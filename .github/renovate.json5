@@ -86,6 +86,21 @@
       description: "Weekly update of pyo3 dependencies",
       enabled: false,
     },
+    {
+      commitMessageTopic: "MSRV",
+      matchManagers: ["regex"],
+      matchDepNames: ["msrv"],
+      // We have a rolling support policy for the MSRV
+      // 2 releases back * 6 weeks per release * 7 days per week + 1
+      minimumReleaseAge: "85 days",
+      internalChecksFilter: "strict",
+      groupName: "MSRV",
+    },
+    {
+      matchManagers: ["regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
@@ -97,6 +112,27 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Minimum supported Rust toolchain version
+    {
+      customType: "regex",
+      fileMatch: ["(^|/)Cargo\\.toml?$"],
+      matchStrings: [
+        'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "msrv",
+      lookupNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    },
+    // Rust toolchain version
+    {
+      fileMatch: ["(^|/)rust-toolchain\\.toml?$"],
+      matchStrings: [
+        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "rust",
+      lookupNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
     },
   ],
   vulnerabilityAlerts: {

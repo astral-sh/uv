@@ -22,8 +22,7 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::Platform;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -205,9 +204,7 @@ impl Interpreter {
             self.python_minor(),
             self.python_patch(),
             self.python_version().pre(),
-            self.os(),
-            self.arch(),
-            self.libc(),
+            uv_platform::Platform::new(self.os(), self.arch(), self.libc()),
             self.variant(),
         )
     }
@@ -912,23 +909,26 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(
-                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
+            .map_err(|err| {
+                if err.kind() == io::ErrorKind::NotFound {
+                    return Error::NotFound(interpreter.to_path_buf());
+                }
+                #[cfg(windows)]
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
+                    err.raw_os_error().and_then(|code| u32::try_from(code).ok())
+                {
                     // These error codes are returned if the Python interpreter is a corrupt MSIX
                     // package, which we want to differentiate from a typical spawn failure.
-                    #[cfg(windows)]
-                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
-                        Error::CorruptWindowsPackage {
-                            path: interpreter.to_path_buf(),
-                            err,
-                        }
-                    }
-                    _ => Error::SpawnFailed {
+                    return Error::CorruptWindowsPackage {
                         path: interpreter.to_path_buf(),
                         err,
-                    },
-                },
-            )?;
+                    };
+                }
+                Error::SpawnFailed {
+                    path: interpreter.to_path_buf(),
+                    err,
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

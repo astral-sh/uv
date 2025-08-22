@@ -191,6 +191,11 @@ in lieu of the default GitHub URL.
 The directory in which to install uv using the standalone installer and `self update` feature.
 Defaults to `~/.local/bin`.
 
+### `UV_ISOLATED`
+
+Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+a `pyproject.toml` or `uv.toml` file.
+
 ### `UV_KEYRING_PROVIDER`
 
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
@@ -651,6 +656,19 @@ See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py
 ### `PYTHONPATH`
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
+
+### `RUST_BACKTRACE`
+
+If set, it can be used to display more stack trace details when a panic occurs.
+This is used by uv particularly on windows to show more details during a platform exception.
+
+For example:
+
+* `RUST_BACKTRACE=1` will print a short backtrace.
+* `RUST_BACKTRACE=full` will print a full backtrace.
+
+See the [Rust backtrace documentation](https://doc.rust-lang.org/std/backtrace/index.html)
+for more.
 
 ### `RUST_LOG`
 

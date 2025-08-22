@@ -7,6 +7,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_static::EnvVars;
 
 #[test]
 fn python_pin() {
@@ -822,7 +823,7 @@ fn python_pin_install() {
     warning: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     ");
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env("UV_PYTHON_DOWNLOADS", "auto"), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::Requirement;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -25,17 +25,12 @@ pub enum Reinstall {
 
 impl Reinstall {
     /// Determine the reinstall strategy to use.
-    pub fn from_args(reinstall: Option<bool>, reinstall_package: Vec<PackageName>) -> Self {
+    pub fn from_args(reinstall: Option<bool>, reinstall_package: Vec<PackageName>) -> Option<Self> {
         match reinstall {
-            Some(true) => Self::All,
-            Some(false) => Self::None,
-            None => {
-                if reinstall_package.is_empty() {
-                    Self::None
-                } else {
-                    Self::Packages(reinstall_package, Vec::new())
-                }
-            }
+            Some(true) => Some(Self::All),
+            Some(false) => Some(Self::None),
+            None if reinstall_package.is_empty() => None,
+            None => Some(Self::Packages(reinstall_package, Vec::new())),
         }
     }
 
@@ -72,20 +67,23 @@ impl Reinstall {
     /// Combine a set of [`Reinstall`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            // If both are `None`, the result is `None`.
-            (Self::None, Self::None) => Self::None,
-            // If either is `All`, the result is `All`.
-            (Self::All, _) | (_, Self::All) => Self::All,
-            // If one is `None`, the result is the other.
-            (Self::Packages(a1, a2), Self::None) => Self::Packages(a1, a2),
-            (Self::None, Self::Packages(b1, b2)) => Self::Packages(b1, b2),
-            // If both are `Packages`, the result is the union of the two.
-            (Self::Packages(mut a1, mut a2), Self::Packages(b1, b2)) => {
-                a1.extend(b1);
-                a2.extend(b2);
-                Self::Packages(a1, a2)
-            }
+        match self {
+            // Setting `--reinstall` or `--no-reinstall` should clear previous `--reinstall-package` selections.
+            Self::All | Self::None => self,
+            Self::Packages(self_packages, self_paths) => match other {
+                // If `--reinstall` was enabled previously, `--reinstall-package` is subsumed by reinstalling all packages.
+                Self::All => other,
+                // If `--no-reinstall` was enabled previously, then `--reinstall-package` enables an explicit reinstall of those packages.
+                Self::None => Self::Packages(self_packages, self_paths),
+                // If `--reinstall-package` was included twice, combine the requirements.
+                Self::Packages(other_packages, other_paths) => {
+                    let mut combined_packages = self_packages;
+                    combined_packages.extend(other_packages);
+                    let mut combined_paths = self_paths;
+                    combined_paths.extend(other_paths);
+                    Self::Packages(combined_packages, combined_paths)
+                }
+            },
         }
     }
 
@@ -135,8 +133,7 @@ impl From<Reinstall> for Refresh {
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug, Default, Clone)]
 pub enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
     #[default]
@@ -150,26 +147,23 @@ pub enum Upgrade {
 }
 
 impl Upgrade {
-    /// Determine the [`Upgrade`] strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Self {
+    /// Determine the upgrade selection strategy from the command-line arguments.
+    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
         match upgrade {
-            Some(true) => Self::All,
-            Some(false) => Self::None,
-            None => {
-                if upgrade_package.is_empty() {
-                    Self::None
-                } else {
-                    Self::Packages(upgrade_package.into_iter().fold(
-                        FxHashMap::default(),
-                        |mut map, requirement| {
-                            map.entry(requirement.name.clone())
-                                .or_default()
-                                .push(requirement);
-                            map
-                        },
-                    ))
-                }
-            }
+            Some(true) => Some(Self::All),
+            // TODO(charlie): `--no-upgrade` with `--upgrade-package` should allow the specified
+            // packages to be upgraded. Right now, `--upgrade-package` is silently ignored.
+            Some(false) => Some(Self::None),
+            None if upgrade_package.is_empty() => None,
+            None => Some(Self::Packages(upgrade_package.into_iter().fold(
+                FxHashMap::default(),
+                |mut map, requirement| {
+                    map.entry(requirement.name.clone())
+                        .or_default()
+                        .push(requirement);
+                    map
+                },
+            ))),
         }
     }
 
@@ -219,19 +213,23 @@ impl Upgrade {
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            // If both are `None`, the result is `None`.
-            (Self::None, Self::None) => Self::None,
-            // If either is `All`, the result is `All`.
-            (Self::All, _) | (_, Self::All) => Self::All,
-            // If one is `None`, the result is the other.
-            (Self::Packages(a), Self::None) => Self::Packages(a),
-            (Self::None, Self::Packages(b)) => Self::Packages(b),
-            // If both are `Packages`, the result is the union of the two.
-            (Self::Packages(mut a), Self::Packages(b)) => {
-                a.extend(b);
-                Self::Packages(a)
-            }
+        match self {
+            // Setting `--upgrade` or `--no-upgrade` should clear previous `--upgrade-package` selections.
+            Self::All | Self::None => self,
+            Self::Packages(self_packages) => match other {
+                // If `--upgrade` was enabled previously, `--upgrade-package` is subsumed by upgrading all packages.
+                Self::All => other,
+                // If `--no-upgrade` was enabled previously, then `--upgrade-package` enables an explicit upgrade of those packages.
+                Self::None => Self::Packages(self_packages),
+                // If `--upgrade-package` was included twice, combine the requirements.
+                Self::Packages(other_packages) => {
+                    let mut combined = self_packages;
+                    for (package, requirements) in other_packages {
+                        combined.entry(package).or_default().extend(requirements);
+                    }
+                    Self::Packages(combined)
+                }
+            },
         }
     }
 }
@@ -247,6 +245,58 @@ impl From<Upgrade> for Refresh {
                 Vec::new(),
                 Timestamp::now(),
             ),
+        }
+    }
+}
+
+/// Whether to isolate builds.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum BuildIsolation {
+    /// Isolate all builds.
+    #[default]
+    Isolate,
+
+    /// Do not isolate any builds.
+    Shared,
+
+    /// Do not isolate builds for the specified packages.
+    SharedPackage(Vec<PackageName>),
+}
+
+impl BuildIsolation {
+    /// Determine the build isolation strategy from the command-line arguments.
+    pub fn from_args(
+        no_build_isolation: Option<bool>,
+        no_build_isolation_package: Vec<PackageName>,
+    ) -> Option<Self> {
+        match no_build_isolation {
+            Some(true) => Some(Self::Shared),
+            Some(false) => Some(Self::Isolate),
+            None if no_build_isolation_package.is_empty() => None,
+            None => Some(Self::SharedPackage(no_build_isolation_package)),
+        }
+    }
+
+    /// Combine a set of [`BuildIsolation`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match self {
+            // Setting `--build-isolation` or `--no-build-isolation` should clear previous `--no-build-isolation-package` selections.
+            Self::Isolate | Self::Shared => self,
+            Self::SharedPackage(self_packages) => match other {
+                // If `--no-build-isolation` was enabled previously, `--no-build-isolation-package` is subsumed by sharing all builds.
+                Self::Shared => other,
+                // If `--build-isolation` was enabled previously, then `--no-build-isolation-package` enables specific packages to be shared.
+                Self::Isolate => Self::SharedPackage(self_packages),
+                // If `--no-build-isolation-package` was included twice, combine the packages.
+                Self::SharedPackage(other_packages) => {
+                    let mut combined = self_packages;
+                    combined.extend(other_packages);
+                    Self::SharedPackage(combined)
+                }
+            },
         }
     }
 }

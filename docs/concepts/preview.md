@@ -69,6 +69,7 @@ The following preview features are available:
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
 - `python-upgrade`: Allows
   [transparent Python version upgrades](./python-versions.md#upgrading-python-versions).
+- `format`: Allows using `uv format`.
 
 ## Disabling preview features
 

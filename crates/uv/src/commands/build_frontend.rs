@@ -14,9 +14,9 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    PackageConfigSettings, Preview, SourceStrategy,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, Preview,
+    SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -24,7 +24,8 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, RequiresPython, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -38,7 +39,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -200,8 +201,7 @@ async fn build_impl(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -348,8 +348,7 @@ async fn build_impl(
             build_logs,
             force_pep517,
             build_constraints,
-            *no_build_isolation,
-            no_build_isolation_package,
+            build_isolation,
             extra_build_dependencies,
             extra_build_variables,
             *index_strategy,
@@ -390,11 +389,33 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            err.to_string().ends_with("outside of the target directory")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 
@@ -428,8 +449,7 @@ async fn build_package(
     build_logs: bool,
     force_pep517: bool,
     build_constraints: &[RequirementsSource],
-    no_build_isolation: bool,
-    no_build_isolation_package: &[PackageName],
+    build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
@@ -544,14 +564,16 @@ async fn build_package(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Resolve the flat indexes from `--find-links`.
@@ -584,7 +606,7 @@ async fn build_package(
         index_strategy,
         config_setting,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,

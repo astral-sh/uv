@@ -20,7 +20,13 @@ pub(crate) trait InstallLogger {
     fn on_audit(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
 
     /// Log the completion of the preparation phase.
-    fn on_prepare(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
+    fn on_prepare(
+        &self,
+        count: usize,
+        suffix: Option<&str>,
+        start: std::time::Instant,
+        printer: Printer,
+    ) -> fmt::Result;
 
     /// Log the completion of the uninstallation phase.
     fn on_uninstall(
@@ -64,14 +70,25 @@ impl InstallLogger for DefaultInstallLogger {
         }
     }
 
-    fn on_prepare(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_prepare(
+        &self,
+        count: usize,
+        suffix: Option<&str>,
+        start: std::time::Instant,
+        printer: Printer,
+    ) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Prepared {} {}",
-                format!("{count} package{s}").bold(),
+                if let Some(suffix) = suffix {
+                    format!("{count} package{s} {suffix}")
+                } else {
+                    format!("{count} package{s}")
+                }
+                .bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -192,6 +209,7 @@ impl InstallLogger for SummaryInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {
@@ -262,6 +280,7 @@ impl InstallLogger for UpgradeInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {

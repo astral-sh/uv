@@ -1,13 +1,13 @@
-use anyhow::{Context, Result, anyhow};
-use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
-use uv_distribution_types::RequiresPython;
 
+use anyhow::{Context, Result, anyhow};
+use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
+
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
@@ -15,10 +15,11 @@ use uv_configuration::{
     DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
     VersionControlSystem,
 };
+use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -769,6 +770,10 @@ impl InitProjectKind {
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
+
         // Do no fill in `authors` for non-packaged applications unless explicitly requested.
         let author_from = author_from.unwrap_or_else(|| {
             if package {
@@ -828,9 +833,6 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
-
         Ok(())
     }
 
@@ -854,6 +856,10 @@ impl InitProjectKind {
         }
 
         fs_err::create_dir_all(path)?;
+
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
 
         let author = get_author_info(path, author_from.unwrap_or_default());
 
@@ -879,9 +885,6 @@ impl InitProjectKind {
         if !bare {
             generate_package_scripts(name, path, build_backend, true)?;
         }
-
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
 
         Ok(())
     }

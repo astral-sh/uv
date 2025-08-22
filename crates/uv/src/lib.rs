@@ -514,8 +514,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.network_settings,
                 args.settings.config_setting,
                 args.settings.config_settings_package,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                args.settings.build_isolation.clone(),
                 &args.settings.extra_build_dependencies,
                 &args.settings.extra_build_variables,
                 args.settings.build_options,
@@ -593,8 +592,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 &args.settings.config_setting,
                 &args.settings.config_settings_package,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                args.settings.build_isolation.clone(),
                 &args.settings.extra_build_dependencies,
                 &args.settings.extra_build_variables,
                 args.settings.build_options,
@@ -737,8 +735,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 &args.settings.config_setting,
                 &args.settings.config_settings_package,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                args.settings.build_isolation.clone(),
                 &args.settings.extra_build_dependencies,
                 &args.settings.extra_build_variables,
                 args.settings.build_options,
@@ -1437,14 +1434,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
             show_settings!(args);
-            let reinstall = false;
             let upgrade = true;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
-                reinstall,
+                args.reinstall,
                 upgrade,
                 args.bin,
                 args.registry,
@@ -1980,6 +1976,8 @@ async fn run_project(
                 args.frozen,
                 args.active,
                 args.no_sync,
+                args.no_install_project,
+                args.no_install_workspace,
                 requirements,
                 constraints,
                 args.marker,
@@ -2184,6 +2182,26 @@ async fn run_project(
                 globals.preview,
             )
             .boxed_local()
+            .await
+        }
+        ProjectCommand::Format(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::FormatSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::format(
+                args.check,
+                args.diff,
+                args.extra_args,
+                args.version,
+                globals.network_settings,
+                cache,
+                printer,
+                globals.preview,
+            ))
             .await
         }
     }

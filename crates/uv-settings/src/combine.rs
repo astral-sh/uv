@@ -4,11 +4,12 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    RequiredVersion, TargetTriple, TrustedPublishing,
+    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion,
+    TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ExtraBuildVariables, Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
+    PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
@@ -175,6 +176,33 @@ impl Combine for Option<PackageConfigSettings> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Upgrade> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Reinstall> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<BuildIsolation> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
         }
     }

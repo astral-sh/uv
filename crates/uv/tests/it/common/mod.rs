@@ -600,29 +600,6 @@ impl TestContext {
                     .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
             );
 
-            // Add filtering for the bin directory of the base interpreter path
-            let bin_dir = if cfg!(windows) {
-                // On Windows, the Python executable is in the root, not the bin directory
-                executable
-                    .canonicalize()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join("Scripts")
-            } else {
-                executable
-                    .canonicalize()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .to_path_buf()
-            };
-            filters.extend(
-                Self::path_patterns(bin_dir)
-                    .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-BIN-{version}]"))),
-            );
-
             // And for the symlink we created in the test the Python path
             filters.extend(
                 Self::path_patterns(python_dir.join(version.to_string()))
@@ -1015,6 +992,14 @@ impl TestContext {
     pub fn export(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("export");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv format` command with options shared across scenarios.
+    pub fn format(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("format");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -1822,7 +1807,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .await
         .unwrap();
 
-    let mut file = tokio::fs::File::create(path).await.unwrap();
+    let mut file = fs_err::tokio::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         file.write_all(&chunk.unwrap()).await.unwrap();

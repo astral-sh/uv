@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+#[cfg(unix)]
+use tracing::debug;
+
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[allow(clippy::doc_markdown)]
@@ -64,6 +67,51 @@ impl Shell {
                 Some(Self::Powershell)
             }
         } else {
+            // Fallback to detecting the shell from the parent process
+            Self::from_parent_process()
+        }
+    }
+
+    /// Attempt to determine the shell from the parent process.
+    ///
+    /// This is a fallback method for when environment variables don't provide
+    /// enough information about the current shell. It looks at the parent process
+    /// to try to identify which shell is running.
+    ///
+    /// This method currently only works on Unix-like systems. On other platforms,
+    /// it returns `None`.
+    fn from_parent_process() -> Option<Self> {
+        #[cfg(unix)]
+        {
+            // Get the parent process ID
+            let ppid = nix::unistd::getppid();
+            debug!("Detected parent process ID: {ppid}");
+
+            // Try to read the parent process executable path
+            let proc_exe_path = format!("/proc/{ppid}/exe");
+            if let Ok(exe_path) = fs_err::read_link(&proc_exe_path) {
+                debug!("Parent process executable: {}", exe_path.display());
+                if let Some(shell) = Self::from_shell_path(&exe_path) {
+                    return Some(shell);
+                }
+            }
+
+            // If reading exe fails, try reading the comm file
+            let proc_comm_path = format!("/proc/{ppid}/comm");
+            if let Ok(comm) = fs_err::read_to_string(&proc_comm_path) {
+                let comm = comm.trim();
+                debug!("Parent process comm: {comm}");
+                if let Some(shell) = parse_shell_from_path(Path::new(comm)) {
+                    return Some(shell);
+                }
+            }
+
+            debug!("Could not determine shell from parent process");
+            None
+        }
+
+        #[cfg(not(unix))]
+        {
             None
         }
     }

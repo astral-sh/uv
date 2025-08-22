@@ -1,7 +1,5 @@
 use crate::Error;
-use std::fmt::Display;
 use std::str::FromStr;
-use std::{cmp, fmt};
 
 /// Architecture variants, e.g., with support for different instruction sets
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
@@ -24,7 +22,7 @@ pub struct Arch {
 }
 
 impl Ord for Arch {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.family == other.family {
             return self.variant.cmp(&other.variant);
         }
@@ -55,8 +53,8 @@ impl Ord for Arch {
             other.family == preferred.family,
         ) {
             (true, true) => unreachable!(),
-            (true, false) => cmp::Ordering::Less,
-            (false, true) => cmp::Ordering::Greater,
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
             (false, false) => {
                 // Both non-preferred, fallback to lexicographic order
                 self.family.to_string().cmp(&other.family.to_string())
@@ -66,46 +64,27 @@ impl Ord for Arch {
 }
 
 impl PartialOrd for Arch {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
-
 impl Arch {
     pub fn new(family: target_lexicon::Architecture, variant: Option<ArchVariant>) -> Self {
         Self { family, variant }
     }
 
     pub fn from_env() -> Self {
+        #[cfg(test)]
+        {
+            if let Some(arch) = test_support::get_mock_arch() {
+                return arch;
+            }
+        }
+
         Self {
             family: target_lexicon::HOST.architecture,
             variant: None,
         }
-    }
-
-    /// Does the current architecture support running the other?
-    ///
-    /// When the architecture is equal, this is always true. Otherwise, this is true if the
-    /// architecture is transparently emulated or is a microarchitecture with worse performance
-    /// characteristics.
-    pub fn supports(self, other: Self) -> bool {
-        if self == other {
-            return true;
-        }
-
-        // TODO: Implement `variant` support checks
-
-        // Windows ARM64 runs emulated x86_64 binaries transparently
-        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
-        // installed. We don't try to be clever and check if that's the case here, we just assume
-        // that if x86_64 distributions are available, they're usable.
-        if (cfg!(windows) || cfg!(target_os = "macos"))
-            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
-        {
-            return other.family == target_lexicon::Architecture::X86_64;
-        }
-
-        false
     }
 
     pub fn family(&self) -> target_lexicon::Architecture {
@@ -115,10 +94,14 @@ impl Arch {
     pub fn is_arm(&self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
+
+    pub fn is_wasm(&self) -> bool {
+        matches!(self.family, target_lexicon::Architecture::Wasm32)
+    }
 }
 
-impl Display for Arch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Arch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.family {
             target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686) => {
                 write!(f, "x86")?;
@@ -192,8 +175,8 @@ impl FromStr for ArchVariant {
     }
 }
 
-impl Display for ArchVariant {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ArchVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::V2 => write!(f, "v2"),
             Self::V3 => write!(f, "v3"),
@@ -245,5 +228,62 @@ impl From<&uv_platform_tags::Arch> for Arch {
             ),
             uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static MOCK_ARCH: RefCell<Option<Arch>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn get_mock_arch() -> Option<Arch> {
+        MOCK_ARCH.with(|arch| *arch.borrow())
+    }
+
+    fn set_mock_arch(arch: Option<Arch>) {
+        MOCK_ARCH.with(|mock| *mock.borrow_mut() = arch);
+    }
+
+    pub(crate) struct MockArchGuard {
+        previous: Option<Arch>,
+    }
+
+    impl MockArchGuard {
+        pub(crate) fn new(arch: Arch) -> Self {
+            let previous = get_mock_arch();
+            set_mock_arch(Some(arch));
+            Self { previous }
+        }
+    }
+
+    impl Drop for MockArchGuard {
+        fn drop(&mut self) {
+            set_mock_arch(self.previous);
+        }
+    }
+
+    /// Run a function with a mocked architecture.
+    /// The mock is automatically cleaned up after the function returns.
+    pub(crate) fn run_with_arch<F, R>(arch: Arch, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let _guard = MockArchGuard::new(arch);
+        f()
+    }
+
+    pub(crate) fn x86_64() -> Arch {
+        Arch::new(target_lexicon::Architecture::X86_64, None)
+    }
+
+    pub(crate) fn aarch64() -> Arch {
+        Arch::new(
+            target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            None,
+        )
     }
 }

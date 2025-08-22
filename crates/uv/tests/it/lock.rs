@@ -8937,8 +8937,8 @@ fn lock_index_workspace_member() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.lock()
-        .env("UV_INDEX_MY_INDEX_USERNAME", "public")
-        .env("UV_INDEX_MY_INDEX_PASSWORD", "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9003,8 +9003,8 @@ fn lock_index_workspace_member() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock()
-        .env("UV_INDEX_MY_INDEX_USERNAME", "public")
-        .env("UV_INDEX_MY_INDEX_PASSWORD", "heron")
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron")
         .arg("--locked"), @r###"
     success: true
     exit_code: 0
