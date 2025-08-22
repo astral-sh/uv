@@ -57,11 +57,15 @@ impl KeyringProvider {
         match &self.backend {
             KeyringProviderBackend::Native => {
                 let Some(username) = credentials.username() else {
-                    trace!("Unable to store credentials in keyring for {url} due to missing username");
+                    trace!(
+                        "Unable to store credentials in keyring for {url} due to missing username"
+                    );
                     return;
                 };
                 let Some(password) = credentials.password() else {
-                    trace!("Unable to store credentials in keyring for {url} due to missing password");
+                    trace!(
+                        "Unable to store credentials in keyring for {url} due to missing password"
+                    );
                     return;
                 };
 
