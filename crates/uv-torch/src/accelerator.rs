@@ -16,6 +16,8 @@ pub enum AcceleratorError {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
+    #[error("Failed to parse NVIDIA device: {0}")]
+    Device(String),
     #[error("Unknown AMD GPU architecture: {0}")]
     UnknownAmdGpuArchitecture(String),
 }
@@ -57,7 +59,7 @@ impl Accelerator {
     /// 2. The `UV_AMD_GPU_ARCHITECTURE` environment variable.
     /// 3. `/sys/module/nvidia/version`, which contains the driver version (e.g., `550.144.03`).
     /// 4. `/proc/driver/nvidia/version`, which contains the driver version among other information.
-    /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
+    /// 5. `nvidia-smi --query-gpu=index,uuid,driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
@@ -121,14 +123,40 @@ impl Accelerator {
 
         // Query `nvidia-smi`.
         if let Ok(output) = std::process::Command::new("nvidia-smi")
-            .arg("--query-gpu=driver_version")
+            .arg("--query-gpu=index,uuid,driver_version")
             .arg("--format=csv,noheader")
             .output()
         {
             if output.status.success() {
-                let driver_version = Version::from_str(&String::from_utf8(output.stdout)?)?;
-                debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
-                return Ok(Some(Self::Cuda { driver_version }));
+                let visible_devices = VisibleDevices::from_env()?.unwrap_or(VisibleDevices::All);
+                let stdout = String::from_utf8(output.stdout)?;
+                for line in stdout.lines() {
+                    let mut parts = line.split(',');
+
+                    // Parse the GPU index.
+                    let index = parts.next().and_then(|s| s.trim().parse::<usize>().ok());
+
+                    // Parse the GPU UUID.
+                    let uuid = parts.next().map(str::trim);
+
+                    // Determine if this GPU is visible based on the environment variable.
+                    if visible_devices.includes(index, uuid) {
+                        if let Some(driver_version) = parts.next() {
+                            let driver_version = Version::from_str(driver_version.trim())?;
+                            debug!(
+                                "Detected CUDA driver version from `nvidia-smi`: {driver_version}"
+                            );
+                            return Ok(Some(Self::Cuda { driver_version }));
+                        }
+                    } else {
+                        debug!("Skipping invisible GPU {index:?} with UUID: {uuid:?}");
+                    }
+                }
+                if let Some(first_line) = stdout.lines().next() {
+                    let driver_version = Version::from_str(first_line.trim())?;
+                    debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
+                    return Ok(Some(Self::Cuda { driver_version }));
+                }
             }
 
             debug!(
@@ -190,6 +218,68 @@ impl Accelerator {
         debug!("Failed to detect GPU driver version");
 
         Ok(None)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum VisibleDevices {
+    /// All GPUs are visible.
+    All,
+    /// No GPUs are visible.
+    None,
+    /// Some GPUs are visible, specified by their indices and/or UUIDs.
+    Some {
+        uuids: Vec<String>,
+        indices: Vec<usize>,
+    },
+}
+
+impl VisibleDevices {
+    /// Read and parse the [`NVIDIA_VISIBLE_DEVICES`] environment variable.
+    fn from_env() -> Result<Option<Self>, AcceleratorError> {
+        let Some(nvidia_visible_devices) = std::env::var(EnvVars::NVIDIA_VISIBLE_DEVICES).ok()
+        else {
+            return Ok(None);
+        };
+        Self::parse(&nvidia_visible_devices)
+    }
+
+    /// Parse the [`NVIDIA_VISIBLE_DEVICES`] environment variable.
+    fn parse(s: &str) -> Result<Option<Self>, AcceleratorError> {
+        if s.is_empty() {
+            Ok(None)
+        } else if s == "void" {
+            Ok(None)
+        } else if s == "all" {
+            Ok(Some(Self::All))
+        } else if s == "none" {
+            Ok(Some(Self::None))
+        } else {
+            let mut indices = Vec::new();
+            let mut uuids = Vec::new();
+            for device in s.split(',') {
+                if device.starts_with("GPU-") {
+                    uuids.push(device.to_string());
+                } else if let Ok(index) = device.parse::<usize>() {
+                    indices.push(index);
+                } else {
+                    return Err(AcceleratorError::Device(device.to_string()));
+                }
+            }
+            Ok(Some(Self::Some { uuids, indices }))
+        }
+    }
+
+    /// Return `true` if the given index or UUID is included in the visible devices.
+    fn includes(&self, index: Option<usize>, uuid: Option<&str>) -> bool {
+        match self {
+            Self::All => true,
+            Self::None => false,
+            Self::Some { uuids, indices } => {
+                index.is_some_and(|index| indices.contains(&index))
+                    || uuid.is_some_and(|uuid| uuids.iter().any(|value| value == uuid))
+            }
+        }
     }
 }
 
@@ -303,5 +393,135 @@ mod tests {
         let content = "NVRM version: NVIDIA UNIX x86_64 Kernel Module  375.74  Wed Jun 14 01:39:39 PDT 2017\nGCC version:  gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.4)";
         let result = parse_proc_driver_nvidia_version(content).unwrap();
         assert_eq!(result, Some(Version::from_str("375.74").unwrap()));
+    }
+
+    #[test]
+    fn nvidia_smi_multi_gpu() {
+        // Test that we can parse nvidia-smi output with multiple GPUs (multiple lines)
+        let single_gpu = "572.60\n";
+        if let Some(first_line) = single_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
+
+        let multi_gpu = "572.60\n572.60\n";
+        if let Some(first_line) = multi_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
+    }
+
+    #[test]
+    fn visible_devices_parse() {
+        assert_eq!(
+            VisibleDevices::parse("all").unwrap(),
+            Some(VisibleDevices::All)
+        );
+
+        assert_eq!(
+            VisibleDevices::parse("none").unwrap(),
+            Some(VisibleDevices::None)
+        );
+
+        assert_eq!(VisibleDevices::parse("void").unwrap(), None);
+
+        assert_eq!(VisibleDevices::parse("").unwrap(), None);
+
+        assert_eq!(
+            VisibleDevices::parse("0").unwrap(),
+            Some(VisibleDevices::Some {
+                uuids: vec![],
+                indices: vec![0]
+            })
+        );
+
+        assert_eq!(
+            VisibleDevices::parse("0,1,2").unwrap(),
+            Some(VisibleDevices::Some {
+                uuids: vec![],
+                indices: vec![0, 1, 2]
+            })
+        );
+
+        assert_eq!(
+            VisibleDevices::parse("GPU-12345678-abcd-efgh-ijkl-123456789abc").unwrap(),
+            Some(VisibleDevices::Some {
+                uuids: vec!["GPU-12345678-abcd-efgh-ijkl-123456789abc".to_string()],
+                indices: vec![]
+            })
+        );
+
+        assert_eq!(
+            VisibleDevices::parse("GPU-12345678,GPU-87654321").unwrap(),
+            Some(VisibleDevices::Some {
+                uuids: vec!["GPU-12345678".to_string(), "GPU-87654321".to_string()],
+                indices: vec![]
+            })
+        );
+
+        assert_eq!(
+            VisibleDevices::parse("0,GPU-12345678,1,GPU-87654321,2").unwrap(),
+            Some(VisibleDevices::Some {
+                uuids: vec!["GPU-12345678".to_string(), "GPU-87654321".to_string()],
+                indices: vec![0, 1, 2]
+            })
+        );
+
+        assert!(matches!(
+            VisibleDevices::parse("invalid").unwrap_err(),
+            AcceleratorError::Device(s) if s == "invalid"
+        ));
+
+        assert!(matches!(
+            VisibleDevices::parse("0,invalid,1").unwrap_err(),
+            AcceleratorError::Device(s) if s == "invalid"
+        ));
+    }
+
+    #[test]
+    fn visible_devices_includes() {
+        let all = VisibleDevices::All;
+        assert!(all.includes(Some(0), None));
+        assert!(all.includes(None, Some("GPU-12345678")));
+        assert!(all.includes(Some(999), Some("GPU-any")));
+
+        let none = VisibleDevices::None;
+        assert!(!none.includes(Some(0), None));
+        assert!(!none.includes(None, Some("GPU-12345678")));
+        assert!(!none.includes(Some(999), Some("GPU-any")));
+
+        let some_indices = VisibleDevices::Some {
+            uuids: vec![],
+            indices: vec![0, 2, 4],
+        };
+        assert!(some_indices.includes(Some(0), None));
+        assert!(some_indices.includes(Some(2), None));
+        assert!(some_indices.includes(Some(4), None));
+        assert!(!some_indices.includes(Some(1), None));
+        assert!(!some_indices.includes(Some(3), None));
+        assert!(!some_indices.includes(None, Some("GPU-12345678")));
+
+        let some_uuids = VisibleDevices::Some {
+            uuids: vec!["GPU-12345678".to_string(), "GPU-87654321".to_string()],
+            indices: vec![],
+        };
+        assert!(some_uuids.includes(None, Some("GPU-12345678")));
+        assert!(some_uuids.includes(None, Some("GPU-87654321")));
+        assert!(!some_uuids.includes(None, Some("GPU-99999999")));
+        assert!(!some_uuids.includes(Some(0), None));
+
+        let some_mixed = VisibleDevices::Some {
+            uuids: vec!["GPU-12345678".to_string()],
+            indices: vec![0, 1],
+        };
+        assert!(some_mixed.includes(Some(0), None));
+        assert!(some_mixed.includes(Some(1), None));
+        assert!(!some_mixed.includes(Some(2), None));
+        assert!(some_mixed.includes(None, Some("GPU-12345678")));
+        assert!(!some_mixed.includes(None, Some("GPU-87654321")));
+
+        assert!(some_mixed.includes(Some(0), Some("GPU-99999999")));
+        assert!(some_mixed.includes(Some(99), Some("GPU-12345678")));
+        assert!(!some_mixed.includes(Some(99), Some("GPU-99999999")));
     }
 }

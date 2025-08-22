@@ -631,6 +631,11 @@ See [no-color.org](https://no-color.org).
 
 Used to detect `NuShell` usage.
 
+### `NVIDIA_VISIBLE_DEVICES`
+
+The visible devices for NVIDIA GPUs, to respect when querying `nvidia-smi` to detect GPU
+drivers.
+
 ### `PAGER`
 
 The standard `PAGER` posix env var. Used by `uv` to configure the appropriate pager.
