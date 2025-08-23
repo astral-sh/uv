@@ -1804,7 +1804,7 @@ fn devrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1828,10 +1828,12 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1844,10 +1846,12 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1866,8 +1870,10 @@ fn devrequirements_txt_() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }

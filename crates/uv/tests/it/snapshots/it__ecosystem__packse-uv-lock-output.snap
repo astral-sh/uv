@@ -1,5 +1,5 @@
 ---
-source: crates/uv/tests/ecosystem.rs
+source: crates/uv/tests/it/ecosystem.rs
 expression: snapshot
 ---
 success: true
@@ -7,4 +7,6 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
+warning: In project `packse`: `[tool.uv.dev-dependencies]` is deprecated.
+Instead use `[dependency-groups] dev = []`.
 Resolved 49 packages in [TIME]

@@ -3999,6 +3999,8 @@ fn resolve_both() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
+    warning: In project `example`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
     - offline
     - pip
@@ -4243,6 +4245,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
+    warning: In project `example`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     "#
     );
 
