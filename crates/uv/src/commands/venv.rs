@@ -27,10 +27,10 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
+use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_virtualenv::OnExisting;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_static::EnvVars;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
