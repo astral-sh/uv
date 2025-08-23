@@ -8455,7 +8455,9 @@ fn sync_python_version() -> Result<()> {
     // Use a fresh project directory without a local `.python-version`
     let global_proj = context.temp_dir.child("global-pin");
     global_proj.create_dir_all()?;
-    global_proj.child("pyproject.toml").write_str(indoc::indoc! {r#"
+    global_proj
+        .child("pyproject.toml")
+        .write_str(indoc::indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
