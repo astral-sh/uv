@@ -296,6 +296,7 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
+        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -385,6 +386,7 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
             markers,
+            model,
             config_settings,
             config_settings_package,
             extra_build_requires,
@@ -399,6 +401,7 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
         markers: &ResolverMarkerEnvironment,
+        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -460,6 +463,7 @@ impl SitePackages {
                             name,
                             distribution,
                             &requirement.source,
+                            model,
                             config_settings,
                             config_settings_package,
                             extra_build_requires,
@@ -481,6 +485,7 @@ impl SitePackages {
                                 name,
                                 distribution,
                                 &constraint.source,
+                                model,
                                 config_settings,
                                 config_settings_package,
                                 extra_build_requires,
@@ -534,6 +539,19 @@ impl SitePackages {
             recursive_requirements: seen,
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncModel {
+    /// A stateful sync, as in the `uv pip` CLI, whereby packages that are already installed in
+    /// the environment may be reused if they implicitly match the requirements. For example, if
+    /// the user installs `./path/to/idna`, then runs `uv pip install anyio` (which depends on
+    /// `idna`), the existing `idna` installation will be reused if it satisfies the requirements,
+    /// even though it is implicitly being requested from the registry.
+    Stateful,
+    /// A stateless sync, as in the `uv sync` CLI, whereby the sources of all packages are defined
+    /// declaratively upfront.
+    Stateless,
 }
 
 /// We check if all requirements are already satisfied, recursing through the requirements tree.

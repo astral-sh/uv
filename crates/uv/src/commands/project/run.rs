@@ -25,7 +25,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
@@ -1363,6 +1363,7 @@ fn can_skip_ephemeral(
         &spec.constraints,
         &spec.overrides,
         &interpreter.resolver_marker_environment(),
+        SyncModel::Stateless,
         config_setting,
         config_settings_package,
         &extra_build_requires,

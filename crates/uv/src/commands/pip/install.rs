@@ -22,7 +22,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -290,6 +290,7 @@ pub(crate) async fn pip_install(
             &constraints,
             &overrides,
             &marker_env,
+            SyncModel::Stateful,
             config_settings,
             config_settings_package,
             &extra_build_requires,
@@ -601,6 +602,7 @@ pub(crate) async fn pip_install(
     match operations::install(
         &resolution,
         site_packages,
+        SyncModel::Stateful,
         modifications,
         &reinstall,
         &build_options,
