@@ -92,6 +92,8 @@ pub(crate) async fn find(
         ) {
             Ok(()) => {}
             Err(err) => {
+                // If the error is due to a global `.python-version` pin conflicting with the project,
+                // it should already have been ignored in WorkspacePython::from_request, so only warn.
                 warn_user!("{err}");
             }
         }

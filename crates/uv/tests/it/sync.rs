@@ -8446,6 +8446,28 @@ fn sync_python_version() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // Global pin incompatible with project should be ignored (no error; use project's requires-python)
+    // Simulate a global `.python-version` at the user config dir
+    let global_pin_dir = context.user_config_dir.child("uv");
+    global_pin_dir.create_dir_all()?;
+    global_pin_dir.child(".python-version").write_str("3.10")?;
+
+    // Parent project requires >=3.11; ensure sync succeeds and uses a compatible interpreter
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
     Ok(())
 }
 
