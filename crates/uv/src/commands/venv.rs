@@ -217,9 +217,10 @@ pub(crate) async fn venv(
                 if active_abs.exists()
                     && !uv_fs::is_same_file_allow_missing(&active_abs, &path).unwrap_or(false)
                 {
+                    let abs_str = active_abs.display().to_string();
                     warn_user_once!(
                         "`VIRTUAL_ENV={}` is set; subsequent commands may use the active environment instead of `.venv`. Consider clearing it with `deactivate`.",
-                        active_abs.user_display()
+                        abs_str
                     );
                 }
             }
