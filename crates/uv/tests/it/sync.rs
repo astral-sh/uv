@@ -8452,8 +8452,19 @@ fn sync_python_version() -> Result<()> {
     global_pin_dir.create_dir_all()?;
     global_pin_dir.child(".python-version").write_str("3.10")?;
 
-    // Parent project requires >=3.11; ensure sync succeeds and uses a compatible interpreter
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    // Use a fresh project directory without a local `.python-version`
+    let global_proj = context.temp_dir.child("global-pin");
+    global_proj.create_dir_all()?;
+    global_proj.child("pyproject.toml").write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
+    uv_snapshot!(context.filters(), context.sync().current_dir(&global_proj), @r"
     success: true
     exit_code: 0
     ----- stdout -----
