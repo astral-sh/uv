@@ -37,7 +37,7 @@ use tracing::instrument;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
@@ -45,6 +45,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
 
@@ -179,6 +180,125 @@ impl RequirementsSpecification {
                 Self {
                     source_trees: vec![path.clone()],
                     ..Self::default()
+                }
+            }
+            RequirementsSource::Pep723Script(path) => {
+                let script = match Pep723Script::read(&path).await {
+                    Ok(Some(script)) => Pep723Item::Script(script),
+                    Ok(None) => {
+                        return Err(anyhow::anyhow!(
+                            "`{}` does not contain inline script metadata",
+                            path.user_display(),
+                        ));
+                    }
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to read `{}` (not found)",
+                            path.user_display(),
+                        ));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                let metadata = script.metadata();
+
+                let requirements = metadata
+                    .dependencies
+                    .as_ref()
+                    .map(|dependencies| {
+                        dependencies
+                            .iter()
+                            .map(|dependency| {
+                                UnresolvedRequirementSpecification::from(Requirement::from(
+                                    dependency.to_owned(),
+                                ))
+                            })
+                            .collect::<Vec<UnresolvedRequirementSpecification>>()
+                    })
+                    .unwrap_or_default();
+
+                if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
+                    let constraints = tool_uv
+                        .constraint_dependencies
+                        .as_ref()
+                        .map(|dependencies| {
+                            dependencies
+                                .iter()
+                                .map(|dependency| {
+                                    NameRequirementSpecification::from(Requirement::from(
+                                        dependency.to_owned(),
+                                    ))
+                                })
+                                .collect::<Vec<NameRequirementSpecification>>()
+                        })
+                        .unwrap_or_default();
+
+                    let overrides = tool_uv
+                        .override_dependencies
+                        .as_ref()
+                        .map(|dependencies| {
+                            dependencies
+                                .iter()
+                                .map(|dependency| {
+                                    UnresolvedRequirementSpecification::from(Requirement::from(
+                                        dependency.to_owned(),
+                                    ))
+                                })
+                                .collect::<Vec<UnresolvedRequirementSpecification>>()
+                        })
+                        .unwrap_or_default();
+
+                    Self {
+                        requirements,
+                        constraints,
+                        overrides,
+                        index_url: tool_uv
+                            .top_level
+                            .index_url
+                            .as_ref()
+                            .map(|index| Index::from(index.clone()).url),
+                        extra_index_urls: tool_uv
+                            .top_level
+                            .extra_index_url
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(|urls| {
+                                urls.iter().map(|index| Index::from(index.clone()).url)
+                            })
+                            .collect(),
+                        no_index: tool_uv.top_level.no_index.unwrap_or_default(),
+                        find_links: tool_uv
+                            .top_level
+                            .find_links
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(|urls| {
+                                urls.iter().map(|index| Index::from(index.clone()).url)
+                            })
+                            .collect(),
+                        no_binary: NoBinary::from_args(
+                            tool_uv.top_level.no_binary,
+                            tool_uv
+                                .top_level
+                                .no_binary_package
+                                .clone()
+                                .unwrap_or_default(),
+                        ),
+                        no_build: NoBuild::from_args(
+                            tool_uv.top_level.no_build,
+                            tool_uv
+                                .top_level
+                                .no_build_package
+                                .clone()
+                                .unwrap_or_default(),
+                        ),
+                        ..Self::default()
+                    }
+                } else {
+                    Self {
+                        requirements,
+                        ..Self::default()
+                    }
                 }
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
