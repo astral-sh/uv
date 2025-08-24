@@ -11,6 +11,7 @@ use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
@@ -84,6 +85,7 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
@@ -106,6 +108,7 @@ impl CandidateSelector {
             reinstall,
             index,
             env,
+            tags,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -116,7 +119,7 @@ impl CandidateSelector {
         let installed = if reinstall {
             None
         } else {
-            Self::get_installed(package_name, range, installed_packages)
+            Self::get_installed(package_name, range, installed_packages, tags)
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
@@ -176,6 +179,7 @@ impl CandidateSelector {
         reinstall: bool,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -231,6 +235,7 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             env,
+            tags,
         )
     }
 
@@ -244,6 +249,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
             // Respect the version range for this requirement.
@@ -263,14 +269,26 @@ impl CandidateSelector {
                                 "Found installed version of {dist} that satisfies preference in {range}"
                             );
 
-                            return Some(Candidate {
-                                name: package_name,
-                                version,
-                                dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                                    dist,
-                                )),
-                                choice_kind: VersionChoiceKind::Preference,
-                            });
+                            // Verify that the installed distribution is compatible with the
+                            // environment.
+                            if tags.is_some_and(|tags| {
+                                let Ok(Some(wheel_tags)) = dist.read_tags() else {
+                                    return true;
+                                };
+                                wheel_tags.is_compatible(tags)
+                            }) {
+                                debug!("Found preferred version of {dist} that satisfies {range}");
+                                return Some(Candidate {
+                                    name: package_name,
+                                    version,
+                                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                        dist,
+                                    )),
+                                    choice_kind: VersionChoiceKind::Preference,
+                                });
+                            }
+
+                            debug!("Platform tags mismatch for installed {dist}");
                         }
                     }
                     // We do not consider installed distributions with multiple versions because
@@ -351,6 +369,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         installed_packages: &'a InstalledPackages,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
         match installed_dists.as_slice() {
@@ -363,13 +382,25 @@ impl CandidateSelector {
                     return None;
                 }
 
-                debug!("Found installed version of {dist} that satisfies {range}");
-                return Some(Candidate {
-                    name: package_name,
-                    version,
-                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
-                    choice_kind: VersionChoiceKind::Installed,
-                });
+                // Verify that the installed distribution is compatible with the
+                // environment.
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if tags.is_some_and(|tags| {
+                    let Ok(Some(wheel_tags)) = dist.read_tags() else {
+                        return true;
+                    };
+                    wheel_tags.is_compatible(tags)
+                }) {
+                    debug!("Found installed version of {dist} that satisfies {range}");
+                    return Some(Candidate {
+                        name: package_name,
+                        version,
+                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                        choice_kind: VersionChoiceKind::Installed,
+                    });
+                }
+
+                debug!("Platform tags mismatch for installed {dist}");
             }
             // We do not consider installed distributions with multiple versions because
             // during installation these must be reinstalled from the remote

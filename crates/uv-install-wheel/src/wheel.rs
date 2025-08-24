@@ -949,8 +949,8 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    use crate::Error;
     use crate::wheel::format_shebang;
+    use crate::{Error, WheelFile};
 
     use super::{
         RecordEntry, Script, WheelFile, get_script_executable, parse_email_message_file,

@@ -14,6 +14,7 @@ use uv_distribution_types::{
 };
 use uv_git_types::GitOid;
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
@@ -32,6 +33,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -57,6 +59,16 @@ impl RequirementSatisfaction {
         }) {
             debug!("Build info mismatch for {name}: {distribution:?}");
             return Self::OutOfDate;
+        }
+
+        // If the distribution isn't compatible with the current platform, it is a mismatch.
+        distribution.read_tags().unwrap();
+
+        if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+            if !wheel_tags.is_compatible(tags) {
+                debug!("Platform tags mismatch for {name}: {distribution:?}");
+                return Self::Mismatch;
+            }
         }
 
         // Filter out already-installed packages.

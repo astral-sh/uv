@@ -272,10 +272,11 @@ pub(crate) async fn pip_list(
 
     // Validate that the environment is consistent.
     if strict {
-        // Determine the markers to use for resolution.
+        // Determine the markers and tags to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
+        let tags = environment.interpreter().tags()?;
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

@@ -2266,9 +2266,10 @@ pub(crate) async fn update_environment(
         ..
     } = spec;
 
-    // Determine markers to use for resolution.
+    // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
     let marker_env = venv.interpreter().resolver_marker_environment();
+    let tags = venv.interpreter().tags()?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2282,6 +2283,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
+            tags,
             config_setting,
             config_settings_package,
             &extra_build_requires,

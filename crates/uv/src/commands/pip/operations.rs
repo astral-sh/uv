@@ -975,10 +975,11 @@ pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
+    tags: &Tags,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers)? {
+    for diagnostic in site_packages.diagnostics(markers, tags)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

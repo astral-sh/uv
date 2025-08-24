@@ -16,6 +16,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
+use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
@@ -194,6 +195,7 @@ impl SitePackages {
     pub fn diagnostics(
         &self,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -238,6 +240,16 @@ impl SitePackages {
                             package: package.clone(),
                             version: self.interpreter.python_version().clone(),
                             requires_python: requires_python.clone(),
+                        });
+                    }
+                }
+
+                // Verify that the package is compatible with the current tags.
+                if let Some(wheel_tags) = distribution.read_tags()? {
+                    if !wheel_tags.is_compatible(tags) {
+                        // TODO(charlie): Show the expanded tag hint, that explains _why_ it doesn't match.
+                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePlatform {
+                            package: package.clone(),
                         });
                     }
                 }
@@ -296,6 +308,7 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -385,6 +398,7 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
             markers,
+            tags,
             config_settings,
             config_settings_package,
             extra_build_requires,
@@ -399,6 +413,7 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -460,6 +475,7 @@ impl SitePackages {
                             name,
                             distribution,
                             &requirement.source,
+                            tags,
                             config_settings,
                             config_settings_package,
                             extra_build_requires,
@@ -481,6 +497,7 @@ impl SitePackages {
                                 name,
                                 distribution,
                                 &constraint.source,
+                                tags,
                                 config_settings,
                                 config_settings_package,
                                 extra_build_requires,
@@ -574,6 +591,10 @@ pub enum SitePackagesDiagnostic {
         /// The version of Python that is required.
         requires_python: VersionSpecifiers,
     },
+    IncompatiblePlatform {
+        /// The package that was built for a different platform.
+        package: PackageName,
+    },
     MissingDependency {
         /// The package that is missing a dependency.
         package: PackageName,
@@ -611,6 +632,9 @@ impl Diagnostic for SitePackagesDiagnostic {
             } => format!(
                 "The package `{package}` requires Python {requires_python}, but `{version}` is installed"
             ),
+            Self::IncompatiblePlatform { package } => {
+                format!("The package `{package}` was built for a different platform")
+            }
             Self::MissingDependency {
                 package,
                 requirement,
@@ -641,6 +665,7 @@ impl Diagnostic for SitePackagesDiagnostic {
         match self {
             Self::MetadataUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
+            Self::IncompatiblePlatform { package } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {
                 package,
