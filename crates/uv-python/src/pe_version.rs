@@ -38,15 +38,6 @@ pub(crate) enum PeVersionError {
 /// Try to extract Python version information from a Windows PE executable.
 ///
 /// On error, return [`None`].
-/// On non-Windows platforms, this function always returns [`None`].
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn try_extract_version_from_pe(_path: &Path) -> Option<crate::PythonVersion> {
-    None
-}
-
-/// Try to extract Python version information from a Windows PE executable.
-///
-/// On error, return [`None`].
 #[cfg(target_os = "windows")]
 pub(crate) fn try_extract_version_from_pe(path: &Path) -> Option<PythonVersion> {
     match extract_version_from_pe(path) {

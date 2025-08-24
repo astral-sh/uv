@@ -29,6 +29,7 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+#[cfg(windows)]
 use crate::pe_version::try_extract_version_from_pe;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
@@ -620,17 +621,25 @@ fn python_executables_from_search_path<'a>(
         .filter(move |path| {
             // On Windows, skip executables with version in the PE metadata that
             // does not match
-            if matches!(version, VersionRequest::Any | VersionRequest::Default) {
+            #[cfg(windows)]
+            {
+                if matches!(version, VersionRequest::Any | VersionRequest::Default) {
+                    return true;
+                }
+                let Some(pe_python_version) = try_extract_version_from_pe(path) else {
+                    return true;
+                };
+                if version.matches_version(&pe_python_version) {
+                    return true;
+                }
+                debug!("Skipping interpreter at `{}`: PE version `{pe_python_version}` does not match `{version}`", path.display());
+                return false;
+            }
+
+            #[cfg(not(windows))]
+            {
                 return true;
             }
-            let Some(pe_python_version) = try_extract_version_from_pe(path) else {
-                return true;
-            };
-            if version.matches_version(&pe_python_version) {
-                return true;
-            }
-            debug!("Skipping interpreter at `{}`: PE version `{pe_python_version}` does not match `{version}`", path.display());
-            false
         })
 }
 
