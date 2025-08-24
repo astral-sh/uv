@@ -30,7 +30,6 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 
 use uv_cache_key::cache_digest;
-use uv_configuration::Preview;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
@@ -41,6 +40,7 @@ use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;

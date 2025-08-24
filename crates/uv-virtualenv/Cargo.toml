@@ -20,9 +20,9 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-configuration = { workspace = true }
 uv-console = { workspace = true }
 uv-fs = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-shell = { workspace = true }

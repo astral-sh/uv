@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
-use uv_configuration::Preview;
 use uv_pep440::Version;
+use uv_preview::Preview;
 
 use anyhow::Result;
 use itertools::Either;

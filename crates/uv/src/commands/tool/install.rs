@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Preview, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, Upgrade};
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };

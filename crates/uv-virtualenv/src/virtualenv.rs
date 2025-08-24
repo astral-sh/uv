@@ -12,8 +12,8 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
-use uv_configuration::Preview;
 use uv_fs::{CWD, Simplified, cachedir};
+use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};

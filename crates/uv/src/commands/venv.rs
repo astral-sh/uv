@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, Preview, PreviewFeatures, SourceStrategy,
+    NoBinary, NoBuild, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -21,6 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };

@@ -8,7 +8,7 @@ use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
-use uv_configuration::Preview;
+use uv_preview::Preview;
 use which::{which, which_all};
 
 use uv_cache::Cache;

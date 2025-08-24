@@ -5,9 +5,9 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
+use uv_preview::Preview;
 use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 

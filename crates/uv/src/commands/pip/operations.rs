@@ -29,6 +29,7 @@ use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
@@ -449,7 +450,7 @@ pub(crate) async fn install(
     installer_metadata: bool,
     dry_run: DryRun,
     printer: Printer,
-    preview: uv_configuration::Preview,
+    preview: Preview,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -618,7 +619,7 @@ async fn execute_plan(
     logger: &dyn InstallLogger,
     installer_metadata: bool,
     printer: Printer,
-    preview: uv_configuration::Preview,
+    preview: Preview,
 ) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
     let Plan {
         cached,

@@ -15,7 +15,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, Preview,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
     SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -31,6 +31,7 @@ use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,

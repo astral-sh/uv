@@ -21,8 +21,8 @@ use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
 use uv_cache::{Cache, CacheBucket};
-use uv_configuration::Preview;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
