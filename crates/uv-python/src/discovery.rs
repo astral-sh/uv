@@ -618,7 +618,7 @@ fn python_executables_from_search_path<'a>(
                 .into_iter()
                 .flatten()
         })
-        .filter(move |path| {
+        .filter(move |_path| {
             // On Windows, skip executables with version in the PE metadata that
             // does not match
             #[cfg(windows)]
@@ -626,19 +626,19 @@ fn python_executables_from_search_path<'a>(
                 if matches!(version, VersionRequest::Any | VersionRequest::Default) {
                     return true;
                 }
-                let Some(pe_python_version) = try_extract_version_from_pe(path) else {
+                let Some(pe_python_version) = try_extract_version_from_pe(_path) else {
                     return true;
                 };
                 if version.matches_version(&pe_python_version) {
                     return true;
                 }
-                debug!("Skipping interpreter at `{}`: PE version `{pe_python_version}` does not match `{version}`", path.display());
-                return false;
+                debug!("Skipping interpreter at `{}`: PE version `{pe_python_version}` does not match `{version}`", _path.display());
+                false
             }
 
             #[cfg(not(windows))]
             {
-                return true;
+                true
             }
         })
 }
