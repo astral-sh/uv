@@ -157,6 +157,22 @@ pub(crate) fn create(
                         }
                     }
                 }
+                OnExisting::FailNoPrompt => {
+                    let hint = format!(
+                        "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
+                        "--clear".green(),
+                        "--allow-existing".green()
+                    );
+                    return Err(Error::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "A {name} already exists at {}\n\n{}{} {hint}",
+                            location.user_display(),
+                            "error".bold().red(),
+                            ":".bold(),
+                        ),
+                    )));
+                }
             }
         }
         Ok(_) => {
@@ -633,11 +649,15 @@ pub enum OnExisting {
     Allow,
     /// Remove an existing directory.
     Remove,
+    /// Fail without prompting if the directory already exists and is non-empty.
+    FailNoPrompt,
 }
 
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool) -> Self {
-        if allow_existing {
+    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
+        if no_clear {
+            Self::FailNoPrompt
+        } else if allow_existing {
             Self::Allow
         } else if clear {
             Self::Remove
