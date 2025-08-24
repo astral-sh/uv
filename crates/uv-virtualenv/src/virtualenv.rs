@@ -118,60 +118,62 @@ pub(crate) fn create(
                     remove_virtualenv(&location)?;
                     fs::create_dir_all(&location)?;
                 }
-                OnExisting::Fail => {
-                    match confirm_clear(location, name)? {
-                        Some(true) => {
-                            debug!("Removing existing {name} due to confirmation");
-                            // Before removing the virtual environment, we need to canonicalize the
-                            // path because `Path::metadata` will follow the symlink but we're still
-                            // operating on the unresolved path and will remove the symlink itself.
-                            let location = location
-                                .canonicalize()
-                                .unwrap_or_else(|_| location.to_path_buf());
-                            remove_virtualenv(&location)?;
-                            fs::create_dir_all(&location)?;
-                        }
-                        Some(false) => {
-                            let hint = format!(
-                                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                                "--clear".green(),
-                                "UV_VENV_CLEAR=1".green()
-                            );
-                            return Err(Error::Io(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!(
-                                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                OnExisting::Fail(allow_prompt) => {
+                    if allow_prompt {
+                        match confirm_clear(location, name)? {
+                            Some(true) => {
+                                debug!("Removing existing {name} due to confirmation");
+                                // Before removing the virtual environment, we need to canonicalize the
+                                // path because `Path::metadata` will follow the symlink but we're still
+                                // operating on the unresolved path and will remove the symlink itself.
+                                let location = location
+                                    .canonicalize()
+                                    .unwrap_or_else(|_| location.to_path_buf());
+                                remove_virtualenv(&location)?;
+                                fs::create_dir_all(&location)?;
+                            }
+                            Some(false) => {
+                                let hint = format!(
+                                    "Use the `{}` flag or set `{}` to replace the existing {name}",
+                                    "--clear".green(),
+                                    "UV_VENV_CLEAR=1".green()
+                                );
+                                return Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "A {name} already exists at: {}\n\n{}{} {hint}",
+                                        location.user_display(),
+                                        "hint".bold().cyan(),
+                                        ":".bold(),
+                                    ),
+                                )));
+                            }
+                            // When we don't have a TTY, warn that the behavior will change in the future
+                            None => {
+                                warn_user_once!(
+                                    "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
                                     location.user_display(),
-                                    "hint".bold().cyan(),
-                                    ":".bold(),
-                                ),
-                            )));
+                                    "--clear".green(),
+                                );
+                            }
                         }
-                        // When we don't have a TTY, warn that the behavior will change in the future
-                        None => {
-                            warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
+                    } else {
+                        // --no-clear was specified, fail without prompting
+                        let hint = format!(
+                            "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
+                            "--clear".green(),
+                            "--allow-existing".green()
+                        );
+                        return Err(Error::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "A {name} already exists at {}\n\n{}{} {hint}",
                                 location.user_display(),
-                                "--clear".green(),
-                            );
-                        }
+                                "error".bold().red(),
+                                ":".bold(),
+                            ),
+                        )));
                     }
-                }
-                OnExisting::FailNoPrompt => {
-                    let hint = format!(
-                        "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
-                        "--clear".green(),
-                        "--allow-existing".green()
-                    );
-                    return Err(Error::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "A {name} already exists at {}\n\n{}{} {hint}",
-                            location.user_display(),
-                            "error".bold().red(),
-                            ":".bold(),
-                        ),
-                    )));
                 }
             }
         }
@@ -639,30 +641,33 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OnExisting {
     /// Fail if the directory already exists and is non-empty.
-    #[default]
-    Fail,
+    /// The bool parameter controls whether prompting is allowed.
+    Fail(bool),
     /// Allow an existing directory, overwriting virtual environment files while retaining other
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
     Remove,
-    /// Fail without prompting if the directory already exists and is non-empty.
-    FailNoPrompt,
+}
+
+impl Default for OnExisting {
+    fn default() -> Self {
+        Self::Fail(true) // Allow prompting by default
+    }
 }
 
 impl OnExisting {
     pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
-        if no_clear {
-            Self::FailNoPrompt
-        } else if allow_existing {
+        if allow_existing {
             Self::Allow
         } else if clear {
             Self::Remove
         } else {
-            Self::default()
+            // If no_clear is true, don't allow prompting
+            Self::Fail(!no_clear)
         }
     }
 }

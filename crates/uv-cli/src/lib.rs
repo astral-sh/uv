@@ -2694,7 +2694,7 @@ pub struct VenvArgs {
     /// By default, `uv venv` will prompt to clear a non-empty directory (when a TTY is available)
     /// or exit with an error (when no TTY is available). The `--no-clear` option will force
     /// an error exit without prompting, regardless of TTY availability.
-    #[clap(long, conflicts_with = "clear", conflicts_with = "allow_existing")]
+    #[clap(long, overrides_with = "clear", conflicts_with = "allow_existing")]
     pub no_clear: bool,
 
     /// Preserve any existing files or directories at the target path.
