@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
@@ -24,6 +24,7 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};

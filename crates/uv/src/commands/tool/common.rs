@@ -10,7 +10,6 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Preview;
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
 use uv_fs::Simplified;
@@ -19,6 +18,7 @@ use uv_fs::replace_symlink;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, VersionRequest,

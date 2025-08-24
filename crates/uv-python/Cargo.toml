@@ -20,7 +20,6 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
-uv-configuration = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
@@ -30,6 +29,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-state = { workspace = true }

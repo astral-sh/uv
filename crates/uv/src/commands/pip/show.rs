@@ -7,12 +7,12 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
 use uv_cache::Cache;
-use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_preview::Preview;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 use crate::commands::ExitStatus;

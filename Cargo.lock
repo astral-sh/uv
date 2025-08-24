@@ -5069,6 +5069,7 @@ dependencies = [
  "uv-performance-memory-allocator",
  "uv-platform",
  "uv-platform-tags",
+ "uv-preview",
  "uv-publish",
  "uv-pypi-types",
  "uv-python",
@@ -5148,6 +5149,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
@@ -5254,6 +5256,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-static",
@@ -5334,6 +5337,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-normalize",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
@@ -5408,7 +5412,6 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bitflags 2.9.1",
  "clap",
  "either",
  "fs-err",
@@ -5431,7 +5434,6 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
- "uv-warnings",
 ]
 
 [[package]]
@@ -5481,6 +5483,7 @@ dependencies = [
  "uv-options-metadata",
  "uv-pep508",
  "uv-performance-memory-allocator",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-settings",
@@ -5524,6 +5527,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-installer",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
@@ -5764,11 +5768,11 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
- "uv-configuration",
  "uv-distribution-filename",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
+ "uv-preview",
  "uv-pypi-types",
  "uv-shell",
  "uv-trampoline-builder",
@@ -5807,6 +5811,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
@@ -5966,6 +5971,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-preview"
+version = "0.0.1"
+dependencies = [
+ "bitflags 2.9.1",
+ "thiserror 2.0.12",
+ "uv-warnings",
+]
+
+[[package]]
 name = "uv-publish"
 version = "0.1.0"
 dependencies = [
@@ -6077,7 +6091,6 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-client",
- "uv-configuration",
  "uv-dirs",
  "uv-distribution-filename",
  "uv-extract",
@@ -6087,6 +6100,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-state",
@@ -6347,7 +6361,6 @@ dependencies = [
  "toml_edit 0.23.2",
  "tracing",
  "uv-cache",
- "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
@@ -6356,6 +6369,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-settings",
@@ -6435,9 +6449,9 @@ dependencies = [
  "self-replace",
  "thiserror 2.0.12",
  "tracing",
- "uv-configuration",
  "uv-console",
  "uv-fs",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-shell",

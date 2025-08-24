@@ -3,8 +3,9 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, Preview};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
