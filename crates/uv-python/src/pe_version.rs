@@ -1,8 +1,8 @@
 //! Extract version information from Windows PE executables.
+use crate::PythonVersion;
 use std::path::Path;
 use thiserror::Error;
 use tracing::{debug, trace};
-use crate::PythonVersion;
 use uv_pep440::{Prerelease, PrereleaseKind, Version};
 use uv_pep508::StringVersion;
 
