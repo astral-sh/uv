@@ -421,7 +421,7 @@ impl InstalledDist {
         }
     }
 
-    /// Return the supported wheel tags for the distribution, if available.
+    /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
     pub fn read_tags(&self) -> Result<Option<ExpandedTags>, InstalledDistError> {
         // TODO(charlie): Cache this result.
         let path = match self {

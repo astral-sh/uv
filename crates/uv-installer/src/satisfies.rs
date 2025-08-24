@@ -57,28 +57,30 @@ impl RequirementSatisfaction {
             );
             dist_build_info != &build_info
         }) {
-            debug!("Build info mismatch for {name}: {distribution:?}");
+            debug!("Build info mismatch for {name}: {distribution}");
             return Self::OutOfDate;
         }
 
-        // If the distribution isn't compatible with the current platform, it is a mismatch.
+        // STOPSHIP(charlie): Remove prior to merging.
         distribution.read_tags().unwrap();
-
-        if let Ok(Some(wheel_tags)) = distribution.read_tags() {
-            if !wheel_tags.is_compatible(tags) {
-                debug!("Platform tags mismatch for {name}: {distribution:?}");
-                return Self::Mismatch;
-            }
-        }
 
         // Filter out already-installed packages.
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
-                if specifier.contains(distribution.version()) {
-                    return Self::Satisfied;
+                if !specifier.contains(distribution.version()) {
+                    return Self::Mismatch;
                 }
-                Self::Mismatch
+
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
+                    }
+                }
+
+                Self::Satisfied
             }
             RequirementSource::Url {
                 // We use the location since `direct_url.json` also stores this URL, e.g.
@@ -143,6 +145,14 @@ impl RequirementSatisfaction {
                     }
                 }
 
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
+                    }
+                }
+
                 // Otherwise, assume the requirement is up-to-date.
                 Self::Satisfied
             }
@@ -201,6 +211,14 @@ impl RequirementSatisfaction {
                     return Self::OutOfDate;
                 }
 
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
+                    }
+                }
+
                 Self::Satisfied
             }
             RequirementSource::Path {
@@ -254,6 +272,14 @@ impl RequirementSatisfaction {
                     Err(err) => {
                         debug!("Failed to read cached requirement for: {distribution} ({err})");
                         return Self::CacheInvalid;
+                    }
+                }
+
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
                     }
                 }
 
@@ -323,6 +349,14 @@ impl RequirementSatisfaction {
                     Err(err) => {
                         debug!("Failed to read cached requirement for: {distribution} ({err})");
                         return Self::CacheInvalid;
+                    }
+                }
+
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
                     }
                 }
 

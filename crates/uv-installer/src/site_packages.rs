@@ -244,6 +244,9 @@ impl SitePackages {
                     }
                 }
 
+                // STOPSHIP(charlie): Remove prior to merging.
+                distribution.read_tags().unwrap();
+
                 // Verify that the package is compatible with the current tags.
                 if let Some(wheel_tags) = distribution.read_tags()? {
                     if !wheel_tags.is_compatible(tags) {

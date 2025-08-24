@@ -12725,7 +12725,6 @@ fn switch_platform() {
 
     uv_snapshot!(context.pip_install()
         .arg("cffi")
-        .arg("--no-deps")
         .arg("--python-platform")
         .arg("windows"), @r"
     success: true
@@ -12733,16 +12732,39 @@ fn switch_platform() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + cffi==1.16.0
+     + pycparser==2.21
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("linux"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `cffi` was built for a different platform
     "
     );
 
     uv_snapshot!(context.pip_install()
         .arg("cffi")
-        .arg("--no-deps")
         .arg("--python-platform")
         .arg("linux"), @r"
     success: true
@@ -12750,7 +12772,7 @@ fn switch_platform() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]

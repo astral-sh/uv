@@ -269,26 +269,27 @@ impl CandidateSelector {
                                 "Found installed version of {dist} that satisfies preference in {range}"
                             );
 
-                            // Verify that the installed distribution is compatible with the
-                            // environment.
+                            dist.read_tags().unwrap();
+
+                            // Verify that the installed distribution is compatible with the environment.
                             if tags.is_some_and(|tags| {
                                 let Ok(Some(wheel_tags)) = dist.read_tags() else {
-                                    return true;
+                                    return false;
                                 };
-                                wheel_tags.is_compatible(tags)
+                                !wheel_tags.is_compatible(tags)
                             }) {
-                                debug!("Found preferred version of {dist} that satisfies {range}");
-                                return Some(Candidate {
-                                    name: package_name,
-                                    version,
-                                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                                        dist,
-                                    )),
-                                    choice_kind: VersionChoiceKind::Preference,
-                                });
+                                debug!("Platform tags mismatch for installed {dist}");
+                                continue;
                             }
 
-                            debug!("Platform tags mismatch for installed {dist}");
+                            return Some(Candidate {
+                                name: package_name,
+                                version,
+                                dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                    dist,
+                                )),
+                                choice_kind: VersionChoiceKind::Preference,
+                            });
                         }
                     }
                     // We do not consider installed distributions with multiple versions because
@@ -382,25 +383,23 @@ impl CandidateSelector {
                     return None;
                 }
 
-                // Verify that the installed distribution is compatible with the
-                // environment.
-                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                // Verify that the installed distribution is compatible with the environment.
                 if tags.is_some_and(|tags| {
                     let Ok(Some(wheel_tags)) = dist.read_tags() else {
-                        return true;
+                        return false;
                     };
-                    wheel_tags.is_compatible(tags)
+                    !wheel_tags.is_compatible(tags)
                 }) {
-                    debug!("Found installed version of {dist} that satisfies {range}");
-                    return Some(Candidate {
-                        name: package_name,
-                        version,
-                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
-                        choice_kind: VersionChoiceKind::Installed,
-                    });
+                    debug!("Platform tags mismatch for installed {dist}");
+                    return None;
                 }
 
-                debug!("Platform tags mismatch for installed {dist}");
+                return Some(Candidate {
+                    name: package_name,
+                    version,
+                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                    choice_kind: VersionChoiceKind::Installed,
+                });
             }
             // We do not consider installed distributions with multiple versions because
             // during installation these must be reinstalled from the remote
