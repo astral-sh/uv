@@ -28,8 +28,8 @@ pub(crate) enum PeVersionError {
     #[error("No version info found in PE file")]
     NoVersionInfo,
 
-    #[error("Failed to parse version: {0}")]
-    InvalidVersion(String),
+    #[error("Failed to parse release level: {0}")]
+    InvalidReleaseLevel(u16),
 
     #[error("Version component too large: {0}")]
     VersionComponentTooLarge(#[from] std::num::TryFromIntError),
@@ -108,9 +108,7 @@ fn extract_version_from_pe(path: &Path) -> Result<PythonVersion, PeVersionError>
         0xC => Some(PrereleaseKind::Rc),
         0xF => None,
         _ => {
-            return Err(PeVersionError::InvalidVersion(format!(
-                "Python version has an invalid release level: {levelnum}"
-            )));
+            return Err(PeVersionError::InvalidReleaseLevel(levelnum));
         }
     }
     .map(|kind| Prerelease {
