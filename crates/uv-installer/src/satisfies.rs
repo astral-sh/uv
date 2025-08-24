@@ -9,8 +9,8 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, PackageConfigSettings,
-    RequirementSource,
+    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
+    PackageConfigSettings, RequirementSource,
 };
 use uv_git_types::GitOid;
 use uv_normalize::PackageName;
@@ -78,12 +78,12 @@ impl RequirementSatisfaction {
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     editable,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -137,7 +137,8 @@ impl RequirementSatisfaction {
                 git: requested_git,
                 subdirectory: requested_subdirectory,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDistKind::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                    &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -192,11 +193,11 @@ impl RequirementSatisfaction {
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -247,11 +248,11 @@ impl RequirementSatisfaction {
                 r#virtual: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };

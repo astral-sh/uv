@@ -389,6 +389,9 @@ pub(crate) struct Changelog {
 impl Changelog {
     /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
     pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+        // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
+        // the inner `kind`, and omits the types that rely on internal mutability.
+        #[allow(clippy::mutable_key_type)]
         let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
 
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed

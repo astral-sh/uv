@@ -225,7 +225,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
