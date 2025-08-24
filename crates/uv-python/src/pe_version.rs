@@ -1,22 +1,11 @@
 //! Extract version information from Windows PE executables.
 use std::path::Path;
-
-#[cfg(target_os = "windows")]
 use thiserror::Error;
-
-#[cfg(target_os = "windows")]
 use tracing::{debug, trace};
-
-#[cfg(target_os = "windows")]
 use crate::PythonVersion;
-
-#[cfg(target_os = "windows")]
 use uv_pep440::{Prerelease, PrereleaseKind, Version};
-
-#[cfg(target_os = "windows")]
 use uv_pep508::StringVersion;
 
-#[cfg(target_os = "windows")]
 #[derive(Debug, Error)]
 pub(crate) enum PeVersionError {
     #[error("Failed to read PE file: {0}")]
@@ -38,7 +27,6 @@ pub(crate) enum PeVersionError {
 /// Try to extract Python version information from a Windows PE executable.
 ///
 /// On error, return [`None`].
-#[cfg(target_os = "windows")]
 pub(crate) fn try_extract_version_from_pe(path: &Path) -> Option<PythonVersion> {
     match extract_version_from_pe(path) {
         Ok(version) => Some(version),
@@ -54,7 +42,6 @@ pub(crate) fn try_extract_version_from_pe(path: &Path) -> Option<PythonVersion> 
 }
 
 /// Extract Python version information from a Windows PE executable.
-#[cfg(target_os = "windows")]
 fn extract_version_from_pe(path: &Path) -> Result<PythonVersion, PeVersionError> {
     use pelite::FileMap;
     trace!("Extracting version info from PE file: {}", path.display());
@@ -113,7 +100,6 @@ fn extract_version_from_pe(path: &Path) -> Result<PythonVersion, PeVersionError>
     Ok(PythonVersion::from(StringVersion::from(version)))
 }
 
-#[cfg(target_os = "windows")]
 fn read_pe64_resources(
     map: &'_ pelite::FileMap,
 ) -> Result<pelite::resources::Resources<'_>, PeVersionError> {
@@ -123,7 +109,6 @@ fn read_pe64_resources(
     Ok(pe.resources()?)
 }
 
-#[cfg(target_os = "windows")]
 fn read_pe32_resources(
     map: &'_ pelite::FileMap,
 ) -> Result<pelite::resources::Resources<'_>, PeVersionError> {
