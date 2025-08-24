@@ -72,6 +72,7 @@ once_cell = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
 windows-sys = { workspace = true }
+pelite = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
