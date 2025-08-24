@@ -13,7 +13,7 @@ use uv_pypi_types::Scheme;
 pub use install::install_wheel;
 pub use linker::{LinkMode, Locks};
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{LibKind, parse_wheel_file, read_record_file};
+pub use wheel::{LibKind, WheelFile, read_record_file};
 
 mod install;
 mod linker;
