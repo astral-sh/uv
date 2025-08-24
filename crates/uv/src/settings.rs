@@ -2589,6 +2589,8 @@ impl PipTreeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
     pub(crate) settings: PipSettings,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
 }
 
 impl PipCheckSettings {
@@ -2598,6 +2600,8 @@ impl PipCheckSettings {
             python,
             system,
             no_system,
+            python_version,
+            python_platform,
         } = args;
 
         Self {
@@ -2609,6 +2613,8 @@ impl PipCheckSettings {
                 },
                 filesystem,
             ),
+            python_version,
+            python_platform,
         }
     }
 }
