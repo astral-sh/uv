@@ -1119,6 +1119,24 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
+        // Helper to parse a concrete version from the request (non-range) for compatibility check
+        fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
+            let version_request = match request {
+                PythonRequest::Version(version)
+                | PythonRequest::ImplementationVersion(_, version) => version,
+                PythonRequest::Key(download_request) => download_request.version()?,
+                _ => {
+                    return None;
+                }
+            };
+            if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
+                return None;
+            }
+            // Remove Python variant and parse to PEP 440 version
+            let s = version_request.clone().without_python_variant().to_string();
+            Some(uv_pep440::Version::from_str(&s).unwrap())
+        }
+
         let requires_python = workspace
             .map(|workspace| find_requires_python(workspace, groups))
             .transpose()?
@@ -1144,24 +1162,6 @@ impl WorkspacePython {
             // project's `requires-python`, ignore the pin and fall back to the project
             // requirement instead of erroring.
             let request_from_file = file.clone().into_version();
-
-            // Helper to parse a concrete version from the request (non-range) for compatibility check
-            fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-                let version_request = match request {
-                    PythonRequest::Version(version)
-                    | PythonRequest::ImplementationVersion(_, version) => version,
-                    PythonRequest::Key(download_request) => download_request.version()?,
-                    _ => {
-                        return None;
-                    }
-                };
-                if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
-                    return None;
-                }
-                // Remove Python variant and parse to PEP 440 version
-                let s = version_request.clone().without_python_variant().to_string();
-                Some(uv_pep440::Version::from_str(&s).unwrap())
-            }
 
             if file.is_global() {
                 if let (Some(req), Some(rp)) =
