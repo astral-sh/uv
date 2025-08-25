@@ -238,6 +238,12 @@ struct PylockTomlDependency {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
+    #[serde(
+        skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+        serialize_with = "uv_pep508::marker::ser::serialize",
+        default
+    )]
+    pub marker: MarkerTree,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -886,6 +892,7 @@ impl<'lock> PylockToml {
                 .map(|dep| PylockTomlDependency {
                     name: dep.package_id.name.clone(),
                     version: dep.package_id.version.clone(),
+                    marker: dep.simplified_marker.clone().as_simplified_marker_tree(),
                 })
                 .chain(
                     package
@@ -899,6 +906,7 @@ impl<'lock> PylockToml {
                         .map(|dep| PylockTomlDependency {
                             name: dep.package_id.name.clone(),
                             version: dep.package_id.version.clone(),
+                            marker: dep.simplified_marker.clone().as_simplified_marker_tree(),
                         }),
                 )
                 .collect();
