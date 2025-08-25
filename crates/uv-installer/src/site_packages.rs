@@ -244,15 +244,21 @@ impl SitePackages {
                     }
                 }
 
-                // STOPSHIP(charlie): Remove prior to merging.
-                distribution.read_tags().unwrap();
-
                 // Verify that the package is compatible with the current tags.
-                if let Some(wheel_tags) = distribution.read_tags()? {
-                    if !wheel_tags.is_compatible(tags) {
-                        // TODO(charlie): Show the expanded tag hint, that explains _why_ it doesn't match.
-                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePlatform {
+                match distribution.read_tags() {
+                    Ok(Some(wheel_tags)) => {
+                        if !wheel_tags.is_compatible(tags) {
+                            // TODO(charlie): Show the expanded tag hint, that explains _why_ it doesn't match.
+                            diagnostics.push(SitePackagesDiagnostic::IncompatiblePlatform {
+                                package: package.clone(),
+                            });
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(_) => {
+                        diagnostics.push(SitePackagesDiagnostic::TagsUnavailable {
                             package: package.clone(),
+                            path: distribution.install_path().to_owned(),
                         });
                     }
                 }
@@ -274,12 +280,10 @@ impl SitePackages {
                         }
                         [installed] => {
                             match &dependency.version_or_url {
-                                None | Some(uv_pep508::VersionOrUrl::Url(_)) => {
+                                None | Some(VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(uv_pep508::VersionOrUrl::VersionSpecifier(
-                                    version_specifier,
-                                )) => {
+                                Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
                                         diagnostics.push(
@@ -586,6 +590,12 @@ pub enum SitePackagesDiagnostic {
         /// The path to the package.
         path: PathBuf,
     },
+    TagsUnavailable {
+        /// The package that is missing tags.
+        package: PackageName,
+        /// The path to the package.
+        path: PathBuf,
+    },
     IncompatiblePythonVersion {
         /// The package that requires a different version of Python.
         package: PackageName,
@@ -628,6 +638,10 @@ impl Diagnostic for SitePackagesDiagnostic {
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.",
                 path.display(),
             ),
+            Self::TagsUnavailable { package, path } => format!(
+                "The package `{package}` is broken or incomplete (unable to read `WHEEL` file). Consider recreating the virtualenv, or removing the package directory at: {}.",
+                path.display(),
+            ),
             Self::IncompatiblePythonVersion {
                 package,
                 version,
@@ -667,6 +681,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MetadataUnavailable { package, .. } => name == package,
+            Self::TagsUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
             Self::IncompatiblePlatform { package } => name == package,
             Self::MissingDependency { package, .. } => name == package,

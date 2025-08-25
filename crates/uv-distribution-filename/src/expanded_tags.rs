@@ -252,6 +252,34 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_unknown_expanded_tag() {
+        let tags = ExpandedTags::parse(vec!["py3-foo-any"]).unwrap();
+
+        insta::assert_debug_snapshot!(tags, @r#"
+        ExpandedTags(
+            [
+                Large {
+                    large: WheelTagLarge {
+                        build_tag: None,
+                        python_tag: [
+                            Python {
+                                major: 3,
+                                minor: None,
+                            },
+                        ],
+                        abi_tag: [],
+                        platform_tag: [
+                            Any,
+                        ],
+                        repr: "py3-foo-any",
+                    },
+                },
+            ],
+        )
+        "#);
+    }
+
+    #[test]
     fn test_parse_expanded_tag_with_dots() {
         let tags = ExpandedTags::parse(vec!["py2.py3-none-any"]).unwrap();
 

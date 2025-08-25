@@ -269,8 +269,6 @@ impl CandidateSelector {
                                 "Found installed version of {dist} that satisfies preference in {range}"
                             );
 
-                            dist.read_tags().unwrap();
-
                             // Verify that the installed distribution is compatible with the environment.
                             if tags.is_some_and(|tags| {
                                 let Ok(Some(wheel_tags)) = dist.read_tags() else {
