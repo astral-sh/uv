@@ -9,8 +9,9 @@ use tracing::warn;
 use url::Url;
 
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::EggInfoFilename;
+use uv_distribution_filename::{EggInfoFilename, ExpandedTags};
 use uv_fs::Simplified;
+use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
@@ -39,6 +40,12 @@ pub enum InstalledDistError {
 
     #[error(transparent)]
     PackageNameParse(#[from] uv_normalize::InvalidNameError),
+
+    #[error(transparent)]
+    WheelFileParse(#[from] uv_install_wheel::Error),
+
+    #[error(transparent)]
+    ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
 
     #[error("Invalid .egg-link path: `{}`", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
@@ -412,6 +419,30 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }
+    }
+
+    /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
+    pub fn read_tags(&self) -> Result<Option<ExpandedTags>, InstalledDistError> {
+        // TODO(charlie): Cache this result.
+        let path = match self {
+            Self::Registry(InstalledRegistryDist { path, .. }) => path,
+            Self::Url(InstalledDirectUrlDist { path, .. }) => path,
+            Self::EggInfoFile(_) => return Ok(None),
+            Self::EggInfoDirectory(_) => return Ok(None),
+            Self::LegacyEditable(_) => return Ok(None),
+        };
+
+        // Read the `WHEEL` file.
+        let contents = fs_err::read_to_string(path.join("WHEEL"))?;
+        let wheel_file = WheelFile::parse(&contents)?;
+        let Some(tags) = wheel_file.tags() else {
+            return Ok(None);
+        };
+
+        // Parse the tags.
+        let tags = ExpandedTags::parse(tags.iter().map(String::as_str))?;
+
+        Ok(Some(tags))
     }
 
     /// Return true if the distribution is editable.
