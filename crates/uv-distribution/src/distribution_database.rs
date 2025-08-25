@@ -144,7 +144,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .read_metadata()
             .map_err(|err| Error::ReadInstalled(Box::new(dist.clone()), err))?;
 
-        Ok(ArchiveMetadata::from_metadata23(metadata))
+        Ok(ArchiveMetadata::from_metadata23(metadata.clone()))
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or

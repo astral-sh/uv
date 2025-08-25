@@ -20,13 +20,9 @@ fn format_project() -> Result<()> {
 
     // Create an unformatted Python file
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
-        import sys
-        def   hello():
-            print(  "Hello, World!"  )
-        if __name__=="__main__":
-            hello(   )
-    "#})?;
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     uv_snapshot!(context.filters(), context.format(), @r"
     success: true
@@ -40,17 +36,9 @@ fn format_project() -> Result<()> {
 
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(formatted_content, @r#"
-    import sys
-
-
-    def hello():
-        print("Hello, World!")
-
-
-    if __name__ == "__main__":
-        hello()
-    "#);
+    assert_snapshot!(formatted_content, @r"
+        x = 1
+    ");
 
     Ok(())
 }
@@ -70,13 +58,9 @@ fn format_from_project_root() -> Result<()> {
 
     // Create an unformatted Python file
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
-        import sys
-        def   hello():
-            print(  "Hello, World!"  )
-        if __name__=="__main__":
-            hello(   )
-    "#})?;
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     let subdir = context.temp_dir.child("subdir");
     fs_err::create_dir_all(&subdir)?;
@@ -94,17 +78,9 @@ fn format_from_project_root() -> Result<()> {
 
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(formatted_content, @r#"
-    import sys
-
-
-    def hello():
-        print("Hello, World!")
-
-
-    if __name__ == "__main__":
-        hello()
-    "#);
+    assert_snapshot!(formatted_content, @r"
+        x = 1
+    ");
 
     Ok(())
 }
@@ -124,23 +100,15 @@ fn format_relative_project() -> Result<()> {
 
     // Create an unformatted Python file in the relative project
     let relative_project_main_py = context.temp_dir.child("project").child("main.py");
-    relative_project_main_py.write_str(indoc! {r#"
-        import sys
-        def   hello():
-            print(  "Hello, World!"  )
-        if __name__=="__main__":
-            hello(   )
-    "#})?;
+    relative_project_main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     // Create another unformatted Python file in the root directory
     let root_main_py = context.temp_dir.child("main.py");
-    root_main_py.write_str(indoc! {r#"
-        import sys
-        def   hello():
-            print(  "Hello, World!"  )
-        if __name__=="__main__":
-            hello(   )
-    "#})?;
+    root_main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--project").arg("project"), @r"
     success: true
@@ -154,27 +122,16 @@ fn format_relative_project() -> Result<()> {
 
     // Check that the relative project file was formatted
     let relative_project_content = fs_err::read_to_string(&relative_project_main_py)?;
-    assert_snapshot!(relative_project_content, @r#"
-    import sys
-
-
-    def hello():
-        print("Hello, World!")
-
-
-    if __name__ == "__main__":
-        hello()
-    "#);
+    assert_snapshot!(relative_project_content, @r"
+        x = 1
+    ");
 
     // Check that the root file was not formatted
     let root_content = fs_err::read_to_string(&root_main_py)?;
-    assert_snapshot!(root_content, @r#"
-    import sys
-    def   hello():
-        print(  "Hello, World!"  )
-    if __name__=="__main__":
-        hello(   )
-    "#);
+    assert_snapshot!(root_content, @r"
+        x    = 1
+    ");
+
     Ok(())
 }
 
@@ -193,10 +150,9 @@ fn format_check() -> Result<()> {
 
     // Create an unformatted Python file
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
-        def   hello():
-            print(  "Hello, World!"  )
-    "#})?;
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--check"), @r"
     success: false
@@ -211,10 +167,9 @@ fn format_check() -> Result<()> {
 
     // Verify the file wasn't modified
     let content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(content, @r#"
-    def   hello():
-        print(  "Hello, World!"  )
-    "#);
+    assert_snapshot!(content, @r"
+        x    = 1
+    ");
 
     Ok(())
 }
@@ -234,10 +189,9 @@ fn format_diff() -> Result<()> {
 
     // Create an unformatted Python file
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
-        def   hello():
-            print(  "Hello, World!"  )
-    "#})?;
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--diff"), @r#"
     success: false
@@ -245,11 +199,9 @@ fn format_diff() -> Result<()> {
     ----- stdout -----
     --- main.py
     +++ main.py
-    @@ -1,2 +1,2 @@
-    -def   hello():
-    -    print(  "Hello, World!"  )
-    +def hello():
-    +    print("Hello, World!")
+    @@ -1 +1 @@
+    -x    = 1
+    +x = 1
 
 
     ----- stderr -----
@@ -259,10 +211,9 @@ fn format_diff() -> Result<()> {
 
     // Verify the file wasn't modified
     let content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(content, @r#"
-    def   hello():
-        print(  "Hello, World!"  )
-    "#);
+    assert_snapshot!(content, @r"
+        x    = 1
+    ");
 
     Ok(())
 }
@@ -323,16 +274,14 @@ fn format_specific_files() -> Result<()> {
 
     // Create multiple unformatted Python files
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
-        def   main():
-            print(  "Main"  )
-    "#})?;
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     let utils_py = context.temp_dir.child("utils.py");
-    utils_py.write_str(indoc! {r#"
-        def   utils():
-            print(  "utils"  )
-    "#})?;
+    utils_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py"), @r"
     success: true
@@ -345,17 +294,15 @@ fn format_specific_files() -> Result<()> {
     ");
 
     let main_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(main_content, @r#"
-    def main():
-        print("Main")
-    "#);
+    assert_snapshot!(main_content, @r"
+        x = 1
+    ");
 
     // Unchanged
     let utils_content = fs_err::read_to_string(&utils_py)?;
-    assert_snapshot!(utils_content, @r#"
-    def   utils():
-        print(  "utils"  )
-    "#);
+    assert_snapshot!(utils_content, @r"
+        x    = 1
+    ");
 
     Ok(())
 }
@@ -375,7 +322,7 @@ fn format_version_option() -> Result<()> {
 
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r"
-        def   hello():  pass
+        x    = 1
     "})?;
 
     // Run format with specific Ruff version

@@ -965,6 +965,10 @@ async fn get_or_create_environment(
                     )
                     .into_inner();
 
+                    // Determine the markers and tags to use for the resolution.
+                    let markers = interpreter.resolver_marker_environment();
+                    let tags = interpreter.tags()?;
+
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
                     if matches!(
@@ -972,7 +976,8 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter(),
                             overrides.iter(),
-                            &interpreter.resolver_marker_environment(),
+                            &markers,
+                            tags,
                             config_setting,
                             config_settings_package,
                             &extra_build_requires,

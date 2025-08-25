@@ -2589,8 +2589,6 @@ impl PipTreeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
     pub(crate) settings: PipSettings,
-    pub(crate) python_version: Option<PythonVersion>,
-    pub(crate) python_platform: Option<TargetTriple>,
 }
 
 impl PipCheckSettings {
@@ -2609,12 +2607,12 @@ impl PipCheckSettings {
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
+                    python_version,
+                    python_platform,
                     ..PipOptions::default()
                 },
                 filesystem,
             ),
-            python_version,
-            python_platform,
         }
     }
 }

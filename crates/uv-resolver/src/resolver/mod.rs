@@ -1269,6 +1269,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            self.tags.as_ref(),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1485,6 +1486,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            self.tags.as_ref(),
         ) else {
             return Ok(None);
         };
@@ -2447,6 +2449,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     None,
                     &env,
+                    self.tags.as_ref(),
                 ) else {
                     return Ok(None);
                 };

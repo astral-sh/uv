@@ -1,20 +1,23 @@
-use crate::Error;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
+
 use fs_err as fs;
 use fs_err::DirEntry;
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument, trace};
+use walkdir::WalkDir;
+
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::{warn_user, warn_user_once};
-use walkdir::WalkDir;
+
+use crate::Error;
 
 #[allow(clippy::struct_field_names)]
 #[derive(Debug, Default)]

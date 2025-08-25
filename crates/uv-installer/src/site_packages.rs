@@ -8,14 +8,15 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist, Name,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
+    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
+use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
@@ -125,7 +126,7 @@ impl SitePackages {
                     .push(idx);
 
                 // Index the distribution by URL.
-                if let InstalledDist::Url(dist) = &dist_info {
+                if let InstalledDistKind::Url(dist) = &dist_info.kind {
                     by_url.entry(dist.url.clone()).or_default().push(idx);
                 }
 
@@ -194,6 +195,7 @@ impl SitePackages {
     pub fn diagnostics(
         &self,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -242,6 +244,25 @@ impl SitePackages {
                     }
                 }
 
+                // Verify that the package is compatible with the current tags.
+                match distribution.read_tags() {
+                    Ok(Some(wheel_tags)) => {
+                        if !wheel_tags.is_compatible(tags) {
+                            // TODO(charlie): Show the expanded tag hint, that explains _why_ it doesn't match.
+                            diagnostics.push(SitePackagesDiagnostic::IncompatiblePlatform {
+                                package: package.clone(),
+                            });
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(_) => {
+                        diagnostics.push(SitePackagesDiagnostic::TagsUnavailable {
+                            package: package.clone(),
+                            path: distribution.install_path().to_owned(),
+                        });
+                    }
+                }
+
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
                     if !dependency.evaluate_markers(markers, &[]) {
@@ -259,12 +280,10 @@ impl SitePackages {
                         }
                         [installed] => {
                             match &dependency.version_or_url {
-                                None | Some(uv_pep508::VersionOrUrl::Url(_)) => {
+                                None | Some(VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(uv_pep508::VersionOrUrl::VersionSpecifier(
-                                    version_specifier,
-                                )) => {
+                                Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
                                         diagnostics.push(
@@ -296,6 +315,7 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -385,6 +405,7 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
             markers,
+            tags,
             config_settings,
             config_settings_package,
             extra_build_requires,
@@ -399,6 +420,7 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -460,6 +482,7 @@ impl SitePackages {
                             name,
                             distribution,
                             &requirement.source,
+                            tags,
                             config_settings,
                             config_settings_package,
                             extra_build_requires,
@@ -481,6 +504,7 @@ impl SitePackages {
                                 name,
                                 distribution,
                                 &constraint.source,
+                                tags,
                                 config_settings,
                                 config_settings_package,
                                 extra_build_requires,
@@ -504,8 +528,8 @@ impl SitePackages {
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
-                    for dependency in metadata.requires_dist {
-                        let dependency = Requirement::from(dependency);
+                    for dependency in &metadata.requires_dist {
+                        let dependency = Requirement::from(dependency.clone());
                         if let Some(r#overrides) = overrides.get(&dependency.name) {
                             for dependency in r#overrides {
                                 if dependency.evaluate_markers(Some(markers), &requirement.extras) {
@@ -566,6 +590,12 @@ pub enum SitePackagesDiagnostic {
         /// The path to the package.
         path: PathBuf,
     },
+    TagsUnavailable {
+        /// The package that is missing tags.
+        package: PackageName,
+        /// The path to the package.
+        path: PathBuf,
+    },
     IncompatiblePythonVersion {
         /// The package that requires a different version of Python.
         package: PackageName,
@@ -573,6 +603,10 @@ pub enum SitePackagesDiagnostic {
         version: Version,
         /// The version of Python that is required.
         requires_python: VersionSpecifiers,
+    },
+    IncompatiblePlatform {
+        /// The package that was built for a different platform.
+        package: PackageName,
     },
     MissingDependency {
         /// The package that is missing a dependency.
@@ -604,6 +638,10 @@ impl Diagnostic for SitePackagesDiagnostic {
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.",
                 path.display(),
             ),
+            Self::TagsUnavailable { package, path } => format!(
+                "The package `{package}` is broken or incomplete (unable to read `WHEEL` file). Consider recreating the virtualenv, or removing the package directory at: {}.",
+                path.display(),
+            ),
             Self::IncompatiblePythonVersion {
                 package,
                 version,
@@ -611,6 +649,9 @@ impl Diagnostic for SitePackagesDiagnostic {
             } => format!(
                 "The package `{package}` requires Python {requires_python}, but `{version}` is installed"
             ),
+            Self::IncompatiblePlatform { package } => {
+                format!("The package `{package}` was built for a different platform")
+            }
             Self::MissingDependency {
                 package,
                 requirement,
@@ -640,7 +681,9 @@ impl Diagnostic for SitePackagesDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MetadataUnavailable { package, .. } => name == package,
+            Self::TagsUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
+            Self::IncompatiblePlatform { package } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {
                 package,

@@ -57,8 +57,9 @@ pub(crate) fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    // Determine the markers to use for resolution.
+    // Determine the markers and tags to use for resolution.
     let markers = environment.interpreter().resolver_marker_environment();
+    let tags = environment.interpreter().tags()?;
 
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
@@ -101,9 +102,11 @@ pub(crate) fn pip_show(
         if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
-                Box::into_iter(metadata.requires_dist)
+                metadata
+                    .requires_dist
+                    .iter()
                     .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| req.name)
+                    .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
                     .collect_vec(),
@@ -117,9 +120,11 @@ pub(crate) fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
-                let requires = Box::into_iter(metadata.requires_dist)
+                let requires = metadata
+                    .requires_dist
+                    .iter()
                     .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| req.name)
+                    .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {
                     requires_map.insert(installed.name(), requires);
@@ -171,7 +176,7 @@ pub(crate) fn pip_show(
                 .iter()
                 .filter(|(name, pkgs)| {
                     **name != distribution.name()
-                        && pkgs.iter().any(|pkg| pkg == distribution.name())
+                        && pkgs.iter().any(|pkg| *pkg == distribution.name())
                 })
                 .map(|(name, _)| name)
                 .sorted_unstable()
@@ -201,7 +206,7 @@ pub(crate) fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
