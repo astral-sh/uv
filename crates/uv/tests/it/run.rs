@@ -5958,3 +5958,120 @@ fn run_python_preference_no_project() {
     ----- stderr -----
     ");
 }
+
+/// Test comma-separated extras in run command
+#[test]
+fn run_comma_separated_extras() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("--extra").arg("dev,test").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test mixed comma-separated and individual extras in run command
+#[test]
+fn run_mixed_extras() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        docs = ["anyio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("--extra").arg("dev,test").arg("--extra").arg("docs").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test invalid comma-separated extras in run command
+#[test]
+fn run_invalid_comma_separated_extras() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("--extra").arg("dev,nonexistent").arg("python").arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    error: Extra `nonexistent` is not defined in the project's `optional-dependencies` table
+    ");
+
+    Ok(())
+}

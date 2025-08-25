@@ -74,13 +74,28 @@ pub enum ListFormat {
     Json,
 }
 
+fn name_with_clap_error<T>(arg: &str, name_type: &str) -> Result<T>
+where
+    T: FromStr,
+    T::Err: std::fmt::Display,
+{
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("{} cannot be empty", name_type));
+    }
+    T::from_str(trimmed).map_err(|err| anyhow!("{}", err))
+}
+
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
-    ExtraName::from_str(arg).map_err(|_err| {
-        anyhow!(
-            "Extra names must start and end with a letter or digit and may only \
-            contain -, _, ., and alphanumeric characters"
-        )
-    })
+    name_with_clap_error::<ExtraName>(arg, "Extra name")
+}
+
+fn group_name_with_clap_error(arg: &str) -> Result<GroupName> {
+    name_with_clap_error::<GroupName>(arg, "Group name")
+}
+
+fn pip_group_name_with_clap_error(arg: &str) -> Result<PipGroupName> {
+    name_with_clap_error::<PipGroupName>(arg, "Group name")
 }
 
 // Configures Clap v3-style help menu colors
@@ -1228,9 +1243,10 @@ pub struct PipCompileArgs {
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -1243,11 +1259,12 @@ pub struct PipCompileArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pyproject.toml`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pyproject.toml` in the working directory is used.
     ///
     /// May be provided multiple times.
-    #[arg(long, group = "sources")]
+    #[arg(long, group = "sources", value_parser = pip_group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
@@ -1559,9 +1576,10 @@ pub struct PipSyncArgs {
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -1574,12 +1592,13 @@ pub struct PipSyncArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
     /// used.
     ///
     /// May be provided multiple times.
-    #[arg(long, group = "sources")]
+    #[arg(long, group = "sources", value_parser = pip_group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
@@ -1861,9 +1880,10 @@ pub struct PipInstallArgs {
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -1876,12 +1896,13 @@ pub struct PipInstallArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
     /// used.
     ///
     /// May be provided multiple times.
-    #[arg(long, group = "sources")]
+    #[arg(long, group = "sources", value_parser = pip_group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
@@ -3027,13 +3048,14 @@ pub struct InitArgs {
 #[derive(Args)]
 pub struct RunArgs {
     /// Include optional dependencies from the specified extra name.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided more than once.
     ///
     /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -3074,18 +3096,20 @@ pub struct RunArgs {
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3096,11 +3120,12 @@ pub struct RunArgs {
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub only_group: Vec<GroupName>,
 
     /// Include dependencies from all dependency groups.
@@ -3313,6 +3338,7 @@ pub struct RunArgs {
 #[derive(Args)]
 pub struct SyncArgs {
     /// Include optional dependencies from the specified extra name.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided more than once.
     ///
@@ -3321,7 +3347,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
@@ -3369,21 +3395,23 @@ pub struct SyncArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// When multiple extras or groups are specified that appear in
     /// `tool.uv.conflicts`, uv will report an error.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3394,11 +3422,12 @@ pub struct SyncArgs {
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub only_group: Vec<GroupName>,
 
     /// Include dependencies from all dependency groups.
@@ -4021,18 +4050,20 @@ pub struct TreeArgs {
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4043,11 +4074,12 @@ pub struct TreeArgs {
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub only_group: Vec<GroupName>,
 
     /// Include dependencies from all dependency groups.
@@ -4158,7 +4190,7 @@ pub struct ExportArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error, value_delimiter = ',')]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -4196,18 +4228,20 @@ pub struct ExportArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4218,11 +4252,12 @@ pub struct ExportArgs {
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
     pub only_group: Vec<GroupName>,
 
     /// Include dependencies from all dependency groups.

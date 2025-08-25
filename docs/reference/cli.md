@@ -101,7 +101,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-run--exclude-newer-package"><a href="#uv-run--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-run--extra"><a href="#uv-run--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
+</dd><dt id="uv-run--extra"><a href="#uv-run--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>May be provided more than once.</p>
 <p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
 <p>This option is only available when running in a project.</p>
@@ -120,7 +120,7 @@ uv run [OPTIONS] [COMMAND]
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-run--frozen"><a href="#uv-run--frozen"><code>--frozen</code></a></dt><dd><p>Run without updating the <code>uv.lock</code> file.</p>
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
-<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-run--group"><a href="#uv-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-run--group"><a href="#uv-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-run--gui-script"><a href="#uv-run--gui-script"><code>--gui-script</code></a></dt><dd><p>Run the given path as a Python GUI script.</p>
 <p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with <code>pythonw.exe</code>, irrespective of its extension. Only available on Windows.</p>
@@ -190,7 +190,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-run--no-env-file"><a href="#uv-run--no-env-file"><code>--no-env-file</code></a></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--no-extra"><a href="#uv-run--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+</dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-run--no-index"><a href="#uv-run--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
@@ -210,7 +210,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-run--only-dev"><a href="#uv-run--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-run--only-group"><a href="#uv-run--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-run--only-group"><a href="#uv-run--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-run--package"><a href="#uv-run--package"><code>--package</code></a> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
@@ -1043,7 +1043,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-sync--exclude-newer-package"><a href="#uv-sync--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-sync--extra"><a href="#uv-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
+</dd><dt id="uv-sync--extra"><a href="#uv-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>May be provided more than once.</p>
 <p>When multiple extras or groups are specified that appear in <code>tool.uv.conflicts</code>, uv will report an error.</p>
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
@@ -1062,7 +1062,7 @@ uv sync [OPTIONS]
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-sync--frozen"><a href="#uv-sync--frozen"><code>--frozen</code></a></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
-<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-sync--group"><a href="#uv-sync--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-sync--group"><a href="#uv-sync--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>When multiple extras or groups are specified that appear in <code>tool.uv.conflicts</code>, uv will report an error.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-sync--help"><a href="#uv-sync--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -1125,7 +1125,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+</dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-sync--no-index"><a href="#uv-sync--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
@@ -1148,7 +1148,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-sync--only-dev"><a href="#uv-sync--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-sync--output-format"><a href="#uv-sync--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
@@ -1488,7 +1488,7 @@ uv export [OPTIONS]
 <li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
 </ul></dd><dt id="uv-export--frozen"><a href="#uv-export--frozen"><code>--frozen</code></a></dt><dd><p>Do not update the <code>uv.lock</code> before exporting.</p>
 <p>If a <code>uv.lock</code> does not exist, uv will exit with an error.</p>
-<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-export--group"><a href="#uv-export--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-export--group"><a href="#uv-export--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-export--help"><a href="#uv-export--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-export--index"><a href="#uv-export--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1558,7 +1558,7 @@ uv export [OPTIONS]
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 </dd><dt id="uv-export--no-extra"><a href="#uv-export--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+</dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-export--no-hashes"><a href="#uv-export--no-hashes"><code>--no-hashes</code></a></dt><dd><p>Omit hashes in the generated output</p>
@@ -1575,7 +1575,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-export--only-dev"><a href="#uv-export--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-export--only-group"><a href="#uv-export--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-export--only-group"><a href="#uv-export--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-export--output-file"><a href="#uv-export--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
@@ -1681,7 +1681,7 @@ uv tree [OPTIONS]
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-tree--frozen"><a href="#uv-tree--frozen"><code>--frozen</code></a></dt><dd><p>Display the requirements without locking the project.</p>
 <p>If the lockfile is missing, uv will exit with an error.</p>
-<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-tree--group"><a href="#uv-tree--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-tree--group"><a href="#uv-tree--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-tree--help"><a href="#uv-tree--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-tree--index"><a href="#uv-tree--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1741,7 +1741,7 @@ uv tree [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-tree--no-dev"><a href="#uv-tree--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-tree--no-index"><a href="#uv-tree--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
@@ -1756,7 +1756,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tree--only-dev"><a href="#uv-tree--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-tree--only-group"><a href="#uv-tree--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-tree--only-group"><a href="#uv-tree--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-tree--outdated"><a href="#uv-tree--outdated"><code>--outdated</code></a></dt><dd><p>Show the latest available version of each package in the tree</p>
@@ -3515,7 +3515,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-compile--exclude-newer-package"><a href="#uv-pip-compile--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+</dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-compile--extra-index-url"><a href="#uv-pip-compile--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3538,7 +3538,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
 <li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
 </ul></dd><dt id="uv-pip-compile--generate-hashes"><a href="#uv-pip-compile--generate-hashes"><code>--generate-hashes</code></a></dt><dd><p>Include distribution hashes in the output file</p>
-</dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
+</dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>If no path is provided, the <code>pyproject.toml</code> in the working directory is used.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-pip-compile--help"><a href="#uv-pip-compile--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -3824,7 +3824,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-sync--exclude-newer-package"><a href="#uv-pip-sync--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-pip-sync--extra"><a href="#uv-pip-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+</dd><dt id="uv-pip-sync--extra"><a href="#uv-pip-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-sync--extra-index-url"><a href="#uv-pip-sync--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3832,7 +3832,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-pip-sync--find-links"><a href="#uv-pip-sync--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 <p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
-<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p></dd><dt id="uv-pip-sync--group"><a href="#uv-pip-sync--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pylock.toml</code> or <code>pyproject.toml</code>.</p>
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p></dd><dt id="uv-pip-sync--group"><a href="#uv-pip-sync--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pylock.toml</code> or <code>pyproject.toml</code>. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>If no path is provided, the <code>pylock.toml</code> or <code>pyproject.toml</code> in the working directory is used.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-pip-sync--help"><a href="#uv-pip-sync--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -4089,7 +4089,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-install--exclude-newer-package"><a href="#uv-pip-install--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+</dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-install--extra-index-url"><a href="#uv-pip-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -4104,7 +4104,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <ul>
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
-</ul></dd><dt id="uv-pip-install--group"><a href="#uv-pip-install--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pylock.toml</code> or <code>pyproject.toml</code>.</p>
+</ul></dd><dt id="uv-pip-install--group"><a href="#uv-pip-install--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pylock.toml</code> or <code>pyproject.toml</code>. Multiple values may be provided with comma separated values or by repeating the flag.</p>
 <p>If no path is provided, the <code>pylock.toml</code> or <code>pyproject.toml</code> in the working directory is used.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-pip-install--help"><a href="#uv-pip-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
