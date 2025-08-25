@@ -474,7 +474,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234113d19d0d7d613b40e86fb654acf958910802bcceab913a4f9e7cda03b1a4"
 dependencies = [
  "memchr",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.10",
  "serde",
 ]
 
@@ -1596,7 +1596,7 @@ dependencies = [
  "aho-corasick",
  "bstr",
  "log",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.10",
  "regex-syntax 0.8.5",
 ]
 
@@ -1980,7 +1980,7 @@ dependencies = [
  "globset",
  "log",
  "memchr",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.10",
  "same-file",
  "walkdir",
  "winapi-util",
@@ -3295,7 +3295,7 @@ checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.10",
  "regex-syntax 0.8.5",
 ]
 
@@ -3310,9 +3310,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.9"
+version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
+checksum = "6b9458fa0bfeeac22b5ca447c63aaf45f28439a709ccd244698632f9aa6394d6"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -5735,7 +5735,7 @@ dependencies = [
  "insta",
  "owo-colors",
  "regex",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.10",
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
