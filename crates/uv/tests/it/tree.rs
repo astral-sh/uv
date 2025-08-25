@@ -532,7 +532,7 @@ fn dev_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -543,11 +543,13 @@ fn dev_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -555,8 +557,10 @@ fn dev_dependencies() -> Result<()> {
     └── iniconfig v2.0.0
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -584,7 +588,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -598,11 +602,13 @@ fn dev_dependencies_inverted() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -610,8 +616,10 @@ fn dev_dependencies_inverted() -> Result<()> {
     └── project v0.1.0
 
     ----- stderr -----
+    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
+    Instead use `[dependency-groups] dev = []`.
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
