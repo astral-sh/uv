@@ -7,8 +7,8 @@ use tokio::process::Command;
 use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Preview, PreviewFeatures};
 use uv_pep440::Version;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 

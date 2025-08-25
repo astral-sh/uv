@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, NoBinary, NoBuild, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -28,6 +28,7 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,

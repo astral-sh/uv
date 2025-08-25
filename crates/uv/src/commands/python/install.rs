@@ -14,9 +14,9 @@ use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_configuration::{Preview, PreviewFeatures};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
 };

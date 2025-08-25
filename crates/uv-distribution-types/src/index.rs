@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
@@ -21,6 +22,30 @@ pub struct IndexCacheControl {
     pub api: Option<SmallString>,
     /// Cache control header for file downloads.
     pub files: Option<SmallString>,
+}
+
+impl IndexCacheControl {
+    /// Return the default Simple API cache control headers for the given index URL, if applicable.
+    pub fn simple_api_cache_control(_url: &Url) -> Option<&'static str> {
+        None
+    }
+
+    /// Return the default files cache control headers for the given index URL, if applicable.
+    pub fn artifact_cache_control(url: &Url) -> Option<&'static str> {
+        if url
+            .host_str()
+            .is_some_and(|host| host.ends_with("pytorch.org"))
+        {
+            // Some wheels in the PyTorch registry were accidentally uploaded with `no-cache,no-store,must-revalidate`.
+            // The PyTorch team plans to correct this in the future, but in the meantime we override
+            // the cache control headers to allow caching of static files.
+            //
+            // See: https://github.com/pytorch/pytorch/pull/149218
+            Some("max-age=365000000, immutable, public")
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -262,6 +287,32 @@ impl Index {
             IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
         } else {
             IndexStatusCodeStrategy::from_index_url(self.url.url())
+        }
+    }
+
+    /// Return the cache control header for file requests to this index, if any.
+    pub fn artifact_cache_control(&self) -> Option<&str> {
+        if let Some(artifact_cache_control) = self
+            .cache_control
+            .as_ref()
+            .and_then(|cache_control| cache_control.files.as_deref())
+        {
+            Some(artifact_cache_control)
+        } else {
+            IndexCacheControl::artifact_cache_control(self.url.url())
+        }
+    }
+
+    /// Return the cache control header for API requests to this index, if any.
+    pub fn simple_api_cache_control(&self) -> Option<&str> {
+        if let Some(api_cache_control) = self
+            .cache_control
+            .as_ref()
+            .and_then(|cache_control| cache_control.api.as_deref())
+        {
+            Some(api_cache_control)
+        } else {
+            IndexCacheControl::simple_api_cache_control(self.url.url())
         }
     }
 }

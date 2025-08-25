@@ -9,9 +9,9 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
+use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,

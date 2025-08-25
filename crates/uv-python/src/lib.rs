@@ -132,7 +132,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
-    use uv_configuration::Preview;
+    use uv_preview::Preview;
     use uv_static::EnvVars;
 
     use uv_cache::Cache;

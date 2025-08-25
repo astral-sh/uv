@@ -5,13 +5,16 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_configuration::Preview;
+use uv_configuration::TargetTriple;
 use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
-use uv_python::PythonPreference;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_preview::Preview;
+use uv_python::{
+    EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
+};
 
 use crate::commands::pip::operations::report_target_environment;
+use crate::commands::pip::resolution_markers;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
@@ -19,6 +22,8 @@ use crate::printer::Printer;
 pub(crate) fn pip_check(
     python: Option<&str>,
     system: bool,
+    python_version: Option<&PythonVersion>,
+    python_platform: Option<&TargetTriple>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -53,7 +58,7 @@ pub(crate) fn pip_check(
     )?;
 
     // Determine the markers to use for resolution.
-    let markers = environment.interpreter().resolver_marker_environment();
+    let markers = resolution_markers(python_version, python_platform, environment.interpreter());
 
     // Run the diagnostics.
     let diagnostics: Vec<SitePackagesDiagnostic> =

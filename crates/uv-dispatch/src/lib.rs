@@ -17,7 +17,7 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, Preview, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, Constraints, IndexStrategy, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -29,6 +29,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{

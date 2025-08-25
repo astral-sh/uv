@@ -13,7 +13,7 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_configuration::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 

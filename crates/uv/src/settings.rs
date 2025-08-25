@@ -23,9 +23,8 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall,
-    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
+    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -34,6 +33,7 @@ use uv_distribution_types::{
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
+use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -2589,6 +2589,8 @@ impl PipTreeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
     pub(crate) settings: PipSettings,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
 }
 
 impl PipCheckSettings {
@@ -2598,6 +2600,8 @@ impl PipCheckSettings {
             python,
             system,
             no_system,
+            python_version,
+            python_platform,
         } = args;
 
         Self {
@@ -2609,6 +2613,8 @@ impl PipCheckSettings {
                 },
                 filesystem,
             ),
+            python_version,
+            python_platform,
         }
     }
 }

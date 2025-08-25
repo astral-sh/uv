@@ -10,8 +10,8 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -19,6 +19,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -2372,6 +2373,27 @@ pub struct PipCheckArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// The Python version against which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the version of the current
+    /// interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the platform of the current
+    /// interpreter.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]

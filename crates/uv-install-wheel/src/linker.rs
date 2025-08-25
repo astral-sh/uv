@@ -10,9 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument, trace};
-use uv_configuration::{Preview, PreviewFeatures};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::{warn_user, warn_user_once};
 use walkdir::WalkDir;
 
