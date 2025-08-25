@@ -29,6 +29,7 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+use crate::python_version::python_build_versions_from_env;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -263,6 +264,9 @@ pub enum Error {
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
     #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
+
+    #[error(transparent)]
+    BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
 /// Lazily iterate over Python executables in mutable virtual environments.
@@ -342,6 +346,9 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
+
+                let build_versions = python_build_versions_from_env()?;
+
                 // Check that the Python version and platform satisfy the request to avoid
                 // unnecessary interpreter queries later
                 Ok(installations
@@ -355,6 +362,22 @@ fn python_executables_from_installed<'a>(
                             debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
+
+                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
+                            let Some(installation_build) = installation.build() else {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
+                                );
+                                return false;
+                            };
+                            if installation_build != requested_build {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+                                );
+                                return false;
+                            }
+                        }
+
                         true
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
@@ -1218,6 +1241,7 @@ pub fn find_python_installations<'a>(
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
                 }
             }
+
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
@@ -1229,7 +1253,9 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
+                .filter_ok(move |(_source, interpreter)| {
+                    request.satisfied_by_interpreter(interpreter)
+                })
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
@@ -3186,6 +3212,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -3205,6 +3232,7 @@ mod tests {
                 ))),
                 os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
+                build: None,
                 prereleases: None
             })
         );
@@ -3221,6 +3249,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -3240,6 +3269,7 @@ mod tests {
                 ))),
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
