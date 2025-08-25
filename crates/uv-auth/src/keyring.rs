@@ -14,7 +14,7 @@ use crate::credentials::Credentials;
 /// Keyring credentials that have been stored during an invocation of uv.
 static STORED_KEYRING_URLS: LazyLock<StoredKeyringUrls> = LazyLock::new(StoredKeyringUrls::new);
 /// Service name prefix for storing credentials in a keyring.
-static UV_SERVICE_PREFIX: &str = "uv-credentials:";
+static UV_SERVICE_PREFIX: &str = "uv:";
 
 /// A backend for retrieving credentials from a keyring.
 ///
