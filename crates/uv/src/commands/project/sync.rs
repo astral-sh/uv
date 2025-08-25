@@ -253,6 +253,7 @@ pub(crate) async fn sync(
                 environment.clone(),
                 spec,
                 modifications,
+                python_platform.as_ref(),
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
