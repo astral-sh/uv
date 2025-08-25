@@ -19,7 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions,
+    InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -96,6 +96,7 @@ pub(crate) async fn run(
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     network_settings: NetworkSettings,
@@ -319,7 +320,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 editable,
                 install_options,
                 modifications,
-                None,
+                python_platform.as_ref(),
                 (&settings).into(),
                 &network_settings,
                 &sync_state,
@@ -421,6 +422,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     environment,
                     spec,
                     modifications,
+                    python_platform.as_ref(),
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
@@ -837,7 +839,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     editable,
                     install_options,
                     modifications,
-                    None,
+                    python_platform.as_ref(),
                     (&settings).into(),
                     &network_settings,
                     &sync_state,

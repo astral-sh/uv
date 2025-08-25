@@ -337,6 +337,7 @@ pub(crate) struct RunSettings {
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -391,6 +392,7 @@ impl RunSettings {
             package,
             no_project,
             python,
+            python_platform,
             show_resolution,
             env_file,
             no_env_file,
@@ -450,6 +452,7 @@ impl RunSettings {
             no_sync,
             active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -477,6 +480,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -510,6 +514,7 @@ impl ToolRunSettings {
             build,
             refresh,
             python,
+            python_platform,
             generate_shell_completion: _,
         } = args;
 
@@ -585,6 +590,7 @@ impl ToolRunSettings {
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings,
             options,
@@ -608,6 +614,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
@@ -636,6 +643,7 @@ impl ToolInstallSettings {
             build,
             refresh,
             python,
+            python_platform,
         } = args;
 
         let options =
@@ -686,6 +694,7 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             python: python.and_then(Maybe::into_option),
+            python_platform,
             force,
             editable,
             refresh: Refresh::from(refresh),

@@ -339,6 +339,7 @@ async fn upgrade_tool(
             environment,
             spec,
             Modifications::Exact,
+            None, // No python_platform for tool upgrade
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -53,6 +53,7 @@ pub(crate) async fn install(
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
     options: ResolverInstallerOptions,
@@ -439,6 +440,7 @@ pub(crate) async fn install(
             environment,
             spec,
             Modifications::Exact,
+            python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,

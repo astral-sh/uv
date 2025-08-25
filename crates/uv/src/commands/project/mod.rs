@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -2207,6 +2207,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2268,8 +2269,8 @@ pub(crate) async fn update_environment(
 
     // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = venv.interpreter().resolver_marker_environment();
-    let tags = venv.interpreter().tags()?;
+    let marker_env = pip::resolution_markers(None, python_platform, venv.interpreter());
+    let tags = pip::resolution_tags(None, python_platform, venv.interpreter())?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2283,7 +2284,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
-            tags,
+            &tags,
             config_setting,
             config_settings_package,
             &extra_build_requires,

@@ -18,6 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
+use uv_configuration::TargetTriple;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -89,6 +90,7 @@ pub(crate) async fn run(
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
+    _python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
