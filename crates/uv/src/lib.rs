@@ -1641,6 +1641,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_wheel(
                 &wheel_directory,
                 metadata_directory.as_deref(),
+                globals.preview,
             ),
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
@@ -1648,6 +1649,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_editable(
                 &wheel_directory,
                 metadata_directory.as_deref(),
+                globals.preview,
             ),
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
@@ -1656,13 +1658,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::get_requires_for_build_wheel()
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_wheel(
+                    &wheel_directory,
+                    globals.preview,
+                )
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
                 commands::build_backend::get_requires_for_build_editable()
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_editable(
+                    &wheel_directory,
+                    globals.preview,
+                )
             }
         })
         .await

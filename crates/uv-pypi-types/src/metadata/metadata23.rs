@@ -10,7 +10,8 @@ use crate::metadata::Headers;
 
 /// Code Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Metadata23 {
     /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3` and
     /// `2.4`.

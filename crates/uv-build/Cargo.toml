@@ -11,7 +11,9 @@ license = { workspace = true }
 
 [dependencies]
 uv-build-backend = { workspace = true }
+uv-preview = { workspace = true }
 uv-version = { workspace = true }
+uv-static = { workspace = true }
 
 anyhow = { workspace = true }
 
