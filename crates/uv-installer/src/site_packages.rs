@@ -8,9 +8,9 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist, Name,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
+    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -126,7 +126,7 @@ impl SitePackages {
                     .push(idx);
 
                 // Index the distribution by URL.
-                if let InstalledDist::Url(dist) = &dist_info {
+                if let InstalledDistKind::Url(dist) = &dist_info.kind {
                     by_url.entry(dist.url.clone()).or_default().push(idx);
                 }
 
@@ -528,8 +528,8 @@ impl SitePackages {
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
-                    for dependency in metadata.requires_dist {
-                        let dependency = Requirement::from(dependency);
+                    for dependency in &metadata.requires_dist {
+                        let dependency = Requirement::from(dependency.clone());
                         if let Some(r#overrides) = overrides.get(&dependency.name) {
                             for dependency in r#overrides {
                                 if dependency.evaluate_markers(Some(markers), &requirement.extras) {
