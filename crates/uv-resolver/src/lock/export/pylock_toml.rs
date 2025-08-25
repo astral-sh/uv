@@ -4,8 +4,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashSet;
-
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
@@ -669,12 +667,6 @@ impl<'lock> PylockToml {
         // We don't support attestation identities at time of writing.
         let attestation_identities = vec![];
 
-        // Collect all package names and versions that are included in this export
-        let included_packages: FxHashSet<_> = nodes
-            .iter()
-            .map(|node| (&node.package.id.name, &node.package.id.version))
-            .collect();
-
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(nodes.len());
         for node in nodes {
@@ -884,24 +876,13 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
-            let dependencies = package
+            let dependencies = node
                 .dependencies
                 .iter()
-                .chain(
-                    package
-                        .optional_dependencies
-                        .values()
-                        .flatten()
-                        // Only include dependencies that are actually in the export
-                        .filter(|dep| {
-                            included_packages
-                                .contains(&(&dep.package_id.name, &dep.package_id.version))
-                        }),
-                )
-                .map(|dep| PylockTomlDependency {
-                    name: dep.package_id.name.clone(),
-                    version: dep.package_id.version.clone(),
-                    marker: dep.simplified_marker.as_simplified_marker_tree(),
+                .map(|(package, marker)| PylockTomlDependency {
+                    name: package.id.name.clone(),
+                    version: package.id.version.clone(),
+                    marker: *marker,
                 })
                 .collect();
 
