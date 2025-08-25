@@ -29,6 +29,8 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+#[cfg(windows)]
+use crate::pe_version::try_extract_version_from_pe;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -616,6 +618,29 @@ fn python_executables_from_search_path<'a>(
                 .into_iter()
                 .flatten()
         })
+        .filter(move |_path| {
+            // On Windows, skip executables with version in the PE metadata that
+            // does not match
+            #[cfg(windows)]
+            {
+                if matches!(version, VersionRequest::Any | VersionRequest::Default) {
+                    return true;
+                }
+                let Some(pe_python_version) = try_extract_version_from_pe(_path) else {
+                    return true;
+                };
+                if version.matches_version(&pe_python_version) {
+                    return true;
+                }
+                debug!("Skipping interpreter at `{}`: PE version `{pe_python_version}` does not match `{version}`", _path.display());
+                false
+            }
+
+            #[cfg(not(windows))]
+            {
+                true
+            }
+        })
 }
 
 /// Find all acceptable `python3.x` minor versions.
@@ -746,7 +771,7 @@ fn python_interpreters_from_executables<'a>(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    executables.map(|result| match result {
+    executables.map(move |result| match result {
         Ok((source, path)) => Interpreter::query(&path, cache)
             .map(|interpreter| (source, interpreter))
             .inspect(|(source, interpreter)| {

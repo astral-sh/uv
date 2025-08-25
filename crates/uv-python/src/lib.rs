@@ -39,6 +39,8 @@ pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
+#[cfg(windows)]
+mod pe_version;
 mod pointer_size;
 mod prefix;
 mod python_version;
