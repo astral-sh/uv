@@ -25,9 +25,7 @@ pub(crate) async fn self_update(
             printer.stderr(),
             "{}",
             format_args!(
-                concat!(
-                    "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
-                ),
+                "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)",
                 "error".red().bold(),
                 ":".bold()
             )

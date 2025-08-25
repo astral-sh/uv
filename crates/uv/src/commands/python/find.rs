@@ -3,8 +3,9 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, PreviewMode};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -32,7 +33,7 @@ pub(crate) async fn find(
     python_preference: PythonPreference,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -123,7 +124,7 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,

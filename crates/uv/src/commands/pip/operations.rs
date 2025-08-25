@@ -1,19 +1,20 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{Context, anyhow};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use anyhow::{Context, anyhow};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification,
+    Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -21,20 +22,19 @@ use uv_distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
     ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
+use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
-    LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
+    GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -55,7 +55,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -70,7 +70,7 @@ pub(crate) async fn read_requirements(
             "Use `package[extra]` syntax instead."
         };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
+            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
@@ -91,15 +91,11 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(RequirementsSpecification::from_sources(
-        &[],
-        constraints,
-        &[],
-        BTreeMap::default(),
-        client_builder,
+    Ok(
+        RequirementsSpecification::from_sources(&[], constraints, &[], None, client_builder)
+            .await?
+            .constraints,
     )
-    .await?
-    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -220,11 +216,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.workspace_cache(),
             )
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to read dependency groups from: {}\n{}",
-                    pyproject_path.display(),
-                    e
+            .with_context(|| {
+                format!(
+                    "Failed to read dependency groups from: {}",
+                    pyproject_path.display()
                 )
             })?;
 
@@ -394,6 +389,9 @@ pub(crate) struct Changelog {
 impl Changelog {
     /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
     pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+        // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
+        // the inner `kind`, and omits the types that rely on internal mutability.
+        #[allow(clippy::mutable_key_type)]
         let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
 
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
@@ -443,8 +441,6 @@ pub(crate) async fn install(
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
-    index_urls: &IndexLocations,
-    config_settings: &ConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -457,6 +453,7 @@ pub(crate) async fn install(
     installer_metadata: bool,
     dry_run: DryRun,
     printer: Printer,
+    preview: Preview,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -468,8 +465,11 @@ pub(crate) async fn install(
             reinstall,
             build_options,
             hasher,
-            index_urls,
-            config_settings,
+            build_dispatch.locations(),
+            build_dispatch.config_settings(),
+            build_dispatch.config_settings_package(),
+            build_dispatch.extra_build_requires(),
+            build_dispatch.extra_build_variables(),
             cache,
             venv,
             tags,
@@ -505,6 +505,132 @@ pub(crate) async fn install(
         return Ok(Changelog::default());
     }
 
+    // Partition into two sets: those that require build isolation, and those that disable it. This
+    // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
+    // `--no-build-isolation` packages "access" to the rest of the environment.
+    let (isolated_phase, shared_phase) = Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    }
+    .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
+
+    let has_isolated_phase = !isolated_phase.is_empty();
+    let has_shared_phase = !shared_phase.is_empty();
+
+    let mut installs = vec![];
+    let mut uninstalls = vec![];
+
+    // Execute the isolated-build phase.
+    if has_isolated_phase {
+        let (isolated_installs, isolated_uninstalls) = execute_plan(
+            isolated_phase,
+            None,
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(isolated_installs);
+        uninstalls.extend(isolated_uninstalls);
+    }
+
+    if has_shared_phase {
+        let (shared_installs, shared_uninstalls) = execute_plan(
+            shared_phase,
+            if has_isolated_phase {
+                Some(InstallPhase::Shared)
+            } else {
+                None
+            },
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(shared_installs);
+        uninstalls.extend(shared_uninstalls);
+    }
+
+    if compile {
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
+    }
+
+    // Construct a summary of the changes made to the environment.
+    let changelog = Changelog::new(installs, uninstalls);
+
+    // Notify the user of any environment modifications.
+    logger.on_complete(&changelog, printer)?;
+
+    Ok(changelog)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallPhase {
+    /// A dedicated phase for building and installing packages with build-isolation disabled.
+    Shared,
+}
+
+impl InstallPhase {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Shared => "without build isolation",
+        }
+    }
+}
+
+/// Execute a [`Plan`] to install distributions into a Python environment.
+async fn execute_plan(
+    plan: Plan,
+    phase: Option<InstallPhase>,
+    resolution: &Resolution,
+    build_options: &BuildOptions,
+    link_mode: LinkMode,
+    hasher: &HashStrategy,
+    tags: &Tags,
+    client: &RegistryClient,
+    in_flight: &InFlight,
+    concurrency: Concurrency,
+    build_dispatch: &BuildDispatch<'_>,
+    cache: &Cache,
+    venv: &PythonEnvironment,
+    logger: &dyn InstallLogger,
+    installer_metadata: bool,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
+    let Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    } = plan;
+
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]
@@ -526,7 +652,7 @@ pub(crate) async fn install(
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
 
-        logger.on_prepare(wheels.len(), start, printer)?;
+        logger.on_prepare(wheels.len(), phase.map(InstallPhase::label), start, printer)?;
 
         wheels
     };
@@ -575,7 +701,7 @@ pub(crate) async fn install(
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv)
+        installs = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
@@ -590,17 +716,7 @@ pub(crate) async fn install(
         logger.on_install(installs.len(), start, printer)?;
     }
 
-    if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
-    }
-
-    // Construct a summary of the changes made to the environment.
-    let changelog = Changelog::new(installs, uninstalls);
-
-    // Notify the user of any environment modifications.
-    logger.on_complete(&changelog, printer)?;
-
-    Ok(changelog)
+    Ok((installs, uninstalls))
 }
 
 /// Display a message about the interpreter that was selected for the operation.
@@ -862,10 +978,11 @@ pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
+    tags: &Tags,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers)? {
+    for diagnostic in site_packages.diagnostics(markers, tags)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

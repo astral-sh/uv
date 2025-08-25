@@ -4,7 +4,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
-
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
@@ -195,7 +195,7 @@ impl PartialOrd for Requirement {
 impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
     fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
+        Self {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
@@ -216,7 +216,7 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
 impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
     fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
+        Self {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
@@ -299,7 +299,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
                 RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
             }
         };
-        Requirement {
+        Self {
             name: requirement.name,
             groups: Box::new([]),
             extras: requirement.extras,
@@ -362,6 +362,107 @@ impl Display for Requirement {
             write!(f, " ; {marker}")?;
         }
         Ok(())
+    }
+}
+
+impl CacheKey for Requirement {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.as_str().cache_key(state);
+
+        self.groups.len().cache_key(state);
+        for group in &self.groups {
+            group.as_str().cache_key(state);
+        }
+
+        self.extras.len().cache_key(state);
+        for extra in &self.extras {
+            extra.as_str().cache_key(state);
+        }
+
+        if let Some(marker) = self.marker.contents() {
+            1u8.cache_key(state);
+            marker.to_string().cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        match &self.source {
+            RequirementSource::Registry {
+                specifier,
+                index,
+                conflict: _,
+            } => {
+                0u8.cache_key(state);
+                specifier.len().cache_key(state);
+                for spec in specifier.iter() {
+                    spec.operator().as_str().cache_key(state);
+                    spec.version().cache_key(state);
+                }
+                if let Some(index) = index {
+                    1u8.cache_key(state);
+                    index.url.cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                // `conflict` is intentionally omitted
+            }
+            RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            } => {
+                1u8.cache_key(state);
+                location.cache_key(state);
+                if let Some(subdirectory) = subdirectory {
+                    1u8.cache_key(state);
+                    subdirectory.display().to_string().cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                ext.name().cache_key(state);
+                url.cache_key(state);
+            }
+            RequirementSource::Git {
+                git,
+                subdirectory,
+                url,
+            } => {
+                2u8.cache_key(state);
+                git.to_string().cache_key(state);
+                if let Some(subdirectory) = subdirectory {
+                    1u8.cache_key(state);
+                    subdirectory.display().to_string().cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                url.cache_key(state);
+            }
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => {
+                3u8.cache_key(state);
+                install_path.cache_key(state);
+                ext.name().cache_key(state);
+                url.cache_key(state);
+            }
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+            } => {
+                4u8.cache_key(state);
+                install_path.cache_key(state);
+                editable.cache_key(state);
+                r#virtual.cache_key(state);
+                url.cache_key(state);
+            }
+        }
+
+        // `origin` is intentionally omitted
     }
 }
 
@@ -429,9 +530,9 @@ pub enum RequirementSource {
         /// The absolute path to the distribution which we use for installing.
         install_path: Box<Path>,
         /// For a source tree (a directory), whether to install as an editable.
-        editable: bool,
+        editable: Option<bool>,
         /// For a source tree (a directory), whether the project should be built and installed.
-        r#virtual: bool,
+        r#virtual: Option<bool>,
         /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -443,23 +544,23 @@ impl RequirementSource {
     /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
-            ParsedUrl::Path(local_file) => RequirementSource::Path {
+            ParsedUrl::Path(local_file) => Self::Path {
                 install_path: local_file.install_path.clone(),
                 ext: local_file.ext,
                 url,
             },
-            ParsedUrl::Directory(directory) => RequirementSource::Directory {
+            ParsedUrl::Directory(directory) => Self::Directory {
                 install_path: directory.install_path.clone(),
                 editable: directory.editable,
                 r#virtual: directory.r#virtual,
                 url,
             },
-            ParsedUrl::Git(git) => RequirementSource::Git {
+            ParsedUrl::Git(git) => Self::Git {
                 git: git.url.clone(),
                 url,
                 subdirectory: git.subdirectory,
             },
-            ParsedUrl::Archive(archive) => RequirementSource::Url {
+            ParsedUrl::Archive(archive) => Self::Url {
                 url,
                 location: archive.url,
                 subdirectory: archive.subdirectory,
@@ -470,7 +571,7 @@ impl RequirementSource {
 
     /// Convert the source to a [`VerbatimParsedUrl`], if it's a URL source.
     pub fn to_verbatim_parsed_url(&self) -> Option<VerbatimParsedUrl> {
-        match &self {
+        match self {
             Self::Registry { .. } => None,
             Self::Url {
                 location,
@@ -545,7 +646,13 @@ impl RequirementSource {
 
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
-        matches!(self, Self::Directory { editable: true, .. })
+        matches!(
+            self,
+            Self::Directory {
+                editable: Some(true),
+                ..
+            }
+        )
     }
 
     /// Returns `true` if the source is empty.
@@ -561,21 +668,18 @@ impl RequirementSource {
     /// If the source is the registry, return the version specifiers
     pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
         match self {
-            RequirementSource::Registry { specifier, .. } => Some(specifier),
-            RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
-            | RequirementSource::Path { .. }
-            | RequirementSource::Directory { .. } => None,
+            Self::Registry { specifier, .. } => Some(specifier),
+            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
+                None
+            }
         }
     }
 
     /// Convert the source to a [`RequirementSource`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         match self {
-            RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::Git { .. } => Ok(self),
-            RequirementSource::Path {
+            Self::Registry { .. } | Self::Url { .. } | Self::Git { .. } => Ok(self),
+            Self::Path {
                 install_path,
                 ext,
                 url,
@@ -586,7 +690,7 @@ impl RequirementSource {
                 ext,
                 url,
             }),
-            RequirementSource::Directory {
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
@@ -607,10 +711,8 @@ impl RequirementSource {
     #[must_use]
     pub fn to_absolute(self, root: &Path) -> Self {
         match self {
-            RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::Git { .. } => self,
-            RequirementSource::Path {
+            Self::Registry { .. } | Self::Url { .. } | Self::Git { .. } => self,
+            Self::Path {
                 install_path,
                 ext,
                 url,
@@ -619,7 +721,7 @@ impl RequirementSource {
                 ext,
                 url,
             },
-            RequirementSource::Directory {
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
@@ -792,11 +894,11 @@ impl From<RequirementSource> for RequirementSourceWire {
                 r#virtual,
                 url: _,
             } => {
-                if editable {
+                if editable.unwrap_or(false) {
                     Self::Editable {
                         editable: PortablePathBuf::from(install_path),
                     }
-                } else if r#virtual {
+                } else if r#virtual.unwrap_or(false) {
                     Self::Virtual {
                         r#virtual: PortablePathBuf::from(install_path),
                     }
@@ -813,7 +915,7 @@ impl From<RequirementSource> for RequirementSourceWire {
 impl TryFrom<RequirementSourceWire> for RequirementSource {
     type Error = RequirementError;
 
-    fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
+    fn try_from(wire: RequirementSourceWire) -> Result<Self, RequirementError> {
         match wire {
             RequirementSourceWire::Registry {
                 specifier,
@@ -908,8 +1010,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: directory,
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: Some(false),
                     url,
                 })
             }
@@ -920,8 +1022,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: editable,
-                    editable: true,
-                    r#virtual: false,
+                    editable: Some(true),
+                    r#virtual: Some(false),
                     url,
                 })
             }
@@ -932,8 +1034,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: r#virtual,
-                    editable: false,
-                    r#virtual: true,
+                    editable: Some(false),
+                    r#virtual: Some(true),
                     url,
                 })
             }
@@ -980,8 +1082,8 @@ mod tests {
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path).into_boxed_path(),
-                editable: false,
-                r#virtual: false,
+                editable: Some(false),
+                r#virtual: Some(false),
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
             origin: None,

@@ -23,14 +23,14 @@ To change the installation path, use `UV_INSTALL_DIR`:
 ## Disabling shell modifications
 
 The installer may also update your shell profiles to ensure the uv binary is on your `PATH`. To
-disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
+disable this behavior, use `UV_NO_MODIFY_PATH`. For example:
 
 ```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+$ curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
 ```
 
-If installed with `INSTALLER_NO_MODIFY_PATH`, subsequent operations, like `uv self update`, will not
-modify your shell profiles.
+If installed with `UV_NO_MODIFY_PATH`, subsequent operations, like `uv self update`, will not modify
+your shell profiles.
 
 ## Unmanaged installations
 

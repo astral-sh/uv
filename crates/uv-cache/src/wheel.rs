@@ -26,20 +26,20 @@ impl WheelCache<'_> {
     /// The root directory for a cache bucket.
     pub fn root(&self) -> PathBuf {
         match self {
-            WheelCache::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
-            WheelCache::Index(url) => WheelCacheKind::Index
+            Self::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
+            Self::Index(url) => WheelCacheKind::Index
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url.url()))),
-            WheelCache::Url(url) => WheelCacheKind::Url
+            Self::Url(url) => WheelCacheKind::Url
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url))),
-            WheelCache::Path(url) => WheelCacheKind::Path
+            Self::Path(url) => WheelCacheKind::Path
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url))),
-            WheelCache::Editable(url) => WheelCacheKind::Editable
+            Self::Editable(url) => WheelCacheKind::Editable
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url))),
-            WheelCache::Git(url, sha) => WheelCacheKind::Git
+            Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url)))
                 .join(sha),

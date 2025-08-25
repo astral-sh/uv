@@ -43,20 +43,20 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
-    "###);
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5191,18 +5191,18 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
@@ -5227,20 +5227,20 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
      + iniconfig==1.1.1
-    "###);
+    ");
 
     // Remove it, and replace with `flask`, which includes a binary.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5249,20 +5249,20 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.2
      - iniconfig==1.1.1
-    "###);
+    ");
     // Ensure that the binary is present in the target directory.
     assert!(
         context
@@ -5293,18 +5293,18 @@ fn target_source_distribution() -> Result<()> {
         .arg("--no-binary")
         .arg("iniconfig")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the build requirements are not present in the target directory.
     assert!(!context.temp_dir.child("target").child("hatchling").is_dir());
@@ -5364,18 +5364,18 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("--no-binary")
         .arg("wheel")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel==0.43.0
-    "###);
+    ");
 
     // Ensure that the build requirements are not present in the target directory.
     assert!(!context.temp_dir.child("target").child("flit_core").is_dir());
@@ -5411,7 +5411,7 @@ fn target_system() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5422,7 +5422,7 @@ fn target_system() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
@@ -5447,18 +5447,18 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that we can't import the package.
     context.assert_command("import iniconfig").failure();
@@ -5483,20 +5483,20 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
      + iniconfig==1.1.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -5625,7 +5625,7 @@ fn sync_seed() -> Result<()> {
     );
 
     // Re-create the environment with seed packages.
-    uv_snapshot!(context.filters(), context.venv()
+    uv_snapshot!(context.filters(), context.venv().arg("--clear")
         .arg("--seed"), @r"
     success: true
     exit_code: 0
@@ -6069,6 +6069,8 @@ fn pep_751_direct_url_tags() -> Result<()> {
     ----- stderr -----
     error: Failed to determine installation plan
       Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+
+    hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
     );
 
@@ -6084,6 +6086,60 @@ fn pep_751_direct_url_tags() -> Result<()> {
     ----- stderr -----
     Installed 1 package in [TIME]
      + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_python_version_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_platform_direct_url() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
     );
 

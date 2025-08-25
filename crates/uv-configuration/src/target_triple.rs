@@ -28,12 +28,18 @@ pub enum TargetTriple {
     #[serde(alias = "x8664-pc-windows-msvc")]
     X8664PcWindowsMsvc,
 
+    /// An ARM64 Windows target.
+    #[cfg_attr(feature = "clap", value(name = "aarch64-pc-windows-msvc"))]
+    #[serde(rename = "aarch64-pc-windows-msvc")]
+    #[serde(alias = "arm64-pc-windows-msvc")]
+    Aarch64PcWindowsMsvc,
+
     /// A 32-bit x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "i686-pc-windows-msvc"))]
     #[serde(rename = "i686-pc-windows-msvc")]
     I686PcWindowsMsvc,
 
-    /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
+    /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
     #[serde(rename = "x86_64-unknown-linux-gnu")]
     #[serde(alias = "x8664-unknown-linux-gnu")]
@@ -56,7 +62,7 @@ pub enum TargetTriple {
     #[serde(alias = "x8664-apple-darwin")]
     X8664AppleDarwin,
 
-    /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.
+    /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
     #[serde(rename = "aarch64-unknown-linux-gnu")]
     Aarch64UnknownLinuxGnu,
@@ -227,7 +233,7 @@ pub enum TargetTriple {
     #[serde(alias = "aarch64-manylinux240")]
     Aarch64Manylinux240,
 
-    /// A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12.
+    /// A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
     Wasm32Pyodide2024,
 }
@@ -237,10 +243,11 @@ impl TargetTriple {
     pub fn platform(self) -> Platform {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86_64),
+            Self::Aarch64PcWindowsMsvc => Platform::new(Os::Windows, Arch::Aarch64),
             Self::Linux | Self::X8664UnknownLinuxGnu => Platform::new(
                 Os::Manylinux {
                     major: 2,
-                    minor: 17,
+                    minor: 28,
                 },
                 Arch::X86_64,
             ),
@@ -262,7 +269,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => Platform::new(
                 Os::Manylinux {
                     major: 2,
-                    minor: 17,
+                    minor: 28,
                 },
                 Arch::Aarch64,
             ),
@@ -468,6 +475,7 @@ impl TargetTriple {
     pub fn platform_machine(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
+            Self::Aarch64PcWindowsMsvc => "ARM64",
             Self::Linux | Self::X8664UnknownLinuxGnu => "x86_64",
             Self::Macos | Self::Aarch64AppleDarwin => "arm64",
             Self::I686PcWindowsMsvc => "x86",
@@ -509,6 +517,7 @@ impl TargetTriple {
     pub fn platform_system(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "Windows",
+            Self::Aarch64PcWindowsMsvc => "Windows",
             Self::Linux | Self::X8664UnknownLinuxGnu => "Linux",
             Self::Macos | Self::Aarch64AppleDarwin => "Darwin",
             Self::I686PcWindowsMsvc => "Windows",
@@ -550,6 +559,7 @@ impl TargetTriple {
     pub fn platform_version(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
+            Self::Aarch64PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
             Self::Macos | Self::Aarch64AppleDarwin => "",
             Self::I686PcWindowsMsvc => "",
@@ -594,6 +604,7 @@ impl TargetTriple {
     pub fn platform_release(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
+            Self::Aarch64PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
             Self::Macos | Self::Aarch64AppleDarwin => "",
             Self::I686PcWindowsMsvc => "",
@@ -637,6 +648,7 @@ impl TargetTriple {
     pub fn os_name(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "nt",
+            Self::Aarch64PcWindowsMsvc => "nt",
             Self::Linux | Self::X8664UnknownLinuxGnu => "posix",
             Self::Macos | Self::Aarch64AppleDarwin => "posix",
             Self::I686PcWindowsMsvc => "nt",
@@ -678,6 +690,7 @@ impl TargetTriple {
     pub fn sys_platform(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "win32",
+            Self::Aarch64PcWindowsMsvc => "win32",
             Self::Linux | Self::X8664UnknownLinuxGnu => "linux",
             Self::Macos | Self::Aarch64AppleDarwin => "darwin",
             Self::I686PcWindowsMsvc => "win32",
@@ -719,6 +732,7 @@ impl TargetTriple {
     pub fn manylinux_compatible(self) -> bool {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => false,
+            Self::Aarch64PcWindowsMsvc => false,
             Self::Linux | Self::X8664UnknownLinuxGnu => true,
             Self::Macos | Self::Aarch64AppleDarwin => false,
             Self::I686PcWindowsMsvc => false,

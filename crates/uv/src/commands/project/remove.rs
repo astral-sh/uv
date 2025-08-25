@@ -10,13 +10,13 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
 };
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
@@ -60,7 +60,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -261,7 +261,7 @@ pub(crate) async fn remove(
         }
         RemoveTarget::Script(script) => {
             let interpreter = ScriptInterpreter::discover(
-                Pep723ItemRef::Script(&script),
+                (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -357,6 +357,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Exact,
+        None,
         (&settings).into(),
         &network_settings,
         &state,
@@ -385,6 +386,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),

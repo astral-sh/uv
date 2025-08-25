@@ -13,14 +13,15 @@ use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, PreviewMode};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -47,17 +48,18 @@ pub(crate) async fn pip_tree(
     network_settings: NetworkSettings,
     concurrency: Concurrency,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
         preview,
     )?;
@@ -73,19 +75,21 @@ pub(crate) async fn pip_tree(
             packages
                 .entry(package.name())
                 .or_default()
-                .push(package.metadata()?);
+                .push(package.read_metadata()?);
         }
         packages
     };
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let markers = environment.interpreter().resolver_marker_environment();
+    let tags = environment.interpreter().tags()?;
 
     // Determine the latest version for each package.
     let latest = if outdated && !packages.is_empty() {
         let capabilities = IndexCapabilities::default();
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .keyring(keyring_provider)
@@ -175,7 +179,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
@@ -221,7 +225,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.

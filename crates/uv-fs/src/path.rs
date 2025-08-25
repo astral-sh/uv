@@ -207,7 +207,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 }
 
 /// Normalize a [`Path`], removing things like `.` and `..`.
-pub fn normalize_path(path: &Path) -> Cow<Path> {
+pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
     // Fast path: if the path is already normalized, return it as-is.
     if path.components().all(|component| match component {
         Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
@@ -395,6 +395,12 @@ impl From<PortablePathBuf> for Box<Path> {
 impl From<Box<Path>> for PortablePathBuf {
     fn from(path: Box<Path>) -> Self {
         Self(path)
+    }
+}
+
+impl<'a> From<&'a Path> for PortablePathBuf {
+    fn from(path: &'a Path) -> Self {
+        Box::<Path>::from(path).into()
     }
 }
 

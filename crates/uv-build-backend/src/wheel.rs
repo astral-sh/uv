@@ -1,6 +1,8 @@
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -127,55 +129,61 @@ fn write_wheel(
         source_tree,
         pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_deref(),
+        settings.module_name.as_ref(),
         settings.namespace,
     )?;
 
-    // For convenience, have directories for the whole tree in the wheel
-    for ancestor in module_relative.ancestors().skip(1) {
-        if ancestor == Path::new("") {
-            continue;
-        }
-        wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
-    }
-
     let mut files_visited = 0;
-    for entry in WalkDir::new(src_root.join(module_relative))
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
-    {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
+    let mut prefix_directories = FxHashSet::default();
+    for module_relative in module_relative {
+        // For convenience, have directories for the whole tree in the wheel
+        for ancestor in module_relative.ancestors().skip(1) {
+            if ancestor == Path::new("") {
+                continue;
+            }
+            // Avoid duplicate directories in the zip.
+            if prefix_directories.insert(ancestor.to_path_buf()) {
+                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
+            }
+        }
 
-        files_visited += 1;
-        if files_visited > 10000 {
-            warn_user_once!(
-                "Visited more than 10,000 files for wheel build. \
+        for entry in WalkDir::new(src_root.join(module_relative))
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+        {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+
+            files_visited += 1;
+            if files_visited > 10000 {
+                warn_user_once!(
+                    "Visited more than 10,000 files for wheel build. \
                 Consider using more constrained includes or more excludes."
-            );
-        }
+                );
+            }
 
-        // We only want to take the module root, but since excludes start at the source tree root,
-        // we strip higher than we iterate.
-        let match_path = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-        let entry_path = entry
-            .path()
-            .strip_prefix(&src_root)
-            .expect("walkdir starts with root");
-        if exclude_matcher.is_match(match_path) {
-            trace!("Excluding from module: `{}`", match_path.user_display());
-            continue;
-        }
+            // We only want to take the module root, but since excludes start at the source tree root,
+            // we strip higher than we iterate.
+            let match_path = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+            let entry_path = entry
+                .path()
+                .strip_prefix(&src_root)
+                .expect("walkdir starts with root");
+            if exclude_matcher.is_match(match_path) {
+                trace!("Excluding from module: `{}`", match_path.user_display());
+                continue;
+            }
 
-        let entry_path = entry_path.portable_display().to_string();
-        debug!("Adding to wheel: {entry_path}");
-        wheel_writer.write_dir_entry(&entry, &entry_path)?;
+            let entry_path = entry_path.portable_display().to_string();
+            debug!("Adding to wheel: {entry_path}");
+            wheel_writer.write_dir_entry(&entry, &entry_path)?;
+        }
     }
     debug!("Visited {files_visited} files for wheel build");
 
@@ -269,7 +277,7 @@ pub fn build_editable(
         source_tree,
         &pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_deref(),
+        settings.module_name.as_ref(),
         settings.namespace,
     )?;
 
@@ -339,7 +347,7 @@ struct RecordEntry {
     ///
     /// While the spec would allow backslashes, we always use portable paths with forward slashes.
     path: String,
-    /// The SHA256 of the files.
+    /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
     size: usize,
@@ -374,7 +382,7 @@ fn write_hashed(
     }
     Ok(RecordEntry {
         path: path.to_string(),
-        hash: format!("{:x}", hasher.finalize()),
+        hash: base64.encode(hasher.finalize()),
         size,
     })
 }
@@ -614,8 +622,8 @@ impl ZipDirectoryWriter {
         path: &str,
         executable_bit: bool,
     ) -> Result<Box<dyn Write + 'slf>, Error> {
-        // 644 is the default of the zip crate.
-        let permissions = if executable_bit { 775 } else { 664 };
+        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
+        let permissions = if executable_bit { 0o755 } else { 0o644 };
         let options = zip::write::SimpleFileOptions::default()
             .unix_permissions(permissions)
             .compression_method(self.compression);
@@ -627,11 +635,14 @@ impl ZipDirectoryWriter {
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
+        // Set appropriate permissions for metadata files (644 = rw-r--r--)
+        let options = zip::write::SimpleFileOptions::default()
+            .unix_permissions(0o644)
+            .compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -709,7 +720,7 @@ impl FilesystemWriter {
 impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -785,14 +796,14 @@ mod test {
     fn test_record() {
         let record = vec![RecordEntry {
             path: "built_by_uv/__init__.py".to_string(),
-            hash: "89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865".to_string(),
+            hash: "ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU".to_string(),
             size: 37,
         }];
 
         let mut writer = Vec::new();
         write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
         assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            built_by_uv/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
+            built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
             built_by_uv-0.1.0/RECORD,,
         ");
     }
@@ -851,9 +862,9 @@ mod test {
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=f883bac9aabac7a1d297ecd61fdeab666818bdfc87947d342f9590a02a73f982,50
-        built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
         "###);
 

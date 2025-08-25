@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::iter;
 use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
 
@@ -6,6 +8,7 @@ use std::sync::{LazyLock, Mutex};
 pub use anstream;
 #[doc(hidden)]
 pub use owo_colors;
+use owo_colors::{DynColor, OwoColorize};
 use rustc_hash::FxHashSet;
 
 /// Whether user-facing warnings are enabled.
@@ -55,4 +58,42 @@ macro_rules! warn_user_once {
             }
         }
     }};
+}
+
+/// Format an error or warning chain.
+///
+/// # Example
+///
+/// ```text
+/// error: Failed to install app
+///   Caused By: Failed to install dependency
+///   Caused By: Error writing failed `/home/ferris/deps/foo`: Permission denied
+/// ```
+///
+/// ```text
+/// warning: Failed to create registry entry for Python 3.12
+///   Caused By: Security policy forbids chaining registry entries
+/// ```
+pub fn write_error_chain(
+    err: &dyn Error,
+    mut stream: impl std::fmt::Write,
+    level: impl AsRef<str>,
+    color: impl DynColor + Copy,
+) -> std::fmt::Result {
+    writeln!(
+        &mut stream,
+        "{}{} {}",
+        level.as_ref().color(color).bold(),
+        ":".bold(),
+        err.to_string().trim()
+    )?;
+    for source in iter::successors(err.source(), |&err| err.source()) {
+        writeln!(
+            &mut stream,
+            "  {}: {}",
+            "Caused by".color(color).bold(),
+            source.to_string().trim()
+        )?;
+    }
+    Ok(())
 }

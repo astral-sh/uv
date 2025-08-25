@@ -38,36 +38,9 @@ impl IndexUrl {
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
-    ///
-    /// Normalizes non-file URLs by removing trailing slashes for consistency.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
-        let url = match split_scheme(path) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(path)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        if let Some(root_dir) = root_dir {
-                            VerbatimUrl::from_path(path, root_dir)?
-                        } else {
-                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                        }
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                if let Some(root_dir) = root_dir {
-                    VerbatimUrl::from_path(path, root_dir)?
-                } else {
-                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                }
-            }
-        };
-        Ok(Self::from(url.with_given(path)))
+        let url = VerbatimUrl::from_url_or_path(path, root_dir)?;
+        Ok(Self::from(url))
     }
 
     /// Return the root [`Url`] of the index, if applicable.
@@ -230,12 +203,16 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.to_string().serialize(serializer)
+        match self {
+            Self::Pypi(url) => url.without_credentials().serialize(serializer),
+            Self::Url(url) => url.without_credentials().serialize(serializer),
+            Self::Path(url) => url.without_credentials().serialize(serializer),
+        }
     }
 }
 
 impl<'de> serde::de::Deserialize<'de> for IndexUrl {
-    fn deserialize<D>(deserializer: D) -> Result<IndexUrl, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
@@ -258,20 +235,13 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 }
 
 impl From<VerbatimUrl> for IndexUrl {
-    fn from(mut url: VerbatimUrl) -> Self {
+    fn from(url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
             Self::Path(Arc::new(url))
+        } else if *url.raw() == *PYPI_URL {
+            Self::Pypi(Arc::new(url))
         } else {
-            // Remove trailing slashes for consistency. They'll be re-added if necessary when
-            // querying the Simple API.
-            if let Ok(mut path_segments) = url.raw_mut().path_segments_mut() {
-                path_segments.pop_if_empty();
-            }
-            if *url.raw() == *PYPI_URL {
-                Self::Pypi(Arc::new(url))
-            } else {
-                Self::Url(Arc::new(url))
-            }
+            Self::Url(Arc::new(url))
         }
     }
 }
@@ -290,7 +260,7 @@ impl Deref for IndexUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
-        match &self {
+        match self {
             Self::Pypi(url) => url,
             Self::Url(url) => url,
             Self::Path(url) => url,
@@ -430,8 +400,8 @@ impl<'a> IndexLocations {
     ///
     /// This includes explicit indexes, implicit indexes, flat indexes, and the default index.
     ///
-    /// The indexes will be returned in the order in which they were defined, such that the
-    /// last-defined index is the last item in the vector.
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
     pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
         if self.no_index {
             self.flat_index.iter().rev().collect()
@@ -463,9 +433,29 @@ impl<'a> IndexLocations {
         }
     }
 
+    /// Return a vector containing all known [`Index`] entries.
+    ///
+    /// This includes explicit indexes, implicit indexes, flat indexes, and default indexes;
+    /// in short, it includes all defined indexes, even if they're overridden by some other index
+    /// definition.
+    ///
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
+    pub fn known_indexes(&'a self) -> impl Iterator<Item = &'a Index> {
+        if self.no_index {
+            Either::Left(self.flat_index.iter().rev())
+        } else {
+            Either::Right(
+                std::iter::once(&*DEFAULT_INDEX)
+                    .chain(self.flat_index.iter().rev())
+                    .chain(self.indexes.iter().rev()),
+            )
+        }
+    }
+
     /// Add all authenticated sources to the cache.
     pub fn cache_index_credentials(&self) {
-        for index in self.allowed_indexes() {
+        for index in self.known_indexes() {
             if let Some(credentials) = index.credentials() {
                 let credentials = Arc::new(credentials);
                 uv_auth::store_credentials(index.raw_url(), credentials.clone());
@@ -475,11 +465,31 @@ impl<'a> IndexLocations {
             }
         }
     }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.simple_api_cache_control();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.artifact_cache_control();
+            }
+        }
+        None
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
-    fn from(index_locations: &IndexLocations) -> uv_auth::Indexes {
-        uv_auth::Indexes::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+    fn from(index_locations: &IndexLocations) -> Self {
+        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
             let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();
@@ -608,6 +618,26 @@ impl<'a> IndexUrls {
         }
         IndexStatusCodeStrategy::Default
     }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.simple_api_cache_control();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.artifact_cache_control();
+            }
+        }
+        None
+    }
 }
 
 bitflags::bitflags! {
@@ -693,6 +723,8 @@ impl IndexCapabilities {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{IndexCacheControl, IndexFormat, IndexName};
+    use uv_small_str::SmallString;
 
     #[test]
     fn test_index_url_parse_valid_paths() {
@@ -725,5 +757,149 @@ mod tests {
         assert!(is_disambiguated_path(
             "git+https://github.com/example/repo.git"
         ));
+    }
+
+    #[test]
+    fn test_cache_control_lookup() {
+        use std::str::FromStr;
+
+        use uv_small_str::SmallString;
+
+        use crate::IndexFormat;
+        use crate::index_name::IndexName;
+
+        let indexes = vec![
+            Index {
+                name: Some(IndexName::from_str("index1").unwrap()),
+                url: IndexUrl::from_str("https://index1.example.com/simple").unwrap(),
+                cache_control: Some(crate::IndexCacheControl {
+                    api: Some(SmallString::from("max-age=300")),
+                    files: Some(SmallString::from("max-age=1800")),
+                }),
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+            Index {
+                name: Some(IndexName::from_str("index2").unwrap()),
+                url: IndexUrl::from_str("https://index2.example.com/simple").unwrap(),
+                cache_control: None,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+        ];
+
+        let index_urls = IndexUrls::from_indexes(indexes);
+
+        let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
+        assert_eq!(
+            index_urls.simple_api_cache_control_for(&url1),
+            Some("max-age=300")
+        );
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&url1),
+            Some("max-age=1800")
+        );
+
+        let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url2), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url2), None);
+
+        let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url3), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url3), None);
+    }
+
+    #[test]
+    fn test_pytorch_default_cache_control() {
+        // Test that PyTorch indexes get default cache control from the getter methods
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("pytorch").unwrap()),
+            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
+            cache_control: None, // No explicit cache control
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
+
+        // IndexUrls should return the default for PyTorch
+        assert_eq!(index_urls.simple_api_cache_control_for(&pytorch_url), None);
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=365000000, immutable, public")
+        );
+
+        // IndexLocations should also return the default for PyTorch
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&pytorch_url),
+            None
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=365000000, immutable, public")
+        );
+    }
+
+    #[test]
+    fn test_pytorch_user_override_cache_control() {
+        // Test that user-specified cache control overrides PyTorch defaults
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("pytorch").unwrap()),
+            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
+            cache_control: Some(IndexCacheControl {
+                api: Some(SmallString::from("no-cache")),
+                files: Some(SmallString::from("max-age=3600")),
+            }),
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
+
+        // User settings should override defaults
+        assert_eq!(
+            index_urls.simple_api_cache_control_for(&pytorch_url),
+            Some("no-cache")
+        );
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=3600")
+        );
+
+        // Same for IndexLocations
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&pytorch_url),
+            Some("no-cache")
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=3600")
+        );
     }
 }

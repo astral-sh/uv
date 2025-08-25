@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.7.19"
+version = "0.8.13"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 uv-auth = { workspace = true }
+uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
@@ -24,7 +25,6 @@ uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-console = { workspace = true }
-uv-dirs = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
@@ -39,7 +39,9 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
+uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
@@ -79,6 +81,7 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+h2 = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
@@ -89,10 +92,12 @@ rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tar = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
@@ -107,25 +112,29 @@ which = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+arrayvec = { workspace = true }
 self-replace = { workspace = true }
+windows = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = { version = "2.0.16" }
-assert_fs = { version = "1.1.2" }
+assert_cmd = { workspace = true }
+assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
-byteorder = { version = "1.5.0" }
-filetime = { version = "0.2.25" }
+byteorder = { workspace = true }
+filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
-ignore = { version = "0.4.23" }
+ignore = { workspace = true }
 indoc = { workspace = true }
-insta = { version = "1.40.0", features = ["filters", "json"] }
-predicates = { version = "3.1.2" }
+insta = { workspace = true }
+predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
-similar = { version = "2.6.0" }
+similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
-whoami = { version = "1.6.0" }
+whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
@@ -135,6 +144,7 @@ nix = { workspace = true }
 [package.metadata.cargo-shear]
 ignored = [
     "flate2",
+    "h2",
     "uv-performance-memory-allocator",
 ]
 
@@ -156,6 +166,7 @@ default-tests = [
     "crates-io",
     "git",
     "pypi",
+    "r2",
     "python",
     "python-managed",
     "python-eol",
@@ -168,6 +179,8 @@ crates-io = []
 git = []
 # Introduces a testing dependency on PyPI.
 pypi = []
+# Introduces a testing dependency on R2.
+r2 = []
 # Introduces a testing dependency on a local Python installation.
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.

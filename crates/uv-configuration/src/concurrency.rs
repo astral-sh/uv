@@ -19,10 +19,10 @@ pub struct Concurrency {
 
 impl Default for Concurrency {
     fn default() -> Self {
-        Concurrency {
-            downloads: Concurrency::DEFAULT_DOWNLOADS,
-            builds: Concurrency::threads(),
-            installs: Concurrency::threads(),
+        Self {
+            downloads: Self::DEFAULT_DOWNLOADS,
+            builds: Self::threads(),
+            installs: Self::threads(),
         }
     }
 }

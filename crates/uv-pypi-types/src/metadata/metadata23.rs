@@ -148,7 +148,7 @@ impl Metadata23 {
         let provides_extras = headers.get_all_values("Provides-Extra").collect();
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();
-        Ok(Metadata23 {
+        Ok(Self {
             metadata_version,
             name,
             version,
@@ -284,7 +284,7 @@ impl FromStr for Metadata23 {
     type Err = MetadataError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Metadata23::parse(s.as_bytes())
+        Self::parse(s.as_bytes())
     }
 }
 

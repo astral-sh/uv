@@ -134,34 +134,22 @@ impl WheelFilename {
 
     /// Return the wheel's Python tags.
     pub fn python_tags(&self) -> &[LanguageTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.python_tag),
-            WheelTag::Large { large } => large.python_tag.as_slice(),
-        }
+        self.tags.python_tags()
     }
 
     /// Return the wheel's ABI tags.
     pub fn abi_tags(&self) -> &[AbiTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.abi_tag),
-            WheelTag::Large { large } => large.abi_tag.as_slice(),
-        }
+        self.tags.abi_tags()
     }
 
     /// Return the wheel's platform tags.
     pub fn platform_tags(&self) -> &[PlatformTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.platform_tag),
-            WheelTag::Large { large } => large.platform_tag.as_slice(),
-        }
+        self.tags.platform_tags()
     }
 
     /// Return the wheel's build tag, if present.
     pub fn build_tag(&self) -> Option<&BuildTag> {
-        match &self.tags {
-            WheelTag::Small { .. } => None,
-            WheelTag::Large { large } => large.build_tag.as_ref(),
-        }
+        self.tags.build_tag()
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).

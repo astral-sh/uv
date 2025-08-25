@@ -3,7 +3,9 @@
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
 mod error;
+mod pipreqs;
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -19,8 +21,8 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{IntoDeserializer, SeqAccess, Visitor, value};
-use serde::{Deserialize, Deserializer, de};
+use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
+use serde::{Deserialize, Deserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -28,14 +30,17 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 
 use uv_cache_key::cache_digest;
-use uv_configuration::PreviewMode;
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_distribution_types::{
+    ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    Resolution,
+};
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
@@ -281,12 +286,13 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
+        extra_build_requires: &ExtraBuildRequires,
         build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -297,7 +303,6 @@ impl SourceBuild {
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
-
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
@@ -322,6 +327,29 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
+        let extra_build_dependencies = package_name
+            .as_ref()
+            .and_then(|name| extra_build_requires.get(name).cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|requirement| {
+                match requirement {
+                    ExtraBuildRequirement {
+                        requirement,
+                        match_runtime: true,
+                    } if requirement.source.is_empty() => {
+                        Err(Error::UnmatchedRuntime(
+                            requirement.name.clone(),
+                            // SAFETY: if `package_name` is `None`, the iterator is empty.
+                            package_name.clone().unwrap(),
+                        ))
+                    }
+                    requirement => Ok(requirement),
+                }
+            })
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
+
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
             venv.clone()
@@ -331,7 +359,7 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                false,
+                uv_virtualenv::OnExisting::Remove,
                 false,
                 false,
                 false,
@@ -344,11 +372,18 @@ impl SourceBuild {
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
+            let dependency_sources = if extra_build_dependencies.is_empty() {
+                "`build-system.requires`"
+            } else {
+                "`build-system.requires` and `extra-build-dependencies`"
+            };
+
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
                 &default_backend,
                 &pep517_backend,
+                extra_build_dependencies,
                 build_stack,
             )
             .await?;
@@ -356,7 +391,7 @@ impl SourceBuild {
             build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
-                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
+                .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -471,10 +506,13 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
+        extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements {
+            if pep517_backend.requirements == default_backend.requirements
+                && extra_build_dependencies.is_empty()
+            {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
                     resolved_requirements.clone()
@@ -489,12 +527,25 @@ impl SourceBuild {
                     resolved_requirements
                 }
             } else {
+                let (requirements, dependency_sources) = if extra_build_dependencies.is_empty() {
+                    (
+                        Cow::Borrowed(&pep517_backend.requirements),
+                        "`build-system.requires`",
+                    )
+                } else {
+                    // If there are extra build dependencies, we need to resolve them together with
+                    // the backend requirements.
+                    let mut requirements = pep517_backend.requirements.clone();
+                    requirements.extend(extra_build_dependencies);
+                    (
+                        Cow::Owned(requirements),
+                        "`build-system.requires` and `extra-build-dependencies`",
+                    )
+                };
                 build_context
-                    .resolve(&pep517_backend.requirements, build_stack)
+                    .resolve(&requirements, build_stack)
                     .await
-                    .map_err(|err| {
-                        Error::RequirementsResolve("`build-system.requires`", err.into())
-                    })?
+                    .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
     }
@@ -511,12 +562,10 @@ impl SourceBuild {
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
-                let pyproject_toml: toml_edit::ImDocument<_> =
-                    toml_edit::ImDocument::from_str(&toml)
-                        .map_err(Error::InvalidPyprojectTomlSyntax)?;
-                let pyproject_toml: PyProjectToml =
-                    PyProjectToml::deserialize(pyproject_toml.into_deserializer())
-                        .map_err(Error::InvalidPyprojectTomlSchema)?;
+                let pyproject_toml = toml_edit::Document::from_str(&toml)
+                    .map_err(Error::InvalidPyprojectTomlSyntax)?;
+                let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                    .map_err(Error::InvalidPyprojectTomlSchema)?;
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
@@ -606,6 +655,7 @@ impl SourceBuild {
                             );
                         }
                     }
+
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))

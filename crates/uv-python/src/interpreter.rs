@@ -21,18 +21,20 @@ use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
-use uv_platform_tags::Platform;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform::{Arch, Libc, Os};
+use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
-use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
     Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
     VirtualEnvironment,
 };
+
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -48,6 +50,7 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -83,6 +86,7 @@ impl Interpreter {
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
+            site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -200,9 +204,7 @@ impl Interpreter {
             self.python_minor(),
             self.python_patch(),
             self.python_version().pre(),
-            self.os(),
-            self.arch(),
-            self.libc(),
+            uv_platform::Platform::new(self.os(), self.arch(), self.libc()),
             self.variant(),
         )
     }
@@ -268,15 +270,28 @@ impl Interpreter {
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
     pub fn is_managed(&self) -> bool {
+        if let Ok(test_managed) =
+            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
+        {
+            // During testing, we collect interpreters into an artificial search path and need to
+            // be able to mock whether an interpreter is managed or not.
+            return test_managed.split_ascii_whitespace().any(|item| {
+                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
+                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
+                );
+                if version.patch().is_some() {
+                    version.version() == self.python_version()
+                } else {
+                    (version.major(), version.minor()) == self.python_tuple()
+                }
+            });
+        }
+
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };
 
-        installations
-            .find_all()
-            .into_iter()
-            .flatten()
-            .any(|install| install.path() == self.sys_base_prefix)
+        self.sys_base_prefix.starts_with(installations.root())
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -423,8 +438,19 @@ impl Interpreter {
     }
 
     /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &Vec<PathBuf> {
+    pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
+    }
+
+    /// Return the `site.getsitepackages` for this Python interpreter.
+    ///
+    /// These are the paths Python will search for packages in at runtime. We use this for
+    /// environment layering, but not for checking for installed packages. We could use these paths
+    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
+    /// simplified version that does not respect customized site-packages. See
+    /// [`Interpreter::site_packages`].
+    pub fn runtime_site_packages(&self) -> &[PathBuf] {
+        &self.site_packages
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -551,7 +577,10 @@ impl Interpreter {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+    ///
+    /// Note this does not include all runtime site-packages directories if the interpreter has been
+    /// customized. See [`Interpreter::runtime_site_packages`].
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         let target = self.target().map(Target::site_packages);
 
         let prefix = self
@@ -760,6 +789,13 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[cfg(windows)]
+    #[error("Failed to query Python interpreter at `{path}`")]
+    CorruptWindowsPackage {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -847,6 +883,7 @@ struct InterpreterInfo {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
@@ -872,9 +909,25 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(|err| Error::SpawnFailed {
-                path: interpreter.to_path_buf(),
-                err,
+            .map_err(|err| {
+                if err.kind() == io::ErrorKind::NotFound {
+                    return Error::NotFound(interpreter.to_path_buf());
+                }
+                #[cfg(windows)]
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
+                    err.raw_os_error().and_then(|code| u32::try_from(code).ok())
+                {
+                    // These error codes are returned if the Python interpreter is a corrupt MSIX
+                    // package, which we want to differentiate from a typical spawn failure.
+                    return Error::CorruptWindowsPackage {
+                        path: interpreter.to_path_buf(),
+                        err,
+                    };
+                }
+                Error::SpawnFailed {
+                    path: interpreter.to_path_buf(),
+                    err,
+                }
             })?;
 
         if !output.status.success() {
@@ -1209,6 +1262,9 @@ mod tests {
             "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
             "sys_path": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
+            "site_packages": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",

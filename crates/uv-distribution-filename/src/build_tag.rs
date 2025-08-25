@@ -58,10 +58,7 @@ impl FromStr for BuildTag {
             None => (s, None),
         };
 
-        Ok(BuildTag(
-            prefix.parse::<u64>()?,
-            suffix.map(SmallString::from),
-        ))
+        Ok(Self(prefix.parse::<u64>()?, suffix.map(SmallString::from)))
     }
 }
 

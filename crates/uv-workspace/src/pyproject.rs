@@ -17,17 +17,19 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
+use serde::de::{IntoDeserializer, SeqAccess};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
+
 use uv_build_backend::BuildBackendSettings;
-use uv_distribution_types::{Index, IndexName, RequirementSource};
+use uv_distribution_types::{ExtraBuildVariables, Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
@@ -49,6 +51,55 @@ pub enum PyprojectTomlError {
     MissingVersion,
 }
 
+/// Helper function to deserialize a map while ensuring all keys are unique.
+fn deserialize_unique_map<'de, D, K, V, F>(
+    deserializer: D,
+    error_msg: F,
+) -> Result<BTreeMap<K, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    K: Deserialize<'de> + Ord + std::fmt::Display,
+    V: Deserialize<'de>,
+    F: FnOnce(&K) -> String,
+{
+    struct Visitor<K, V, F>(F, std::marker::PhantomData<(K, V)>);
+
+    impl<'de, K, V, F> serde::de::Visitor<'de> for Visitor<K, V, F>
+    where
+        K: Deserialize<'de> + Ord + std::fmt::Display,
+        V: Deserialize<'de>,
+        F: FnOnce(&K) -> String,
+    {
+        type Value = BTreeMap<K, V>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a map with unique keys")
+        }
+
+        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+        where
+            M: serde::de::MapAccess<'de>,
+        {
+            use std::collections::btree_map::Entry;
+
+            let mut map = BTreeMap::new();
+            while let Some((key, value)) = access.next_entry::<K, V>()? {
+                match map.entry(key) {
+                    Entry::Occupied(entry) => {
+                        return Err(serde::de::Error::custom((self.0)(entry.key())));
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                }
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_map(Visitor(error_msg, std::marker::PhantomData))
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(test, derive(Serialize))]
@@ -66,34 +117,37 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject: toml_edit::ImDocument<_> =
-            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
+        let pyproject =
+            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject = Self::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
-        Ok(PyProjectToml { raw, ..pyproject })
+        Ok(Self { raw, ..pyproject })
     }
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
-    pub fn is_package(&self) -> bool {
+    pub fn is_package(&self, require_build_system: bool) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
+        if let Some(is_package) = self.tool_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
-        self.build_system.is_some()
+        self.build_system.is_some() || !require_build_system
+    }
+
+    /// Returns the value of `tool.uv.package` if set.
+    fn tool_uv_package(&self) -> Option<bool> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
     }
 
     /// Returns `true` if the project uses a dynamic version.
@@ -202,7 +256,7 @@ impl TryFrom<ProjectWire> for Project {
             return Err(PyprojectTomlError::MissingVersion);
         }
 
-        Ok(Project {
+        Ok(Self {
             name,
             version: value.version,
             requires_python: value.requires_python,
@@ -373,6 +427,35 @@ pub struct ToolUv {
         "#
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
+
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.extra-build-dependencies]
+            pytest = ["pip"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+
+    /// Extra environment variables to set when building certain packages.
+    ///
+    /// Environment variables will be added to the environment when building the
+    /// specified packages.
+    #[option(
+        default = r#"{}"#,
+        value_type = r#"dict[str, dict[str, str]]"#,
+        example = r#"
+            [tool.uv.extra-build-variables]
+            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+        "#
+    )]
+    pub extra_build_variables: Option<ExtraBuildVariables>,
 
     /// The project's development dependencies.
     ///
@@ -639,38 +722,10 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     where
         D: Deserializer<'de>,
     {
-        struct SourcesVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
-            type Value = ToolUvSources;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a map with unique keys")
-            }
-
-            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let mut sources = BTreeMap::new();
-                while let Some((key, value)) = access.next_entry::<PackageName, Sources>()? {
-                    match sources.entry(key) {
-                        std::collections::btree_map::Entry::Occupied(entry) => {
-                            return Err(serde::de::Error::custom(format!(
-                                "duplicate sources for package `{}`",
-                                entry.key()
-                            )));
-                        }
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(value);
-                        }
-                    }
-                }
-                Ok(ToolUvSources(sources))
-            }
-        }
-
-        deserializer.deserialize_map(SourcesVisitor)
+        deserialize_unique_map(deserializer, |key: &PackageName| {
+            format!("duplicate sources for package `{key}`")
+        })
+        .map(ToolUvSources)
     }
 }
 
@@ -698,40 +753,10 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
     where
         D: Deserializer<'de>,
     {
-        struct SourcesVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
-            type Value = ToolUvDependencyGroups;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a map with unique keys")
-            }
-
-            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let mut groups = BTreeMap::new();
-                while let Some((key, value)) =
-                    access.next_entry::<GroupName, DependencyGroupSettings>()?
-                {
-                    match groups.entry(key) {
-                        std::collections::btree_map::Entry::Occupied(entry) => {
-                            return Err(serde::de::Error::custom(format!(
-                                "duplicate settings for dependency group `{}`",
-                                entry.key()
-                            )));
-                        }
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(value);
-                        }
-                    }
-                }
-                Ok(ToolUvDependencyGroups(groups))
-            }
-        }
-
-        deserializer.deserialize_map(SourcesVisitor)
+        deserialize_unique_map(deserializer, |key: &GroupName| {
+            format!("duplicate settings for dependency group `{key}`")
+        })
+        .map(ToolUvDependencyGroups)
     }
 }
 
@@ -743,6 +768,130 @@ pub struct DependencyGroupSettings {
     /// Version of python to require when installing this group
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
     pub requires_python: Option<VersionSpecifiers>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ExtraBuildDependencyWire {
+    Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
+    #[serde(rename_all = "kebab-case")]
+    Annotated {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        match_runtime: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    deny_unknown_fields,
+    try_from = "ExtraBuildDependencyWire",
+    into = "ExtraBuildDependencyWire"
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ExtraBuildDependency {
+    pub requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+    pub match_runtime: bool,
+}
+
+impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
+    fn from(value: ExtraBuildDependency) -> Self {
+        value.requirement
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ExtraBuildDependencyError {
+    #[error("Dependencies marked with `match-runtime = true` cannot include version specifiers")]
+    VersionSpecifiersNotAllowed,
+    #[error("Dependencies marked with `match-runtime = true` cannot include URL constraints")]
+    UrlNotAllowed,
+}
+
+impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
+    type Error = ExtraBuildDependencyError;
+
+    fn try_from(wire: ExtraBuildDependencyWire) -> Result<Self, ExtraBuildDependencyError> {
+        match wire {
+            ExtraBuildDependencyWire::Unannotated(requirement) => Ok(Self {
+                requirement,
+                match_runtime: false,
+            }),
+            ExtraBuildDependencyWire::Annotated {
+                requirement,
+                match_runtime,
+            } => match requirement.version_or_url {
+                // If `match-runtime = true`, reject additional constraints.
+                Some(VersionOrUrl::VersionSpecifier(..)) if match_runtime => {
+                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
+                }
+                Some(VersionOrUrl::Url(..)) if match_runtime => {
+                    Err(ExtraBuildDependencyError::UrlNotAllowed)
+                }
+                _ => Ok(Self {
+                    requirement,
+                    match_runtime,
+                }),
+            },
+        }
+    }
+}
+
+impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
+    fn from(item: ExtraBuildDependency) -> Self {
+        Self::Annotated {
+            requirement: item.requirement,
+            match_runtime: item.match_runtime,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ExtraBuildDependencies(BTreeMap<PackageName, Vec<ExtraBuildDependency>>);
+
+impl std::ops::Deref for ExtraBuildDependencies {
+    type Target = BTreeMap<PackageName, Vec<ExtraBuildDependency>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ExtraBuildDependencies {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl IntoIterator for ExtraBuildDependencies {
+    type Item = (PackageName, Vec<ExtraBuildDependency>);
+    type IntoIter = std::collections::btree_map::IntoIter<PackageName, Vec<ExtraBuildDependency>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl FromIterator<(PackageName, Vec<ExtraBuildDependency>)> for ExtraBuildDependencies {
+    fn from_iter<T: IntoIterator<Item = (PackageName, Vec<ExtraBuildDependency>)>>(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ExtraBuildDependencies {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_unique_map(deserializer, |key: &PackageName| {
+            format!("duplicate extra-build-dependencies for `{key}`")
+        })
+        .map(ExtraBuildDependencies)
+    }
 }
 
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
@@ -1480,7 +1629,7 @@ impl Source {
         branch: Option<String>,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
-    ) -> Result<Option<Source>, SourceError> {
+    ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
             && (branch.is_some() || tag.is_some() || rev.is_some())
@@ -1488,7 +1637,7 @@ impl Source {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
                     for existing_source in package_sources.iter() {
-                        if let Source::Git {
+                        if let Self::Git {
                             git,
                             subdirectory,
                             marker,
@@ -1497,7 +1646,7 @@ impl Source {
                             ..
                         } = existing_source
                         {
-                            return Ok(Some(Source::Git {
+                            return Ok(Some(Self::Git {
                                 git: git.clone(),
                                 subdirectory: subdirectory.clone(),
                                 rev,
@@ -1540,7 +1689,7 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace {
+                    Ok(Some(Self::Workspace {
                         workspace: true,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1565,7 +1714,7 @@ impl Source {
             }
             RequirementSource::Registry { index: None, .. } => {
                 if let Some(index) = index {
-                    Source::Registry {
+                    Self::Registry {
                         index,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1576,7 +1725,7 @@ impl Source {
                 }
             }
             RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Source::Path {
+            | RequirementSource::Directory { install_path, .. } => Self::Path {
                 editable,
                 package: None,
                 path: PortablePathBuf::from(
@@ -1593,7 +1742,7 @@ impl Source {
                 location,
                 subdirectory,
                 ..
-            } => Source::Url {
+            } => Self::Url {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
@@ -1612,7 +1761,7 @@ impl Source {
                         GitReference::NamedRef(rev) => Some(rev),
                         GitReference::DefaultBranch => None,
                     };
-                    Source::Git {
+                    Self::Git {
                         rev: rev.cloned(),
                         tag,
                         branch,
@@ -1623,7 +1772,7 @@ impl Source {
                         group: None,
                     }
                 } else {
-                    Source::Git {
+                    Self::Git {
                         rev,
                         tag,
                         branch,
@@ -1643,33 +1792,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => *marker,
-            Source::Url { marker, .. } => *marker,
-            Source::Path { marker, .. } => *marker,
-            Source::Registry { marker, .. } => *marker,
-            Source::Workspace { marker, .. } => *marker,
+            Self::Git { marker, .. } => *marker,
+            Self::Url { marker, .. } => *marker,
+            Self::Path { marker, .. } => *marker,
+            Self::Registry { marker, .. } => *marker,
+            Self::Workspace { marker, .. } => *marker,
         }
     }
 
     /// Return the extra name for the source.
     pub fn extra(&self) -> Option<&ExtraName> {
         match self {
-            Source::Git { extra, .. } => extra.as_ref(),
-            Source::Url { extra, .. } => extra.as_ref(),
-            Source::Path { extra, .. } => extra.as_ref(),
-            Source::Registry { extra, .. } => extra.as_ref(),
-            Source::Workspace { extra, .. } => extra.as_ref(),
+            Self::Git { extra, .. } => extra.as_ref(),
+            Self::Url { extra, .. } => extra.as_ref(),
+            Self::Path { extra, .. } => extra.as_ref(),
+            Self::Registry { extra, .. } => extra.as_ref(),
+            Self::Workspace { extra, .. } => extra.as_ref(),
         }
     }
 
     /// Return the dependency group name for the source.
     pub fn group(&self) -> Option<&GroupName> {
         match self {
-            Source::Git { group, .. } => group.as_ref(),
-            Source::Url { group, .. } => group.as_ref(),
-            Source::Path { group, .. } => group.as_ref(),
-            Source::Registry { group, .. } => group.as_ref(),
-            Source::Workspace { group, .. } => group.as_ref(),
+            Self::Git { group, .. } => group.as_ref(),
+            Self::Url { group, .. } => group.as_ref(),
+            Self::Path { group, .. } => group.as_ref(),
+            Self::Registry { group, .. } => group.as_ref(),
+            Self::Workspace { group, .. } => group.as_ref(),
         }
     }
 }
@@ -1696,7 +1845,7 @@ impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
     where
         D: Deserializer<'de>,
     {
-        Ok(BuildBackendSettingsSchema)
+        Ok(Self)
     }
 }
 

@@ -146,8 +146,8 @@ fn unquote_open_escape(acc: &mut String, cursor: &mut std::iter::Enumerate<std::
 ///
 /// # Examples
 ///
-/// ```
-/// assert_eq!(r_shquote::unquote("foobar").unwrap(), "foobar");
+/// ```no_build
+/// assert_eq!(unquote("foobar").unwrap(), "foobar");
 /// ```
 pub(crate) fn unquote(source: &str) -> Result<Option<String>, UnquoteError> {
     // If the string does not contain any single-quotes, double-quotes, or escape sequences, it

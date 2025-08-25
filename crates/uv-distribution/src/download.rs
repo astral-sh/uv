@@ -2,7 +2,7 @@ use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{CachedDist, Dist, Hashed};
+use uv_distribution_types::{BuildInfo, CachedDist, Dist, Hashed};
 use uv_metadata::read_flat_wheel_metadata;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
@@ -18,8 +18,10 @@ pub struct LocalWheel {
     /// The canonicalized path in the cache directory to which the wheel was downloaded.
     /// Typically, a directory within the archive bucket.
     pub(crate) archive: Box<Path>,
-    /// The cache index of the wheel.
+    /// The cache info of the wheel.
     pub(crate) cache: CacheInfo,
+    /// The build info, if available.
+    pub(crate) build: Option<BuildInfo>,
     /// The computed hashes of the wheel.
     pub(crate) hashes: HashDigests,
 }
@@ -55,12 +57,13 @@ impl Hashed for LocalWheel {
 
 /// Convert a [`LocalWheel`] into a [`CachedDist`].
 impl From<LocalWheel> for CachedDist {
-    fn from(wheel: LocalWheel) -> CachedDist {
-        CachedDist::from_remote(
+    fn from(wheel: LocalWheel) -> Self {
+        Self::from_remote(
             wheel.dist,
             wheel.filename,
             wheel.hashes,
             wheel.cache,
+            wheel.build,
             wheel.archive,
         )
     }

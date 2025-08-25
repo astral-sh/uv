@@ -64,7 +64,7 @@ impl RequirementsTxtRequirement {
     /// Specifically, only local directory URLs are supported.
     pub fn into_editable(self) -> Result<Self, EditableError> {
         match self {
-            RequirementsTxtRequirement::Named(requirement) => {
+            Self::Named(requirement) => {
                 let Some(version_or_url) = requirement.version_or_url else {
                     return Err(EditableError::MissingVersion(requirement.name));
                 };
@@ -90,14 +90,14 @@ impl RequirementsTxtRequirement {
                     version_or_url: Some(uv_pep508::VersionOrUrl::Url(VerbatimParsedUrl {
                         verbatim: url.verbatim,
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: true,
+                            editable: Some(true),
                             ..parsed_url
                         }),
                     })),
                     ..requirement
                 }))
             }
-            RequirementsTxtRequirement::Unnamed(requirement) => {
+            Self::Unnamed(requirement) => {
                 let parsed_url = match requirement.url.parsed_url {
                     ParsedUrl::Directory(parsed_url) => parsed_url,
                     ParsedUrl::Path(_) => {
@@ -115,7 +115,7 @@ impl RequirementsTxtRequirement {
                     url: VerbatimParsedUrl {
                         verbatim: requirement.url.verbatim,
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: true,
+                            editable: Some(true),
                             ..parsed_url
                         }),
                     },

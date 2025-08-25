@@ -7,6 +7,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace, warn};
 
+use crate::providers::HuggingFaceProvider;
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -25,7 +26,7 @@ enum NetrcMode {
 
 impl Default for NetrcMode {
     fn default() -> Self {
-        NetrcMode::Automatic(LazyLock::new(|| match Netrc::new() {
+        Self::Automatic(LazyLock::new(|| match Netrc::new() {
             Ok(netrc) => Some(netrc),
             Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 debug!("No netrc file found");
@@ -43,9 +44,9 @@ impl NetrcMode {
     /// Get the parsed netrc file if enabled.
     fn get(&self) -> Option<&Netrc> {
         match self {
-            NetrcMode::Automatic(lock) => lock.as_ref(),
-            NetrcMode::Enabled(netrc) => Some(netrc),
-            NetrcMode::Disabled => None,
+            Self::Automatic(lock) => lock.as_ref(),
+            Self::Enabled(netrc) => Some(netrc),
+            Self::Disabled => None,
         }
     }
 }
@@ -128,7 +129,7 @@ impl AuthMiddleware {
 
 impl Default for AuthMiddleware {
     fn default() -> Self {
-        AuthMiddleware::new()
+        Self::new()
     }
 }
 
@@ -457,9 +458,8 @@ impl AuthMiddleware {
             Some(credentials)
         };
 
-        return self
-            .complete_request(credentials, request, extensions, next, auth_policy)
-            .await;
+        self.complete_request(credentials, request, extensions, next, auth_policy)
+            .await
     }
 
     /// Fetch credentials for a URL.
@@ -501,6 +501,13 @@ impl AuthMiddleware {
             }
 
             return credentials;
+        }
+
+        // Support for known providers, like Hugging Face.
+        if let Some(credentials) = HuggingFaceProvider::credentials_for(url).map(Arc::new) {
+            debug!("Found Hugging Face credentials for {url}");
+            self.cache().fetches.done(key, Some(credentials.clone()));
+            return Some(credentials);
         }
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.

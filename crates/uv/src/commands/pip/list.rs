@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, PreviewMode};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
@@ -24,8 +24,9 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonEnvironment};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -49,12 +50,12 @@ pub(crate) async fn pip_list(
     network_settings: &NetworkSettings,
     concurrency: Concurrency,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -65,6 +66,7 @@ pub(crate) async fn pip_list(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
         preview,
     )?;
@@ -87,6 +89,7 @@ pub(crate) async fn pip_list(
         let capabilities = IndexCapabilities::default();
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .keyring(keyring_provider)
@@ -269,10 +272,11 @@ pub(crate) async fn pip_list(
 
     // Validate that the environment is consistent.
     if strict {
-        // Determine the markers to use for resolution.
+        // Determine the markers and tags to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
+        let tags = environment.interpreter().tags()?;
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

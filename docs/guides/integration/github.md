@@ -15,7 +15,7 @@ PATH, (optionally) persists the cache, and more, with support for all uv-support
 
 To install the latest version of uv:
 
-```yaml title="example.yml" hl_lines="11-12"
+```yaml title="example.yml" hl_lines="11 12"
 name: Example
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 ```
 
 It is considered best practice to pin to a specific uv version, e.g., with:
@@ -44,10 +44,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           # Install a specific version of uv.
-          version: "0.7.19"
+          version: "0.8.13"
 ```
 
 ## Setting up Python
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Set up Python
         run: uv python install
@@ -81,7 +81,7 @@ Set the
 [`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)
 option to use the pinned version for the project:
 
-```yaml title="example.yml" hl_lines="14 15 16 17"
+```yaml title="example.yml" hl_lines="14"
 name: Example
 
 jobs:
@@ -91,20 +91,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 ```
 
 Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
 the project's `requires-python` constraint:
 
-```yaml title="example.yml" hl_lines="17"
+```yaml title="example.yml" hl_lines="14"
 name: Example
 
 jobs:
@@ -115,13 +115,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 ```
 
 ## Multiple Python versions
@@ -146,7 +146,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
 ```
@@ -175,7 +175,7 @@ jobs:
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
 run in the environment with `uv run`:
 
-```yaml title="example.yml" hl_lines="17-22"
+```yaml title="example.yml" hl_lines="15 17-22"
 name: Example
 
 jobs:
@@ -187,7 +187,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
@@ -212,43 +212,10 @@ persisting the cache:
 
 ```yaml title="example.yml"
 - name: Enable caching
-  uses: astral-sh/setup-uv@v5
+  uses: astral-sh/setup-uv@v6
   with:
     enable-cache: true
 ```
-
-You can configure the action to use a custom cache directory on the runner:
-
-```yaml title="example.yml"
-- name: Define a custom uv cache path
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-local-path: "/path/to/cache"
-```
-
-Or invalidate it when the lockfile changes:
-
-```yaml title="example.yml"
-- name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-dependency-glob: "uv.lock"
-```
-
-Or when any requirements file changes:
-
-```yaml title="example.yml"
-- name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-dependency-glob: "requirements**.txt"
-```
-
-Note that `astral-sh/setup-uv` will automatically use a separate cache key for each host
-architecture and platform.
 
 Alternatively, you can manage the cache manually with the `actions/cache` action:
 

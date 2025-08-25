@@ -2,9 +2,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_configuration::SourceStrategy;
-use uv_distribution_types::{IndexLocations, Requirement};
+use uv_distribution_types::{
+    ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+};
 use uv_normalize::PackageName;
-use uv_workspace::pyproject::ToolUvSources;
+use uv_workspace::pyproject::{ExtraBuildDependencies, ExtraBuildDependency, ToolUvSources};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
 };
@@ -201,5 +203,128 @@ impl BuildRequires {
             name: metadata.name,
             requires_dist,
         })
+    }
+}
+
+/// Lowered extra build dependencies.
+///
+/// This is a wrapper around [`ExtraBuildRequires`] that provides methods to lower
+/// [`ExtraBuildDependencies`] from a workspace context or from already lowered dependencies.
+#[derive(Debug, Clone, Default)]
+pub struct LoweredExtraBuildDependencies(ExtraBuildRequires);
+
+impl LoweredExtraBuildDependencies {
+    /// Return the [`ExtraBuildRequires`] that this was lowered into.
+    pub fn into_inner(self) -> ExtraBuildRequires {
+        self.0
+    }
+
+    /// Create from a workspace, lowering the extra build dependencies.
+    pub fn from_workspace(
+        extra_build_dependencies: ExtraBuildDependencies,
+        workspace: &Workspace,
+        index_locations: &IndexLocations,
+        source_strategy: SourceStrategy,
+    ) -> Result<Self, MetadataError> {
+        match source_strategy {
+            SourceStrategy::Enabled => {
+                // Collect project sources and indexes
+                let project_indexes = workspace
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.index.as_deref())
+                    .unwrap_or(&[]);
+
+                let empty_sources = BTreeMap::default();
+                let project_sources = workspace
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref())
+                    .map(ToolUvSources::inner)
+                    .unwrap_or(&empty_sources);
+
+                // Lower each package's extra build dependencies
+                let mut build_requires = ExtraBuildRequires::default();
+                for (package_name, requirements) in extra_build_dependencies {
+                    let lowered: Vec<ExtraBuildRequirement> = requirements
+                        .into_iter()
+                        .flat_map(
+                            |ExtraBuildDependency {
+                                 requirement,
+                                 match_runtime,
+                             }| {
+                                let requirement_name = requirement.name.clone();
+                                let extra = requirement.marker.top_level_extra_name();
+                                let group = None;
+                                LoweredRequirement::from_requirement(
+                                    requirement,
+                                    None,
+                                    workspace.install_path(),
+                                    project_sources,
+                                    project_indexes,
+                                    extra.as_deref(),
+                                    group,
+                                    index_locations,
+                                    workspace,
+                                    None,
+                                )
+                                .map(move |requirement| {
+                                    match requirement {
+                                        Ok(requirement) => Ok(ExtraBuildRequirement {
+                                            requirement: requirement.into_inner(),
+                                            match_runtime,
+                                        }),
+                                        Err(err) => Err(MetadataError::LoweringError(
+                                            requirement_name.clone(),
+                                            Box::new(err),
+                                        )),
+                                    }
+                                })
+                            },
+                        )
+                        .collect::<Result<Vec<_>, _>>()?;
+                    build_requires.insert(package_name, lowered);
+                }
+                Ok(Self(build_requires))
+            }
+            SourceStrategy::Disabled => Ok(Self::from_non_lowered(extra_build_dependencies)),
+        }
+    }
+
+    /// Create from lowered dependencies (for non-workspace contexts, like scripts).
+    pub fn from_lowered(extra_build_dependencies: ExtraBuildRequires) -> Self {
+        Self(extra_build_dependencies)
+    }
+
+    /// Create from unlowered dependencies (e.g., for contexts in the pip CLI).
+    pub fn from_non_lowered(extra_build_dependencies: ExtraBuildDependencies) -> Self {
+        Self(
+            extra_build_dependencies
+                .into_iter()
+                .map(|(name, requirements)| {
+                    (
+                        name,
+                        requirements
+                            .into_iter()
+                            .map(
+                                |ExtraBuildDependency {
+                                     requirement,
+                                     match_runtime,
+                                 }| {
+                                    ExtraBuildRequirement {
+                                        requirement: requirement.into(),
+                                        match_runtime,
+                                    }
+                                },
+                            )
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect(),
+        )
     }
 }

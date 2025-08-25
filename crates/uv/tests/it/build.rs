@@ -7,6 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use uv_static::EnvVars;
 use zip::ZipArchive;
 
 #[test]
@@ -1439,7 +1440,6 @@ fn build_fast_path() -> Result<()> {
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1")), @r###"
@@ -1465,7 +1465,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1485,7 +1484,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
@@ -1505,7 +1503,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
@@ -1545,7 +1542,6 @@ fn build_list_files() -> Result<()> {
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1601,7 +1597,6 @@ fn build_list_files() -> Result<()> {
         .assert(predicate::path::missing());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1670,7 +1665,6 @@ fn build_list_files_errors() -> Result<()> {
     // In CI, we run with link mode settings.
     filters.push(("--link-mode <LINK_MODE> ", ""));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1694,7 +1688,6 @@ fn build_list_files_errors() -> Result<()> {
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1762,13 +1755,14 @@ fn build_with_symlink() -> Result<()> {
             build-backend = "hatchling.build"
     "#})?;
     fs_err::os::unix::fs::symlink(
-        context.temp_dir.child("pyproject.toml.real"),
+        "pyproject.toml.real",
         context.temp_dir.child("pyproject.toml"),
     )?;
     context
         .temp_dir
         .child("src/softlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1807,6 +1801,7 @@ fn build_with_hardlink() -> Result<()> {
         .temp_dir
         .child("src/hardlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1987,12 +1982,7 @@ fn force_pep517() -> Result<()> {
     // We need to use a real `uv_build` package.
     let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
 
-    context
-        .init()
-        .arg("--build-backend")
-        .arg("uv")
-        .assert()
-        .success();
+    context.init().assert().success();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2008,7 +1998,7 @@ fn force_pep517() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().env("RUST_BACKTRACE", "0"), @r"
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2019,18 +2009,77 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-    Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
+    Error: Missing source directory at: `src`
       × Failed to build `[TEMP_DIR]/`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
           hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    Ok(())
+}
+
+/// Check that we show a hint when there's a venv in the source distribution.
+///
+/// <https://github.com/astral-sh/uv/issues/15096>
+// Windows uses trampolines instead of symlinks. You don't want those in your source distribution
+// either, but that's for the build backend to catch, we're only checking for the unix error hint
+// in uv here.
+#[cfg(unix)]
+#[test]
+fn venv_included_in_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--name")
+        .arg("project")
+        .arg("--build-backend")
+        .arg("hatchling")
+        .assert()
+        .success();
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+
+        [tool.hatch.build.targets.sdist.force-include]
+        ".venv" = ".venv"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#};
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    context.venv().assert().success();
+
+    // context.filters()
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid tar file
+      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      ╰─▶ symlink destination for [PYTHON-3.12] is outside of the target directory
+      help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
     Ok(())

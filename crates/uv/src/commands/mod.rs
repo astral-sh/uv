@@ -23,6 +23,7 @@ pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
 pub(crate) use project::export::export;
+pub(crate) use project::format::format;
 pub(crate) use project::init::{InitKind, InitProjectKind, init};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
@@ -38,6 +39,7 @@ pub(crate) use python::install::install as python_install;
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
 pub(crate) use python::uninstall::uninstall as python_uninstall;
+pub(crate) use python::update_shell::update_shell as python_update_shell;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::dir::dir as tool_dir;
@@ -72,7 +74,6 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
-mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -18,7 +17,7 @@ use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -36,10 +35,10 @@ use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
-use uv_requirements::RequirementsSource;
+use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
-use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
+use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -52,10 +51,13 @@ use crate::settings::{
     PublishSettings,
 };
 
+pub(crate) mod child;
 pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
+#[cfg(windows)]
+mod windows_exception;
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -301,6 +303,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
 
@@ -466,20 +471,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_compile(
                 &requirements,
@@ -518,8 +513,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.keyring_provider,
                 &globals.network_settings,
                 args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -570,11 +567,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_sync(
                 &requirements,
                 &constraints,
                 &build_constraints,
+                &args.settings.extras,
+                &groups,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -588,8 +591,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
                 &args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                &args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -649,20 +654,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             // Special-case: any source trees specified on the command-line are automatically
             // reinstalled. This matches user expectations: `uv pip install .` should always
@@ -722,7 +717,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
-                groups,
+                &groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -739,8 +734,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.hash_checking,
                 globals.installer_metadata,
                 &args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                &args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.modifications,
                 args.settings.python_version,
@@ -919,6 +916,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_check(
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.python_version.as_ref(),
+                args.settings.python_platform.as_ref(),
                 &cache,
                 printer,
                 globals.preview,
@@ -1026,6 +1025,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
+            let on_existing = uv_virtualenv::OnExisting::from_args(args.allow_existing, args.clear);
+
             commands::venv(
                 &project_dir,
                 args.path,
@@ -1042,7 +1043,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
-                args.allow_existing,
+                on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,
@@ -1056,13 +1057,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
-                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
                 script,
                 globals,
                 cli.top_level.no_config,
+                cli.top_level.global_args.project.is_some(),
                 filesystem,
                 cache,
                 printer,
@@ -1229,21 +1230,35 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
-                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+                args.with.len()
+                    + args.with_editable.len()
+                    + args.with_requirements.len()
+                    + args.with_executables_from.len(),
             );
-            for package in args.with {
-                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
+            for pkg in args.with {
+                requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for package in args.with_editable {
-                requirements.push(RequirementsSource::from_editable(&package)?);
+            for pkg in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
-            requirements.extend(
-                args.with_requirements
-                    .into_iter()
-                    .map(RequirementsSource::from_requirements_file)
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
+            for path in args.with_requirements {
+                requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
+            for pkg in &args.with_executables_from {
+                let source = RequirementsSource::from_with_package_argument(pkg)?;
+                let RequirementsSource::Package(RequirementsTxtRequirement::Named(requirement)) =
+                    &source
+                else {
+                    bail!(
+                        "Expected a named package for `--with-executables-from`, but got: {}",
+                        source.to_string().cyan()
+                    )
+                };
+                entrypoints.push(requirement.name.clone());
+                requirements.push(source);
+            }
 
             let constraints = args
                 .constraints
@@ -1269,6 +1284,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 &build_constraints,
+                &entrypoints,
                 args.python,
                 args.install_mirrors,
                 args.force,
@@ -1388,7 +1404,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
             // TODO(john): If we later want to support `--upgrade`, we need to replace this.
             let upgrade = false;
@@ -1399,6 +1415,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.targets,
                 args.reinstall,
                 upgrade,
+                args.bin,
+                args.registry,
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
@@ -1418,15 +1436,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
             show_settings!(args);
-            let reinstall = false;
             let upgrade = true;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
-                reinstall,
+                args.reinstall,
                 upgrade,
+                args.bin,
+                args.registry,
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
@@ -1467,7 +1486,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
-                    Pep723ItemRef::Script(&script),
+                    (&script).into(),
                     args.show_version,
                     &globals.network_settings,
                     globals.python_preference,
@@ -1528,6 +1547,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::python_dir(args.bin)?;
+            Ok(ExitStatus::Success)
+        }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::UpdateShell,
+        }) => {
+            commands::python_update_shell(printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
@@ -1647,7 +1672,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
-    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -1655,6 +1679,7 @@ async fn run_project(
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
     no_config: bool,
+    explicit_project: bool,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
     printer: Printer,
@@ -1802,6 +1827,7 @@ async fn run_project(
                 args.install_options,
                 args.modifications,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1814,6 +1840,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
+                args.output_format,
             ))
             .await
         }
@@ -1951,6 +1978,9 @@ async fn run_project(
                 args.frozen,
                 args.active,
                 args.no_sync,
+                args.no_install_project,
+                args.no_install_workspace,
+                args.no_install_local,
                 requirements,
                 constraints,
                 args.marker,
@@ -1965,6 +1995,7 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.workspace,
                 args.install_mirrors,
                 args.settings,
                 globals.network_settings,
@@ -2036,21 +2067,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = project_was_explicit
-                || globals.preview.is_enabled()
-                || args.dry_run
-                || args.bump.is_some()
-                || args.value.is_some()
-                || args.package.is_some();
             Box::pin(commands::project_version(
                 args.value,
                 args.bump,
                 args.short,
                 args.output_format,
-                strict,
                 project_dir,
                 args.package,
+                explicit_project,
                 args.dry_run,
                 args.locked,
                 args.frozen,
@@ -2163,6 +2187,27 @@ async fn run_project(
             .boxed_local()
             .await
         }
+        ProjectCommand::Format(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::FormatSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::format(
+                project_dir,
+                args.check,
+                args.diff,
+                args.extra_args,
+                args.version,
+                globals.network_settings,
+                cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
     }
 }
 
@@ -2186,6 +2231,9 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    #[cfg(windows)]
+    windows_exception::setup();
+
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
     if let Ok(current_exe) = std::env::current_exe() {
@@ -2277,6 +2325,7 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
+            trace!("Error trace: {err:?}");
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",

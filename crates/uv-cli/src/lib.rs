@@ -10,16 +10,23 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
+    PipFindLinks, PipIndex,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    ResolutionMode,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -43,6 +50,15 @@ pub enum PythonListFormat {
     #[default]
     Text,
     /// JSON (for computers).
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
     Json,
 }
 
@@ -263,7 +279,7 @@ pub struct GlobalArgs {
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
-    /// Whether to enable experimental, preview features.
+    /// Whether to enable all experimental preview features.
     ///
     /// Preview features may change without warning.
     #[arg(global = true, long, hide = true, env = EnvVars::UV_PREVIEW, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -272,13 +288,32 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
     pub no_preview: bool,
 
+    /// Enable experimental preview features.
+    ///
+    /// Preview features may change without warning.
+    ///
+    /// Use comma-separated values or pass multiple times to enable multiple features.
+    ///
+    /// The following features are available: `python-install-default`, `python-upgrade`,
+    /// `json-output`, `pylock`, `add-bounds`.
+    #[arg(
+        global = true,
+        long = "preview-features",
+        env = EnvVars::UV_PREVIEW_FEATURES,
+        value_delimiter = ',',
+        hide = true,
+        alias = "preview-feature",
+        value_enum,
+    )]
+    pub preview_features: Vec<PreviewFeatures>,
+
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file.
     ///
     /// Normally, configuration files are discovered in the current directory,
     /// parent directories, or user configuration directories.
     ///
     /// This option is deprecated in favor of `--no-config`.
-    #[arg(global = true, long, hide = true)]
+    #[arg(global = true, long, hide = true, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
@@ -532,8 +567,10 @@ pub struct VersionArgs {
     pub value: Option<String>,
 
     /// Update the project version using the given semantics
+    ///
+    /// This flag can be passed multiple times.
     #[arg(group = "operation", long)]
-    pub bump: Option<VersionBump>,
+    pub bump: Vec<VersionBump>,
 
     /// Don't write a new version to the `pyproject.toml`
     ///
@@ -608,14 +645,56 @@ pub struct VersionArgs {
     pub python: Option<Maybe<String>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
+// Note that the ordering of the variants is significant, as when given a list of operations
+// to perform, we sort them and apply them in order, so users don't have to think too hard about it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum VersionBump {
-    /// Increase the major version (1.2.3 => 2.0.0)
+    /// Increase the major version (e.g., 1.2.3 => 2.0.0)
     Major,
-    /// Increase the minor version (1.2.3 => 1.3.0)
+    /// Increase the minor version (e.g., 1.2.3 => 1.3.0)
     Minor,
-    /// Increase the patch version (1.2.3 => 1.2.4)
+    /// Increase the patch version (e.g., 1.2.3 => 1.2.4)
     Patch,
+    /// Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 => 1.2.3)
+    ///
+    /// Removes all pre-release components, but will not remove "local" components.
+    Stable,
+    /// Increase the alpha version (e.g., 1.2.3a4 => 1.2.3a5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0a1, you'd also include [`VersionBump::Major`].
+    Alpha,
+    /// Increase the beta version (e.g., 1.2.3b4 => 1.2.3b5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0b1, you'd also include [`VersionBump::Major`].
+    Beta,
+    /// Increase the rc version (e.g., 1.2.3rc4 => 1.2.3rc5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0rc1, you'd also include [`VersionBump::Major`].]
+    Rc,
+    /// Increase the post version (e.g., 1.2.3.post5 => 1.2.3.post6)
+    Post,
+    /// Increase the dev version (e.g., 1.2.3a4.dev6 => 1.2.3.dev7)
+    Dev,
+}
+
+impl std::fmt::Display for VersionBump {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            Self::Major => "major",
+            Self::Minor => "minor",
+            Self::Patch => "patch",
+            Self::Stable => "stable",
+            Self::Alpha => "alpha",
+            Self::Beta => "beta",
+            Self::Rc => "rc",
+            Self::Post => "post",
+            Self::Dev => "dev",
+        };
+        string.fmt(f)
+    }
 }
 
 #[derive(Args)]
@@ -928,6 +1007,21 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Format Python code in the project.
+    ///
+    /// Formats Python code using the Ruff formatter. By default, all Python files in the project
+    /// are formatted. This command has the same behavior as running `ruff format` in the project
+    /// root.
+    ///
+    /// To check if files are formatted without modifying them, use `--check`. To see a diff of
+    /// formatting changes, use `--diff`.
+    ///
+    /// Additional arguments can be passed to Ruff after `--`.
+    #[command(
+        after_help = "Use `uv help format` for more details.",
+        after_long_help = ""
+    )]
+    Format(FormatArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -941,13 +1035,13 @@ pub enum Maybe<T> {
 impl<T> Maybe<T> {
     pub fn into_option(self) -> Option<T> {
         match self {
-            Maybe::Some(value) => Some(value),
-            Maybe::None => None,
+            Self::Some(value) => Some(value),
+            Self::None => None,
         }
     }
 
     pub fn is_some(&self) -> bool {
-        matches!(self, Maybe::Some(_))
+        matches!(self, Self::Some(_))
     }
 }
 
@@ -1148,6 +1242,14 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
+    /// Install the specified dependency group from a `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -1161,14 +1263,6 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Write the compiled requirements to the given `requirements.txt` or `pylock.toml` file.
     ///
@@ -1464,6 +1558,30 @@ pub struct PipSyncArgs {
     #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
+    pub all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -1744,18 +1862,27 @@ pub struct PipInstallArgs {
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub all_extras: bool,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -1770,14 +1897,6 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -2254,6 +2373,27 @@ pub struct PipCheckArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// The Python version against which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the version of the current
+    /// interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the platform of the current
+    /// interpreter.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -2562,16 +2702,23 @@ pub struct VenvArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
+    /// Remove any existing files or directories at the target path.
+    ///
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
+    /// `--clear` option will instead clear a non-empty path before creating a new virtual
+    /// environment.
+    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    pub clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
-    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--allow-existing` option will instead write to the given path, regardless of its contents,
     /// and without clearing it beforehand.
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
-    #[clap(long)]
+    #[clap(long, overrides_with = "clear")]
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
@@ -2644,7 +2791,16 @@ pub struct VenvArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long)]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -2652,6 +2808,11 @@ pub struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
@@ -2805,7 +2966,7 @@ pub struct InitArgs {
     /// Initialize a build-backend of choice for the project.
     ///
     /// Implicitly sets `--package`.
-    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
+    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"], env = EnvVars::UV_INIT_BUILD_BACKEND)]
     pub build_backend: Option<ProjectBuildBackend>,
 
     /// Invalid option name for build backend.
@@ -2900,7 +3061,7 @@ pub struct RunArgs {
     /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
@@ -2909,7 +3070,7 @@ pub struct RunArgs {
     /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3001,7 +3162,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
     /// specified by the project.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode.
@@ -3030,7 +3191,7 @@ pub struct RunArgs {
     ///
     /// When used with `--with` or `--with-requirements`, the additional dependencies will still be
     /// layered in a second environment.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -3163,6 +3324,10 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    pub output_format: SyncFormat,
+
     /// Include all optional dependencies.
     ///
     /// When two or more extras are declared as conflicting in `tool.uv.conflicts`, using this flag
@@ -3185,14 +3350,14 @@ pub struct SyncArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -3292,6 +3457,14 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_workspace: bool,
 
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long)]
+    pub no_install_local: bool,
+
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
@@ -3360,6 +3533,7 @@ pub struct SyncArgs {
         conflicts_with = "package",
         conflicts_with = "no_install_project",
         conflicts_with = "no_install_workspace",
+        conflicts_with = "no_install_local",
         conflicts_with = "extra",
         conflicts_with = "all_extras",
         conflicts_with = "no_extra",
@@ -3394,6 +3568,23 @@ pub struct SyncArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 
     /// Check if the Python environment is synchronized with the project.
     ///
@@ -3497,7 +3688,9 @@ pub struct AddArgs {
         long,
         conflicts_with("optional"),
         conflicts_with("group"),
-        conflicts_with("script")
+        conflicts_with("script"),
+        env = EnvVars::UV_DEV,
+        value_parser = clap::builder::BoolishValueParser::new()
     )]
     pub dev: bool,
 
@@ -3524,7 +3717,7 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    #[arg(long, overrides_with = "editable", hide = true)]
+    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Add a dependency as provided.
@@ -3632,7 +3825,8 @@ pub struct AddArgs {
         long,
         conflicts_with = "dev",
         conflicts_with = "optional",
-        conflicts_with = "package"
+        conflicts_with = "package",
+        conflicts_with = "workspace"
     )]
     pub script: Option<PathBuf>,
 
@@ -3648,6 +3842,50 @@ pub struct AddArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Add the dependency as a workspace member.
+    ///
+    /// By default, uv will add path dependencies that are within the workspace directory
+    /// as workspace members. When used with a path dependency, the package will be added
+    /// to the workspace's `members` list in the root `pyproject.toml` file.
+    #[arg(long, overrides_with = "no_workspace")]
+    pub workspace: bool,
+
+    /// Don't add the dependency as a workspace member.
+    ///
+    /// By default, when adding a dependency that's a local path and is within the workspace
+    /// directory, uv will add it as a workspace member; pass `--no-workspace` to add the package
+    /// as direct path dependency instead.
+    #[arg(long, overrides_with = "workspace")]
+    pub no_workspace: bool,
+
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like building
+    /// Docker images where installing the project separately from its dependencies allows optimal
+    /// layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the current project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_local: bool,
 }
 
 #[derive(Args)]
@@ -3659,7 +3897,7 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"), env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -3764,7 +4002,7 @@ pub struct TreeArgs {
     /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Only include the development dependency group.
@@ -3779,7 +4017,7 @@ pub struct TreeArgs {
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3939,14 +4177,14 @@ pub struct ExportArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -4009,7 +4247,7 @@ pub struct ExportArgs {
 
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.
@@ -4039,6 +4277,14 @@ pub struct ExportArgs {
     /// exclusion of all the workspace members while retaining their dependencies.
     #[arg(long, alias = "no-install-workspace")]
     pub no_emit_workspace: bool,
+
+    /// Do not include local path dependencies in the exported requirements.
+    ///
+    /// Omits the current project, workspace members, and any other local (path or editable)
+    /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
+    /// and CI flows that want to export and cache third-party dependencies first.
+    #[arg(long, alias = "no-install-local")]
+    pub no_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
@@ -4095,6 +4341,32 @@ pub struct ExportArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct FormatArgs {
+    /// Check if files are formatted without applying changes.
+    #[arg(long)]
+    pub check: bool,
+
+    /// Show a diff of formatting changes without applying them.
+    ///
+    /// Implies `--check`.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// The version of Ruff to use for formatting.
+    ///
+    /// By default, a version of Ruff pinned by uv will be used.
+    #[arg(long)]
+    pub version: Option<String>,
+
+    /// Additional arguments to pass to Ruff.
+    ///
+    /// For example, use `uv format -- --line-length 100` to set the line length or
+    /// `uv format -- src/module/foo.py` to format a specific file.
+    #[arg(last = true)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Args)]
@@ -4204,7 +4476,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode
@@ -4251,7 +4523,7 @@ pub struct ToolRunArgs {
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Load environment variables from a `.env` file.
@@ -4319,7 +4591,7 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following additional requirements.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Include all requirements listed in the given `requirements.txt` files.
@@ -4334,6 +4606,10 @@ pub struct ToolInstallArgs {
     /// Include the given packages in editable mode.
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
+
+    /// Install executables from the following packages.
+    #[arg(long)]
+    pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -4595,6 +4871,14 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -4626,12 +4910,26 @@ pub struct ToolUpgradeArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -4712,18 +5010,19 @@ pub enum PythonCommand {
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
     ///
-    /// A `python` executable is not made globally available, managed Python versions are only used
-    /// in uv commands or in active virtual environments. There is experimental support for adding
-    /// Python executables to a directory on the path — use the `--preview` flag to enable this
-    /// behavior and `uv python dir --bin` to retrieve the target directory.
+    /// By default, Python executables are added to a directory on the path with a minor version
+    /// suffix, e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use
+    /// `uv python dir --bin` to see the target directory.
     ///
     /// Multiple Python versions may be requested.
     ///
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
-    /// Upgrade installed Python versions to the latest supported patch release (requires the
-    /// `--preview` flag).
+    /// Upgrade installed Python versions.
+    ///
+    /// Upgrades versions to the latest supported patch release. Requires the `python-upgrade`
+    /// preview feature.
     ///
     /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
     /// may be provided to perform more than one upgrade.
@@ -4774,6 +5073,19 @@ pub enum PythonCommand {
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
+
+    /// Ensure that the Python executable directory is on the `PATH`.
+    ///
+    /// If the Python executable directory is not present on the `PATH`, uv will attempt to add it to
+    /// the relevant shell configuration files.
+    ///
+    /// If the shell configuration files already include a blurb to add the executable directory to
+    /// the path, but the directory is not present on the `PATH`, uv will exit with an error.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and can be
+    /// retrieved with `uv python dir --bin`.
+    #[command(alias = "ensurepath")]
+    UpdateShell,
 }
 
 #[derive(Args)]
@@ -4859,6 +5171,38 @@ pub struct PythonInstallArgs {
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
+    /// Install a Python executable into the `bin` directory.
+    ///
+    /// This is the default behavior. If this flag is provided explicitly, uv will error if the
+    /// executable cannot be installed.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=1`.
+    ///
+    /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
+    #[arg(long, overrides_with("no_bin"), hide = true)]
+    pub bin: bool,
+
+    /// Do not install a Python executable into the `bin` directory.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
+    #[arg(long, overrides_with("bin"), conflicts_with("default"))]
+    pub no_bin: bool,
+
+    /// Register the Python installation in the Windows registry.
+    ///
+    /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
+    /// registry entry cannot be created.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=1`.
+    #[arg(long, overrides_with("no_registry"), hide = true)]
+    pub registry: bool,
+
+    /// Do not register the Python installation in the Windows registry.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
+    #[arg(long, overrides_with("registry"))]
+    pub no_registry: bool,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
@@ -4921,7 +5265,7 @@ pub struct PythonInstallArgs {
     /// and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
 }
 
@@ -4961,6 +5305,13 @@ pub struct PythonUpgradeArgs {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
+
+    /// Reinstall the latest Python patch, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the latest patch is already
+    /// installed.
+    #[arg(long, short)]
+    pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
     ///
@@ -5342,6 +5693,14 @@ pub struct InstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5367,12 +5726,26 @@ pub struct InstallerArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5529,6 +5902,14 @@ pub struct ResolverArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5560,7 +5941,16 @@ pub struct ResolverArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -5568,6 +5958,11 @@ pub struct ResolverArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5718,6 +6113,14 @@ pub struct ResolverInstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5749,12 +6152,26 @@ pub struct ResolverInstallerArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5838,7 +6255,7 @@ pub struct FetchArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
 }
 
 #[derive(Args)]

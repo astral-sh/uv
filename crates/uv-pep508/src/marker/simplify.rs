@@ -9,6 +9,7 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
+use crate::marker::tree::ContainerOperator;
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
@@ -154,6 +155,22 @@ fn collect_dnf(
                     key: marker.key().into(),
                     value: ArcStr::from(marker.value()),
                     operator,
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
+        MarkerTreeKind::List(marker) => {
+            for (is_high, tree) in marker.children() {
+                let expr = MarkerExpression::List {
+                    pair: marker.pair().clone(),
+                    operator: if is_high {
+                        ContainerOperator::In
+                    } else {
+                        ContainerOperator::NotIn
+                    },
                 };
 
                 path.push(expr);
@@ -396,18 +413,18 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
         MarkerExpression::VersionIn {
             key,
             versions,
-            negated,
+            operator,
         } => {
             let MarkerExpression::VersionIn {
                 key: key2,
                 versions: versions2,
-                negated: negated2,
+                operator: operator2,
             } = right
             else {
                 return false;
             };
 
-            key == key2 && versions == versions2 && negated != negated2
+            key == key2 && versions == versions2 && operator != operator2
         }
         MarkerExpression::String {
             key,
@@ -439,6 +456,17 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
             };
 
             name == name2 && operator.negate() == *operator2
+        }
+        MarkerExpression::List { pair, operator } => {
+            let MarkerExpression::List {
+                pair: pair2,
+                operator: operator2,
+            } = right
+            else {
+                return false;
+            };
+
+            pair == pair2 && operator != operator2
         }
     }
 }

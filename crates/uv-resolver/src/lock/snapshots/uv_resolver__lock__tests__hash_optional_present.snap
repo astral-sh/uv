@@ -37,6 +37,7 @@ Ok(
             prerelease_mode: IfNecessaryOrExplicit,
             fork_strategy: RequiresPython,
             exclude_newer: None,
+            exclude_newer_package: None,
         },
         packages: [
             Package {

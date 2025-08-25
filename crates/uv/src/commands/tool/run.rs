@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -17,8 +16,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
+use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
@@ -29,6 +29,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -42,6 +43,7 @@ use uv_warnings::warn_user;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -51,13 +53,12 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// The user-facing command used to invoke a tool run.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -71,8 +72,8 @@ pub(crate) enum ToolRunCommand {
 impl Display for ToolRunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRunCommand::Uvx => write!(f, "uvx"),
-            ToolRunCommand::ToolRun => write!(f, "uv tool run"),
+            Self::Uvx => write!(f, "uvx"),
+            Self::ToolRun => write!(f, "uv tool run"),
         }
     }
 }
@@ -102,7 +103,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -648,8 +649,8 @@ pub(crate) enum ToolRequirement {
 impl ToolRequirement {
     fn executable(&self) -> &str {
         match self {
-            ToolRequirement::Python { executable, .. } => executable,
-            ToolRequirement::Package { executable, .. } => executable,
+            Self::Python { executable, .. } => executable,
+            Self::Package { executable, .. } => executable,
         }
     }
 }
@@ -657,8 +658,8 @@ impl ToolRequirement {
 impl std::fmt::Display for ToolRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRequirement::Python { .. } => write!(f, "python"),
-            ToolRequirement::Package { requirement, .. } => write!(f, "{requirement}"),
+            Self::Python { .. } => write!(f, "python"),
+            Self::Package { requirement, .. } => write!(f, "{requirement}"),
         }
     }
 }
@@ -687,9 +688,10 @@ async fn get_or_create_environment(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -870,7 +872,7 @@ async fn get_or_create_environment(
         with,
         constraints,
         overrides,
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;
@@ -945,6 +947,28 @@ async fn get_or_create_environment(
                     .flatten()
                     .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
                 {
+                    let ResolverInstallerSettings {
+                        resolver:
+                            ResolverSettings {
+                                config_setting,
+                                config_settings_package,
+                                extra_build_dependencies,
+                                extra_build_variables,
+                                ..
+                            },
+                        ..
+                    } = settings;
+
+                    // Lower the extra build dependencies, if any.
+                    let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                        extra_build_dependencies.clone(),
+                    )
+                    .into_inner();
+
+                    // Determine the markers and tags to use for the resolution.
+                    let markers = interpreter.resolver_marker_environment();
+                    let tags = interpreter.tags()?;
+
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
                     if matches!(
@@ -952,7 +976,12 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter(),
                             overrides.iter(),
-                            &interpreter.resolver_marker_environment()
+                            &markers,
+                            tags,
+                            config_setting,
+                            config_settings_package,
+                            &extra_build_requires,
+                            extra_build_variables,
                         ),
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
@@ -1079,10 +1108,6 @@ async fn get_or_create_environment(
             err => return Err(err),
         },
     };
-
-    // Clear any existing overlay.
-    environment.clear_overlay()?;
-    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

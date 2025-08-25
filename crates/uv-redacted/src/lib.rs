@@ -1,5 +1,6 @@
 use ref_cast::RefCast;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -59,7 +60,7 @@ impl DisplaySafeUrl {
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
     pub fn join(&self, input: &str) -> Result<Self, url::ParseError> {
-        self.0.join(input).map(DisplaySafeUrl::from)
+        self.0.join(input).map(Self::from)
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
@@ -77,12 +78,12 @@ impl DisplaySafeUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        Url::deserialize_internal(deserializer).map(DisplaySafeUrl::from)
+        Url::deserialize_internal(deserializer).map(Self::from)
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<DisplaySafeUrl, ()> {
-        Url::from_file_path(path).map(DisplaySafeUrl::from)
+    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
+        Url::from_file_path(path).map(Self::from)
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
@@ -96,6 +97,24 @@ impl DisplaySafeUrl {
         }
         let _ = self.0.set_username("");
         let _ = self.0.set_password(None);
+    }
+
+    /// Returns the URL with any credentials removed.
+    pub fn without_credentials(&self) -> Cow<'_, Url> {
+        if self.0.password().is_none() && self.0.username() == "" {
+            return Cow::Borrowed(&self.0);
+        }
+
+        // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
+        // username.
+        if is_ssh_git_username(&self.0) {
+            return Cow::Borrowed(&self.0);
+        }
+
+        let mut url = self.0.clone();
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        Cow::Owned(url)
     }
 
     /// Returns [`Display`] implementation that doesn't mask credentials.
@@ -158,7 +177,7 @@ impl Debug for DisplaySafeUrl {
 
 impl From<Url> for DisplaySafeUrl {
     fn from(url: Url) -> Self {
-        DisplaySafeUrl(url)
+        Self(url)
     }
 }
 
