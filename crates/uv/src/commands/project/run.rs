@@ -1354,6 +1354,12 @@ fn can_skip_ephemeral(
         return false;
     }
 
+    // Determine the markers and tags to use for resolution.
+    let markers = interpreter.resolver_marker_environment();
+    let Ok(tags) = interpreter.tags() else {
+        return false;
+    };
+
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -1363,7 +1369,8 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
-        &interpreter.resolver_marker_environment(),
+        &markers,
+        tags,
         config_setting,
         config_settings_package,
         &extra_build_requires,

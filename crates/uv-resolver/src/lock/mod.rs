@@ -5270,18 +5270,14 @@ impl WheelTagHint {
     fn python_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = LanguageTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::python_tags).copied()
     }
 
     /// Returns an iterator over the compatible Python tags of the available wheels.
     fn abi_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = AbiTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::abi_tags).copied()
     }
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given

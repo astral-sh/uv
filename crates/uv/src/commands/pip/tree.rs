@@ -80,8 +80,9 @@ pub(crate) async fn pip_tree(
         packages
     };
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let markers = environment.interpreter().resolver_marker_environment();
+    let tags = environment.interpreter().tags()?;
 
     // Determine the latest version for each package.
     let latest = if outdated && !packages.is_empty() {
@@ -178,7 +179,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
@@ -224,7 +225,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
