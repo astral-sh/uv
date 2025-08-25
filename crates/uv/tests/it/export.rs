@@ -4548,7 +4548,6 @@ fn no_editable_env_var() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn pep_751_complex_conflict_markers() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
