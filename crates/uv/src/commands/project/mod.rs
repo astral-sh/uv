@@ -2356,7 +2356,6 @@ pub(crate) async fn update_environment(
     let preferences = Vec::default();
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
@@ -2365,7 +2364,7 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -2409,7 +2408,7 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         venv.interpreter().markers(),
@@ -2439,7 +2438,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         *compile_bytecode,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,

@@ -3977,11 +3977,11 @@ fn tool_install_python_platform() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black` for Windows.
+    // Install `black` for macos.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--python-platform")
-        .arg("windows")
+        .arg("macos")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
@@ -3995,7 +3995,6 @@ fn tool_install_python_platform() {
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
-     + colorama==0.4.6
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
@@ -4021,7 +4020,6 @@ fn tool_install_python_platform() {
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      ~ black==24.3.0
-     - colorama==0.4.6
     Installed 2 executables: black, blackd
     ");
 }
