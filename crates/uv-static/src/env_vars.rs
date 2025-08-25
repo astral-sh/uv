@@ -833,4 +833,8 @@ impl EnvVars {
 
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
+
+    /// The visible devices for NVIDIA GPUs, to respect when querying `nvidia-smi` to detect GPU
+    /// drivers.
+    pub const NVIDIA_VISIBLE_DEVICES: &'static str = "NVIDIA_VISIBLE_DEVICES";
 }
