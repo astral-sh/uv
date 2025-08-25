@@ -1572,3 +1572,123 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn no_clear_with_existing_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a virtual environment first
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Try to create again with --no-clear (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A virtual environment already exists at .venv
+
+    error: Use the `--clear` flag to clear the virtual environment or `--allow-existing` to allow overwriting
+    "
+    );
+}
+
+#[test]
+fn no_clear_with_non_existent_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create with --no-clear on non-existent directory (should succeed)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn no_clear_overrides_clear() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a non-empty directory at `.venv`
+    context.venv.create_dir_all().unwrap();
+    context.venv.child("file").touch().unwrap();
+
+    // --no-clear should override --clear and fail without prompting
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at .venv
+
+    error: Use the `--clear` flag to clear the directory or `--allow-existing` to allow overwriting
+    "
+    );
+}
+
+#[test]
+fn no_clear_conflicts_with_allow_existing() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Try to use --no-clear with --allow-existing (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-clear' cannot be used with '--allow-existing'
+
+    Usage: uv venv --cache-dir [CACHE_DIR] --no-clear --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <PATH>
+
+    For more information, try '--help'.
+    "
+    );
+}
