@@ -34,7 +34,6 @@ uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
-uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
@@ -69,6 +68,8 @@ which = { workspace = true }
 once_cell = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+uv-trampoline-builder = { workspace = true }
+
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
 windows-sys = { workspace = true }
