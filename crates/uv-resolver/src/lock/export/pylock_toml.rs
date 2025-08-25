@@ -884,32 +884,21 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
-            // Extract dependencies from the package
-            // Only include dependencies that are actually in the export
-            let dependencies = package
-                .dependencies
-                .iter()
-                .map(|dep| PylockTomlDependency {
-                    name: dep.package_id.name.clone(),
-                    version: dep.package_id.version.clone(),
-                    marker: dep.simplified_marker.clone().as_simplified_marker_tree(),
-                })
-                .chain(
-                    package
-                        .optional_dependencies
-                        .values()
-                        .flatten()
-                        .filter(|dep| {
-                            included_packages
-                                .contains(&(&dep.package_id.name, &dep.package_id.version))
-                        })
-                        .map(|dep| PylockTomlDependency {
-                            name: dep.package_id.name.clone(),
-                            version: dep.package_id.version.clone(),
-                            marker: dep.simplified_marker.clone().as_simplified_marker_tree(),
-                        }),
-                )
-                .collect();
+            let dependencies = package.dependencies.iter().chain(
+                package
+                    .optional_dependencies
+                    .values()
+                    .flatten()
+                    // Only include dependencies that are actually in the export
+                    .filter(|dep| {
+                        included_packages
+                            .contains(&(&dep.package_id.name, &dep.package_id.version))
+                    })
+            ).map(|dep| PylockTomlDependency {
+                name: dep.package_id.name.clone(),
+                version: dep.package_id.version.clone(),
+                marker: dep.simplified_marker.clone().as_simplified_marker_tree(),
+            }).collect();
 
             let package = PylockTomlPackage {
                 name,
