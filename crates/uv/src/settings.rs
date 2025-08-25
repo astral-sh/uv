@@ -710,6 +710,7 @@ impl ToolInstallSettings {
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) names: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
@@ -721,6 +722,7 @@ impl ToolUpgradeSettings {
         let ToolUpgradeArgs {
             name,
             python,
+            python_platform,
             upgrade,
             upgrade_package,
             index_args,
@@ -798,6 +800,7 @@ impl ToolUpgradeSettings {
         Self {
             names: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
+            python_platform,
             args,
             filesystem: top_level,
             install_mirrors,

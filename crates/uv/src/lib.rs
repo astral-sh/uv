@@ -1336,6 +1336,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Box::pin(commands::tool_upgrade(
                 args.names,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.args,
                 args.filesystem,

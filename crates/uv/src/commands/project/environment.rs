@@ -12,7 +12,7 @@ use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_configuration::{Concurrency, Constraints};
+use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
 use uv_preview::Preview;
@@ -111,6 +111,7 @@ impl CachedEnvironment {
         spec: EnvironmentSpecification<'_>,
         build_constraints: Constraints,
         interpreter: &Interpreter,
+        python_platform: Option<&TargetTriple>,
         settings: &ResolverInstallerSettings,
         network_settings: &NetworkSettings,
         state: &PlatformState,
@@ -129,6 +130,7 @@ impl CachedEnvironment {
             resolve_environment(
                 spec,
                 &interpreter,
+                python_platform,
                 build_constraints.clone(),
                 &settings.resolver,
                 network_settings,

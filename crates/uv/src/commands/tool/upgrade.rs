@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun};
+use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
@@ -40,6 +40,7 @@ use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 pub(crate) async fn upgrade(
     names: Vec<String>,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
@@ -125,6 +126,7 @@ pub(crate) async fn upgrade(
             name,
             constraints,
             interpreter.as_ref(),
+            python_platform.as_ref(),
             printer,
             &installed_tools,
             &args,
@@ -210,6 +212,7 @@ async fn upgrade_tool(
     name: &PackageName,
     constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
+    python_platform: Option<&TargetTriple>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
@@ -296,6 +299,7 @@ async fn upgrade_tool(
         let resolution = resolve_environment(
             spec.into(),
             interpreter,
+            python_platform,
             build_constraints.clone(),
             &settings.resolver,
             network_settings,
@@ -339,7 +343,7 @@ async fn upgrade_tool(
             environment,
             spec,
             Modifications::Exact,
-            None, // No python_platform for tool upgrade
+            python_platform,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

@@ -357,7 +357,7 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(package_name, &cache)?
             .filter(|environment| {
-                if environment.uses(&interpreter) {
+                if !environment.uses(&interpreter) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         package_name,
@@ -391,15 +391,14 @@ pub(crate) async fn install(
                 && overrides == tool_receipt.overrides()
                 && build_constraints == tool_receipt.build_constraints()
             {
+                // Then we're done! Though we might need to update the receipt.
                 if *tool_receipt.options() != options {
-                    // ...but the options differ, we need to update the receipt.
                     installed_tools.add_tool_receipt(
                         package_name,
                         tool_receipt.clone().with_options(options),
                     )?;
                 }
 
-                // We're done, though we might need to update the receipt.
                 writeln!(
                     printer.stderr(),
                     "`{}` is already installed",
@@ -482,6 +481,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
+            python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &network_settings,
@@ -536,6 +536,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
+                        python_platform.as_ref(),
                         Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &network_settings,

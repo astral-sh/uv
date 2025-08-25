@@ -4801,6 +4801,15 @@ pub struct ToolUpgradeArgs {
     )]
     pub python: Option<Maybe<String>>,
 
+    /// The platform for which requirements should be installed.
+    ///
+    /// Accepts a target triple (e.g., `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`,
+    /// `x86_64-apple-darwin`, or `aarch64-apple-darwin`).
+    ///
+    /// By default, uv installs for the current platform.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
+
     // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`, and
     // `--upgrade-package` options hidden, and the `--no-upgrade` option removed.
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
