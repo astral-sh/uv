@@ -483,6 +483,7 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
+        installation.ensure_build_file()?;
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }

@@ -220,28 +220,32 @@ impl TestContext {
     /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
-        use env::consts::EXE_SUFFIX;
-        let exe_suffix = regex::escape(EXE_SUFFIX);
+        for name in ["python", "pypy"] {
+            // Note we strip version numbers from the executable names because, e.g., on Windows
+            // `python.exe` is the equivalent to a Unix `python3.12`.`
+            let suffix = if cfg!(windows) {
+                // On Windows, we'll require a `.exe` suffix for disambiguation
+                // We'll also strip version numbers if present, which is not common for `python.exe`
+                // but can occur for, e.g., `pypy3.12.exe`
+                let exe_suffix = regex::escape(env::consts::EXE_SUFFIX);
+                format!(r"(\d\.\d+|\d)?{exe_suffix}")
+            } else {
+                // On Unix, we'll strip version numbers
+                if name == "python" {
+                    // We can't require them in this case since `/python` is common
+                    r"(\d\.\d+|\d)?".to_string()
+                } else {
+                    // However, for other names we'll require them to avoid over-matching
+                    r"(\d\.\d+|\d)".to_string()
+                }
+            };
 
-        self.filters.push((
-            format!(r"python\d.\d\d{exe_suffix}"),
-            "[PYTHON]".to_string(),
-        ));
-        self.filters
-            .push((format!(r"python\d{exe_suffix}"), "[PYTHON]".to_string()));
-
-        if cfg!(windows) {
-            // On Windows, we want to filter out all `python.exe` instances
-            self.filters
-                .push((format!(r"python{exe_suffix}"), "[PYTHON]".to_string()));
-            // Including ones where we'd already stripped the `.exe` in another filter
-            self.filters
-                .push((r"[\\/]python".to_string(), "/[PYTHON]".to_string()));
-        } else {
-            // On Unix, it's a little trickier — we don't want to clobber use of `python` in the
-            // middle of something else, e.g., `cpython`. For this reason, we require a leading `/`.
-            self.filters
-                .push((format!(r"/python{exe_suffix}"), "/[PYTHON]".to_string()));
+            self.filters.push((
+                // We use a leading path separator to help disambiguate cases where the name is not
+                // used in a path.
+                format!(r"[\\/]{name}{suffix}"),
+                format!("/[{}]", name.to_uppercase()),
+            ));
         }
 
         self
@@ -270,15 +274,34 @@ impl TestContext {
     /// the virtual environment equivalent.
     #[must_use]
     pub fn with_filtered_python_install_bin(mut self) -> Self {
+        // We don't want to eagerly match paths that aren't actually Python executables, so we
+        // do our best to detect that case
+        let suffix = if cfg!(windows) {
+            let exe_suffix = regex::escape(env::consts::EXE_SUFFIX);
+            // On Windows, we usually don't have a version attached but we might, e.g., for pypy3.12
+            format!(r"(\d\.\d+|\d)?{exe_suffix}")
+        } else {
+            // On Unix, we'll require a version to be attached to avoid over-matching
+            r"\d\.\d+|\d".to_string()
+        };
+
         if cfg!(unix) {
             self.filters.push((
-                r"[\\/]bin/python".to_string(),
-                "/[INSTALL-BIN]/python".to_string(),
+                format!(r"[\\/]bin/python({suffix})"),
+                "/[INSTALL-BIN]/python$1".to_string(),
+            ));
+            self.filters.push((
+                format!(r"[\\/]bin/pypy({suffix})"),
+                "/[INSTALL-BIN]/pypy$1".to_string(),
             ));
         } else {
             self.filters.push((
-                r"[\\/]python".to_string(),
-                "/[INSTALL-BIN]/python".to_string(),
+                format!(r"[\\/]python({suffix})"),
+                "/[INSTALL-BIN]/python$1".to_string(),
+            ));
+            self.filters.push((
+                format!(r"[\\/]pypy({suffix})"),
+                "/[INSTALL-BIN]/pypy$1".to_string(),
             ));
         }
         self

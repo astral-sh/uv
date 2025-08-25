@@ -36,6 +36,7 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
+use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -110,6 +111,8 @@ pub enum Error {
         url: Box<Url>,
         python_builds_dir: PathBuf,
     },
+    #[error(transparent)]
+    BuildVersion(#[from] BuildVersionError),
 }
 
 impl Error {
@@ -144,6 +147,7 @@ pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: Cow<'static, str>,
     sha256: Option<Cow<'static, str>>,
+    build: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -153,6 +157,7 @@ pub struct PythonDownloadRequest {
     pub(crate) arch: Option<ArchRequest>,
     pub(crate) os: Option<Os>,
     pub(crate) libc: Option<Libc>,
+    pub(crate) build: Option<String>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
@@ -255,6 +260,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            build: None,
             prereleases,
         }
     }
@@ -311,6 +317,12 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[must_use]
+    pub fn with_build(mut self, build: String) -> Self {
+        self.build = Some(build);
+        self
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
@@ -356,11 +368,25 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
+    /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
+    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+        if self.build.is_some() {
+            return Ok(self);
+        }
+        let Some(implementation) = self.implementation else {
+            return Ok(self);
+        };
+
+        self.build = python_build_version_from_env(implementation)?;
+        Ok(self)
+    }
+
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
         self = self.fill_platform()?;
+        self = self.fill_build_from_env()?;
         Ok(self)
     }
 
@@ -434,7 +460,31 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        self.satisfied_by_key(download.key())
+        // First check the key
+        if !self.satisfied_by_key(download.key()) {
+            return false;
+        }
+
+        // Then check the build if specified
+        if let Some(ref requested_build) = self.build {
+            let Some(download_build) = download.build() else {
+                debug!(
+                    "Skipping download `{}`: a build version was requested but is not available for this download",
+                    download
+                );
+                return false;
+            };
+
+            if download_build != requested_build {
+                debug!(
+                    "Skipping download `{}`: requested build version `{}` does not match download build version `{}`",
+                    download, requested_build, download_build
+                );
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Whether this download request opts-in to pre-release Python versions.
@@ -753,6 +803,7 @@ struct JsonPythonDownload {
     url: String,
     sha256: Option<String>,
     variant: Option<String>,
+    build: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -767,7 +818,25 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
+/// A wrapper type to display a `ManagedPythonDownload` with its build information.
+pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
+
+impl Display for ManagedPythonDownloadWithBuild<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(build) = self.0.build {
+            write!(f, "{}+{}", self.0.key, build)
+        } else {
+            write!(f, "{}", self.0.key)
+        }
+    }
+}
+
 impl ManagedPythonDownload {
+    /// Return a display type that includes the build information.
+    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
+        ManagedPythonDownloadWithBuild(self)
+    }
+
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     ///
     /// If there is no stable version matching the request, a compatible pre-release version will
@@ -850,6 +919,10 @@ impl ManagedPythonDownload {
 
     pub fn sha256(&self) -> Option<&Cow<'static, str>> {
         self.sha256.as_ref()
+    }
+
+    pub fn build(&self) -> Option<&'static str> {
+        self.build
     }
 
     /// Download and extract a Python distribution, retrying on failure.
@@ -1345,6 +1418,9 @@ fn parse_json_downloads(
 
             let url = Cow::Owned(entry.url);
             let sha256 = entry.sha256.map(Cow::Owned);
+            let build = entry
+                .build
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
@@ -1355,6 +1431,7 @@ fn parse_json_downloads(
                 ),
                 url,
                 sha256,
+                build,
             })
         })
         .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
@@ -1513,6 +1590,10 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use crate::implementation::LenientImplementationName;
+    use crate::installation::PythonInstallationKey;
+    use uv_platform::{Arch, Libc, Os, Platform};
+
     use super::*;
 
     /// Parse a request with all of its fields.
@@ -1725,5 +1806,91 @@ mod tests {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
         assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// Test that build filtering works correctly
+    #[test]
+    fn test_python_download_request_build_filtering() {
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("20240814".to_string());
+
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert!(
+            !downloads.is_empty(),
+            "Should find at least one matching download"
+        );
+        for download in downloads {
+            assert_eq!(download.build(), Some("20240814"));
+        }
+    }
+
+    /// Test that an invalid build results in no matches
+    #[test]
+    fn test_python_download_request_invalid_build() {
+        // Create a request with a non-existent build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("99999999".to_string());
+
+        // Should find no matching downloads
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert_eq!(downloads.len(), 0);
+    }
+
+    /// Test build display
+    #[test]
+    fn test_managed_python_download_build_display() {
+        // Create a test download with a build
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
+            3,
+            12,
+            0,
+            None,
+            Platform::new(
+                Os::from_str("linux").unwrap(),
+                Arch::from_str("x86_64").unwrap(),
+                Libc::from_str("gnu").unwrap(),
+            ),
+            crate::PythonVariant::default(),
+        );
+
+        let download_with_build = ManagedPythonDownload {
+            key,
+            url: Cow::Borrowed("https://example.com/python.tar.gz"),
+            sha256: Some(Cow::Borrowed("abc123")),
+            build: Some("20240101"),
+        };
+
+        // Test display with build
+        assert_eq!(
+            download_with_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu+20240101"
+        );
+
+        // Test download without build
+        let download_without_build = ManagedPythonDownload {
+            key: download_with_build.key.clone(),
+            url: Cow::Borrowed("https://example.com/python.tar.gz"),
+            sha256: Some(Cow::Borrowed("abc123")),
+            build: None,
+        };
+
+        // Test display without build
+        assert_eq!(
+            download_without_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu"
+        );
     }
 }
