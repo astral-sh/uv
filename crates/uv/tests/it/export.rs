@@ -3693,8 +3693,8 @@ fn pep_751_dependency_extra() -> Result<()> {
         { name = "click", version = "8.1.7" },
         { name = "itsdangerous", version = "2.1.2" },
         { name = "jinja2", version = "3.1.3" },
-        { name = "werkzeug", version = "3.0.1" },
         { name = "python-dotenv", version = "1.0.1" },
+        { name = "werkzeug", version = "3.0.1" },
     ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", upload-time = 2024-02-03T21:11:44Z, size = 675248, hashes = { sha256 = "822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d" } }
@@ -3842,8 +3842,8 @@ fn pep_751_project_extra() -> Result<()> {
     [[packages]]
     name = "project"
     dependencies = [
-        { name = "typing-extensions", version = "4.10.0" },
         { name = "anyio", version = "3.7.0" },
+        { name = "typing-extensions", version = "4.10.0" },
     ]
     directory = { path = ".", editable = true }
 
@@ -3885,8 +3885,8 @@ fn pep_751_project_extra() -> Result<()> {
     [[packages]]
     name = "project"
     dependencies = [
-        { name = "typing-extensions", version = "4.10.0" },
         { name = "iniconfig", version = "2.0.0" },
+        { name = "typing-extensions", version = "4.10.0" },
     ]
     directory = { path = ".", editable = true }
 
@@ -3939,9 +3939,9 @@ fn pep_751_project_extra() -> Result<()> {
     [[packages]]
     name = "project"
     dependencies = [
-        { name = "typing-extensions", version = "4.10.0" },
         { name = "anyio", version = "3.7.0" },
         { name = "iniconfig", version = "2.0.0" },
+        { name = "typing-extensions", version = "4.10.0" },
     ]
     directory = { path = ".", editable = true }
 
@@ -3994,8 +3994,8 @@ fn pep_751_project_extra() -> Result<()> {
     [[packages]]
     name = "project"
     dependencies = [
-        { name = "typing-extensions", version = "4.10.0" },
         { name = "anyio", version = "3.7.0" },
+        { name = "typing-extensions", version = "4.10.0" },
     ]
     directory = { path = ".", editable = true }
 
@@ -4736,7 +4736,7 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     name = "nvidia-cudnn-cu12"
     version = "9.1.0.70"
     marker = "platform_machine == 'x86_64' and sys_platform == 'linux'"
-    dependencies = [{ name = "nvidia-cublas-cu12", version = "12.4.5.8" }]
+    dependencies = [{ name = "nvidia-cublas-cu12", version = "12.4.5.8", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }]
     index = "https://pypi.org/simple"
     wheels = [
         { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", upload-time = 2024-04-22T15:24:15Z, size = 664752741, hashes = { sha256 = "165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f" } },
@@ -4747,7 +4747,7 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     name = "nvidia-cufft-cu12"
     version = "11.2.1.3"
     marker = "platform_machine == 'x86_64' and sys_platform == 'linux'"
-    dependencies = [{ name = "nvidia-nvjitlink-cu12", version = "12.4.127" }]
+    dependencies = [{ name = "nvidia-nvjitlink-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }]
     index = "https://pypi.org/simple"
     wheels = [
         { url = "https://files.pythonhosted.org/packages/7a/8a/0e728f749baca3fbeffad762738276e5df60851958be7783af121a7221e7/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", upload-time = 2024-06-18T19:33:39Z, size = 211422548, hashes = { sha256 = "5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399" } },
@@ -4771,9 +4771,9 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     version = "11.6.1.9"
     marker = "platform_machine == 'x86_64' and sys_platform == 'linux'"
     dependencies = [
-        { name = "nvidia-cublas-cu12", version = "12.4.5.8" },
-        { name = "nvidia-cusparse-cu12", version = "12.3.1.170" },
-        { name = "nvidia-nvjitlink-cu12", version = "12.4.127" },
+        { name = "nvidia-cublas-cu12", version = "12.4.5.8", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cusparse-cu12", version = "12.3.1.170", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-nvjitlink-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     ]
     index = "https://pypi.org/simple"
     wheels = [
@@ -4786,7 +4786,7 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     name = "nvidia-cusparse-cu12"
     version = "12.3.1.170"
     marker = "platform_machine == 'x86_64' and sys_platform == 'linux'"
-    dependencies = [{ name = "nvidia-nvjitlink-cu12", version = "12.4.127" }]
+    dependencies = [{ name = "nvidia-nvjitlink-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }]
     index = "https://pypi.org/simple"
     wheels = [
         { url = "https://files.pythonhosted.org/packages/96/a9/c0d2f83a53d40a4a41be14cea6a0bf9e668ffcf8b004bd65633f433050c0/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", upload-time = 2024-06-18T19:35:32Z, size = 207381987, hashes = { sha256 = "9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3" } },
@@ -4853,27 +4853,27 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     name = "torch"
     version = "2.6.0"
     dependencies = [
-        { name = "filelock", version = "3.17.0", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "fsspec", version = "2024.12.0", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "jinja2", version = "3.1.5", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "networkx", version = "3.4.2", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "nvidia-cublas-cu12", version = "12.4.5.8", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cuda-cupti-cu12", version = "12.4.127", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cuda-nvrtc-cu12", version = "12.4.127", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cuda-runtime-cu12", version = "12.4.127", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cudnn-cu12", version = "9.1.0.70", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cufft-cu12", version = "11.2.1.3", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-curand-cu12", version = "10.3.5.147", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cusolver-cu12", version = "11.6.1.9", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cusparse-cu12", version = "12.3.1.170", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-cusparselt-cu12", version = "0.6.2", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-nccl-cu12", version = "2.21.5", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-nvjitlink-cu12", version = "12.4.127", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "nvidia-nvtx-cu12", version = "12.4.127", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "setuptools", version = "75.8.0", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "sympy", version = "1.13.1", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
-        { name = "triton", version = "3.2.0", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "typing-extensions", version = "4.12.2", marker = "(extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')" },
+        { name = "filelock", version = "3.17.0" },
+        { name = "fsspec", version = "2024.12.0" },
+        { name = "jinja2", version = "3.1.5" },
+        { name = "networkx", version = "3.4.2" },
+        { name = "nvidia-cublas-cu12", version = "12.4.5.8", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cuda-cupti-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cuda-nvrtc-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cuda-runtime-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cudnn-cu12", version = "9.1.0.70", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cufft-cu12", version = "11.2.1.3", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-curand-cu12", version = "10.3.5.147", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cusolver-cu12", version = "11.6.1.9", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cusparse-cu12", version = "12.3.1.170", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-cusparselt-cu12", version = "0.6.2", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-nccl-cu12", version = "2.21.5", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-nvjitlink-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "nvidia-nvtx-cu12", version = "12.4.127", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "setuptools", version = "75.8.0" },
+        { name = "sympy", version = "1.13.1" },
+        { name = "triton", version = "3.2.0", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        { name = "typing-extensions", version = "4.12.2" },
     ]
     index = "https://pypi.org/simple"
     wheels = [
@@ -5088,13 +5088,13 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     version = "2.6.0"
     marker = "sys_platform == 'darwin'"
     dependencies = [
-        { name = "filelock", version = "3.17.0", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "fsspec", version = "2024.12.0", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "jinja2", version = "3.1.5", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "networkx", version = "3.4.2", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "setuptools", version = "75.8.0", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "sympy", version = "1.13.1", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "typing-extensions", version = "4.12.2", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+        { name = "filelock", version = "3.17.0" },
+        { name = "fsspec", version = "2024.12.0" },
+        { name = "jinja2", version = "3.1.5" },
+        { name = "networkx", version = "3.4.2" },
+        { name = "setuptools", version = "75.8.0" },
+        { name = "sympy", version = "1.13.1" },
+        { name = "typing-extensions", version = "4.12.2" },
     ]
     index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
     wheels = [
@@ -5107,13 +5107,13 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     version = "2.6.0+cpu"
     marker = "sys_platform != 'darwin'"
     dependencies = [
-        { name = "filelock", version = "3.17.0", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "fsspec", version = "2024.12.0", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "jinja2", version = "3.1.5", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "networkx", version = "3.4.2", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "setuptools", version = "75.8.0", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "sympy", version = "1.13.1", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "typing-extensions", version = "4.12.2", marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+        { name = "filelock", version = "3.17.0" },
+        { name = "fsspec", version = "2024.12.0" },
+        { name = "jinja2", version = "3.1.5" },
+        { name = "networkx", version = "3.4.2" },
+        { name = "setuptools", version = "75.8.0" },
+        { name = "sympy", version = "1.13.1" },
+        { name = "typing-extensions", version = "4.12.2" },
     ]
     index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
     wheels = [
@@ -5132,10 +5132,10 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     version = "0.21.0"
     marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'"
     dependencies = [
-        { name = "numpy", version = "2.2.2", marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-        { name = "pillow", version = "11.1.0", marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-        { name = "torch", version = "2.6.0", marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-        { name = "torch", version = "2.6.0+cpu", marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.14' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+        { name = "numpy", version = "2.2.2" },
+        { name = "pillow", version = "11.1.0" },
+        { name = "torch", version = "2.6.0+cpu", marker = "sys_platform != 'darwin'" },
+        { name = "torch", version = "2.6.0", marker = "sys_platform == 'darwin'" },
     ]
     index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
     wheels = [
@@ -5150,9 +5150,9 @@ fn pep_751_complex_conflict_markers() -> Result<()> {
     version = "0.21.0+cpu"
     marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')"
     dependencies = [
-        { name = "numpy", version = "2.2.2", marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-        { name = "pillow", version = "11.1.0", marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-        { name = "torch", version = "2.6.0+cpu", marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+        { name = "numpy", version = "2.2.2" },
+        { name = "pillow", version = "11.1.0" },
+        { name = "torch", version = "2.6.0+cpu", marker = "sys_platform != 'darwin'" },
     ]
     index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
     wheels = [
