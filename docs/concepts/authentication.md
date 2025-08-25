@@ -82,7 +82,8 @@ Authentication is not cached across invocations of uv.
 defined, falling back to `~/.netrc` if not.
 
 To enable keyring-based authentication, pass the `--keyring-provider subprocess` command-line
-argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`.
+argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`. When setting tokens with `keyring` use the
+index endpoint URL as "service".
 
 Authentication may be used for hosts specified in the following contexts:
 
