@@ -11,12 +11,13 @@ use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, Preview,
+    ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject_mut::Error;

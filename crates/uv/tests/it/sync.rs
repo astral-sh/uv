@@ -422,7 +422,7 @@ fn sync_json() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--locked")
-        .arg("--output-format").arg("json"), @r###"
+        .arg("--output-format").arg("json"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -430,7 +430,7 @@ fn sync_json() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    ");
 
     // Test that JSON output is shown even with --quiet flag
     uv_snapshot!(context.filters(), context.sync()
@@ -5197,6 +5197,90 @@ fn no_install_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Avoid syncing local packages when `--no-install-local` is provided.
+#[test]
+fn no_install_local() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "local", "local-editable", "workspace-member"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        local = { path = "./local" }
+        local-editable = { path = "./local-editable", editable = true }
+        workspace-member = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["workspace-member"]
+        "#,
+    )?;
+
+    // Add a local package, local editable package, and then a workspace member
+    // as a dependency.
+    let local = context.temp_dir.child("local");
+    local.create_dir_all()?;
+    let local_pyproject = local.child("pyproject.toml");
+    local_pyproject.write_str(
+        r#"
+        [project]
+        name = "local"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let local_editable = context.temp_dir.child("local-editable");
+    local_editable.create_dir_all()?;
+    let local_editable_pyproject = local_editable.child("pyproject.toml");
+    local_editable_pyproject.write_str(
+        r#"
+        [project]
+        name = "local-editable"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let workspace_member = context.temp_dir.child("workspace-member");
+    workspace_member.create_dir_all()?;
+    let member_pyproject = workspace_member.child("pyproject.toml");
+    member_pyproject.write_str(
+        r#"
+        [project]
+        name = "workspace-member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing the target package when `--no-install-package` is provided.
 #[test]
 fn no_install_package() -> Result<()> {
@@ -6283,7 +6367,7 @@ fn sync_active_script_environment() -> Result<()> {
 fn sync_active_script_environment_json() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
-        .with_filtered_python_names();
+        .with_filtered_exe_suffix();
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -6318,7 +6402,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[CACHE_DIR]/environments-v2/script-[HASH]",
           "python": {
-            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -6364,7 +6448,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
+            "path": "[TEMP_DIR]/foo/[BIN]/python",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -6423,7 +6507,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
+            "path": "[TEMP_DIR]/foo/[BIN]/python",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -7992,14 +8076,14 @@ fn sync_invalid_environment() -> Result<()> {
     // If the directory already exists and is not a virtual environment we should fail with an error
     fs_err::create_dir(context.temp_dir.join(".venv"))?;
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
-    "###);
+    ");
 
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
@@ -8094,7 +8178,7 @@ fn sync_invalid_environment() -> Result<()> {
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
 
     // We should never delete it
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8102,7 +8186,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
-    "###);
+    ");
 
     // Even if there's no Python executable
     fs_err::remove_dir_all(&bin)?;

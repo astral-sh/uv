@@ -9,11 +9,12 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, PackageConfigSettings,
-    RequirementSource,
+    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
+    PackageConfigSettings, RequirementSource,
 };
 use uv_git_types::GitOid;
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
@@ -32,6 +33,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -55,7 +57,7 @@ impl RequirementSatisfaction {
             );
             dist_build_info != &build_info
         }) {
-            debug!("Build info mismatch for {name}: {distribution:?}");
+            debug!("Build info mismatch for {name}: {distribution}");
             return Self::OutOfDate;
         }
 
@@ -63,10 +65,9 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
-                if specifier.contains(distribution.version()) {
-                    return Self::Satisfied;
+                if !specifier.contains(distribution.version()) {
+                    return Self::Mismatch;
                 }
-                Self::Mismatch
             }
             RequirementSource::Url {
                 // We use the location since `direct_url.json` also stores this URL, e.g.
@@ -77,12 +78,12 @@ impl RequirementSatisfaction {
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     editable,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -130,16 +131,14 @@ impl RequirementSatisfaction {
                         }
                     }
                 }
-
-                // Otherwise, assume the requirement is up-to-date.
-                Self::Satisfied
             }
             RequirementSource::Git {
                 url: _,
                 git: requested_git,
                 subdirectory: requested_subdirectory,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDistKind::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                    &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -188,19 +187,17 @@ impl RequirementSatisfaction {
                     );
                     return Self::OutOfDate;
                 }
-
-                Self::Satisfied
             }
             RequirementSource::Path {
                 install_path: requested_path,
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -244,8 +241,6 @@ impl RequirementSatisfaction {
                         return Self::CacheInvalid;
                     }
                 }
-
-                Self::Satisfied
             }
             RequirementSource::Directory {
                 install_path: requested_path,
@@ -253,11 +248,11 @@ impl RequirementSatisfaction {
                 r#virtual: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist {
+                let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
                     ..
-                }) = &distribution
+                }) = &distribution.kind
                 else {
                     return Self::Mismatch;
                 };
@@ -314,9 +309,26 @@ impl RequirementSatisfaction {
                     }
                 }
 
-                Self::Satisfied
+                // If the distribution isn't compatible with the current platform, it is a mismatch.
+                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+                    if !wheel_tags.is_compatible(tags) {
+                        debug!("Platform tags mismatch for {name}: {distribution}");
+                        return Self::Mismatch;
+                    }
+                }
             }
         }
+
+        // If the distribution isn't compatible with the current platform, it is a mismatch.
+        if let Ok(Some(wheel_tags)) = distribution.read_tags() {
+            if !wheel_tags.is_compatible(tags) {
+                debug!("Platform tags mismatch for {name}: {distribution}");
+                return Self::Mismatch;
+            }
+        }
+
+        // Otherwise, assume the requirement is up-to-date.
+        Self::Satisfied
     }
 }
 

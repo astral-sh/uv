@@ -16,8 +16,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
+use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
-use uv_configuration::{Concurrency, Preview};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -29,6 +29,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -964,6 +965,10 @@ async fn get_or_create_environment(
                     )
                     .into_inner();
 
+                    // Determine the markers and tags to use for the resolution.
+                    let markers = interpreter.resolver_marker_environment();
+                    let tags = interpreter.tags()?;
+
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
                     if matches!(
@@ -971,7 +976,8 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter(),
                             overrides.iter(),
-                            &interpreter.resolver_marker_environment(),
+                            &markers,
+                            tags,
                             config_setting,
                             config_settings_package,
                             &extra_build_requires,

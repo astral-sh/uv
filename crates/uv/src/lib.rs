@@ -916,6 +916,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_check(
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.python_version.as_ref(),
+                args.settings.python_platform.as_ref(),
                 &cache,
                 printer,
                 globals.preview,
@@ -1978,6 +1980,7 @@ async fn run_project(
                 args.no_sync,
                 args.no_install_project,
                 args.no_install_workspace,
+                args.no_install_local,
                 requirements,
                 constraints,
                 args.marker,
@@ -2193,6 +2196,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             Box::pin(commands::format(
+                project_dir,
                 args.check,
                 args.diff,
                 args.extra_args,

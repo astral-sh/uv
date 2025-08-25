@@ -611,4 +611,4 @@ versions of uv to error.
 ## Learn more
 
 For more details about the internals of the resolver, see the
-[resolver reference](../reference/resolver-internals.md) documentation.
+[resolver reference](../reference/internals/resolver.md) documentation.

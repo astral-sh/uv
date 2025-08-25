@@ -9,9 +9,9 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
+use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -252,6 +252,7 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        installed.ensure_build_file()?;
 
         let minor_version = installed.minor_version_key();
         let highest_patch = installations

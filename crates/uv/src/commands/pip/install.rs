@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -24,6 +24,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
@@ -264,13 +265,18 @@ pub(crate) async fn pip_install(
         })
         .ok();
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let interpreter = environment.interpreter();
     let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
     );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -290,6 +296,7 @@ pub(crate) async fn pip_install(
             &constraints,
             &overrides,
             &marker_env,
+            &tags,
             config_settings,
             config_settings_package,
             &extra_build_requires,
@@ -327,13 +334,6 @@ pub(crate) async fn pip_install(
     } else {
         PythonRequirement::from_interpreter(interpreter)
     };
-
-    // Determine the tags to use for the resolution.
-    let tags = resolution_tags(
-        python_version.as_ref(),
-        python_platform.as_ref(),
-        interpreter,
-    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -635,7 +635,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
     }
 
     Ok(ExitStatus::Success)

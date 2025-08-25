@@ -1100,8 +1100,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Determine the last-modified time of the source distribution.
         let cache_info = CacheInfo::from_file(&resource.path).map_err(Error::CacheRead)?;
 
-        // STOPSHIP(charlie): Add build digest.
-
         // Read the existing metadata from the cache.
         let revision_entry = cache_shard.entry(LOCAL_REVISION);
 
@@ -2909,7 +2907,6 @@ fn validate_filename(filename: &WheelFilename, metadata: &ResolutionMetadata) ->
 /// Encoded with `MsgPack`, and represented on disk by a `.http` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct HttpRevisionPointer {
-    // STOPSHIP(charlie): This probably needs a `CacheInfo` field, too, at least for build info.
     revision: Revision,
 }
 

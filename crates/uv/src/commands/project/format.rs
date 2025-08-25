@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -6,9 +7,10 @@ use tokio::process::Command;
 use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Preview, PreviewFeatures};
 use uv_pep440::Version;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -18,6 +20,7 @@ use crate::settings::NetworkSettings;
 
 /// Run the formatter.
 pub(crate) async fn format(
+    project_dir: &Path,
     check: bool,
     diff: bool,
     extra_args: Vec<String>,
@@ -34,6 +37,12 @@ pub(crate) async fn format(
             PreviewFeatures::FORMAT
         );
     }
+
+    let workspace_cache = WorkspaceCache::default();
+    let project =
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await?;
+
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
 
@@ -53,6 +62,8 @@ pub(crate) async fn format(
         .context("Failed to install ruff {version}")?;
 
     let mut command = Command::new(&ruff_path);
+    // Run ruff in the project root
+    command.current_dir(project.root());
     command.arg("format");
 
     if check {

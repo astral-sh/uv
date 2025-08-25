@@ -10,8 +10,8 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -19,6 +19,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -2372,6 +2373,27 @@ pub struct PipCheckArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// The Python version against which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the version of the current
+    /// interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the platform of the current
+    /// interpreter.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -3435,6 +3457,14 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_workspace: bool,
 
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long)]
+    pub no_install_local: bool,
+
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
@@ -3503,6 +3533,7 @@ pub struct SyncArgs {
         conflicts_with = "package",
         conflicts_with = "no_install_project",
         conflicts_with = "no_install_workspace",
+        conflicts_with = "no_install_local",
         conflicts_with = "extra",
         conflicts_with = "all_extras",
         conflicts_with = "no_extra",
@@ -3847,6 +3878,14 @@ pub struct AddArgs {
     /// allows optimal layer caching.
     #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
     pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_local: bool,
 }
 
 #[derive(Args)]
@@ -4238,6 +4277,14 @@ pub struct ExportArgs {
     /// exclusion of all the workspace members while retaining their dependencies.
     #[arg(long, alias = "no-install-workspace")]
     pub no_emit_workspace: bool,
+
+    /// Do not include local path dependencies in the exported requirements.
+    ///
+    /// Omits the current project, workspace members, and any other local (path or editable)
+    /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
+    /// and CI flows that want to export and cache third-party dependencies first.
+    #[arg(long, alias = "no-install-local")]
+    pub no_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
