@@ -3968,3 +3968,60 @@ fn tool_install_with_executables_from_no_entrypoints() {
     Installed 1 executable: flask
     "###);
 }
+
+#[test]
+fn tool_install_python_platform() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` for Windows.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("windows")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + colorama==0.4.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    // Install `black` for Linux.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("linux")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
+     - colorama==0.4.6
+    Installed 2 executables: black, blackd
+    ");
+}

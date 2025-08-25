@@ -9,10 +9,12 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
 };
+use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -29,6 +31,7 @@ use uv_workspace::WorkspaceCache;
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
+use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment, update_environment,
@@ -375,38 +378,70 @@ pub(crate) async fn install(
             });
 
     // If the requested and receipt requirements are the same...
-    if existing_environment
-        .as_ref()
-        .filter(|_| {
-            // And the user didn't request a reinstall or upgrade...
-            !request.is_latest()
-                && settings.reinstall.is_none()
-                && settings.resolver.upgrade.is_none()
-        })
-        .is_some()
-    {
+    if let Some(environment) = existing_environment.as_ref().filter(|_| {
+        // And the user didn't request a reinstall or upgrade...
+        !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none()
+    }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
                 && build_constraints == tool_receipt.build_constraints()
             {
-                if *tool_receipt.options() != options {
-                    // ...but the options differ, we need to update the receipt.
-                    installed_tools.add_tool_receipt(
-                        package_name,
-                        tool_receipt.clone().with_options(options),
+                let ResolverInstallerSettings {
+                    resolver:
+                        ResolverSettings {
+                            config_setting,
+                            config_settings_package,
+                            extra_build_dependencies,
+                            extra_build_variables,
+                            ..
+                        },
+                    ..
+                } = &settings;
+
+                // Lower the extra build dependencies, if any.
+                let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                    extra_build_dependencies.clone(),
+                )
+                .into_inner();
+
+                // Determine the markers and tags to use for the resolution.
+                let markers = resolution_markers(None, python_platform.as_ref(), &interpreter);
+                let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+
+                // Check if the installed packages meet the requirements.
+                let site_packages = SitePackages::from_environment(environment)?;
+                if matches!(
+                    site_packages.satisfies_requirements(
+                        requirements.iter(),
+                        constraints.iter(),
+                        overrides.iter(),
+                        &markers,
+                        &tags,
+                        config_setting,
+                        config_settings_package,
+                        &extra_build_requires,
+                        extra_build_variables,
+                    ),
+                    Ok(SatisfiesResult::Fresh { .. })
+                ) {
+                    // Then we're done! Though we might need to update the receipt.
+                    if *tool_receipt.options() != options {
+                        installed_tools.add_tool_receipt(
+                            package_name,
+                            tool_receipt.clone().with_options(options),
+                        )?;
+                    }
+
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` is already installed",
+                        requirement.cyan()
                     )?;
+
+                    return Ok(ExitStatus::Success);
                 }
-
-                // We're done, though we might need to update the receipt.
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is already installed",
-                    requirement.cyan()
-                )?;
-
-                return Ok(ExitStatus::Success);
             }
         }
     }
@@ -482,6 +517,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
+            python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &network_settings,
@@ -536,6 +572,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
+                        python_platform.as_ref(),
                         Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &network_settings,

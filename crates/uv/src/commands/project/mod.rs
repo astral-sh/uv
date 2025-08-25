@@ -1849,6 +1849,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
     network_settings: &NetworkSettings,
@@ -1899,8 +1900,8 @@ pub(crate) async fn resolve_environment(
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
-    let marker_env = interpreter.resolver_marker_environment();
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     index_locations.cache_index_credentials();
@@ -1973,7 +1974,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     let workspace_cache = WorkspaceCache::default();
@@ -2024,7 +2025,7 @@ pub(crate) async fn resolve_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
         interpreter.markers(),
@@ -2269,8 +2270,8 @@ pub(crate) async fn update_environment(
 
     // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = pip::resolution_markers(None, python_platform, venv.interpreter());
-    let tags = pip::resolution_tags(None, python_platform, venv.interpreter())?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;

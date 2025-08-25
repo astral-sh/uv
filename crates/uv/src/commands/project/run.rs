@@ -1000,6 +1000,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 spec,
                 build_constraints.unwrap_or_default(),
                 &base_interpreter,
+                python_platform.as_ref(),
                 &settings,
                 &network_settings,
                 &sync_state,

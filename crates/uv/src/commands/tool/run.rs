@@ -46,6 +46,7 @@ use uv_workspace::WorkspaceCache;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
+use crate::commands::pip;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -90,7 +91,7 @@ pub(crate) async fn run(
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
-    _python_platform: Option<TargetTriple>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
@@ -269,6 +270,7 @@ pub(crate) async fn run(
         build_constraints,
         show_resolution,
         python.as_deref(),
+        python_platform,
         install_mirrors,
         options,
         &settings,
@@ -679,6 +681,7 @@ async fn get_or_create_environment(
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
@@ -968,8 +971,9 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers = interpreter.resolver_marker_environment();
-                    let tags = interpreter.tags()?;
+                    let markers =
+                        pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
+                    let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
@@ -979,7 +983,7 @@ async fn get_or_create_environment(
                             constraints.iter(),
                             overrides.iter(),
                             &markers,
-                            tags,
+                            &tags,
                             config_setting,
                             config_settings_package,
                             &extra_build_requires,
@@ -1027,6 +1031,7 @@ async fn get_or_create_environment(
         spec.clone(),
         build_constraints.clone(),
         &interpreter,
+        python_platform.as_ref(),
         settings,
         network_settings,
         &state,
@@ -1086,6 +1091,7 @@ async fn get_or_create_environment(
                     spec,
                     build_constraints,
                     &interpreter,
+                    python_platform.as_ref(),
                     settings,
                     network_settings,
                     &state,
