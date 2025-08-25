@@ -21,11 +21,11 @@ doctest = false
 name = "uv_install_wheel"
 
 [dependencies]
-uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }

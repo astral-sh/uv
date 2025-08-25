@@ -8,8 +8,9 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DependencyGroupsWithDefaults, Preview};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,

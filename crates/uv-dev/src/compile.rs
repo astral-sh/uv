@@ -4,7 +4,8 @@ use clap::Parser;
 use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
-use uv_configuration::{Concurrency, Preview};
+use uv_configuration::Concurrency;
+use uv_preview::Preview;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 #[derive(Parser)]

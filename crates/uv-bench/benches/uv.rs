@@ -85,9 +85,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{
-        BuildOptions, Concurrency, Constraints, IndexStrategy, Preview, SourceStrategy,
-    };
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, SourceStrategy};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -98,6 +96,7 @@ mod resolver {
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
+    use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{

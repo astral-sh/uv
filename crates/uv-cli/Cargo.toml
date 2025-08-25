@@ -23,6 +23,7 @@ uv-distribution-types = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["clap"], default-features = false }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap", "schemars"]}
 uv-redacted = { workspace = true }

@@ -12,9 +12,10 @@ use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_configuration::{Concurrency, Constraints, Preview};
+use uv_configuration::{Concurrency, Constraints};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.

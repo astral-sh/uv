@@ -916,6 +916,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_check(
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.python_version.as_ref(),
+                args.python_platform.as_ref(),
                 &cache,
                 printer,
                 globals.preview,

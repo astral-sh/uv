@@ -9,9 +9,9 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    Preview,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};

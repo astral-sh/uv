@@ -19,7 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, Preview,
+    InstallOptions,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -27,6 +27,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
