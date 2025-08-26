@@ -1145,7 +1145,7 @@
           "const": "disabled"
         },
         {
-          "description": "Use the system keyring for credential lookup.",
+          "description": "Use a native integration with the system keychain for credential lookup.",
           "type": "string",
           "const": "native"
         },
