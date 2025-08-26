@@ -12951,7 +12951,7 @@
     "url": "https://github.com/pyodide/pyodide/releases/download/0.28.2/xbuildenv-0.28.2.tar.bz2",
     "sha256": null,
     "variant": null,
-    "build": "0.28.1"
+    "build": "0.28.2"
   },
   "cpython-3.13.2-linux-aarch64-gnu": {
     "name": "cpython",
