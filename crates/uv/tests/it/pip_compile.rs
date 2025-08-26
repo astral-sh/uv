@@ -17763,6 +17763,11 @@ fn omit_python_patch_universal() -> Result<()> {
 async fn package_name_on_index_package_mismatch() -> Result<()> {
     let context = TestContext::new("3.12");
     let server = MockServer::start().await;
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
 
     // An index for anyio, with tqdm and anyio distributions.
     let networkx_page = r#"
@@ -17787,7 +17792,7 @@ async fn package_name_on_index_package_mismatch() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(filters, context
         .pip_compile()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--extra-index-url")
@@ -17816,7 +17821,7 @@ async fn package_name_on_index_package_mismatch() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>4.10")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(filters, context
         .pip_compile()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--extra-index-url")
@@ -17833,6 +17838,11 @@ async fn package_name_on_index_package_mismatch() -> Result<()> {
               anyio==4.67.1
           and anyio==4.67.1 has the wrong package name in the index page (`tqdm`), we can conclude that anyio>4.10 cannot be used.
           And because you require anyio>4.10, we can conclude that your requirements are unsatisfiable.
+
+          hint: `anyio` was found on http://[LOCALHOST]/, but not at the requested version (all of:
+              anyio>4.10,<4.67.1
+              anyio>4.67.1
+          ). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     ");
 
     Ok(())
