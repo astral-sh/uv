@@ -959,7 +959,7 @@ fn non_empty_dir_exists() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail,
-    // even if `--clear` is specified.
+    // unless `--clear` is specified.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
@@ -975,7 +975,9 @@ fn non_empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: The directory at `.venv` is not a virtual environment; remove it manually to proceed
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
     );
 
@@ -984,15 +986,14 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    error: Failed to create virtual environment
-      Caused by: The directory at `.venv` is not a virtual environment; remove it manually to proceed
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -1020,7 +1021,9 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: The directory at `.venv` is not a virtual environment; remove it manually to proceed
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
     );
 

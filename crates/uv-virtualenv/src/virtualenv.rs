@@ -121,11 +121,6 @@ pub(crate) fn create(
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
                 OnExisting::Remove => {
-                    // Refuse to remove a non-virtual environment, even if `--clear` is provided.
-                    if !is_virtualenv {
-                        return Err(Error::NonVirtualEnvironment(location.to_path_buf()));
-                    }
-
                     debug!("Removing existing {name} due to `--clear`");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
@@ -137,12 +132,14 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => {
-                    // Refuse to remove a non-virtual environment.
-                    if !is_virtualenv {
-                        return Err(Error::NonVirtualEnvironment(location.to_path_buf()));
-                    }
+                    let confirmation = if is_virtualenv {
+                        confirm_clear(location, name)?
+                    } else {
+                        // Refuse to remove a non-virtual environment; don't even prompt.
+                        Some(false)
+                    };
 
-                    match confirm_clear(location, name)? {
+                    match confirmation {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the

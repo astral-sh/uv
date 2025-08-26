@@ -1,9 +1,8 @@
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use thiserror::Error;
 
-use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -21,8 +20,6 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
-    #[error("The directory at `{}` is not a virtual environment; remove it manually to proceed", _0.user_display())]
-    NonVirtualEnvironment(PathBuf),
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
