@@ -399,7 +399,7 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
-    /// Configure credentials
+    /// Manage authentication.
     #[command(
         after_help = "Use `uv help auth` for more details.",
         after_long_help = ""
@@ -4384,11 +4384,11 @@ pub struct AuthNamespace {
 
 #[derive(Subcommand)]
 pub enum AuthCommand {
-    /// Log in to a repository or registry.
+    /// Login to a service
     Login(AuthLoginArgs),
-    /// Log out of a repository or registry.
+    /// Logout of a service
     Logout(AuthLogoutArgs),
-    /// Show the credentials for a repository or registry.
+    /// Show the credentials for a service
     Show(AuthShowArgs),
 }
 
