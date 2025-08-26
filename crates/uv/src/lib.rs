@@ -443,7 +443,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Login(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLoginSettings::resolve(args, filesystem);
+            let args = settings::AuthLoginSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
             show_settings!(args);
 
             commands::auth_login(
@@ -451,6 +455,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.username,
                 args.password,
                 args.token,
+                &args.network_settings,
                 printer,
                 globals.preview,
             )
@@ -460,19 +465,41 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Logout(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLogoutSettings::resolve(args, filesystem);
+            let args = settings::AuthLogoutSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
             show_settings!(args);
 
-            commands::auth_logout(args.service, args.username, printer, globals.preview).await
+            commands::auth_logout(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Token(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthTokenSettings::resolve(args, filesystem);
+            let args = settings::AuthTokenSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
             show_settings!(args);
 
-            commands::auth_token(args.service, args.username, printer, globals.preview).await
+            commands::auth_token(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Dir,

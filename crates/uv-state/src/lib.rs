@@ -105,7 +105,7 @@ pub enum StateBucket {
     ManagedPython,
     /// Installed tools.
     Tools,
-    /// Stored authentication credentials.
+    /// Credentials.
     Credentials,
 }
 

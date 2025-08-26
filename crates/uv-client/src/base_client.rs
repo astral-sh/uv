@@ -28,7 +28,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, Indexes};
+use uv_auth::{AuthMiddleware, Credentials, Indexes, PyxTokenStore};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -472,6 +472,30 @@ impl<'a> BaseClientBuilder<'a> {
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
+                // Create a base client to using in the authentication middleware.
+                let base_client = {
+                    let mut client = reqwest_middleware::ClientBuilder::new(client.clone());
+
+                    // Avoid uncloneable errors with a streaming body during publish.
+                    if self.retries > 0 {
+                        // Initialize the retry strategy.
+                        let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                            self.retry_policy(),
+                            UvRetryableStrategy,
+                        );
+                        client = client.with(retry_strategy);
+                    }
+
+                    // When supplied, add the extra middleware.
+                    if let Some(extra_middleware) = &self.extra_middleware {
+                        for middleware in &extra_middleware.0 {
+                            client = client.with_arc(middleware.clone());
+                        }
+                    }
+
+                    client.build()
+                };
+
                 let mut client = reqwest_middleware::ClientBuilder::new(client);
 
                 // Avoid uncloneable errors with a streaming body during publish.
@@ -484,33 +508,40 @@ impl<'a> BaseClientBuilder<'a> {
                     client = client.with(retry_strategy);
                 }
 
+                // When supplied, add the extra middleware.
+                if let Some(extra_middleware) = &self.extra_middleware {
+                    for middleware in &extra_middleware.0 {
+                        client = client.with_arc(middleware.clone());
+                    }
+                }
+
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let auth_middleware = AuthMiddleware::new()
+                        let mut auth_middleware = AuthMiddleware::new()
+                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview);
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let auth_middleware = AuthMiddleware::new()
+                        let mut auth_middleware = AuthMiddleware::new()
+                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
-
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
-                    }
-                }
-
-                // When supplied add the extra middleware
-                if let Some(extra_middleware) = &self.extra_middleware {
-                    for middleware in &extra_middleware.0 {
-                        client = client.with_arc(middleware.clone());
                     }
                 }
 

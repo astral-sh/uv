@@ -1164,6 +1164,11 @@ impl PythonRunner {
             // tools, which might mess with wrappers trying to parse their
             // output.
             .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
+            // Remove potentially-sensitive environment variables.
+            .env_remove(EnvVars::PYX_API_KEY)
+            .env_remove(EnvVars::UV_API_KEY)
+            .env_remove(EnvVars::PYX_AUTH_TOKEN)
+            .env_remove(EnvVars::UV_AUTH_TOKEN)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
