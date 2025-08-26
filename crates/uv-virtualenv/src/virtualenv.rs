@@ -110,7 +110,8 @@ pub(crate) fn create(
             );
         }
         Ok(metadata) if metadata.is_dir() => {
-            let name = if uv_fs::is_virtualenv_base(location) {
+            let is_virtualenv = uv_fs::is_virtualenv_base(location);
+            let name = if is_virtualenv {
                 "virtual environment"
             } else {
                 "directory"
@@ -131,7 +132,14 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => {
-                    match confirm_clear(location, name)? {
+                    let confirmation = if is_virtualenv {
+                        confirm_clear(location, name)?
+                    } else {
+                        // Refuse to remove a non-virtual environment; don't even prompt.
+                        Some(false)
+                    };
+
+                    match confirmation {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
