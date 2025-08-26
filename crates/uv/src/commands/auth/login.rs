@@ -1,11 +1,12 @@
 use anyhow::{Result, bail};
+use std::fmt::Write;
 
 use console::Term;
 use uv_auth::{Credentials, KeyringProvider};
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::commands::ExitStatus;
+use crate::{commands::ExitStatus, printer::Printer};
 
 /// Login to a service.
 pub(crate) async fn login(
@@ -14,6 +15,7 @@ pub(crate) async fn login(
     password: Option<String>,
     token: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let username = if let Some(username) = username {
         username
@@ -65,6 +67,8 @@ pub(crate) async fn login(
     let url = DisplaySafeUrl::parse(&service)?;
     let credentials = Credentials::basic(Some(username), Some(password));
     provider.store(&url, &credentials).await;
+
+    writeln!(printer.stderr(), "Logged in to {url}")?;
 
     Ok(ExitStatus::Success)
 }

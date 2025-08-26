@@ -17,15 +17,27 @@ pub(crate) async fn show(
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Be helpful about incompatible `keyring-provider` settings
+    if let Some(provider) = &keyring_provider {
+        match provider {
+            KeyringProviderType::Native => {}
+            KeyringProviderType::Disabled => {
+                bail!(
+                    "Cannot show credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead"
+                );
+            }
+            KeyringProviderType::Subprocess => {
+                bail!(
+                    "Cannot show credentials with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
+                );
+            }
+        }
+    }
+
     let url = DisplaySafeUrl::parse(&service)?;
 
-    let Some(provider) = keyring_provider
-        .as_ref()
-        .map(KeyringProviderType::to_provider)
-        .unwrap_or_else(|| Some(KeyringProvider::native()))
-    else {
-        bail!("Cannot show credentials with `keyring-provider = disabled`")
-    };
+    // Always use the native keyring provider
+    let provider = KeyringProvider::native();
 
     let credentials = provider
         .fetch(&url, username.as_deref())

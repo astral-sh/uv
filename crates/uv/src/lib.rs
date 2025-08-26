@@ -437,7 +437,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthLoginSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_login(args.service, args.username, args.password, args.token, args.keyring_provider).await
+            commands::auth_login(args.service, args.username, args.password, args.token, args.keyring_provider, printer).await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Logout(args),
@@ -446,7 +446,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthLogoutSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_logout(args.service, args.username, args.keyring_provider).await
+            commands::auth_logout(args.service, args.username, args.keyring_provider, printer).await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Show(args),

@@ -1,10 +1,11 @@
 use anyhow::{Context, Result, bail};
+use std::fmt::Write;
 
 use uv_auth::KeyringProvider;
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::commands::ExitStatus;
+use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
 ///
@@ -13,6 +14,7 @@ pub(crate) async fn logout(
     service: String,
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let username = if let Some(username) = username {
         username
@@ -45,6 +47,8 @@ pub(crate) async fn logout(
         .remove(&url, &username)
         .await
         .with_context(|| format!("Unable to remove credentials for {url}"))?;
+
+    writeln!(printer.stderr(), "Logged out of {url}")?;
 
     Ok(ExitStatus::Success)
 }
