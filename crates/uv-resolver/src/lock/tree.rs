@@ -30,6 +30,8 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
+    lock: &'env Lock,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -398,6 +400,7 @@ impl<'env> TreeDisplay<'env> {
             latest,
             depth,
             no_dedupe,
+            lock,
         }
     }
 
@@ -445,6 +448,15 @@ impl<'env> TreeDisplay<'env> {
                         let _ = write!(line, " (group: {group})");
                     }
                 }
+            }
+
+            // Append compressed wheel size, if available in the lockfile.
+            // Keep it simple: use the first wheel entry that includes a size.
+            let package = self.lock.find_by_id(package_id);
+            if let Some(size_bytes) = package.wheels.iter().filter_map(|wheel| wheel.size).next() {
+                let (bytes, unit) = human_readable_bytes(size_bytes);
+                line.push(' ');
+                line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
             }
 
             line
@@ -661,4 +673,20 @@ impl std::fmt::Display for TreeDisplay<'_> {
 
         Ok(())
     }
+}
+
+/// Formats a number of bytes into a human readable SI-prefixed size (binary units).
+///
+/// Returns a tuple of `(quantity, units)`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
+    const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+    let bytes_f32 = bytes as f32;
+    let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
+    (bytes_f32 / 1024_f32.powi(i as i32), UNITS[i])
 }
