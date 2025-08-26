@@ -20,9 +20,9 @@ pub struct KeyringProvider {
 
 #[derive(Debug)]
 pub(crate) enum KeyringProviderBackend {
-    /// Use system keyring integration to fetch credentials.
+    /// Use a native system keyring integration for credentials.
     Native,
-    /// Use the external `keyring` command to fetch credentials.
+    /// Use the external `keyring` command for credentials.
     Subprocess,
     #[cfg(test)]
     Dummy(Vec<(String, &'static str, &'static str)>),
@@ -86,27 +86,36 @@ impl KeyringProvider {
         };
         match entry.set_password(password).await {
             Ok(()) => {
-                debug!("Stored credentials for {service} in system keyring");
+                debug!("Stored credentials for {username}@{service} in system keyring");
             }
             Err(err) => {
                 warn_user_once!(
-                    "Unable to store credentials for {service} in the system keyring: {err}"
+                    "Unable to store credentials for {username}@{service} in the system keyring: {err}"
                 );
             }
         }
     }
 
-    /// Remove credentials for the given [`Url`]/`username` pair from the keyring if the
-    /// keyring provider backend is [`KeyringProviderBackend::Native`].
+    /// Remove credentials for the given [`DisplaySafeUrl`] and username from the keyring.
+    ///
+    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn remove_if_native(
+    pub async fn remove(
         &self,
         url: &DisplaySafeUrl,
         username: &str,
     ) -> Result<(), uv_keyring::Error> {
-        if let KeyringProviderBackend::Native = &self.backend {
-            self.remove_native(url.as_str(), username).await?;
-            STORED_KEYRING_URLS.remove(url);
+        match &self.backend {
+            KeyringProviderBackend::Native => {
+                self.remove_native(url.as_str(), username).await?;
+            }
+            KeyringProviderBackend::Subprocess => {
+                trace!(
+                    "Removing credentials with the `subprocess` keyring provider is not currently supported"
+                );
+            }
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(_) => {}
         }
         Ok(())
     }
@@ -122,7 +131,7 @@ impl KeyringProvider {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service_name}");
         let entry = uv_keyring::Entry::new(&prefixed_service, username)?;
         entry.delete_credential().await?;
-        trace!("Removing credentials for {service_name}/{username} from system keyring");
+        trace!("Removed credentials for {username}@{service_name} from system keyring");
         Ok(())
     }
 

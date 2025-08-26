@@ -1,30 +1,38 @@
-/// Unset credentials for a service.
+use std::fmt::Write;
+
+use anyhow::{Context, Result, bail};
+
+use uv_configuration::KeyringProviderType;
+use uv_redacted::DisplaySafeUrl;
+
+use crate::{Printer, commands::ExitStatus};
+
+/// Show credentials for a service.
 ///
 /// If no username is provided, defaults to `__token__`.
-pub(crate) async fn unset(
-    service: Option<String>,
+pub(crate) async fn show(
+    service: String,
     username: Option<String>,
-    keyring_provider: KeyringProviderType,
+    keyring_provider: Option<KeyringProviderType>,
+    printer: Printer,
 ) -> Result<ExitStatus> {
-    let Some(service) = service else {
-        bail!(
-            "`uv auth unset` requires a service and username, e.g., `uv auth set https://example.com user`"
-        );
-    };
-    let username = if let Some(username) = username {
-        username
-    } else {
-        debug!("No username provided. Using `__token__`");
-        String::from("__token__")
-    };
-
-    let Some(keyring_provider) = keyring_provider.to_provider() else {
-        bail!("`--keyring-provider native` is required for system keyring credential configuration")
-    };
-
     let url = DisplaySafeUrl::parse(&service)?;
-    if let Err(err) = keyring_provider.remove_if_native(&url, &username).await {
-        bail!("Unable to remove credentials for {url}: {err}");
+
+    let Some(keyring_provider) = keyring_provider.and_then(|p| p.to_provider()) else {
+        bail!(
+            "A keyring provider is required to retrieve credentials, e.g., use `--keyring-provider native`"
+        )
+    };
+
+    let credentials = keyring_provider
+        .fetch(&url, username.as_deref())
+        .await
+        .with_context(|| format!("Failed to fetch credentials for {url}"))?;
+
+    if let Some(password) = credentials.password() {
+        writeln!(printer.stdout(), "{password}")?;
+    } else {
+        bail!("No password found in credentials");
     }
 
     Ok(ExitStatus::Success)

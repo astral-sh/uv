@@ -1,31 +1,33 @@
-/// Unset credentials for a service.
+use anyhow::{Context, Result, bail};
+
+use uv_configuration::KeyringProviderType;
+use uv_redacted::DisplaySafeUrl;
+
+use crate::commands::ExitStatus;
+
+/// Logout from a service.
 ///
 /// If no username is provided, defaults to `__token__`.
-pub(crate) async fn unset(
-    service: Option<String>,
+pub(crate) async fn logout(
+    service: String,
     username: Option<String>,
-    keyring_provider: KeyringProviderType,
+    keyring_provider: Option<KeyringProviderType>,
 ) -> Result<ExitStatus> {
-    let Some(service) = service else {
-        bail!(
-            "`uv auth unset` requires a service and username, e.g., `uv auth set https://example.com user`"
-        );
-    };
     let username = if let Some(username) = username {
         username
     } else {
-        debug!("No username provided. Using `__token__`");
         String::from("__token__")
     };
+    let url = DisplaySafeUrl::parse(&service)?;
 
-    let Some(keyring_provider) = keyring_provider.to_provider() else {
+    let Some(keyring_provider) = keyring_provider.and_then(|p| p.to_provider()) else {
         bail!("`--keyring-provider native` is required for system keyring credential configuration")
     };
 
-    let url = DisplaySafeUrl::parse(&service)?;
-    if let Err(err) = keyring_provider.remove_if_native(&url, &username).await {
-        bail!("Unable to remove credentials for {url}: {err}");
-    }
+    keyring_provider
+        .remove(&url, &username)
+        .await
+        .with_context(|| format!("Unable to remove credentials for {url}"))?;
 
     Ok(ExitStatus::Success)
 }

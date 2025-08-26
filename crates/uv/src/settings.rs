@@ -7,7 +7,7 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthLoginArgs, AuthLogoutArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
+    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthShowArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
     ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
     PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs,
     PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
@@ -3468,6 +3468,8 @@ impl PublishSettings {
             ),
         }
     }
+}
+
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct AuthLogoutSettings {
@@ -3485,7 +3487,7 @@ impl AuthLogoutSettings {
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
 
-        let ResolverInstallerOptions {
+        let ResolverInstallerSchema {
             keyring_provider, ..
         } = top_level;
 
@@ -3496,7 +3498,6 @@ impl AuthLogoutSettings {
         }
     }
 }
-
 
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
@@ -3515,13 +3516,14 @@ impl AuthShowSettings {
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
 
-        let ResolverInstallerOptions {
+        let ResolverInstallerSchema {
             keyring_provider, ..
         } = top_level;
 
         Self {
             service: args.service,
             username: args.username,
+            keyring_provider: keyring_provider.unwrap_or_default(),
         }
     }
 }
@@ -3535,7 +3537,7 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) token: Option<String>,
 
     // Both CLI and configuration.
-    pub(crate) keyring_provider: Option<KeyringProviderType,
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
 impl AuthLoginSettings {
@@ -3545,14 +3547,11 @@ impl AuthLoginSettings {
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
 
-        let ResolverInstallerOptions {
+        let ResolverInstallerSchema {
             keyring_provider, ..
         } = top_level;
 
-        let keyring_provider = args
-                .keyring_provider
-                .combine(keyring_provider);
-
+        let keyring_provider = args.keyring_provider.combine(keyring_provider);
 
         Self {
             service: args.service,

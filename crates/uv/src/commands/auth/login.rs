@@ -1,11 +1,9 @@
 use anyhow::{Result, bail};
 
 use console::Term;
-use tracing::debug;
 use uv_auth::{Credentials, KeyringProvider};
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 
@@ -15,7 +13,7 @@ pub(crate) async fn login(
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
-    keyring_provider: KeyringProviderType,
+    keyring_provider: Option<KeyringProviderType>,
 ) -> Result<ExitStatus> {
     let username = if let Some(username) = username {
         username
@@ -32,17 +30,19 @@ pub(crate) async fn login(
         match provider {
             KeyringProviderType::Native => {}
             KeyringProviderType::Disabled => {
-                bail!("Cannot login with `keyring-provider = disabled`");
+                bail!(
+                    "Cannot login with `keyring-provider = disabled`, use `keyring-provider = native` instead"
+                );
             }
             KeyringProviderType::Subprocess => {
-                warn_user_once!(
-                    "Login is not supported with `keyring-provider = subprocess`, the `native` provider will be used instead"
+                bail!(
+                    "Cannot login with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
                 );
             }
         }
     }
 
-    // ALways use the native keyring provider
+    // Always use the native keyring provider
     let provider = KeyringProvider::native();
 
     // FIXME: It would be preferable to accept the value of --password or --token
