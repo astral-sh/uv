@@ -856,4 +856,27 @@ impl EnvVars {
 
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
+
+    /// The URL of the pyx Simple API server.
+    pub const PYX_API_URL: &'static str = "PYX_API_URL";
+
+    /// The domain of the pyx CDN.
+    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
+
+    /// The pyx API key (e.g., `sk-pyx-...`).
+    pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
+
+    /// The pyx API key, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_API_KEY: &'static str = "UV_API_KEY";
+
+    /// The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
+    pub const PYX_AUTH_TOKEN: &'static str = "PYX_AUTH_TOKEN";
+
+    /// The pyx authentication token, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
+
+    /// Specifies the directory where uv stores pyx credentials.
+    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 }

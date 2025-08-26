@@ -4,20 +4,24 @@ use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
 use netrc::Netrc;
 use reqwest::{Request, Response};
-use reqwest_middleware::{Error, Middleware, Next};
+use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
+use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::owo_colors::OwoColorize;
 
 use crate::providers::HuggingFaceProvider;
+use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
-    CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
+    AccessToken, CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
+
 use crate::{TextCredentialStore, TomlCredentialError};
 
 /// Strategy for loading netrc files.
@@ -105,6 +109,15 @@ impl TextStoreMode {
     }
 }
 
+#[derive(Debug, Clone)]
+enum TokenState {
+    /// The token state has not yet been initialized from the store.
+    Uninitialized,
+    /// The token state has been initialized, and the store either returned tokens or `None` if
+    /// the user has not yet authenticated.
+    Initialized(Option<AccessToken>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -119,6 +132,12 @@ pub struct AuthMiddleware {
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
+    /// The base client to use for requests within the middleware.
+    base_client: Option<ClientWithMiddleware>,
+    /// The pyx token store to use for persistent credentials.
+    pyx_token_store: Option<PyxTokenStore>,
+    /// Tokens to use for persistent credentials.
+    pyx_token_state: Mutex<TokenState>,
     preview: Preview,
 }
 
@@ -131,6 +150,9 @@ impl AuthMiddleware {
             cache: None,
             indexes: Indexes::new(),
             only_authenticated: false,
+            base_client: None,
+            pyx_token_store: None,
+            pyx_token_state: Mutex::new(TokenState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -194,6 +216,20 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_only_authenticated(mut self, only_authenticated: bool) -> Self {
         self.only_authenticated = only_authenticated;
+        self
+    }
+
+    /// Configure the [`ClientWithMiddleware`] to use for requests within the middleware.
+    #[must_use]
+    pub fn with_base_client(mut self, client: ClientWithMiddleware) -> Self {
+        self.base_client = Some(client);
+        self
+    }
+
+    /// Configure the [`PyxTokenStore`] to use for persistent credentials.
+    #[must_use]
+    pub fn with_pyx_token_store(mut self, token_store: PyxTokenStore) -> Self {
+        self.pyx_token_store = Some(token_store);
         self
     }
 
@@ -309,9 +345,20 @@ impl Middleware for AuthMiddleware {
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
 
-        let retry_unauthenticated =
-            !self.only_authenticated && !matches!(auth_policy, AuthPolicy::Always);
-        let (mut retry_request, response) = if retry_unauthenticated {
+        // Determine whether this is a "known" URL.
+        let is_known_url = self
+            .pyx_token_store
+            .as_ref()
+            .is_some_and(|token_store| token_store.is_known_url(request.url()));
+
+        let must_authenticate = self.only_authenticated
+            || match auth_policy {
+                AuthPolicy::Auto => is_known_url,
+                AuthPolicy::Always => true,
+                AuthPolicy::Never => false,
+            };
+
+        let (mut retry_request, response) = if !must_authenticate {
             let url = tracing_url(&request, credentials.as_deref());
             if credentials.is_none() {
                 trace!("Attempting unauthenticated request for {url}");
@@ -419,9 +466,16 @@ impl Middleware for AuthMiddleware {
         if let Some(response) = response {
             Ok(response)
         } else {
-            Err(Error::Middleware(format_err!(
-                "Missing credentials for {url}"
-            )))
+            if is_known_url {
+                Err(Error::Middleware(format_err!(
+                    "Run `{}` to authenticate the uv CLI",
+                    "uv auth login".green()
+                )))
+            } else {
+                Err(Error::Middleware(format_err!(
+                    "Missing credentials for {url}"
+                )))
+            }
         }
     }
 }
@@ -587,6 +641,46 @@ impl AuthMiddleware {
             debug!("Found Hugging Face credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
             return Some(credentials);
+        }
+
+        // If this is a known URL, authenticate it via the token store.
+        if let Some(base_client) = self.base_client.as_ref() {
+            if let Some(token_store) = self.pyx_token_store.as_ref() {
+                if token_store.is_known_url(url) {
+                    let mut token_state = self.pyx_token_state.lock().await;
+
+                    // If the token store is uninitialized, initialize it.
+                    let token = match *token_state {
+                        TokenState::Uninitialized => {
+                            trace!("Initializing token store for {url}");
+                            let generated = match token_store
+                                .access_token(base_client, DEFAULT_TOLERANCE_SECS)
+                                .await
+                            {
+                                Ok(Some(token)) => Some(token),
+                                Ok(None) => None,
+                                Err(err) => {
+                                    warn!("Failed to generate access tokens: {err}");
+                                    None
+                                }
+                            };
+                            *token_state = TokenState::Initialized(generated.clone());
+                            generated
+                        }
+                        TokenState::Initialized(ref tokens) => tokens.clone(),
+                    };
+
+                    let credentials = token.map(|token| {
+                        trace!("Using credentials from token store for {url}");
+                        Arc::new(Credentials::from(token))
+                    });
+
+                    // Register the fetch for this key
+                    self.cache().fetches.done(key.clone(), credentials.clone());
+
+                    return credentials;
+                }
+            }
         }
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
