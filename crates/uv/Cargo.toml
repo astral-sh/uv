@@ -53,6 +53,7 @@ uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
+uv-small-str = { workspace = true }
 uv-static = { workspace = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
@@ -69,6 +70,7 @@ axoupdater = { workspace = true, features = [
     "github_releases",
     "tokio",
 ], optional = true }
+base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
@@ -84,6 +86,7 @@ indoc = { workspace = true }
 itertools = { workspace = true }
 h2 = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
+open = {workspace = true}
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
@@ -106,6 +109,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "json", "regi
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }

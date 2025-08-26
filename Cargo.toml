@@ -135,6 +135,7 @@ miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
 nix = { version = "0.30.0", features = ["signal"] }
 once_cell = { version = "1.20.2" }
+open = { version = "5.3.2" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
@@ -188,6 +189,7 @@ tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.2.0" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
+uuid = { version = "1.16.0" }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0", features = ["regex"] }
@@ -199,6 +201,7 @@ windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Secur
 wiremock = { version = "0.6.4" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
+zstd = { version = "0.13.3" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }

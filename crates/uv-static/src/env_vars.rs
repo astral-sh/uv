@@ -280,6 +280,9 @@ impl EnvVars {
     /// Specifies the "bin" directory for installing tool executables.
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
+    /// Specifies the directory where uv stores credentials.
+    pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";
+
     /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
     /// to use when creating a new project.
     pub const UV_INIT_BUILD_BACKEND: &'static str = "UV_INIT_BUILD_BACKEND";
@@ -853,4 +856,16 @@ impl EnvVars {
 
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
+
+    /// The URL of the uv Simple API server.
+    pub const UV_API_URL: &'static str = "UV_API_URL";
+
+    /// The domain of the uv CDN.
+    pub const UV_CDN_DOMAIN: &'static str = "UV_CDN_DOMAIN";
+
+    /// The pyx API key (e.g., `sk-pyx-...`).
+    pub const UV_API_KEY: &'static str = "UV_API_KEY";
+
+    /// The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
+    pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
 }

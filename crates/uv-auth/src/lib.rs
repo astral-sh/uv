@@ -2,13 +2,17 @@ use std::sync::{Arc, LazyLock};
 
 use tracing::trace;
 
+use uv_redacted::DisplaySafeUrl;
+
 use cache::CredentialsCache;
 pub use credentials::Credentials;
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-use realm::Realm;
-use uv_redacted::DisplaySafeUrl;
+pub use realm::Realm;
+pub use service::{
+    AccessToken, DEFAULT_TOLERANCE_SECS, OAuthTokens, TokenStore, TokenStoreError, Tokens,
+};
 
 mod cache;
 mod credentials;
@@ -17,7 +21,7 @@ mod keyring;
 mod middleware;
 mod providers;
 mod realm;
-
+mod service;
 // TODO(zanieb): Consider passing a cache explicitly throughout
 
 /// Global authentication cache for a uv invocation
