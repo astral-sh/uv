@@ -958,12 +958,32 @@ fn empty_dir_exists() -> Result<()> {
 fn non_empty_dir_exists() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
-    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail.
+    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail,
+    // unless `--clear` is specified.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12"), @r"
     success: true
@@ -973,7 +993,6 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -994,15 +1013,17 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
-    Activate with: source .venv/[BIN]/activate
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
     );
 
@@ -1571,4 +1592,43 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     assert!(intermediate_link.path().is_symlink());
 
     Ok(())
+}
+
+#[test]
+fn create_venv_current_working_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(".")
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .current_dir(&context.venv), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .
+    Activate with: source bin/activate
+    "
+    );
+
+    context.root.assert(predicates::path::is_dir());
 }

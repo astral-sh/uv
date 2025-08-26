@@ -254,7 +254,7 @@ If you need to remove uv from your system, follow these steps:
 
         Before removing the binaries, you may want to remove any data that uv has stored.
 
-2.  Remove the uv and uvx binaries:
+2.  Remove the uv, uvx, and uvw binaries:
 
     === "macOS and Linux"
 
@@ -267,6 +267,7 @@ If you need to remove uv from your system, follow these steps:
         ```pwsh-session
         PS> rm $HOME\.local\bin\uv.exe
         PS> rm $HOME\.local\bin\uvx.exe
+        PS> rm $HOME\.local\bin\uvw.exe
         ```
 
     !!! note

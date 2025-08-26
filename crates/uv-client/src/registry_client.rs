@@ -29,7 +29,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_pypi_types::{PypiSimpleDetail, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
@@ -630,10 +630,10 @@ impl RegistryClient {
                             .bytes()
                             .await
                             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                        let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
+                        let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
-                        SimpleMetadata::from_files(data.files, package_name, &url)
+                        SimpleMetadata::from_pypi_files(data.files, package_name, &url)
                     }
                     MediaType::Html => {
                         let text = response
@@ -1136,7 +1136,11 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
+    fn from_pypi_files(
+        files: Vec<uv_pypi_types::PypiFile>,
+        package_name: &PackageName,
+        base: &Url,
+    ) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Convert to a reference-counted string.
@@ -1188,7 +1192,7 @@ impl SimpleMetadata {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(Self::from_files(files, package_name, base.as_url()))
+        Ok(Self::from_pypi_files(files, package_name, base.as_url()))
     }
 }
 
@@ -1261,7 +1265,7 @@ mod tests {
 
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::SimpleJson;
+    use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
@@ -1480,9 +1484,9 @@ mod tests {
         ]
     }
     "#;
-        let data: SimpleJson = serde_json::from_str(response).unwrap();
+        let data: PypiSimpleDetail = serde_json::from_str(response).unwrap();
         let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
-        let simple_metadata = SimpleMetadata::from_files(
+        let simple_metadata = SimpleMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
             &base,
