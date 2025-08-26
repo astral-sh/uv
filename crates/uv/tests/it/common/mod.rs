@@ -1274,6 +1274,30 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv auth login` command.
+    pub fn auth_login(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("login");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth logout` command.
+    pub fn auth_logout(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("logout");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth show` command.
+    pub fn auth_show(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("show");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
         self.python_command()
