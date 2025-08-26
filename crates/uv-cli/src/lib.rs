@@ -5458,18 +5458,29 @@ pub struct PythonPinArgs {
 
 #[derive(Args)]
 pub struct AuthLogoutArgs {
-    /// The authentication service to configure
-    pub service: Option<String>,
+    /// The service to logout of.
+    pub service: String,
 
-    /// The username to set for the service
+    /// The username to logout.
     #[arg(long, short)]
     pub username: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `logout`, which uses the system keyring
+    /// via an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
 pub struct AuthLoginArgs {
-    /// The service to log in to.
-    pub service: Option<String>,
+    /// The service to login to.
+    pub service: String,
 
     /// The username to use for the service.
     #[arg(long, short, conflicts_with = "token")]
@@ -5484,16 +5495,35 @@ pub struct AuthLoginArgs {
     /// The username will be set to `__token__`.
     #[arg(long, short, conflicts_with = "username", conflicts_with = "password")]
     pub token: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `login`, which uses the system keyring via
+    /// an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
 pub struct AuthShowArgs {
     /// The service to lookup.
-    pub service: Option<String>,
+    pub service: String,
 
     /// The username to lookup.
     #[arg(long, short)]
     pub username: Option<String>,
+
+    /// The keyring provider to use for reading credentials.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]

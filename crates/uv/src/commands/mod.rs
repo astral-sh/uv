@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
-pub(crate) use auth::configure::set as auth_set;
-pub(crate) use auth::configure::unset as auth_unset;
+pub(crate) use auth::login::login as auth_login;
+pub(crate) use auth::logout::logout as auth_logout;
+pub(crate) use auth::show::show as auth_show;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;

@@ -431,29 +431,31 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Set(args),
+            command: AuthCommand::Login(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthSetSettings::resolve(args, filesystem);
+            let args = settings::AuthLoginSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_set(
-                args.service,
-                args.username,
-                args.password,
-                args.token,
-                args.keyring_provider,
-            )
-            .await
+            commands::auth_login(args.service, args.username, args.password, args.token).await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Unset(args),
+            command: AuthCommand::Logout(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthUnsetSettings::resolve(args, filesystem);
+            let args = settings::AuthLogoutSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_unset(args.service, args.username, args.keyring_provider).await
+            commands::auth_logout(args.service, args.username).await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Show(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthShowSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::auth_show(args.service, args.username).await
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),

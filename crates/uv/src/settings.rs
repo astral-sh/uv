@@ -7,7 +7,7 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthSetArgs, AuthUnsetArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
+    AddArgs, AuthLoginArgs, AuthLogoutArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
     ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
     PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs,
     PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
@@ -3468,22 +3468,19 @@ impl PublishSettings {
             ),
         }
     }
-}
-
-/// The resolved settings to use for an invocation of the `uv auth unset` CLI.
+/// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthUnsetSettings {
-    // CLI only, see [`AuthUnsetArgs`] for docs.
-    pub(crate) service: Option<String>,
+pub(crate) struct AuthLogoutSettings {
+    pub(crate) service: String,
     pub(crate) username: Option<String>,
 
     // Both CLI and configuration.
-    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
-impl AuthUnsetSettings {
-    /// Resolve the [`AuthUnsetSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthUnsetArgs, filesystem: Option<FilesystemOptions>) -> Self {
+impl AuthLogoutSettings {
+    /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthLogoutArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options { top_level, .. } = filesystem
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
@@ -3495,30 +3492,55 @@ impl AuthUnsetSettings {
         Self {
             service: args.service,
             username: args.username,
-            keyring_provider: args
-                .keyring_provider
-                .combine(keyring_provider)
-                .unwrap_or_default(),
+            keyring_provider,
+        }
+    }
+}
+
+
+/// The resolved settings to use for an invocation of the `uv auth logout` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthShowSettings {
+    pub(crate) service: String,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: KeyringProviderType,
+}
+
+impl AuthShowSettings {
+    /// Resolve the [`AuthShowSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthShowArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            keyring_provider, ..
+        } = top_level;
+
+        Self {
+            service: args.service,
+            username: args.username,
         }
     }
 }
 
 /// The resolved settings to use for an invocation of the `uv auth set` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthSetSettings {
-    // CLI only, see [`AuthSetArgs`] for docs.
-    pub(crate) service: Option<String>,
+pub(crate) struct AuthLoginSettings {
+    pub(crate) service: String,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
 
     // Both CLI and configuration.
-    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) keyring_provider: Option<KeyringProviderType,
 }
 
-impl AuthSetSettings {
-    /// Resolve the [`AuthSetSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthSetArgs, filesystem: Option<FilesystemOptions>) -> Self {
+impl AuthLoginSettings {
+    /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthLoginArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options { top_level, .. } = filesystem
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
@@ -3527,15 +3549,17 @@ impl AuthSetSettings {
             keyring_provider, ..
         } = top_level;
 
+        let keyring_provider = args
+                .keyring_provider
+                .combine(keyring_provider);
+
+
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            keyring_provider: args
-                .keyring_provider
-                .combine(keyring_provider)
-                .unwrap_or_default(),
+            keyring_provider,
         }
     }
 }

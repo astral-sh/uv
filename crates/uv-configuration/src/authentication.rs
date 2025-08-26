@@ -9,7 +9,7 @@ pub enum KeyringProviderType {
     /// Do not use keyring for credential lookup.
     #[default]
     Disabled,
-    /// Use the system keyring for credential lookup.
+    /// Use a native integration with the system keychain for credential lookup.
     Native,
     /// Use the `keyring` command for credential lookup.
     Subprocess,
