@@ -1149,14 +1149,6 @@ impl SimpleMetadata {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
-            if filename.name() != package_name {
-                warn!(
-                    "Skipping file with mismatched package name: `{}` vs. `{}`",
-                    filename.name(),
-                    package_name
-                );
-                continue;
-            }
             let file = match File::try_from(file, &base) {
                 Ok(file) => file,
                 Err(err) => {

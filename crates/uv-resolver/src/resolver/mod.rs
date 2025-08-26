@@ -1370,7 +1370,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, name, pins, request_sink)?;
+        if let Some(incompatibility) =
+            self.visit_candidate(&candidate, dist, package, name, pins, request_sink)?
+        {
+            return Ok(Some(incompatibility));
+        }
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1531,14 +1535,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(
+
+            if let Some(incompatibility) = self.visit_candidate(
                 &base_candidate,
                 base_dist,
                 package,
                 name,
                 pins,
                 request_sink,
-            )?;
+            )? {
+                return Ok(Some(incompatibility));
+            }
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1585,15 +1592,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, name, pins, request_sink)?;
-        self.visit_candidate(
+        if let Some(incompatibility) =
+            self.visit_candidate(candidate, dist, package, name, pins, request_sink)?
+        {
+            return Ok(Some(incompatibility));
+        }
+        if let Some(incompatibility) = self.visit_candidate(
             &base_candidate,
             base_dist,
             package,
             name,
             pins,
             request_sink,
-        )?;
+        )? {
+            return Ok(Some(incompatibility));
+        }
 
         let forks = vec![
             VersionFork {
@@ -1611,6 +1624,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Visit a selected candidate.
+    ///
+    /// Returns an unavailability if the version can't be used.
     fn visit_candidate(
         &self,
         candidate: &Candidate,
@@ -1619,7 +1634,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
-    ) -> Result<(), ResolveError> {
+    ) -> Result<Option<ResolverVersion>, ResolveError> {
+        // If there is a package with a different name then the index page on the index, return
+        // an unavailability.
+        if dist.name() != (name) {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::PackageNameMismatch {
+                    dist_name: dist.name().clone(),
+                },
+            )));
+        }
+
         // We want to return a package pinned to a specific version; but we _also_ want to
         // store the exact file that we selected to satisfy that version.
         pins.insert(candidate, dist);
@@ -1649,7 +1675,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
@@ -2497,6 +2523,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .hasher
                     .allows_package(candidate.name(), candidate.version())
                 {
+                    return Ok(None);
+                }
+
+                // If there is a package with a different name then the index page on the index,
+                // `chose_version` later returns an unavailability. Ignoring it here allows the
+                // resolver to continue instead of erroring from a prefetch.
+                if dist.name() != &package_name {
+                    warn!(
+                        "Expected packages name {} and distribution name {} do not match, skipping prefetch",
+                        dist.name(),
+                        package_name
+                    );
                     return Ok(None);
                 }
 
