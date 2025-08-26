@@ -3332,14 +3332,14 @@ fn run_project_toml_error() -> Result<()> {
     init.touch()?;
 
     // `run` should fail
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    "###);
+    ");
 
     // `run --no-project` should not
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
@@ -4086,7 +4086,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
-        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4101,7 +4101,7 @@ fn run_linked_environment_path() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
@@ -5957,4 +5957,85 @@ fn run_python_preference_no_project() {
 
     ----- stderr -----
     ");
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/15518>
+#[test]
+fn isolate_child_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "iniconfig"
+        ]
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    // Sync the parent package.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("python").arg("-c").arg("import iniconfig"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import iniconfig"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    Ok(())
 }
