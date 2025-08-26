@@ -331,6 +331,7 @@ pub fn decode_error(err: Error) -> ErrorCode {
     }
 }
 
+#[cfg(feature = "keyring-tests")]
 #[cfg(not(miri))]
 #[cfg(test)]
 mod tests {

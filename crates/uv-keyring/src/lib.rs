@@ -410,6 +410,7 @@ mod tests {
     use std::collections::HashMap;
 
     /// Create a platform-specific credential given the constructor, service, and user
+    #[cfg(feature = "keyring-tests")]
     pub(crate) fn entry_from_constructor<F, T>(f: F, service: &str, user: &str) -> Entry
     where
         F: FnOnce(Option<&str>, &str, &str) -> Result<T>,
