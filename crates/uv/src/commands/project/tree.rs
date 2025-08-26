@@ -45,6 +45,7 @@ pub(crate) async fn tree(
     no_dedupe: bool,
     invert: bool,
     outdated: bool,
+    show_sizes: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
@@ -273,7 +274,7 @@ pub(crate) async fn tree(
     };
 
     // Render the tree.
-    let tree = TreeDisplay::new(
+    let mut tree = TreeDisplay::new(
         &lock,
         markers.as_ref(),
         &latest,
@@ -284,6 +285,9 @@ pub(crate) async fn tree(
         no_dedupe,
         invert,
     );
+    if show_sizes {
+        tree = tree.with_show_sizes(true);
+    }
 
     print!("{tree}");
 

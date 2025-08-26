@@ -32,6 +32,8 @@ pub struct TreeDisplay<'env> {
     no_dedupe: bool,
     /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
     lock: &'env Lock,
+    /// Whether to show sizes in the rendered output.
+    show_sizes: bool,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -401,7 +403,15 @@ impl<'env> TreeDisplay<'env> {
             depth,
             no_dedupe,
             lock,
+            show_sizes: false,
         }
+    }
+
+    /// Enable showing sizes in the rendered output.
+    #[must_use]
+    pub fn with_show_sizes(mut self, show: bool) -> Self {
+        self.show_sizes = show;
+        self
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
@@ -452,11 +462,15 @@ impl<'env> TreeDisplay<'env> {
 
             // Append compressed wheel size, if available in the lockfile.
             // Keep it simple: use the first wheel entry that includes a size.
-            let package = self.lock.find_by_id(package_id);
-            if let Some(size_bytes) = package.wheels.iter().filter_map(|wheel| wheel.size).next() {
-                let (bytes, unit) = human_readable_bytes(size_bytes);
-                line.push(' ');
-                line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
+            if self.show_sizes {
+                let package = self.lock.find_by_id(package_id);
+                if let Some(size_bytes) =
+                    package.wheels.iter().filter_map(|wheel| wheel.size).next()
+                {
+                    let (bytes, unit) = human_readable_bytes(size_bytes);
+                    line.push(' ');
+                    line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
+                }
             }
 
             line
