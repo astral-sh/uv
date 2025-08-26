@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 
+use uv_auth::KeyringProvider;
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
@@ -20,11 +21,27 @@ pub(crate) async fn logout(
     };
     let url = DisplaySafeUrl::parse(&service)?;
 
-    let Some(keyring_provider) = keyring_provider.and_then(|p| p.to_provider()) else {
-        bail!("`--keyring-provider native` is required for system keyring credential configuration")
-    };
+    // Be helpful about incompatible `keyring-provider` settings
+    if let Some(provider) = &keyring_provider {
+        match provider {
+            KeyringProviderType::Native => {}
+            KeyringProviderType::Disabled => {
+                bail!(
+                    "Cannot login with `keyring-provider = disabled`, use `keyring-provider = native` instead"
+                );
+            }
+            KeyringProviderType::Subprocess => {
+                bail!(
+                    "Cannot login with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
+                );
+            }
+        }
+    }
 
-    keyring_provider
+    // Always use the native keyring provider
+    let provider = KeyringProvider::native();
+
+    provider
         .remove(&url, &username)
         .await
         .with_context(|| format!("Unable to remove credentials for {url}"))?;

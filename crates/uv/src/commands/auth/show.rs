@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result, bail};
 
+use uv_auth::{Credentials, KeyringProvider};
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
@@ -18,22 +19,45 @@ pub(crate) async fn show(
 ) -> Result<ExitStatus> {
     let url = DisplaySafeUrl::parse(&service)?;
 
-    let Some(keyring_provider) = keyring_provider.and_then(|p| p.to_provider()) else {
-        bail!(
-            "A keyring provider is required to retrieve credentials, e.g., use `--keyring-provider native`"
-        )
+    let Some(provider) = keyring_provider
+        .as_ref()
+        .map(KeyringProviderType::to_provider)
+        .unwrap_or_else(|| Some(KeyringProvider::native()))
+    else {
+        bail!("Cannot show credentials with `keyring-provider = disabled`")
     };
 
-    let credentials = keyring_provider
+    let credentials = provider
         .fetch(&url, username.as_deref())
         .await
         .with_context(|| format!("Failed to fetch credentials for {url}"))?;
 
-    if let Some(password) = credentials.password() {
-        writeln!(printer.stdout(), "{password}")?;
-    } else {
+    let Some(password) = credentials.password() else {
         bail!("No password found in credentials");
+    };
+
+    // Only show a username if it wasn't provided
+    let username = username
+        .is_none()
+        .then(|| show_username(&credentials))
+        .flatten();
+
+    if let Some(username) = username {
+        writeln!(printer.stdout(), "{username}:{password}")?;
+    } else {
+        writeln!(printer.stdout(), "{password}")?;
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Return the username to show.
+///
+/// If missing or set to `__token__`, returns `None`.
+fn show_username(credentials: &Credentials) -> Option<&str> {
+    let username = credentials.username()?;
+    if username == "__token__" {
+        return None;
+    }
+    Some(username)
 }
