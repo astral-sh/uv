@@ -259,7 +259,7 @@ If you need to remove uv from your system, follow these steps:
     === "macOS and Linux"
 
         ```console
-        $ rm ~/.local/bin/uv ~/.local/bin/uvx
+        $ rm ~/.local/bin/uv ~/.local/bin/uvx ~/.local/bin/uvw
         ```
 
     === "Windows"
@@ -267,6 +267,7 @@ If you need to remove uv from your system, follow these steps:
         ```pwsh-session
         PS> rm $HOME\.local\bin\uv.exe
         PS> rm $HOME\.local\bin\uvx.exe
+        PS> rm $HOME\.local\bin\uvw.exe
         ```
 
     !!! note
