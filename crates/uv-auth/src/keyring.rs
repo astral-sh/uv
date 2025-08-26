@@ -1,4 +1,4 @@
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
     io::Write,
     process::Stdio,
@@ -9,10 +9,8 @@ use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
 
-use crate::credentials::Credentials;
+use crate::credentials::{Credentials, Username};
 
-/// Keyring credentials that have been stored during an invocation of uv.
-static STORED_KEYRING_URLS: LazyLock<StoredKeyringUrls> = LazyLock::new(StoredKeyringUrls::new);
 /// Service name prefix for storing credentials in a keyring.
 static UV_SERVICE_PREFIX: &str = "uv:";
 
@@ -50,33 +48,28 @@ impl KeyringProvider {
         }
     }
 
-    /// Store credentials for the given [`Url`] to the keyring if the
-    /// keyring provider backend is `Native`.
+    /// Store credentials for the given [`DisplaySafeUrl`] to the keyring.
+    ///
+    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn store_if_native(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
+    pub async fn store(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
+        let Some(username) = credentials.username() else {
+            trace!("Unable to store credentials in keyring for {url} due to missing username");
+            return;
+        };
+        let Some(password) = credentials.password() else {
+            trace!("Unable to store credentials in keyring for {url} due to missing password");
+            return;
+        };
+
         match &self.backend {
             KeyringProviderBackend::Native => {
-                let Some(username) = credentials.username() else {
-                    trace!(
-                        "Unable to store credentials in keyring for {url} due to missing username"
-                    );
-                    return;
-                };
-                let Some(password) = credentials.password() else {
-                    trace!(
-                        "Unable to store credentials in keyring for {url} due to missing password"
-                    );
-                    return;
-                };
-
-                // Only store credentials if not already stored during this uv invocation.
-                if !STORED_KEYRING_URLS.contains(url) {
-                    self.store_native(url.as_str(), username, password).await;
-                    STORED_KEYRING_URLS.insert(url.clone());
-                }
+                self.store_native(url.as_str(), username, password).await;
             }
             KeyringProviderBackend::Subprocess => {
-                trace!("Storing credentials is not supported for `subprocess` keyring");
+                trace!(
+                    "Storing credentials with the `subprocess` keyring provider is not currently supported"
+                );
             }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(_) => {}
@@ -99,7 +92,7 @@ impl KeyringProvider {
         };
         match entry.set_password(password).await {
             Ok(()) => {
-                debug!("Storing credentials for {service} in system keyring");
+                debug!("Stored credentials for {service} in system keyring");
             }
             Err(err) => {
                 warn_user_once!(
@@ -263,18 +256,19 @@ impl KeyringProvider {
     ) -> Option<(String, String)> {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
         let username = username?;
-        if let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) {
-            match entry.get_password().await {
-                Ok(password) => return Some((username.to_string(), password)),
-                Err(uv_keyring::Error::NoEntry) => {
-                    debug!("No entry found in system keyring for {service}");
-                }
-                Err(err) => {
-                    warn_user_once!(
-                        "Unable to fetch credentials for {service} from system keyring: {}",
-                        err
-                    );
-                }
+        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) else {
+            return None;
+        };
+        match entry.get_password().await {
+            Ok(password) => return Some((username.to_string(), password)),
+            Err(uv_keyring::Error::NoEntry) => {
+                debug!("No entry found in system keyring for {service}");
+            }
+            Err(err) => {
+                warn_user_once!(
+                    "Unable to fetch credentials for {service} from system keyring: {}",
+                    err
+                );
             }
         }
         None
@@ -315,23 +309,6 @@ impl KeyringProvider {
         Self {
             backend: KeyringProviderBackend::Dummy(Vec::new()),
         }
-    }
-}
-
-/// Keyring credentials that have been stored during an invocation of uv.
-struct StoredKeyringUrls(RwLock<FxHashSet<DisplaySafeUrl>>);
-
-impl StoredKeyringUrls {
-    pub(crate) fn new() -> Self {
-        Self(RwLock::new(FxHashSet::default()))
-    }
-
-    pub(crate) fn contains(&self, url: &DisplaySafeUrl) -> bool {
-        self.0.read().unwrap().contains(url)
-    }
-
-    pub(crate) fn insert(&self, url: DisplaySafeUrl) -> bool {
-        self.0.write().unwrap().insert(url)
     }
 }
 
