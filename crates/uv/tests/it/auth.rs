@@ -8,12 +8,12 @@ fn add_package_native_keyring() -> Result<()> {
     let context = TestContext::new("3.12").with_real_home();
 
     // Clear state before the test
-    let _ = context
+    context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
-        .status();
+        .status()?;
 
     // Configure `pyproject.toml` with native keyring provider.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -56,7 +56,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -87,7 +87,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
+    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -110,16 +110,16 @@ fn add_package_native_keyring() -> Result<()> {
 }
 
 #[test]
-fn show_native_keyring() {
+fn show_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
     // Clear state before the test
-    let _ = context
+    context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
-        .status();
+        .status()?;
 
     // Without a service name
     uv_snapshot!(context.auth_show(), @r"
@@ -147,7 +147,7 @@ fn show_native_keyring() {
     error: Cannot show credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead
     ");
 
-    // With explicit native keyring provider
+    // Without persisted credentials
     uv_snapshot!(context.auth_show()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
@@ -157,10 +157,10 @@ fn show_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot show credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
-    // With username and native keyring provider
+    // Without persisted credentials (with a username in the request)
     uv_snapshot!(context.auth_show()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
@@ -172,7 +172,7 @@ fn show_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot show credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Login to the index
@@ -189,22 +189,69 @@ fn show_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
+
+    // Show the credentials
+    uv_snapshot!(context.auth_show()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    // Without the username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.auth_show()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // With a mismatched username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.auth_show()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("private")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    Ok(())
 }
 
 #[test]
-fn login_native_keyring() {
+fn login_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
     // Clear state before the test
-    let _ = context
+    context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
-        .status();
+        .status()?;
 
     // Without a service name
     uv_snapshot!(context.auth_login(), @r"
@@ -221,18 +268,7 @@ fn login_native_keyring() {
     For more information, try '--help'.
     ");
 
-    // Without a keyring provider
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: `uv auth login` requires either a `--token` or a username, e.g., `uv auth login https://example.com user`
-    ");
-
-    // Without a username or token
+    // Without a username (or token)
     uv_snapshot!(context.auth_login()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
@@ -242,7 +278,7 @@ fn login_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv auth login` requires either a `--token` or a username, e.g., `uv auth login https://example.com user`
+    error: No username provided; did you mean to provide `--username` or `--token`?
     ");
 
     // Without a password
@@ -257,7 +293,20 @@ fn login_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv auth login` requires `--password` when not in a terminal.
+    error: No password provided; did you mean to provide `--password` or `--token`?
+    ");
+
+    // Without a keyring provider
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--token")
+        .arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Logging in requires setting `keyring-provider = native` for credentials to be retrieved in subsequent commands
     ");
 
     // Successful
@@ -274,22 +323,55 @@ fn login_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn logout_native_keyring() {
+fn login_token_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
     // Clear state before the test
-    let _ = context
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("__token__")
+        .status()?;
+
+    // Successful with token
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--token")
+        .arg("test-token")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn logout_native_keyring() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // Clear state before the test
+    context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
-        .status();
+        .status()?;
 
     // Without a service name
     uv_snapshot!(context.auth_logout(), @r"
@@ -306,19 +388,18 @@ fn logout_native_keyring() {
     For more information, try '--help'.
     ");
 
-    // Without a keyring provider...
+    // Logout without a keyring provider
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-      Caused by: No matching entry found in secure storage
+    Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
-    // With explicit native keyring provider
+    // Logout before logging in (without a username)
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
@@ -332,7 +413,7 @@ fn logout_native_keyring() {
       Caused by: No matching entry found in secure storage
     ");
 
-    // With username and native keyring provider
+    // Logout before logging in (with a username)
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
@@ -344,11 +425,11 @@ fn logout_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Unable to remove credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
       Caused by: No matching entry found in secure storage
     ");
 
-    // First login to create credentials for testing
+    // Login with a username
     uv_snapshot!(context.auth_login()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
@@ -362,11 +443,26 @@ fn logout_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
-    // Successful logout with credentials present
+    // Logout without a username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+      Caused by: No matching entry found in secure storage
+    ");
+
+    // Logout with a username
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
@@ -378,6 +474,50 @@ fn logout_native_keyring() {
     ----- stdout -----
 
     ----- stderr -----
+    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn logout_token_native_keyring() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .status()?;
+
+    // Login with a token
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--token")
+        .arg("test-token")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Logout without a username
+    uv_snapshot!(context.auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
     ");
+
+    Ok(())
 }

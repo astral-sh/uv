@@ -18,14 +18,37 @@ pub struct KeyringProvider {
     backend: KeyringProviderBackend,
 }
 
-#[derive(Debug)]
-pub(crate) enum KeyringProviderBackend {
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Keyring(#[from] uv_keyring::Error),
+
+    #[error("The '{0}' keyring provider does not support storing credentials")]
+    StoreUnsupported(KeyringProviderBackend),
+
+    #[error("The '{0}' keyring provider does not support removing credentials")]
+    RemoveUnsupported(KeyringProviderBackend),
+}
+
+#[derive(Debug, Clone)]
+pub enum KeyringProviderBackend {
     /// Use a native system keyring integration for credentials.
     Native,
     /// Use the external `keyring` command for credentials.
     Subprocess,
     #[cfg(test)]
     Dummy(Vec<(String, &'static str, &'static str)>),
+}
+
+impl std::fmt::Display for KeyringProviderBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Native => write!(f, "native"),
+            Self::Subprocess => write!(f, "subprocess"),
+            #[cfg(test)]
+            Self::Dummy(_) => write!(f, "dummy"),
+        }
+    }
 }
 
 impl KeyringProvider {
@@ -47,77 +70,63 @@ impl KeyringProvider {
     ///
     /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn store(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
+    pub async fn store(
+        &self,
+        url: &DisplaySafeUrl,
+        credentials: &Credentials,
+    ) -> Result<bool, Error> {
         let Some(username) = credentials.username() else {
             trace!("Unable to store credentials in keyring for {url} due to missing username");
-            return;
+            return Ok(false);
         };
         let Some(password) = credentials.password() else {
             trace!("Unable to store credentials in keyring for {url} due to missing password");
-            return;
+            return Ok(false);
         };
 
         match &self.backend {
             KeyringProviderBackend::Native => {
-                self.store_native(url.as_str(), username, password).await;
+                self.store_native(url.as_str(), username, password).await?;
+                Ok(true)
             }
             KeyringProviderBackend::Subprocess => {
-                trace!(
-                    "Storing credentials with the `subprocess` keyring provider is not currently supported"
-                );
+                Err(Error::StoreUnsupported(self.backend.clone()))
             }
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => {}
+            KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.clone())),
         }
     }
 
     /// Store credentials to the system keyring.
     #[instrument(skip(self))]
-    async fn store_native(&self, service: &str, username: &str, password: &str) {
+    async fn store_native(
+        &self,
+        service: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), Error> {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
-        let entry = match uv_keyring::Entry::new(&prefixed_service, username) {
-            Ok(entry) => entry,
-            Err(err) => {
-                warn_user_once!(
-                    "Unable to store credentials for {service} in the system keyring: {err}"
-                );
-                return;
-            }
-        };
-        match entry.set_password(password).await {
-            Ok(()) => {
-                debug!("Stored credentials for {username}@{service} in system keyring");
-            }
-            Err(err) => {
-                warn_user_once!(
-                    "Unable to store credentials for {username}@{service} in the system keyring: {err}"
-                );
-            }
-        }
+        let entry = uv_keyring::Entry::new(&prefixed_service, username)?;
+        entry.set_password(password).await?;
+        Ok(())
     }
 
     /// Remove credentials for the given [`DisplaySafeUrl`] and username from the keyring.
     ///
     /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn remove(
-        &self,
-        url: &DisplaySafeUrl,
-        username: &str,
-    ) -> Result<(), uv_keyring::Error> {
+    pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
         match &self.backend {
             KeyringProviderBackend::Native => {
                 self.remove_native(url.as_str(), username).await?;
+                Ok(())
             }
             KeyringProviderBackend::Subprocess => {
-                trace!(
-                    "Removing credentials with the `subprocess` keyring provider is not currently supported"
-                );
+                Err(Error::RemoveUnsupported(self.backend.clone()))
             }
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => {}
+            KeyringProviderBackend::Dummy(_) => Err(Error::RemoveUnsupported(self.backend.clone())),
         }
-        Ok(())
     }
 
     /// Remove credentials from the system keyring for the given `service_name`/`username`

@@ -1,7 +1,5 @@
 use anyhow::{Context, Result, bail};
 use std::fmt::Write;
-
-use uv_auth::KeyringProvider;
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
@@ -16,39 +14,34 @@ pub(crate) async fn logout(
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let username = if let Some(username) = username {
-        username
-    } else {
-        String::from("__token__")
-    };
     let url = DisplaySafeUrl::parse(&service)?;
+    let display_url = username
+        .as_ref()
+        .map(|username| format!("{username}@{url}"))
+        .unwrap_or_else(|| url.to_string());
+    let username = username.unwrap_or_else(|| String::from("__token__"));
+
+    // Unlike login, we'll default to the native provider if none is requested since it's the only
+    // valid option and it doesn't matter if the credentials are available in subsequent commands.
+    let keyring_provider = keyring_provider.unwrap_or(KeyringProviderType::Native);
 
     // Be helpful about incompatible `keyring-provider` settings
-    if let Some(provider) = &keyring_provider {
-        match provider {
-            KeyringProviderType::Native => {}
-            KeyringProviderType::Disabled => {
-                bail!(
-                    "Cannot login with `keyring-provider = disabled`, use `keyring-provider = native` instead"
-                );
-            }
-            KeyringProviderType::Subprocess => {
-                bail!(
-                    "Cannot login with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
-                );
-            }
+    let provider = match keyring_provider {
+        KeyringProviderType::Native => keyring_provider.to_provider().unwrap(),
+        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
+            bail!(
+                "Cannot logout with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
+                KeyringProviderType::Native
+            );
         }
-    }
-
-    // Always use the native keyring provider
-    let provider = KeyringProvider::native();
+    };
 
     provider
         .remove(&url, &username)
         .await
-        .with_context(|| format!("Unable to remove credentials for {url}"))?;
+        .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
 
-    writeln!(printer.stderr(), "Logged out of {url}")?;
+    writeln!(printer.stderr(), "Logged out of {display_url}")?;
 
     Ok(ExitStatus::Success)
 }

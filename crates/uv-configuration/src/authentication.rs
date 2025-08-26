@@ -29,3 +29,13 @@ impl KeyringProviderType {
         }
     }
 }
+
+impl std::fmt::Display for KeyringProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disabled => write!(f, "disabled"),
+            Self::Native => write!(f, "native"),
+            Self::Subprocess => write!(f, "subprocess"),
+        }
+    }
+}

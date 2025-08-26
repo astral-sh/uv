@@ -299,13 +299,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(
-                        None,
-                        retry_request,
-                        extensions,
-                        next,
-                        auth_policy,
-                    )
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }
@@ -339,13 +333,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(
-                        None,
-                        retry_request,
-                        extensions,
-                        next,
-                        auth_policy,
-                    )
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }

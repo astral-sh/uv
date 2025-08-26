@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use std::fmt::Write;
 
 use console::Term;
-use uv_auth::{Credentials, KeyringProvider};
+use uv_auth::Credentials;
 use uv_configuration::KeyringProviderType;
 use uv_redacted::DisplaySafeUrl;
 
@@ -17,35 +17,42 @@ pub(crate) async fn login(
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let url = DisplaySafeUrl::parse(&service)?;
+    let display_url = username
+        .as_ref()
+        .map(|username| format!("{username}@{url}"))
+        .unwrap_or_else(|| url.to_string());
+
     let username = if let Some(username) = username {
         username
     } else if token.is_some() {
         String::from("__token__")
     } else {
-        bail!(
-            "`uv auth login` requires either a `--token` or a username, e.g., `uv auth login https://example.com user`"
-        );
+        let term = Term::stderr();
+        if term.is_term() {
+            let prompt = "username: ";
+            uv_console::username(prompt, &term)?
+        } else {
+            bail!("No username provided; did you mean to provide `--username` or `--token`?");
+        }
     };
 
     // Be helpful about incompatible `keyring-provider` settings
-    if let Some(provider) = &keyring_provider {
-        match provider {
-            KeyringProviderType::Native => {}
-            KeyringProviderType::Disabled => {
-                bail!(
-                    "Cannot login with `keyring-provider = disabled`, use `keyring-provider = native` instead"
-                );
-            }
-            KeyringProviderType::Subprocess => {
-                bail!(
-                    "Cannot login with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
-                );
-            }
+    let Some(keyring_provider) = &keyring_provider else {
+        bail!(
+            "Logging in requires setting `keyring-provider = {}` for credentials to be retrieved in subsequent commands",
+            KeyringProviderType::Native
+        );
+    };
+    let provider = match keyring_provider {
+        KeyringProviderType::Native => keyring_provider.to_provider().unwrap(),
+        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
+            bail!(
+                "Cannot login with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
+                KeyringProviderType::Native
+            );
         }
-    }
-
-    // Always use the native keyring provider
-    let provider = KeyringProvider::native();
+    };
 
     // FIXME: It would be preferable to accept the value of --password or --token
     // from stdin, perhaps checking here for `-` as an indicator to read stdin. We
@@ -60,15 +67,14 @@ pub(crate) async fn login(
             let prompt = "password: ";
             uv_console::password(prompt, &term)?
         } else {
-            bail!("`uv auth login` requires `--password` when not in a terminal.");
+            bail!("No password provided; did you mean to provide `--password` or `--token`?");
         }
     };
 
-    let url = DisplaySafeUrl::parse(&service)?;
     let credentials = Credentials::basic(Some(username), Some(password));
-    provider.store(&url, &credentials).await;
+    provider.store(&url, &credentials).await?;
 
-    writeln!(printer.stderr(), "Logged in to {url}")?;
+    writeln!(printer.stderr(), "Logged in to {display_url}")?;
 
     Ok(ExitStatus::Success)
 }

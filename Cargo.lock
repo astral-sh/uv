@@ -5118,6 +5118,7 @@ dependencies = [
  "serde",
  "tempfile",
  "test-log",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "url",
