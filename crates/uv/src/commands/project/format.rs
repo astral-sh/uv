@@ -59,7 +59,7 @@ pub(crate) async fn format(
     let version = version.as_ref().unwrap_or(&default_version);
     let ruff_path = bin_install(Binary::Ruff, version, &client, &cache, &reporter)
         .await
-        .context("Failed to install ruff {version}")?;
+        .with_context(|| format!("Failed to install ruff {version}"))?;
 
     let mut command = Command::new(&ruff_path);
     // Run ruff in the project root
