@@ -19,8 +19,11 @@ use crate::{LenientVersionSpecifiers, MetadataError, VerbatimParsedUrl, metadata
 /// fields that are relevant to dependency resolution.
 ///
 /// Core Metadata 2.3 is specified in <https://packaging.python.org/specifications/core-metadata/>.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
 #[serde(rename_all = "kebab-case")]
+#[rkyv(derive(Debug))]
 pub struct ResolutionMetadata {
     // Mandatory fields
     pub name: PackageName,

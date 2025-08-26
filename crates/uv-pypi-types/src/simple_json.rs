@@ -141,6 +141,18 @@ impl<'de> Deserialize<'de> for CoreMetadata {
     }
 }
 
+impl Serialize for CoreMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_available) => serializer.serialize_bool(*is_available),
+            Self::Hashes(hashes) => hashes.serialize(serializer),
+        }
+    }
+}
+
 impl CoreMetadata {
     pub fn is_available(&self) -> bool {
         match self {
@@ -166,6 +178,18 @@ impl<'de> Deserialize<'de> for Yanked {
             .bool(|bool| Ok(Self::Bool(bool)))
             .string(|string| Ok(Self::Reason(SmallString::from(string))))
             .deserialize(deserializer)
+    }
+}
+
+impl Serialize for Yanked {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_yanked) => serializer.serialize_bool(*is_yanked),
+            Self::Reason(reason) => serializer.serialize_str(reason.as_ref()),
+        }
     }
 }
 
