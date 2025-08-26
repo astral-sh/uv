@@ -11,9 +11,12 @@ license = { workspace = true }
 
 [dependencies]
 uv-build-backend = { workspace = true }
+uv-logging = { workspace = true }
 uv-version = { workspace = true }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true
