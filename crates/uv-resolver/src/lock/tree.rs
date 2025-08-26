@@ -464,9 +464,7 @@ impl<'env> TreeDisplay<'env> {
             // Keep it simple: use the first wheel entry that includes a size.
             if self.show_sizes {
                 let package = self.lock.find_by_id(package_id);
-                if let Some(size_bytes) =
-                    package.wheels.iter().find_map(|wheel| wheel.size)
-                {
+                if let Some(size_bytes) = package.wheels.iter().find_map(|wheel| wheel.size) {
                     let (bytes, unit) = human_readable_bytes(size_bytes);
                     line.push(' ');
                     line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
