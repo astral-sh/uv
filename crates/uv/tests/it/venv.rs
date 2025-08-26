@@ -1572,3 +1572,26 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn create_venv_current_working_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(".")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .
+    warning: A directory already exists at `.`. In the future, uv will require `--clear` to replace it
+    Activate with: source bin/activate
+    "
+    );
+
+    context.root.assert(predicates::path::is_dir());
+}
