@@ -76,8 +76,7 @@ impl KeyringProvider {
         }
     }
 
-    /// Store credentials to the system keyring for the given `service_name`/`username`
-    /// pair.
+    /// Store credentials to the system keyring.
     #[instrument(skip(self))]
     async fn store_native(&self, service: &str, username: &str, password: &str) {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
