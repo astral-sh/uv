@@ -48,6 +48,7 @@ impl<'env> TreeDisplay<'env> {
         dev: &DependencyGroupsWithDefaults,
         no_dedupe: bool,
         invert: bool,
+        show_sizes: bool,
     ) -> Self {
         // Identify any workspace members.
         //
@@ -403,15 +404,8 @@ impl<'env> TreeDisplay<'env> {
             depth,
             no_dedupe,
             lock,
-            show_sizes: false,
+            show_sizes,
         }
-    }
-
-    /// Enable showing sizes in the rendered output.
-    #[must_use]
-    pub fn with_show_sizes(mut self, show: bool) -> Self {
-        self.show_sizes = show;
-        self
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.

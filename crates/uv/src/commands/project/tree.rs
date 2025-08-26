@@ -284,10 +284,8 @@ pub(crate) async fn tree(
         &groups,
         no_dedupe,
         invert,
+        show_sizes,
     );
-    if show_sizes {
-        tree = tree.with_show_sizes(true);
-    }
 
     print!("{tree}");
 
