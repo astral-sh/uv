@@ -106,6 +106,7 @@ impl Interpreter {
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
+            site_packages: vec![],
             ..self
         }
     }

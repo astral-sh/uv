@@ -153,6 +153,7 @@ class PythonDownload:
     implementation: ImplementationName
     filename: str
     url: str
+    build: str
     sha256: str | None = None
     build_options: list[str] = field(default_factory=list)
     variant: Variant | None = None
@@ -397,6 +398,7 @@ class CPythonFinder(Finder):
             implementation=self.implementation,
             filename=filename,
             url=url,
+            build=str(release),
             build_options=build_options,
             variant=variant,
             sha256=sha256,
@@ -507,6 +509,7 @@ class PyPyFinder(Finder):
             python_version = Version.from_str(version["python_version"])
             if python_version < (3, 7, 0):
                 continue
+            pypy_version = version["pypy_version"]
             for file in version["files"]:
                 arch = self._normalize_arch(file["arch"])
                 platform = self._normalize_os(file["platform"])
@@ -523,6 +526,7 @@ class PyPyFinder(Finder):
                     implementation=self.implementation,
                     filename=file["filename"],
                     url=file["download_url"],
+                    build=pypy_version,
                 )
                 # Only keep the latest pypy version of each arch/platform
                 if (python_version, arch, platform) not in results:
@@ -612,6 +616,7 @@ class PyodideFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
+                    build=pyodide_version,
                 )
             )
 
@@ -708,6 +713,7 @@ class GraalPyFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
+                    build=graalpy_version,
                     sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform
@@ -811,6 +817,7 @@ def render(downloads: list[PythonDownload]) -> None:
             "url": download.url,
             "sha256": download.sha256,
             "variant": download.variant if download.variant else None,
+            "build": download.build,
         }
 
     VERSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)

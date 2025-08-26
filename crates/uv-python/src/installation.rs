@@ -252,6 +252,7 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        installed.ensure_build_file()?;
 
         let minor_version = installed.minor_version_key();
         let highest_patch = installations
