@@ -1,15 +1,13 @@
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
     io::Write,
     process::Stdio,
-    sync::{LazyLock, RwLock},
 };
 use tokio::process::Command;
 use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
 
-use crate::credentials::{Credentials, Username};
+use crate::credentials::Credentials;
 
 /// Service name prefix for storing credentials in a keyring.
 static UV_SERVICE_PREFIX: &str = "uv:";

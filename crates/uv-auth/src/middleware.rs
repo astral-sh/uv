@@ -217,14 +217,7 @@ impl Middleware for AuthMiddleware {
                 if credentials.password().is_some() {
                     trace!("Request for {url} is fully authenticated");
                     return self
-                        .complete_request(
-                            None,
-                            request,
-                            extensions,
-                            next,
-                            maybe_index_url,
-                            auth_policy,
-                        )
+                        .complete_request(None, request, extensions, next, auth_policy)
                         .await;
                 }
 
@@ -311,7 +304,6 @@ impl Middleware for AuthMiddleware {
                         retry_request,
                         extensions,
                         next,
-                        maybe_index_url,
                         auth_policy,
                     )
                     .await;
@@ -337,7 +329,6 @@ impl Middleware for AuthMiddleware {
                     retry_request,
                     extensions,
                     next,
-                    maybe_index_url,
                     auth_policy,
                 )
                 .await;
@@ -353,7 +344,6 @@ impl Middleware for AuthMiddleware {
                         retry_request,
                         extensions,
                         next,
-                        maybe_index_url,
                         auth_policy,
                     )
                     .await;
@@ -380,7 +370,6 @@ impl AuthMiddleware {
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
-        index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let Some(credentials) = credentials else {
@@ -423,14 +412,7 @@ impl AuthMiddleware {
         if credentials.password().is_some() {
             trace!("Request for {url} already contains username and password");
             return self
-                .complete_request(
-                    Some(credentials),
-                    request,
-                    extensions,
-                    next,
-                    index_url,
-                    auth_policy,
-                )
+                .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
         }
 
@@ -451,14 +433,7 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             let credentials = None;
             return self
-                .complete_request(
-                    credentials,
-                    request,
-                    extensions,
-                    next,
-                    index_url,
-                    auth_policy,
-                )
+                .complete_request(credentials, request, extensions, next, auth_policy)
                 .await;
         }
 
@@ -496,15 +471,8 @@ impl AuthMiddleware {
             Some(credentials)
         };
 
-        self.complete_request(
-            credentials,
-            request,
-            extensions,
-            next,
-            index_url,
-            auth_policy,
-        )
-        .await
+        self.complete_request(credentials, request, extensions, next, auth_policy)
+            .await
     }
 
     /// Fetch credentials for a URL.
