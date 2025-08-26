@@ -1,186 +1,122 @@
 {
-  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
-  suppressNotifications: [
-    'prEditedNotification',
-  ],
-  extends: [
-    'config:recommended',
-    'customManagers:githubActionsVersions',
-  ],
-  labels: [
-    'internal',
-  ],
-  schedule: [
-    'before 4am on Monday',
-  ],
-  semanticCommits: 'disabled',
+  suppressNotifications: ["prEditedNotification"],
+  extends: ["config:recommended", "customManagers:githubActionsVersions"],
+  labels: ["internal"],
+  schedule: ["before 4am on Monday"],
+  semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: [
-    'github-actions',
-    'pre-commit',
-    'cargo',
-    'custom.regex',
-  ],
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
-    rangeStrategy: 'update-lockfile',
-    managerFilePatterns: [
-      '/^crates/.*Cargo\\.toml$/',
-    ],
+    rangeStrategy: "update-lockfile",
+    managerFilePatterns: ["/^crates/.*Cargo\\.toml$/"],
   },
-  'pre-commit': {
+  "pre-commit": {
     enabled: true,
   },
   packageRules: [
     {
-      matchDepTypes: [
-        'action',
-      ],
+      matchDepTypes: ["action"],
       pinDigests: true,
     },
     {
-      extends: [
-        'helpers:pinGitHubActionDigests',
-      ],
-      extractVersion: '^(?<version>v?\\d+\\.\\d+\\.\\d+)$',
-      versioning: 'regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$',
+      extends: ["helpers:pinGitHubActionDigests"],
+      extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
+      versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
-      matchPackageNames: [
-        '/zip/',
-      ],
-      matchManagers: [
-        'cargo',
-      ],
+      matchPackageNames: ["/zip/"],
+      matchManagers: ["cargo"],
       enabled: false,
     },
     {
-      matchFileNames: [
-        'docs/**/*.md',
-      ],
-      commitMessageTopic: 'documentation references to {{{depName}}}',
-      semanticCommitType: 'docs',
+      matchFileNames: ["docs/**/*.md"],
+      commitMessageTopic: "documentation references to {{{depName}}}",
+      semanticCommitType: "docs",
       semanticCommitScope: null,
-      additionalBranchPrefix: 'docs-',
+      additionalBranchPrefix: "docs-",
     },
     {
-      groupName: 'Artifact GitHub Actions dependencies',
-      matchManagers: [
-        'github-actions',
-      ],
-      matchDatasources: [
-        'gitea-tags',
-        'github-tags',
-      ],
-      matchPackageNames: [
-        '/actions/.*-artifact/',
-      ],
-      description: 'Weekly update of artifact-related GitHub Actions dependencies',
+      groupName: "Artifact GitHub Actions dependencies",
+      matchManagers: ["github-actions"],
+      matchDatasources: ["gitea-tags", "github-tags"],
+      matchPackageNames: ["/actions/.*-artifact/"],
+      description: "Weekly update of artifact-related GitHub Actions dependencies",
     },
     {
-      groupName: 'GitHub runners',
-      matchManagers: [
-        'github-actions',
-      ],
-      matchDatasources: [
-        'github-runners',
-      ],
+      groupName: "GitHub runners",
+      matchManagers: ["github-actions"],
+      matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
     },
     {
-      groupName: 'pre-commit dependencies',
-      matchManagers: [
-        'pre-commit',
-      ],
-      description: 'Weekly update of pre-commit dependencies',
+      groupName: "pre-commit dependencies",
+      matchManagers: ["pre-commit"],
+      description: "Weekly update of pre-commit dependencies",
     },
     {
-      groupName: 'Rust dev-dependencies',
-      matchManagers: [
-        'cargo',
-      ],
-      matchDepTypes: [
-        'devDependencies',
-      ],
-      description: 'Weekly update of Rust development dependencies',
+      groupName: "Rust dev-dependencies",
+      matchManagers: ["cargo"],
+      matchDepTypes: ["devDependencies"],
+      description: "Weekly update of Rust development dependencies",
     },
     {
-      groupName: 'pyo3',
-      matchManagers: [
-        'cargo',
-      ],
-      matchPackageNames: [
-        '/pyo3/',
-      ],
-      description: 'Weekly update of pyo3 dependencies',
+      groupName: "pyo3",
+      matchManagers: ["cargo"],
+      matchPackageNames: ["/pyo3/"],
+      description: "Weekly update of pyo3 dependencies",
       enabled: false,
     },
     {
-      commitMessageTopic: 'MSRV',
-      matchManagers: [
-        'custom.regex',
-      ],
-      matchDepNames: [
-        'msrv',
-      ],
-      minimumReleaseAge: '85 days',
-      internalChecksFilter: 'strict',
-      groupName: 'MSRV',
+      commitMessageTopic: "MSRV",
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["msrv"],
+      minimumReleaseAge: "85 days",
+      internalChecksFilter: "strict",
+      groupName: "MSRV",
     },
     {
-      matchManagers: [
-        'custom.regex',
-      ],
-      matchDepNames: [
-        'rust',
-      ],
-      commitMessageTopic: 'Rust',
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
     },
   ],
   customManagers: [
     {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/^docs/.*\\.md$/',
-      ],
+      customType: "regex",
+      managerFilePatterns: ["/^docs/.*\\.md$/"],
       matchStrings: [
-        '\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s',
+        "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
       ],
-      datasourceTemplate: 'github-tags',
-      versioningTemplate: 'regex:^v(?<major>\\d+)$',
+      datasourceTemplate: "github-tags",
+      versioningTemplate: "regex:^v(?<major>\\d+)$",
     },
     {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/(^|/)Cargo\\.toml?$/',
-      ],
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Cargo\\.toml?$/"],
       matchStrings: [
         'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
-      depNameTemplate: 'msrv',
-      packageNameTemplate: 'rust-lang/rust',
-      datasourceTemplate: 'github-releases',
+      depNameTemplate: "msrv",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
     },
     {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/(^|/)rust-toolchain\\.toml?$/',
-      ],
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml?$/"],
       matchStrings: [
         'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
-      depNameTemplate: 'rust',
-      packageNameTemplate: 'rust-lang/rust',
-      datasourceTemplate: 'github-releases',
+      depNameTemplate: "rust",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
     },
   ],
   vulnerabilityAlerts: {
-    commitMessageSuffix: '',
-    labels: [
-      'internal',
-      'security',
-    ],
+    commitMessageSuffix: "",
+    labels: ["internal", "security"],
   },
 }
