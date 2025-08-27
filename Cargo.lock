@@ -5838,6 +5838,7 @@ dependencies = [
  "secret-service",
  "security-framework",
  "tokio",
+ "tracing",
  "windows-sys 0.59.0",
  "zeroize",
 ]

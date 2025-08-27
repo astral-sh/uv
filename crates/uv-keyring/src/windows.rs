@@ -44,9 +44,10 @@ use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 use std::iter::once;
 use std::str;
+use tracing::debug;
 use windows_sys::Win32::Foundation::{
-    ERROR_BAD_USERNAME, ERROR_ENVVAR_NOT_FOUND, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER,
-    ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND, FILETIME, GetLastError,
+    ERROR_BAD_USERNAME, ERROR_ENVVAR_NOT_FOUND, ERROR_INVALID_FLAGS, ERROR_INVALID_HANDLE,
+    ERROR_INVALID_PARAMETER, ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND, FILETIME, GetLastError,
 };
 use windows_sys::Win32::Security::Credentials::{
     CRED_FLAGS, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_MAX_GENERIC_TARGET_NAME_LENGTH,
@@ -500,9 +501,14 @@ pub fn decode_error() -> ErrorCode {
     // SAFETY: Calling Windows API
     match unsafe { GetLastError() } {
         ERROR_NOT_FOUND => ErrorCode::NoEntry,
-        // N.B. It's not clear why `ERROR_ENVVAR_NOT_FOUND` would be returned rather than
-        // `ERROR_NOT_FOUND`, but this was encountered on a Windows CI machine.
-        ERROR_ENVVAR_NOT_FOUND => ErrorCode::NoEntry,
+        // N.B. It's not clear why `ERROR_ENVVAR_NOT_FOUND` or `ERROR_INVALID_HANDLE` would be
+        // returned rather than `ERROR_NOT_FOUND`, but these were encountered on Windows CI machines.
+        err @ (ERROR_ENVVAR_NOT_FOUND | ERROR_INVALID_HANDLE) => {
+            debug!(
+                "Windows credential operation failed with error code {err}, treating it as a missing credential"
+            );
+            ErrorCode::NoEntry
+        }
         ERROR_NO_SUCH_LOGON_SESSION => {
             ErrorCode::NoStorageAccess(wrap(ERROR_NO_SUCH_LOGON_SESSION))
         }

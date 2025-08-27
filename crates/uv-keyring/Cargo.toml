@@ -23,6 +23,7 @@ windows-native = ["dep:windows-sys", "dep:byteorder"]
 [dependencies]
 async-trait = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3", optional = true }
