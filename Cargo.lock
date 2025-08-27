@@ -5026,6 +5026,7 @@ dependencies = [
  "self-replace",
  "serde",
  "serde_json",
+ "sha2",
  "similar",
  "tar",
  "tempfile",

@@ -8,6 +8,7 @@ use std::sync::{Arc, LazyLock, RwLock};
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
+use tracing::trace;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
@@ -457,6 +458,14 @@ impl<'a> IndexLocations {
     pub fn cache_index_credentials(&self) {
         for index in self.known_indexes() {
             if let Some(credentials) = index.credentials() {
+                trace!(
+                    "Read credentials for index {}",
+                    index
+                        .name
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| index.url.to_string())
+                );
                 let credentials = Arc::new(credentials);
                 uv_auth::store_credentials(index.raw_url(), credentials.clone());
                 if let Some(root_url) = index.root_url() {

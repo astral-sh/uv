@@ -18,8 +18,8 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
-
 use tokio::io::AsyncWriteExt;
+
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
 use uv_preview::Preview;
