@@ -17,8 +17,8 @@ use url::Url;
 
 use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
-use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -93,37 +93,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
-        self
-    }
-
-    #[must_use]
-    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .allow_insecure_host(allow_insecure_host);
-        self
-    }
-
-    #[must_use]
-    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
-        self
-    }
-
-    #[must_use]
-    pub fn retries(mut self, retries: u32) -> Self {
-        self.base_client_builder = self.base_client_builder.retries(retries);
-        self
-    }
-
-    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
-        self.base_client_builder = self.base_client_builder.retries_from_env()?;
-        Ok(self)
-    }
-
-    #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
         self
     }
 
