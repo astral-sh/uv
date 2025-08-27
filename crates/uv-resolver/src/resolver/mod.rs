@@ -2952,6 +2952,12 @@ impl ForkState {
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
+            // As we're adding an incompatibility from the proxy package to the base package,
+            // we need to register the base package.
+            if let Some(base_package) = package.base_package() {
+                self.priorities
+                    .insert(&base_package, version, &self.fork_urls);
+            }
         }
 
         Ok(())
@@ -2972,20 +2978,8 @@ impl ForkState {
                 url: _,
             } = dependency;
 
-            let base_package = match &**package {
-                PubGrubPackageInner::Root(_)
-                | PubGrubPackageInner::Python(_)
-                | PubGrubPackageInner::System(_)
-                | PubGrubPackageInner::Package { .. } => continue,
-                PubGrubPackageInner::Dev { .. } => {
-                    // The dependency groups of a package do not by themselves require the package
-                    // itself.
-                    continue;
-                }
-                PubGrubPackageInner::Extra { name, .. }
-                | PubGrubPackageInner::Marker { name, .. } => {
-                    PubGrubPackage::from_package(name.clone(), None, None, MarkerTree::TRUE)
-                }
+            let Some(base_package) = package.base_package() else {
+                continue;
             };
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());

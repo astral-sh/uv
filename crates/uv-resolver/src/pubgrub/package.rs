@@ -133,6 +133,32 @@ impl PubGrubPackage {
         }
     }
 
+    /// If this package is a proxy package, return the base package it depends on.
+    ///
+    /// While dependency groups may be attached to a package, we don't consider them here as
+    /// there is no (mandatory) dependency from a dependency group to the package.
+    pub(crate) fn base_package(&self) -> Option<Self> {
+        match &**self {
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_)
+            | PubGrubPackageInner::Package { .. } => None,
+            PubGrubPackageInner::Group { .. } => {
+                // The dependency groups of a package do not by themselves require the package
+                // itself.
+                None
+            }
+            PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
+                Some(Self::from_package(
+                    name.clone(),
+                    None,
+                    None,
+                    MarkerTree::TRUE,
+                ))
+            }
+        }
+    }
+
     /// Returns the name of this PubGrub package, if it has one.
     pub(crate) fn name(&self) -> Option<&PackageName> {
         match &**self {
