@@ -463,7 +463,9 @@ async fn read_index_credential_env_vars_for_check_url() {
         .current_dir(&context.temp_dir)
         .arg(&wheel)
         .arg("--index")
-        .arg("private-index"),
+        .arg("private-index")
+        .arg("--trusted-publishing")
+        .arg("never"),
         @r"
     success: false
     exit_code: 2
@@ -484,7 +486,9 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg("--index")
         .arg("private-index")
         .env("UV_INDEX_PRIVATE_INDEX_USERNAME", "username")
-        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret"),
+        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret")
+        .arg("--trusted-publishing")
+        .arg("never"),
         @r"
     success: true
     exit_code: 0
