@@ -6,7 +6,7 @@ use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{Printer, commands::ExitStatus};
 
-/// Show the token that would be used for a service.
+/// Show the token that will be used for a service.
 pub(crate) async fn token(
     service: Service,
     username: Option<String>,
@@ -23,9 +23,8 @@ pub(crate) async fn token(
     let Some(keyring_provider) = &keyring_provider else {
         bail!("Retrieving credentials requires setting a `keyring-provider`");
     };
-    let provider = match keyring_provider.to_provider() {
-        Some(provider) => provider,
-        None => bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`",),
+    let Some(provider) = keyring_provider.to_provider() else {
+        bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`");
     };
 
     let url = service.url();

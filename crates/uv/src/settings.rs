@@ -3507,7 +3507,7 @@ pub(crate) struct AuthTokenSettings {
     pub(crate) username: Option<String>,
 
     // Both CLI and configuration.
-    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
 impl AuthTokenSettings {
@@ -3526,7 +3526,7 @@ impl AuthTokenSettings {
         Self {
             service: args.service,
             username: args.username,
-            keyring_provider: keyring_provider.unwrap_or_default(),
+            keyring_provider,
         }
     }
 }

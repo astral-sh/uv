@@ -144,7 +144,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot retrieve credentials with `keyring-provider = disabled`
+    error: Retrieving credentials requires setting a `keyring-provider`
     ");
 
     // Without persisted credentials

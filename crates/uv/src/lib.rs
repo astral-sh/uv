@@ -463,13 +463,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthTokenSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_token(
-                args.service,
-                args.username,
-                Some(args.keyring_provider),
-                printer,
-            )
-            .await
+            commands::auth_token(args.service, args.username, args.keyring_provider, printer).await
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
