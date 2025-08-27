@@ -320,6 +320,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.build_options,
             self.hasher,
             self.index_locations,
+            self.sources,
             self.config_settings,
             self.config_settings_package,
             self.extra_build_requires(),

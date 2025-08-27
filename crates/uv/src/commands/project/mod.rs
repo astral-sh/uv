@@ -2283,6 +2283,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
+            *sources,
             tags,
             config_setting,
             config_settings_package,

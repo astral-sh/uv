@@ -7,6 +7,7 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
@@ -33,6 +34,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        source_strategy: SourceStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -65,6 +67,22 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
+                // For uv sync only: When sources are disabled and the requirement is from registry,
+                // reject editable/URL installations. We determine if we're in sync mode by checking
+                // if sources are disabled - pip commands never disable sources internally.
+                // This ensures `uv sync --no-sources` properly switches from editable to registry,
+                // while `uv pip install --no-sources` maintains traditional pip behavior.
+                if matches!(source_strategy, SourceStrategy::Disabled) {
+                    // Check if the installed distribution is not from registry
+                    if !matches!(distribution.kind, InstalledDistKind::Registry(_)) {
+                        trace!(
+                            "Source strategy is disabled (sync mode), rejecting non-registry installation: {:?}",
+                            distribution
+                        );
+                        return Self::Mismatch;
+                    }
+                }
+
                 if !specifier.contains(distribution.version()) {
                     return Self::Mismatch;
                 }
