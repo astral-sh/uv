@@ -13832,6 +13832,213 @@ fn reject_unmatched_runtime() -> Result<()> {
     Ok(())
 }
 
+/// Test Git LFS configuration.
+#[test]
+#[cfg(feature = "git")]
+fn sync_git_lfs() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    // Set `lfs = true` in the source
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["test-lfs-repo"]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git", lfs = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+    ");
+
+    // Verify that we can import the module and access LFS content
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    // `UV_GIT_LFS=false` should not override `lfs = true`
+    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "false").arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    // Set `lfs = false` in the source
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["test-lfs-repo"]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git", lfs = false }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+    ");
+
+    // Verify that LFS content is missing (import should fail)
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    // `UV_GIT_LFS=true` should not override `lfs = false`
+    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "true").arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    // `UV_GIT_LFS = true` should work without explicit lfs flag
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["test-lfs-repo"]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "true").arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+    ");
+
+    // Verify that we can import the module when UV_GIT_LFS is set
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module; print('LFS module imported via env var')
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    Ok(())
+}
+
 #[test]
 fn match_runtime_optional() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");

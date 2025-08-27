@@ -542,13 +542,13 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
-        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `package`, `index`, `workspace`, `marker`, `extra`, `group`
-        "###);
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `lfs`, `url`, `path`, `editable`, `package`, `index`, `workspace`, `marker`, `extra`, `group`
+        "#);
     }
 
     #[tokio::test]

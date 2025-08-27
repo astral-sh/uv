@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 use url::Url;
 
 use uv_fs::Simplified;
-use uv_git_types::{GitOid, GitReference};
+use uv_git_types::{GitLfs, GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -231,12 +231,11 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         disable_ssl: bool,
         offline: bool,
+        lfs: GitLfs,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
-        let enable_lfs_fetch = std::env::var(EnvVars::UV_GIT_LFS).is_ok();
-
         if let Some(mut db) = db {
             fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
@@ -247,7 +246,7 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                if enable_lfs_fetch {
+                if lfs.enabled() {
                     fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 }
@@ -272,7 +271,7 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
-        if enable_lfs_fetch {
+        if lfs.enabled() {
             fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
                 .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
         }
