@@ -110,7 +110,7 @@ fn add_package_native_keyring() -> Result<()> {
 }
 
 #[test]
-fn show_native_keyring() -> Result<()> {
+fn token_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
     // Clear state before the test
@@ -144,7 +144,7 @@ fn show_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot show credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead
+    error: Cannot retrieve credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead
     ");
 
     // Without persisted credentials
@@ -172,7 +172,7 @@ fn show_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Login to the index
@@ -235,7 +235,36 @@ fn show_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for private@https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // Login to the index with a token
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--token")
+        .arg("heron")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Retrieve the token without a username
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
     ");
 
     Ok(())
