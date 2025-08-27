@@ -17,8 +17,20 @@ use crate::{
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[rkyv(derive(Debug))]
 pub struct GroupName(SmallString);
 
 impl GroupName {

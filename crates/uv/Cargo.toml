@@ -35,6 +35,7 @@ uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
+uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -82,7 +83,6 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 h2 = { workspace = true }
-jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
@@ -102,7 +102,7 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true, features = ["json"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }

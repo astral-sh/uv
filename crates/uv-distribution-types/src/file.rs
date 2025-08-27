@@ -11,7 +11,7 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
-/// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
+/// Error converting [`uv_pypi_types::PypiFile`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
@@ -20,7 +20,7 @@ pub enum FileConversionError {
     Url(String, #[source] url::ParseError),
 }
 
-/// Internal analog to [`uv_pypi_types::File`].
+/// Internal analog to [`uv_pypi_types::PypiFile`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct File {
@@ -41,7 +41,7 @@ pub struct File {
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from(
-        file: uv_pypi_types::File,
+        file: uv_pypi_types::PypiFile,
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {

@@ -77,6 +77,18 @@ pub(crate) fn create(
         base_python.display()
     );
 
+    // Extract the prompt and compute the absolute path prior to validating the location; otherwise,
+    // we risk deleting (and recreating) the current working directory, which would cause the `CWD`
+    // queries to fail.
+    let prompt = match prompt {
+        Prompt::CurrentDirectoryName => CWD
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string()),
+        Prompt::Static(value) => Some(value),
+        Prompt::None => None,
+    };
+    let absolute = std::path::absolute(location)?;
+
     // Validate the existing location.
     match location.metadata() {
         Ok(metadata) if metadata.is_file() => {
@@ -98,7 +110,8 @@ pub(crate) fn create(
             );
         }
         Ok(metadata) if metadata.is_dir() => {
-            let name = if uv_fs::is_virtualenv_base(location) {
+            let is_virtualenv = uv_fs::is_virtualenv_base(location);
+            let name = if is_virtualenv {
                 "virtual environment"
             } else {
                 "directory"
@@ -119,7 +132,14 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => {
-                    match confirm_clear(location, name)? {
+                    let confirmation = if is_virtualenv {
+                        confirm_clear(location, name)?
+                    } else {
+                        // Refuse to remove a non-virtual environment; don't even prompt.
+                        Some(false)
+                    };
+
+                    match confirmation {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
@@ -172,7 +192,8 @@ pub(crate) fn create(
         Err(err) => return Err(Error::Io(err)),
     }
 
-    let location = std::path::absolute(location)?;
+    // Use the absolute path for all further operations.
+    let location = absolute;
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -182,13 +203,6 @@ pub(crate) fn create(
         unimplemented!("Only Windows and Unix are supported")
     };
     let scripts = location.join(&interpreter.virtualenv().scripts);
-    let prompt = match prompt {
-        Prompt::CurrentDirectoryName => CWD
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string()),
-        Prompt::Static(value) => Some(value),
-        Prompt::None => None,
-    };
 
     // Add the CACHEDIR.TAG.
     cachedir::ensure_tag(&location)?;
