@@ -1594,7 +1594,9 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     Ok(())
 }
 
+/// On Unix, creating a virtual environment in the current working directory should work.
 #[test]
+#[cfg(unix)]
 fn create_venv_current_working_directory() {
     let context = TestContext::new_with_versions(&["3.12"]);
 
@@ -1631,4 +1633,45 @@ fn create_venv_current_working_directory() {
     );
 
     context.root.assert(predicates::path::is_dir());
+}
+
+/// On Windows, creating a virtual environment in the current working directory should fail,
+/// as you can't delete the current working directory.
+#[test]
+#[cfg(windows)]
+fn create_venv_current_working_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(".")
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .current_dir(&context.venv), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .
+    error: Failed to create virtual environment
+      Caused by: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
+    "
+    );
 }
