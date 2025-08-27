@@ -45,8 +45,8 @@ use std::collections::HashMap;
 use std::iter::once;
 use std::str;
 use windows_sys::Win32::Foundation::{
-    ERROR_BAD_USERNAME, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER, ERROR_NO_SUCH_LOGON_SESSION,
-    ERROR_NOT_FOUND, FILETIME, GetLastError,
+    ERROR_BAD_USERNAME, ERROR_ENVVAR_NOT_FOUND, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER,
+    ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND, FILETIME, GetLastError,
 };
 use windows_sys::Win32::Security::Credentials::{
     CRED_FLAGS, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_MAX_GENERIC_TARGET_NAME_LENGTH,
@@ -500,6 +500,9 @@ pub fn decode_error() -> ErrorCode {
     // SAFETY: Calling Windows API
     match unsafe { GetLastError() } {
         ERROR_NOT_FOUND => ErrorCode::NoEntry,
+        // N.B. It's not clear why `ERROR_ENVVAR_NOT_FOUND` would be returned rather than
+        // `ERROR_NOT_FOUND`, but this was encountered on a Windows CI machine.
+        ERROR_ENVVAR_NOT_FOUND => ErrorCode::NoEntry,
         ERROR_NO_SUCH_LOGON_SESSION => {
             ErrorCode::NoStorageAccess(wrap(ERROR_NO_SUCH_LOGON_SESSION))
         }
