@@ -400,7 +400,10 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name,
+                extra,
+                group: dev,
+                ..
             } if self.workspace_members.contains(name) => {
                 if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
                     Some("your project".to_string())
@@ -411,7 +414,7 @@ impl PubGrubReportFormatter<'_> {
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
-            PubGrubPackageInner::Dev { name, .. } if self.workspace_members.contains(name) => {
+            PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
             _ => None,
@@ -428,7 +431,10 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name,
+                extra,
+                group: dev,
+                ..
             } if self.workspace_members.contains(name) => {
                 self.is_single_project_workspace() && extra.is_none() && dev.is_none()
             }
@@ -647,7 +653,7 @@ impl PubGrubReportFormatter<'_> {
 
                     if package_name == dependency_name
                         && (dependency.extra().is_none() || package.extra() == dependency.extra())
-                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && (dependency.group().is_none() || dependency.group() == package.group())
                         && workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnItself {

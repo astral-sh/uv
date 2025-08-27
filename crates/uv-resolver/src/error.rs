@@ -775,7 +775,7 @@ fn collapse_no_versions_of_workspace_members(
                     // Then, if the package is a workspace member...
                     let (PubGrubPackageInner::Package { name, .. }
                     | PubGrubPackageInner::Extra { name, .. }
-                    | PubGrubPackageInner::Dev { name, .. }) = &**package
+                    | PubGrubPackageInner::Group { name, .. }) = &**package
                     else {
                         return;
                     };

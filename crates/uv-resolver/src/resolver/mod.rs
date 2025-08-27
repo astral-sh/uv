@@ -1034,7 +1034,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubPackageInner::Package {
                 name,
                 extra: None,
-                dev: None,
+                group: None,
                 marker: MarkerTree::TRUE,
             } = &**package
             else {
@@ -1103,7 +1103,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
                     self.choose_version_url(name, range, url, python_requirement)
@@ -1762,7 +1762,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Package {
                 name,
                 extra,
-                dev,
+                group: dev,
                 marker: _,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
@@ -1890,7 +1890,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: None,
-                                dev: None,
+                                group: None,
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
@@ -1918,7 +1918,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                         name: name.clone(),
                                         extra: extra.cloned(),
-                                        dev: None,
+                                        group: None,
                                         marker,
                                     }),
                                     version: Range::singleton(version.clone()),
@@ -1931,7 +1931,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Add a dependency on the dependency group, with and without the marker.
-            PubGrubPackageInner::Dev { name, dev, marker } => {
+            PubGrubPackageInner::Group {
+                name,
+                group: dev,
+                marker,
+            } => {
                 return Ok(Dependencies::Unforkable(
                     [MarkerTree::TRUE, *marker]
                         .into_iter()
@@ -1940,7 +1944,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: None,
-                                dev: Some(dev.clone()),
+                                group: Some(dev.clone()),
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
@@ -2669,7 +2673,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubPackageInner::System(_) => {}
                 PubGrubPackageInner::Marker { .. } => {}
                 PubGrubPackageInner::Extra { .. } => {}
-                PubGrubPackageInner::Dev { .. } => {}
+                PubGrubPackageInner::Group { .. } => {}
                 PubGrubPackageInner::Package { name, .. } => {
                     reporter.on_progress(name, &VersionOrUrlRef::Version(version));
                 }
@@ -3062,7 +3066,7 @@ impl ForkState {
                     PubGrubPackageInner::Package {
                         name: self_name,
                         extra: self_extra,
-                        dev: self_dev,
+                        group: self_dev,
                         marker: _,
                     } => (Some(self_name), self_extra.as_ref(), self_dev.as_ref()),
 
@@ -3079,7 +3083,7 @@ impl ForkState {
                     PubGrubPackageInner::Package {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
-                        dev: ref dependency_dev,
+                        group: ref dependency_dev,
                         marker: ref dependency_marker,
                     } => {
                         debug_assert!(
@@ -3201,9 +3205,9 @@ impl ForkState {
                         edges.push(edge);
                     }
 
-                    PubGrubPackageInner::Dev {
+                    PubGrubPackageInner::Group {
                         name: ref dependency_name,
-                        dev: ref dependency_dev,
+                        group: ref dependency_dev,
                         marker: ref dependency_marker,
                     } => {
                         debug_assert!(
@@ -3244,7 +3248,7 @@ impl ForkState {
                 if let PubGrubPackageInner::Package {
                     name,
                     extra,
-                    dev,
+                    group: dev,
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {

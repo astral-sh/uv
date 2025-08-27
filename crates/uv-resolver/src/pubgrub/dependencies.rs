@@ -49,7 +49,7 @@ impl PubGrubDependency {
     ) -> impl Iterator<Item = Self> + 'a {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
-            .map(|pp| pp.extra().is_none() && pp.dev().is_none())
+            .map(|pp| pp.extra().is_none() && pp.group().is_none())
             .unwrap_or(false);
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
@@ -141,7 +141,7 @@ impl PubGrubDependency {
                         url,
                     }
                 }
-                PubGrubPackageInner::Dev { name, .. } => {
+                PubGrubPackageInner::Group { name, .. } => {
                     if dev.is_none() {
                         debug_assert!(
                             parent_name.is_none_or(|parent_name| parent_name != name),
