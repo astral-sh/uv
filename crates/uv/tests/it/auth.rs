@@ -1,7 +1,9 @@
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
+use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 
 #[test]
 fn add_package_native_keyring() -> Result<()> {
@@ -268,6 +270,94 @@ fn token_native_keyring() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn token_subprocess_keyring() {
+    let context = TestContext::new("3.12");
+
+    // Without a keyring on the PATH
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Install our keyring plugin
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    // Without credentials available
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for __token__@https://public@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for __token__@pypi-proxy.fly.dev
+    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Without a username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for __token__@https://public@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for __token__@pypi-proxy.fly.dev
+    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // With the correct username
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
+    "
+    );
 }
 
 #[test]
