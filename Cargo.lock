@@ -5014,7 +5014,6 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "jiff",
  "miette",
  "nix 0.30.1",
  "owo-colors",
@@ -5063,6 +5062,7 @@ dependencies = [
  "uv-git-types",
  "uv-install-wheel",
  "uv-installer",
+ "uv-logging",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -5184,8 +5184,11 @@ dependencies = [
 name = "uv-build"
 version = "0.8.13"
 dependencies = [
+ "anstream",
  "anyhow",
+ "tracing-subscriber",
  "uv-build-backend",
+ "uv-logging",
  "uv-version",
 ]
 
@@ -5836,6 +5839,16 @@ dependencies = [
  "tokio",
  "windows-sys 0.59.0",
  "zeroize",
+]
+
+[[package]]
+name = "uv-logging"
+version = "0.0.1"
+dependencies = [
+ "jiff",
+ "owo-colors",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
