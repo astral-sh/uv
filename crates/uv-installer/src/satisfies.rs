@@ -67,11 +67,6 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
-                // For uv sync only: When sources are disabled and the requirement is from registry,
-                // reject editable/URL installations. We determine if we're in sync mode by checking
-                // if sources are disabled - pip commands never disable sources internally.
-                // This ensures `uv sync --no-sources` properly switches from editable to registry,
-                // while `uv pip install --no-sources` maintains traditional pip behavior.
                 if matches!(source_strategy, SourceStrategy::Disabled) {
                     // Check if the installed distribution is not from registry
                     if !matches!(distribution.kind, InstalledDistKind::Registry(_)) {

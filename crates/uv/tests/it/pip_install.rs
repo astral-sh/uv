@@ -12780,3 +12780,72 @@ fn switch_platform() {
     "
     );
 }
+
+/// Test for Issue #15190: `uv pip install --no-sources` should reject non-registry installations
+///
+/// This verifies that when --no-sources is used, editable installations are considered
+/// incompatible and will be replaced with registry installations
+#[test]
+fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a simple local package
+    let local_pkg = context.temp_dir.child("local_pkg");
+    local_pkg.create_dir_all()?;
+
+    local_pkg.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "iniconfig"
+        version = "2.0.0"
+        description = "Local test package"
+        requires-python = ">=3.7"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    local_pkg.child("src").child("iniconfig").create_dir_all()?;
+    local_pkg
+        .child("src")
+        .child("iniconfig")
+        .child("__init__.py")
+        .write_str("__version__ = '2.0.0'")?;
+
+    // Step 1: Install as editable first
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--editable")
+        .arg("./local_pkg"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+    "
+    );
+
+    // Step 2: Use --no-sources to install from registry - should switch from editable to registry
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
