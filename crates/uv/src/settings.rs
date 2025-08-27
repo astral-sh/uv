@@ -3479,13 +3479,18 @@ pub(crate) struct AuthLogoutSettings {
 
     // Both CLI and configuration.
     pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLogoutArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: AuthLogoutArgs,
+        global_args: &GlobalArgs,
+        filesystem: Option<&FilesystemOptions>,
+    ) -> Self {
         let Options { top_level, .. } = filesystem
-            .map(FilesystemOptions::into_options)
+            .map(|f| f.clone().into_options())
             .unwrap_or_default();
 
         let ResolverInstallerSchema {
@@ -3496,6 +3501,7 @@ impl AuthLogoutSettings {
             service: args.service,
             username: args.username,
             keyring_provider,
+            network_settings: NetworkSettings::resolve(global_args, filesystem),
         }
     }
 }
@@ -3546,9 +3552,12 @@ pub(crate) struct AuthLoginSettings {
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLoginArgs, global_args: &GlobalArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: AuthLoginArgs,
+        global_args: &GlobalArgs,
+        filesystem: Option<&FilesystemOptions>,
+    ) -> Self {
         let Options { top_level, .. } = filesystem
-            .as_ref()
             .map(|f| f.clone().into_options())
             .unwrap_or_default();
 
@@ -3564,7 +3573,7 @@ impl AuthLoginSettings {
             password: args.password,
             token: args.token,
             keyring_provider,
-            network_settings: NetworkSettings::resolve(global_args, filesystem.as_ref()),
+            network_settings: NetworkSettings::resolve(global_args, filesystem),
         }
     }
 }

@@ -101,7 +101,7 @@ pub(crate) async fn login(
     Ok(ExitStatus::Success)
 }
 
-fn is_pyx_url(url: &DisplaySafeUrl) -> bool {
+pub(crate) fn is_pyx_url(url: &DisplaySafeUrl) -> bool {
     let Some(domain) = url.domain() else {
         return false;
     };
