@@ -2,7 +2,6 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result, bail};
 
-use uv_auth::KeyringProvider;
 use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{Printer, commands::ExitStatus};
@@ -20,31 +19,20 @@ pub(crate) async fn token(
         "token"
     };
 
-    // Be helpful about incompatible `keyring-provider` settings
-    if let Some(provider) = &keyring_provider {
-        match provider {
-            KeyringProviderType::Native => {}
-            KeyringProviderType::Disabled => {
-                bail!(
-                    "Cannot retrieve credentials with `keyring-provider = disabled`, use `keyring-provider = native` instead"
-                );
-            }
-            KeyringProviderType::Subprocess => {
-                bail!(
-                    "Cannot retrieve credentials with `keyring-provider = subprocess`, use `keyring-provider = native` instead"
-                );
-            }
-        }
-    }
+    // Determine the keyring provider to use
+    let Some(keyring_provider) = &keyring_provider else {
+        bail!("Retrieving credentials requires setting a `keyring-provider`");
+    };
+    let provider = match keyring_provider.to_provider() {
+        Some(provider) => provider,
+        None => bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`",),
+    };
 
     let url = service.url();
     let display_url = username
         .as_ref()
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
-
-    // Always use the native keyring provider
-    let provider = KeyringProvider::native();
 
     let credentials = provider
         .fetch(url, Some(username.as_deref().unwrap_or("__token__")))
