@@ -9,6 +9,48 @@ mod github;
 mod oid;
 mod reference;
 
+/// Configuration for Git LFS (Large File Storage) support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub enum GitLfs {
+    /// Git LFS is disabled (default).
+    #[default]
+    Disabled,
+    /// Git LFS is enabled.
+    Enabled,
+}
+
+impl GitLfs {
+    /// Create a `GitLfs` configuration from environment variables.
+    pub fn from_env() -> Self {
+        if std::env::var("UV_GIT_LFS").is_ok() {
+            Self::Enabled
+        } else {
+            Self::Disabled
+        }
+    }
+
+    /// Returns true if LFS is enabled.
+    pub fn enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
+}
+
+impl From<Option<bool>> for GitLfs {
+    fn from(value: Option<bool>) -> Self {
+        match value {
+            Some(true) => Self::Enabled,
+            Some(false) => Self::Disabled,
+            None => Self::from_env(),
+        }
+    }
+}
+
+impl From<bool> for GitLfs {
+    fn from(value: bool) -> Self {
+        if value { Self::Enabled } else { Self::Disabled }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum GitUrlParseError {
     #[error(
@@ -27,6 +69,8 @@ pub struct GitUrl {
     reference: GitReference,
     /// The precise commit to use, if known.
     precise: Option<GitOid>,
+    /// Git LFS configuration for this repository.
+    lfs: GitLfs,
 }
 
 impl GitUrl {
@@ -35,7 +79,7 @@ impl GitUrl {
         repository: DisplaySafeUrl,
         reference: GitReference,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, None)
+        Self::from_fields(repository, reference, None, GitLfs::from_env())
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
@@ -44,7 +88,7 @@ impl GitUrl {
         reference: GitReference,
         precise: GitOid,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, Some(precise))
+        Self::from_fields(repository, reference, Some(precise), GitLfs::from_env())
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
@@ -52,6 +96,7 @@ impl GitUrl {
         repository: DisplaySafeUrl,
         reference: GitReference,
         precise: Option<GitOid>,
+        lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
         match repository.scheme() {
             "http" | "https" | "ssh" | "file" => {}
@@ -66,6 +111,7 @@ impl GitUrl {
             repository,
             reference,
             precise,
+            lfs,
         })
     }
 
@@ -96,6 +142,18 @@ impl GitUrl {
     /// Return the precise commit, if known.
     pub fn precise(&self) -> Option<GitOid> {
         self.precise
+    }
+
+    /// Return the Git LFS configuration.
+    pub fn lfs(&self) -> GitLfs {
+        self.lfs
+    }
+
+    /// Set the Git LFS configuration.
+    #[must_use]
+    pub fn with_lfs(mut self, lfs: GitLfs) -> Self {
+        self.lfs = lfs;
+        self
     }
 }
 

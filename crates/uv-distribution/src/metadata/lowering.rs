@@ -166,6 +166,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -175,6 +176,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -407,6 +409,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -416,6 +419,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -580,6 +584,7 @@ fn git_source(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
@@ -607,7 +612,7 @@ fn git_source(
 
     Ok(RequirementSource::Git {
         url,
-        git: GitUrl::from_reference(repository, reference)?,
+        git: GitUrl::from_fields(repository, reference, None, lfs.into())?,
         subdirectory,
     })
 }

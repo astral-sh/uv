@@ -7,7 +7,7 @@ use thiserror::Error;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
@@ -965,7 +965,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let url = VerbatimUrl::from_url(url);
 
                 Ok(Self::Git {
-                    git: GitUrl::from_fields(repository, reference, precise)?,
+                    git: GitUrl::from_fields(repository, reference, precise, GitLfs::from_env())?,
                     subdirectory: subdirectory.map(Box::<Path>::from),
                     url,
                 })
