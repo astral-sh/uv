@@ -1,7 +1,6 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
@@ -15,7 +14,7 @@ use tracing::{debug, warn};
 use url::Url;
 
 use uv_fs::Simplified;
-use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_git_types::{GitHubRepository, GitLfs, GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
@@ -238,12 +237,11 @@ impl GitRemote {
         client: &ClientWithMiddleware,
         disable_ssl: bool,
         offline: bool,
+        lfs: GitLfs,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
-        let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
-
         if let Some(mut db) = db {
             fetch(
                 &mut db.repo,
@@ -261,7 +259,7 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                if enable_lfs_fetch {
+                if lfs.enabled() {
                     fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 }
@@ -293,7 +291,7 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
-        if enable_lfs_fetch {
+        if lfs.enabled() {
             fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
                 .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
         }
