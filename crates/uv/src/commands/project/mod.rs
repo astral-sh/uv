@@ -1728,12 +1728,10 @@ pub(crate) async fn resolve_names(
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1904,12 +1902,10 @@ pub(crate) async fn resolve_environment(
     let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2089,12 +2085,10 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2318,12 +2312,10 @@ pub(crate) async fn update_environment(
         }
     }
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())

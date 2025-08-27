@@ -176,8 +176,6 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    index_locations.cache_index_credentials();
-
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
         match validate_project_requires_python(
@@ -225,13 +223,10 @@ pub(crate) async fn venv(
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 
-        // Add all authenticated sources to the cache.
-        index_locations.cache_index_credentials();
-
         // Instantiate a client.
         let client = RegistryClientBuilder::try_from(client_builder)?
             .cache(cache.clone())
-            .index_locations(index_locations)
+            .index_locations(index_locations.clone())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())

@@ -399,11 +399,9 @@ pub(crate) async fn add(
             let hasher = HashStrategy::default();
             let sources = SourceStrategy::Enabled;
 
-            settings.resolver.index_locations.cache_index_credentials();
-
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_locations(&settings.resolver.index_locations)
+                .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
