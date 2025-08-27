@@ -13621,6 +13621,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -13636,6 +13637,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -13653,6 +13655,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Uninstalled 1 package in [TIME]
