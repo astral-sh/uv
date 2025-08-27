@@ -16,13 +16,13 @@ use uv_static::EnvVars;
 
 use crate::{Credentials, Realm};
 
-/// Retrieve the API key from the environment variable, or return `None`.
-fn read_api_key() -> Option<String> {
+/// Retrieve the pyx API key from the environment variable, or return `None`.
+fn read_pyx_api_key() -> Option<String> {
     std::env::var(EnvVars::PYX_API_KEY).ok()
 }
 
-/// Retrieve the authentication token (JWT) from the environment variable, or return `None`.
-fn read_auth_token() -> Option<AccessToken> {
+/// Retrieve the pyx authentication token (JWT) from the environment variable, or return `None`.
+fn read_pyx_auth_token() -> Option<AccessToken> {
     std::env::var(EnvVars::PYX_AUTH_TOKEN).ok().map(AccessToken)
 }
 
@@ -116,7 +116,7 @@ impl From<AccessToken> for Credentials {
 pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
 
 #[derive(Debug, Clone)]
-pub struct TokenStore {
+pub struct PyxTokenStore {
     /// The root directory for the token store (e.g., `/Users/ferris/.local/share/uv/credentials`).
     root: PathBuf,
     /// The subdirectory for the token store (e.g., `/Users/ferris/.local/share/uv/credentials/3859a629b26fda96`).
@@ -127,8 +127,8 @@ pub struct TokenStore {
     cdn: SmallString,
 }
 
-impl TokenStore {
-    /// Create a new [`TokenStore`] from settings.
+impl PyxTokenStore {
+    /// Create a new [`PyxTokenStore`] from settings.
     pub fn from_settings() -> Result<Self, TokenStoreError> {
         // Read the API URL and CDN domain from the environment variables, or fallback to the
         // defaults.
@@ -186,7 +186,7 @@ impl TokenStore {
         tolerance_secs: u64,
     ) -> Result<Option<AccessToken>, TokenStoreError> {
         // If the access token is already set in the environment, return it.
-        if let Some(access_token) = read_auth_token() {
+        if let Some(access_token) = read_pyx_auth_token() {
             return Ok(Some(access_token));
         }
 
@@ -245,15 +245,15 @@ impl TokenStore {
 
     /// Returns `true` if the user appears to have credentials (which may be invalid).
     pub fn has_credentials(&self) -> bool {
-        read_auth_token().is_some()
-            || read_api_key().is_some()
+        read_pyx_auth_token().is_some()
+            || read_pyx_api_key().is_some()
             || self.path.join("tokens.json").is_file()
     }
 
     /// Read the tokens from the store.
     pub async fn read(&self) -> Result<Option<Tokens>, TokenStoreError> {
         // Retrieve the API URL from the environment variable, or error if unset.
-        if let Some(api_key) = read_api_key() {
+        if let Some(api_key) = read_pyx_api_key() {
             // Read the API key tokens from a file based on the API key.
             let digest = uv_cache_key::cache_digest(&api_key);
             match fs_err::tokio::read(self.path.join(format!("{digest}.json"))).await {
@@ -296,7 +296,7 @@ impl TokenStore {
         }
 
         // Retrieve the API key from the environment variable, if set.
-        let Some(api_key) = read_api_key() else {
+        let Some(api_key) = read_pyx_api_key() else {
             return Ok(None);
         };
 

@@ -12,7 +12,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::providers::HuggingFaceProvider;
-use crate::service::{AccessToken, DEFAULT_TOLERANCE_SECS, TokenStore};
+use crate::service::{AccessToken, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -79,10 +79,10 @@ pub struct AuthMiddleware {
     only_authenticated: bool,
     /// The base client to use for requests within the middleware.
     base_client: Option<ClientWithMiddleware>,
-    /// The token store to use for persistent credentials.
-    token_store: Option<TokenStore>,
+    /// The pyx token store to use for persistent credentials.
+    pyx_token_store: Option<PyxTokenStore>,
     /// Tokens to use for persistent credentials.
-    token_state: Mutex<TokenState>,
+    pyx_token_state: Mutex<TokenState>,
 }
 
 impl AuthMiddleware {
@@ -94,8 +94,8 @@ impl AuthMiddleware {
             indexes: Indexes::new(),
             only_authenticated: false,
             base_client: None,
-            token_store: None,
-            token_state: Mutex::new(TokenState::Uninitialized),
+            pyx_token_store: None,
+            pyx_token_state: Mutex::new(TokenState::Uninitialized),
         }
     }
 
@@ -148,10 +148,10 @@ impl AuthMiddleware {
         self
     }
 
-    /// Configure the [`TokenStore`] to use for persistent credentials.
+    /// Configure the [`PyxTokenStore`] to use for persistent credentials.
     #[must_use]
-    pub fn with_token_store(mut self, token_store: TokenStore) -> Self {
-        self.token_store = Some(token_store);
+    pub fn with_pyx_token_store(mut self, token_store: PyxTokenStore) -> Self {
+        self.pyx_token_store = Some(token_store);
         self
     }
 
@@ -269,7 +269,7 @@ impl Middleware for AuthMiddleware {
 
         // Determine whether this is a "known" URL.
         let is_known_url = self
-            .token_store
+            .pyx_token_store
             .as_ref()
             .is_some_and(|token_store| token_store.is_known_url(request.url()));
 
@@ -567,9 +567,9 @@ impl AuthMiddleware {
 
         // If this is a known URL, authenticate it via the token store.
         if let Some(base_client) = self.base_client.as_ref() {
-            if let Some(token_store) = self.token_store.as_ref() {
+            if let Some(token_store) = self.pyx_token_store.as_ref() {
                 if token_store.is_known_url(url) {
-                    let mut token_state = self.token_state.lock().await;
+                    let mut token_state = self.pyx_token_state.lock().await;
 
                     // If the token store is uninitialized, initialize it.
                     let token = match *token_state {

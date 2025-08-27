@@ -27,7 +27,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, Indexes, TokenStore};
+use uv_auth::{AuthMiddleware, Credentials, Indexes, PyxTokenStore};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -505,8 +505,8 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider());
-                        if let Ok(token_store) = TokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_token_store(token_store);
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
                         }
                         client = client.with(auth_middleware);
                     }
@@ -516,8 +516,8 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_only_authenticated(true);
-                        if let Ok(token_store) = TokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_token_store(token_store);
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
                         }
                         client = client.with(auth_middleware);
                     }

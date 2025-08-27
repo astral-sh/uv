@@ -1,11 +1,9 @@
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
-
-use uv_auth::{Credentials, TokenStore};
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{KeyringProviderType, Service};
-use uv_redacted::DisplaySafeUrl;
 
 use crate::commands::auth::login::is_pyx_url;
 use crate::settings::NetworkSettings;
@@ -27,7 +25,7 @@ pub(crate) async fn logout(
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
 
-    if is_pyx_url(&url) {
+    if is_pyx_url(url) {
         return pyx_logout(network_settings, printer).await;
     }
 
@@ -62,7 +60,7 @@ async fn pyx_logout(
     network_settings: &NetworkSettings,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let store = TokenStore::from_settings()?;
+    let store = PyxTokenStore::from_settings()?;
 
     // Initialize the client.
     let client = BaseClientBuilder::default()

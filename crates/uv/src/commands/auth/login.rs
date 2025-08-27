@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use url::Url;
 use uuid::Uuid;
 
-use uv_auth::{AccessToken, Credentials, OAuthTokens, TokenStore, Tokens};
+use uv_auth::{AccessToken, Credentials, OAuthTokens, PyxTokenStore, Tokens};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_configuration::{KeyringProviderType, Service};
 use uv_redacted::DisplaySafeUrl;
@@ -31,8 +31,8 @@ pub(crate) async fn login(
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
 
-    if is_pyx_url(&url) {
-        let store = TokenStore::from_settings()?;
+    if is_pyx_url(url) {
+        let store = PyxTokenStore::from_settings()?;
         let client = BaseClientBuilder::default()
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
@@ -109,7 +109,7 @@ pub(crate) fn is_pyx_url(url: &DisplaySafeUrl) -> bool {
 }
 
 async fn pyx_login_with_browser(
-    store: &TokenStore,
+    store: &PyxTokenStore,
     client: &BaseClient,
     printer: &Printer,
 ) -> anyhow::Result<AccessToken> {
