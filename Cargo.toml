@@ -43,6 +43,7 @@ uv-git-types = { path = "crates/uv-git-types" }
 uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
+uv-logging = { path = "crates/uv-logging" }
 uv-macros = { path = "crates/uv-macros" }
 uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
@@ -180,7 +181,7 @@ toml = { version = "0.9.2", features = ["fast_hash"] }
 toml_edit = { version = "0.23.2", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
+tracing-subscriber = { version = "0.3.18" } # Default feature set for uv_build, uv activates extra features
 tracing-test = { version = "0.2.5" }
 tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.2.0" }

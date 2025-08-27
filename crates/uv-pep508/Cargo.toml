@@ -30,6 +30,7 @@ boxcar = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
+rkyv = { workspace = true, optional = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
@@ -56,5 +57,6 @@ schemars = ["dep:schemars"]
 # be supported.
 non-pep508-extensions = []
 default = []
+rkyv = ["dep:rkyv"]
 # Match the API of the published crate, for compatibility.
 serde = []
