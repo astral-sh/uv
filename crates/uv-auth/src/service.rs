@@ -144,7 +144,7 @@ impl PyxTokenStore {
 
         // Read the credentials directory from the environment variable, or fallback to the default
         // credentials directory.
-        let root = if let Some(tool_dir) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR) {
+        let root = if let Some(tool_dir) = std::env::var_os(EnvVars::PYX_CREDENTIALS_DIR) {
             std::path::absolute(tool_dir)?
         } else {
             StateStore::from_settings(None)?.bucket(StateBucket::Credentials)

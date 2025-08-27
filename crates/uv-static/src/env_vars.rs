@@ -280,8 +280,8 @@ impl EnvVars {
     /// Specifies the "bin" directory for installing tool executables.
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
-    /// Specifies the directory where uv stores credentials.
-    pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";
+    /// Specifies the directory where uv stores pyx credentials.
+    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 
     /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
     /// to use when creating a new project.
