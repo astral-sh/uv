@@ -3541,13 +3541,15 @@ pub(crate) struct AuthLoginSettings {
 
     // Both CLI and configuration.
     pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLoginArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: AuthLoginArgs, global_args: &GlobalArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options { top_level, .. } = filesystem
-            .map(FilesystemOptions::into_options)
+            .as_ref()
+            .map(|f| f.clone().into_options())
             .unwrap_or_default();
 
         let ResolverInstallerSchema {
@@ -3562,6 +3564,7 @@ impl AuthLoginSettings {
             password: args.password,
             token: args.token,
             keyring_provider,
+            network_settings: NetworkSettings::resolve(global_args, filesystem.as_ref()),
         }
     }
 }

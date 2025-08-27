@@ -434,7 +434,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Login(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLoginSettings::resolve(args, filesystem);
+            let args = settings::AuthLoginSettings::resolve(args, &cli.top_level.global_args, filesystem);
             show_settings!(args);
 
             commands::auth_login(
@@ -443,6 +443,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.password,
                 args.token,
                 args.keyring_provider,
+                &args.network_settings,
                 printer,
             )
             .await
