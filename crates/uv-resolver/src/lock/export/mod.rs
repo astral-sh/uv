@@ -46,7 +46,7 @@ impl<'lock> ExportableRequirements<'lock> {
         target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecificationWithDefaults,
-        dev: &DependencyGroupsWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
     ) -> Self {
@@ -76,7 +76,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 .expect("found too many packages matching root")
                 .expect("could not find root");
 
-            if dev.prod() {
+            if groups.prod() {
                 // Add the workspace package to the graph.
                 let index = *inverse
                     .entry(&dist.id)
@@ -103,7 +103,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
+                    if groups.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -163,7 +163,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     .dependency_groups()
                     .iter()
                     .filter_map(|(group, deps)| {
-                        if dev.contains(group) {
+                        if groups.contains(group) {
                             Some(deps)
                         } else {
                             None
