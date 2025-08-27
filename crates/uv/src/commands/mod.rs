@@ -9,7 +9,7 @@ use std::{fmt::Display, fmt::Write, process::ExitCode};
 
 pub(crate) use auth::login::login as auth_login;
 pub(crate) use auth::logout::logout as auth_logout;
-pub(crate) use auth::show::show as auth_show;
+pub(crate) use auth::token::token as auth_token;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;

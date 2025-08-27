@@ -1290,10 +1290,10 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv auth show` command.
-    pub fn auth_show(&self) -> Command {
+    /// Create a `uv auth token` command.
+    pub fn auth_token(&self) -> Command {
         let mut command = Self::new_command();
-        command.arg("auth").arg("show");
+        command.arg("auth").arg("token");
         self.add_shared_options(&mut command, false);
         command
     }

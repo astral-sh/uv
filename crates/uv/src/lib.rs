@@ -457,13 +457,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::auth_logout(args.service, args.username, args.keyring_provider, printer).await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Show(args),
+            command: AuthCommand::Token(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthShowSettings::resolve(args, filesystem);
+            let args = settings::AuthTokenSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_show(
+            commands::auth_token(
                 args.service,
                 args.username,
                 Some(args.keyring_provider),

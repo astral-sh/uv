@@ -4388,8 +4388,8 @@ pub enum AuthCommand {
     Login(AuthLoginArgs),
     /// Logout of a service
     Logout(AuthLogoutArgs),
-    /// Show the credentials for a service
-    Show(AuthShowArgs),
+    /// Show the authentication token for a service
+    Token(AuthTokenArgs),
 }
 
 #[derive(Args)]
@@ -5509,7 +5509,7 @@ pub struct AuthLoginArgs {
 }
 
 #[derive(Args)]
-pub struct AuthShowArgs {
+pub struct AuthTokenArgs {
     /// The service to lookup.
     pub service: Service,
 

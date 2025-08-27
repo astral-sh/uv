@@ -7,10 +7,10 @@ use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{Printer, commands::ExitStatus};
 
-/// Show credentials for a service.
+/// Show authentication token for a service.
 ///
 /// If no username is provided, defaults to `__token__`.
-pub(crate) async fn show(
+pub(crate) async fn token(
     service: Service,
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,

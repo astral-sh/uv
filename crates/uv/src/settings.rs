@@ -7,8 +7,8 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthShowArgs, ColorChoice, ExternalCommand, GlobalArgs,
-    InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
     PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
     PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
@@ -3500,9 +3500,9 @@ impl AuthLogoutSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv auth logout` CLI.
+/// The resolved settings to use for an invocation of the `uv auth token` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthShowSettings {
+pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
 
@@ -3510,9 +3510,9 @@ pub(crate) struct AuthShowSettings {
     pub(crate) keyring_provider: KeyringProviderType,
 }
 
-impl AuthShowSettings {
-    /// Resolve the [`AuthShowSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthShowArgs, filesystem: Option<FilesystemOptions>) -> Self {
+impl AuthTokenSettings {
+    /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthTokenArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options { top_level, .. } = filesystem
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();

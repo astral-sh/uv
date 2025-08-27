@@ -122,7 +122,7 @@ fn show_native_keyring() -> Result<()> {
         .status()?;
 
     // Without a service name
-    uv_snapshot!(context.auth_show(), @r"
+    uv_snapshot!(context.auth_token(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -131,13 +131,13 @@ fn show_native_keyring() -> Result<()> {
     error: the following required arguments were not provided:
       <SERVICE>
 
-    Usage: uv auth show --cache-dir [CACHE_DIR] <SERVICE>
+    Usage: uv auth token --cache-dir [CACHE_DIR] <SERVICE>
 
     For more information, try '--help'.
     ");
 
     // Without a keyring provider...
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r"
     success: false
     exit_code: 2
@@ -148,7 +148,7 @@ fn show_native_keyring() -> Result<()> {
     ");
 
     // Without persisted credentials
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
         .arg("native"), @r"
@@ -161,7 +161,7 @@ fn show_native_keyring() -> Result<()> {
     ");
 
     // Without persisted credentials (with a username in the request)
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
@@ -194,7 +194,7 @@ fn show_native_keyring() -> Result<()> {
     );
 
     // Show the credentials
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
@@ -210,7 +210,7 @@ fn show_native_keyring() -> Result<()> {
 
     // Without the username
     // TODO(zanieb): Add a hint here if we can?
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
         .arg("native"), @r"
@@ -224,7 +224,7 @@ fn show_native_keyring() -> Result<()> {
 
     // With a mismatched username
     // TODO(zanieb): Add a hint here if we can?
-    uv_snapshot!(context.auth_show()
+    uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("private")
