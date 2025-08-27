@@ -744,7 +744,7 @@ async fn get_or_create_environment(
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
-        &client_builder,
+        client_builder,
         cache,
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
@@ -869,14 +869,9 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec = RequirementsSpecification::from_sources(
-        with,
-        constraints,
-        overrides,
-        None,
-        &client_builder,
-    )
-    .await?;
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, None, client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -1014,7 +1009,7 @@ async fn get_or_create_environment(
 
     // Read the `--build-constraints` requirements.
     let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, &client_builder)
+        operations::read_constraints(build_constraints, client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement),
@@ -1063,7 +1058,7 @@ async fn get_or_create_environment(
                     &interpreter,
                     python_request.as_ref(),
                     &err,
-                    &client_builder,
+                    client_builder,
                     &reporter,
                     &install_mirrors,
                     python_preference,

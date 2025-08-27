@@ -708,7 +708,7 @@ impl ScriptInterpreter {
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -987,7 +987,7 @@ impl ProjectInterpreter {
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -1710,8 +1710,7 @@ pub(crate) async fn resolve_names(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
@@ -1879,8 +1878,7 @@ pub(crate) async fn resolve_environment(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
@@ -2057,8 +2055,7 @@ pub(crate) async fn sync_environment(
     let tags = venv.interpreter().tags()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
@@ -2279,8 +2276,7 @@ pub(crate) async fn update_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())

@@ -1819,7 +1819,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
         .collect();
 
-    let client = uv_client::BaseClientBuilder::new()
+    let client = uv_client::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
         .build();
     let url = url.parse().unwrap();

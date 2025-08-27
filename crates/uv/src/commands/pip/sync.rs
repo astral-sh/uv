@@ -301,8 +301,7 @@ pub(crate) async fn pip_sync(
         .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder.clone())?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())

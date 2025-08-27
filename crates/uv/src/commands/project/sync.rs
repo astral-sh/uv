@@ -715,8 +715,7 @@ pub(super) async fn do_sync(
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())

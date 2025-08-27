@@ -391,7 +391,7 @@ pub(crate) async fn add(
             let sources = SourceStrategy::Enabled;
 
             // Initialize the registry client.
-            let client = RegistryClientBuilder::try_from(client_builder.clone())?
+            let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                 .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())

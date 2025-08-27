@@ -154,7 +154,7 @@ pub(crate) async fn venv(
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -215,8 +215,7 @@ pub(crate) async fn venv(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::try_from(client_builder.clone())?
-            .cache(cache.clone())
+        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
             .index_locations(index_locations.clone())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)

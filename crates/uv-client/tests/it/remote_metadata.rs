@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Result;
 
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_pep508::VerbatimUrl;
@@ -12,7 +12,7 @@ use uv_redacted::DisplaySafeUrl;
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
     let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run.

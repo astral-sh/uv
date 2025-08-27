@@ -55,20 +55,17 @@ pub struct RegistryClientBuilder<'a> {
     base_client_builder: BaseClientBuilder<'a>,
 }
 
-impl RegistryClientBuilder<'_> {
-    pub fn new(cache: Cache) -> Self {
+impl<'a> RegistryClientBuilder<'a> {
+    pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
         Self {
             index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            // STOPSHIP
-            base_client_builder: BaseClientBuilder::new(Connectivity::Online, false, Vec::new()),
+            base_client_builder,
         }
     }
-}
 
-impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
         self.base_client_builder = self.base_client_builder.custom_client(client);
@@ -237,20 +234,6 @@ impl<'a> RegistryClientBuilder<'a> {
             timeout,
             flat_indexes: Arc::default(),
         }
-    }
-}
-
-impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    type Error = std::io::Error;
-
-    fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            index_locations: IndexLocations::default(),
-            index_strategy: IndexStrategy::default(),
-            torch_backend: None,
-            cache: Cache::temp()?,
-            base_client_builder: value,
-        })
     }
 }
 
@@ -1276,7 +1259,7 @@ mod tests {
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
+    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
@@ -1325,7 +1308,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1385,7 +1368,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1433,7 +1416,7 @@ mod tests {
             .await;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();

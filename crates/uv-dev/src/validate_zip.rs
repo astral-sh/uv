@@ -6,7 +6,7 @@ use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 use uv_cache::{Cache, CacheArgs};
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::ParsedUrl;
 
@@ -19,7 +19,7 @@ pub(crate) struct ValidateZipArgs {
 
 pub(crate) async fn validate_zip(args: ValidateZipArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only archive URLs are supported");

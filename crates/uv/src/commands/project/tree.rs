@@ -215,12 +215,9 @@ pub(crate) async fn tree(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(
+                client_builder.clone(),
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
-            .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
             .build();
