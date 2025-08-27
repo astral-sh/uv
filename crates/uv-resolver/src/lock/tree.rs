@@ -10,11 +10,11 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_console::human_readable_bytes;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
-use uv_console::human_readable_bytes;
 
 use crate::lock::PackageId;
 use crate::{Lock, PackageMap};
