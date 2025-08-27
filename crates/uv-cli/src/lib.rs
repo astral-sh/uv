@@ -11,7 +11,7 @@ use clap::{Args, Parser, Subcommand};
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
-    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    Service, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -5459,7 +5459,7 @@ pub struct PythonPinArgs {
 #[derive(Args)]
 pub struct AuthLogoutArgs {
     /// The service to logout of.
-    pub service: String,
+    pub service: Service,
 
     /// The username to logout.
     #[arg(long, short)]
@@ -5480,7 +5480,7 @@ pub struct AuthLogoutArgs {
 #[derive(Args)]
 pub struct AuthLoginArgs {
     /// The service to login to.
-    pub service: String,
+    pub service: Service,
 
     /// The username to use for the service.
     #[arg(long, short, conflicts_with = "token")]
@@ -5511,7 +5511,7 @@ pub struct AuthLoginArgs {
 #[derive(Args)]
 pub struct AuthShowArgs {
     /// The service to lookup.
-    pub service: String,
+    pub service: Service,
 
     /// The username to lookup.
     #[arg(long, short)]

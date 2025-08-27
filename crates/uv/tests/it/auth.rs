@@ -521,3 +521,94 @@ fn logout_token_native_keyring() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn login_url_parsing() {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // A domain-only service name gets https:// prepended
+    uv_snapshot!(context.auth_login()
+        .arg("example.com")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@https://example.com/
+    ");
+
+    // When including a protocol explicitly, it is retained
+    uv_snapshot!(context.auth_login()
+        .arg("http://example.com")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@http://example.com/
+    ");
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@https://example.com/
+    ");
+
+    // A domain-only service with a path also gets https:// prepended
+    uv_snapshot!(context.auth_login()
+        .arg("example.com/simple")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@https://example.com/simple
+    ");
+
+    // An invalid URL is rejected
+    uv_snapshot!(context.auth_login()
+        .arg("not a valid url")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'not a valid url' for '<SERVICE>': invalid international domain name
+
+    For more information, try '--help'.
+    ");
+}

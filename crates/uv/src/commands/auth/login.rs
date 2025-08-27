@@ -3,21 +3,20 @@ use std::fmt::Write;
 
 use console::Term;
 use uv_auth::Credentials;
-use uv_configuration::KeyringProviderType;
-use uv_redacted::DisplaySafeUrl;
+use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Login to a service.
 pub(crate) async fn login(
-    service: String,
+    service: Service,
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let url = DisplaySafeUrl::parse(&service)?;
+    let url = service.url();
     let display_url = username
         .as_ref()
         .map(|username| format!("{username}@{url}"))
@@ -72,7 +71,7 @@ pub(crate) async fn login(
     };
 
     let credentials = Credentials::basic(Some(username), Some(password));
-    provider.store(&url, &credentials).await?;
+    provider.store(url, &credentials).await?;
 
     writeln!(printer.stderr(), "Logged in to {display_url}")?;
 

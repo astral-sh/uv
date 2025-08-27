@@ -1,7 +1,6 @@
 use anyhow::{Context, Result, bail};
 use std::fmt::Write;
-use uv_configuration::KeyringProviderType;
-use uv_redacted::DisplaySafeUrl;
+use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{commands::ExitStatus, printer::Printer};
 
@@ -9,12 +8,12 @@ use crate::{commands::ExitStatus, printer::Printer};
 ///
 /// If no username is provided, defaults to `__token__`.
 pub(crate) async fn logout(
-    service: String,
+    service: Service,
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let url = DisplaySafeUrl::parse(&service)?;
+    let url = service.url();
     let display_url = username
         .as_ref()
         .map(|username| format!("{username}@{url}"))
@@ -37,7 +36,7 @@ pub(crate) async fn logout(
     };
 
     provider
-        .remove(&url, &username)
+        .remove(url, &username)
         .await
         .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
 

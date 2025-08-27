@@ -3,8 +3,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 
 use uv_auth::{Credentials, KeyringProvider};
-use uv_configuration::KeyringProviderType;
-use uv_redacted::DisplaySafeUrl;
+use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{Printer, commands::ExitStatus};
 
@@ -12,7 +11,7 @@ use crate::{Printer, commands::ExitStatus};
 ///
 /// If no username is provided, defaults to `__token__`.
 pub(crate) async fn show(
-    service: String,
+    service: Service,
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
@@ -34,13 +33,13 @@ pub(crate) async fn show(
         }
     }
 
-    let url = DisplaySafeUrl::parse(&service)?;
+    let url = service.url();
 
     // Always use the native keyring provider
     let provider = KeyringProvider::native();
 
     let credentials = provider
-        .fetch(&url, username.as_deref())
+        .fetch(url, username.as_deref())
         .await
         .with_context(|| format!("Failed to fetch credentials for {url}"))?;
 

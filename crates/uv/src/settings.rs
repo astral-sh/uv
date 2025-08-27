@@ -25,7 +25,8 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    Service, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3473,7 +3474,7 @@ impl PublishSettings {
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct AuthLogoutSettings {
-    pub(crate) service: String,
+    pub(crate) service: Service,
     pub(crate) username: Option<String>,
 
     // Both CLI and configuration.
@@ -3502,7 +3503,7 @@ impl AuthLogoutSettings {
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct AuthShowSettings {
-    pub(crate) service: String,
+    pub(crate) service: Service,
     pub(crate) username: Option<String>,
 
     // Both CLI and configuration.
@@ -3533,7 +3534,7 @@ impl AuthShowSettings {
 /// The resolved settings to use for an invocation of the `uv auth set` CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct AuthLoginSettings {
-    pub(crate) service: String,
+    pub(crate) service: Service,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
