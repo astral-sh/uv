@@ -18,12 +18,12 @@ use crate::{Credentials, Realm};
 
 /// Retrieve the API key from the environment variable, or return `None`.
 fn read_api_key() -> Option<String> {
-    std::env::var(EnvVars::UV_API_KEY).ok()
+    std::env::var(EnvVars::PYX_API_KEY).ok()
 }
 
 /// Retrieve the authentication token (JWT) from the environment variable, or return `None`.
 fn read_auth_token() -> Option<AccessToken> {
-    std::env::var(EnvVars::UV_AUTH_TOKEN).ok().map(AccessToken)
+    std::env::var(EnvVars::PYX_AUTH_TOKEN).ok().map(AccessToken)
 }
 
 /// An encoded JWT access token.
@@ -132,12 +132,12 @@ impl TokenStore {
     pub fn from_settings() -> Result<Self, TokenStoreError> {
         // Read the API URL and CDN domain from the environment variables, or fallback to the
         // defaults.
-        let api = if let Ok(api_url) = std::env::var(EnvVars::UV_API_URL) {
+        let api = if let Ok(api_url) = std::env::var(EnvVars::PYX_API_URL) {
             DisplaySafeUrl::parse(&api_url)
         } else {
             DisplaySafeUrl::parse("https://api.pyx.dev")
         }?;
-        let cdn = std::env::var(EnvVars::UV_CDN_DOMAIN)
+        let cdn = std::env::var(EnvVars::PYX_CDN_DOMAIN)
             .ok()
             .map(SmallString::from)
             .unwrap_or_else(|| SmallString::from(arcstr::literal!("astralhosted.com")));
