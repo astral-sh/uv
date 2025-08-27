@@ -282,9 +282,7 @@ jobs:
         with:
           images: |
             ${{ env.UV_GHCR_IMAGE }}
-            # We are temporarily not publishing the extra images to DockerHub
-            # TODO(zanieb): Restore DockerHub support. See also, "Add annotations to images".
-            # ${{ env.UV_DOCKERHUB_IMAGE }}
+            ${{ env.UV_DOCKERHUB_IMAGE }}
           flavor: |
             latest=false
           tags: |
@@ -315,9 +313,7 @@ jobs:
       - name: Add annotations to images
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         env:
-          IMAGES: "${{ env.UV_GHCR_IMAGE }}"
-          # TODO(zanieb): Restore DockerHub support.
-          # IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
+          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}

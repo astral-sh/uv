@@ -532,19 +532,25 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    // Determine whether the reader is exhausted.
+    // Determine whether the reader is exhausted, but allow trailing null bytes, which some zip
+    // implementations incorrectly include.
     if !skip_validation {
-        let mut buffer = [0; 1];
-        if reader.read(&mut buffer).await.map_err(Error::Io)? > 0 {
-            // If the buffer contains a single null byte, ignore it.
-            if buffer[0] == 0 {
-                if reader.read(&mut buffer).await.map_err(Error::Io)? > 0 {
+        let mut has_trailing_bytes = false;
+        let mut buf = [0u8; 256];
+        loop {
+            let n = reader.read(&mut buf).await.map_err(Error::Io)?;
+            if n == 0 {
+                if has_trailing_bytes {
+                    warn!("Ignoring trailing null bytes in ZIP archive");
+                }
+                break;
+            }
+            for &b in &buf[..n] {
+                if b == 0 {
+                    has_trailing_bytes = true;
+                } else {
                     return Err(Error::TrailingContents);
                 }
-
-                warn!("Ignoring trailing null byte in ZIP archive");
-            } else {
-                return Err(Error::TrailingContents);
             }
         }
     }

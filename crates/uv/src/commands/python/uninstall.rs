@@ -11,8 +11,8 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
-use uv_configuration::Preview;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
     ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,

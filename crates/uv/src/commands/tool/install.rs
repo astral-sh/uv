@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Preview, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, Upgrade};
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -234,10 +235,7 @@ pub(crate) async fn install(
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
             resolver: ResolverSettings {
-                upgrade: settings
-                    .resolver
-                    .upgrade
-                    .combine(Upgrade::package(package_name.clone())),
+                upgrade: Upgrade::package(package_name.clone()).combine(settings.resolver.upgrade),
                 ..settings.resolver
             },
             ..settings
@@ -249,9 +247,7 @@ pub(crate) async fn install(
     // If the user passed `--force`, it implies `--reinstall-package <from>`
     let settings = if force {
         ResolverInstallerSettings {
-            reinstall: settings
-                .reinstall
-                .combine(Reinstall::package(package_name.clone())),
+            reinstall: Reinstall::package(package_name.clone()).combine(settings.reinstall),
             ..settings
         }
     } else {

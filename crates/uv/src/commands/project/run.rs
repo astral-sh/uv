@@ -19,7 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, Preview,
+    InstallOptions,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -27,6 +27,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -1353,6 +1354,12 @@ fn can_skip_ephemeral(
         return false;
     }
 
+    // Determine the markers and tags to use for resolution.
+    let markers = interpreter.resolver_marker_environment();
+    let Ok(tags) = interpreter.tags() else {
+        return false;
+    };
+
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -1362,7 +1369,8 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
-        &interpreter.resolver_marker_environment(),
+        &markers,
+        tags,
         config_setting,
         config_settings_package,
         &extra_build_requires,

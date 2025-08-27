@@ -75,6 +75,7 @@ plugins:
         "reference/versioning.md": "reference/policies/versioning.md"
         "reference/platforms.md": "reference/policies/platforms.md"
         "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
+        "reference/resolver-internals.md": "reference/internals/resolver.md"
         "configuration/installer.md": "reference/installer.md"
         "configuration/authentication.md": "concepts/authentication.md"
         "configuration/build-backend.md": "concepts/build-backend.md"
@@ -232,7 +233,9 @@ nav:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
-      - Resolver: reference/resolver-internals.md
+      - Internals:
+          - reference/internals/index.md
+          - Resolver: reference/internals/resolver.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md

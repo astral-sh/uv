@@ -18,8 +18,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
+    SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -30,8 +30,9 @@ use uv_distribution_types::{
 use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
+use uv_pep508::{MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
@@ -69,6 +70,9 @@ pub(crate) async fn add(
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
+    no_install_project: bool,
+    no_install_workspace: bool,
+    no_install_local: bool,
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
@@ -407,17 +411,16 @@ pub(crate) async fn add(
 
             // Determine whether to enable build isolation.
             let environment;
-            let build_isolation = if settings.resolver.no_build_isolation {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::Shared(&environment)
-            } else if settings.resolver.no_build_isolation_package.is_empty() {
-                BuildIsolation::Isolated
-            } else {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::SharedPackage(
-                    &environment,
-                    &settings.resolver.no_build_isolation_package,
-                )
+            let build_isolation = match &settings.resolver.build_isolation {
+                uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+                uv_configuration::BuildIsolation::Shared => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::Shared(&environment)
+                }
+                uv_configuration::BuildIsolation::SharedPackage(packages) => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::SharedPackage(&environment, packages)
+                }
             };
 
             // Resolve the flat indexes from `--find-links`.
@@ -735,6 +738,9 @@ pub(crate) async fn add(
         lock_state,
         sync_state,
         locked,
+        no_install_project,
+        no_install_workspace,
+        no_install_local,
         &defaulted_extras,
         &defaulted_groups,
         raw,
@@ -963,6 +969,9 @@ async fn lock_and_sync(
     lock_state: UniversalState,
     sync_state: PlatformState,
     locked: bool,
+    no_install_project: bool,
+    no_install_workspace: bool,
+    no_install_local: bool,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     raw: bool,
@@ -1149,7 +1158,12 @@ async fn lock_and_sync(
         extras,
         groups,
         EditableMode::Editable,
-        InstallOptions::default(),
+        InstallOptions::new(
+            no_install_project,
+            no_install_workspace,
+            no_install_local,
+            vec![],
+        ),
         Modifications::Sufficient,
         None,
         settings.into(),

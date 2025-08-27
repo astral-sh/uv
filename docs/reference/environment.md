@@ -191,6 +191,11 @@ in lieu of the default GitHub URL.
 The directory in which to install uv using the standalone installer and `self update` feature.
 Defaults to `~/.local/bin`.
 
+### `UV_ISOLATED`
+
+Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+a `pyproject.toml` or `uv.toml` file.
+
 ### `UV_KEYRING_PROVIDER`
 
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
@@ -405,6 +410,12 @@ Specifies the directory to place links to installed, managed Python executables.
 Specifies the directory for caching the archives of managed Python installations before
 installation.
 
+### `UV_PYTHON_CPYTHON_BUILD`
+
+Pin managed CPython versions to a specific build version.
+
+For CPython, this should be the build date (e.g., "20250814").
+
 ### `UV_PYTHON_DOWNLOADS`
 
 Equivalent to the
@@ -419,6 +430,12 @@ This variable can be set to a URL pointing to JSON to use as a list for Python i
 This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
 
 Note that currently, only local paths are supported.
+
+### `UV_PYTHON_GRAALPY_BUILD`
+
+Pin managed GraalPy versions to a specific build version.
+
+For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
 
 ### `UV_PYTHON_INSTALL_BIN`
 
@@ -445,6 +462,18 @@ Whether to install the Python executable into the Windows registry.
 ### `UV_PYTHON_PREFERENCE`
 
 Whether uv should prefer system or managed Python versions.
+
+### `UV_PYTHON_PYODIDE_BUILD`
+
+Pin managed Pyodide versions to a specific build version.
+
+For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
+
+### `UV_PYTHON_PYPY_BUILD`
+
+Pin managed PyPy versions to a specific build version.
+
+For PyPy, this should be the PyPy version (e.g., "7.3.20").
 
 ### `UV_REQUEST_TIMEOUT`
 

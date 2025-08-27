@@ -1,4 +1,5 @@
 use core::fmt;
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
@@ -12,7 +13,7 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_configuration::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -314,11 +315,15 @@ pub struct ManagedPythonInstallation {
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
-    url: Option<&'static str>,
+    url: Option<Cow<'static, str>>,
     /// The SHA256 of the Python archive at the URL.
     ///
     /// Empty when self was constructed from a path.
-    sha256: Option<&'static str>,
+    sha256: Option<Cow<'static, str>>,
+    /// The build version of the Python installation.
+    ///
+    /// Empty when self was constructed from a path without a BUILD file.
+    build: Option<Cow<'static, str>>,
 }
 
 impl ManagedPythonInstallation {
@@ -326,8 +331,9 @@ impl ManagedPythonInstallation {
         Self {
             path,
             key: download.key().clone(),
-            url: Some(download.url()),
-            sha256: download.sha256(),
+            url: Some(download.url().clone()),
+            sha256: download.sha256().cloned(),
+            build: download.build().map(Cow::Borrowed),
         }
     }
 
@@ -341,11 +347,19 @@ impl ManagedPythonInstallation {
 
         let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
+        // Try to read the BUILD file if it exists
+        let build = match fs::read_to_string(path.join("BUILD")) {
+            Ok(content) => Some(Cow::Owned(content.trim().to_string())),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err.into()),
+        };
+
         Ok(Self {
             path,
             key,
             url: None,
             sha256: None,
+            build,
         })
     }
 
@@ -452,6 +466,11 @@ impl ManagedPythonInstallation {
 
     pub fn platform(&self) -> &Platform {
         self.key.platform()
+    }
+
+    /// The build version of this installation, if available.
+    pub fn build(&self) -> Option<&str> {
+        self.build.as_deref()
     }
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
@@ -617,6 +636,15 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// Ensure the build version is written to a BUILD file in the installation directory.
+    pub fn ensure_build_file(&self) -> Result<(), Error> {
+        if let Some(ref build) = self.build {
+            let build_file = self.path.join("BUILD");
+            fs::write(&build_file, build.as_ref())?;
+        }
+        Ok(())
+    }
+
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
     /// [`create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
@@ -668,12 +696,12 @@ impl ManagedPythonInstallation {
         self.key.patch != other.key.patch
     }
 
-    pub fn url(&self) -> Option<&'static str> {
-        self.url
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
     }
 
-    pub fn sha256(&self) -> Option<&'static str> {
-        self.sha256
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
     }
 }
 

@@ -1,7 +1,8 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings};
+use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
+use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
@@ -333,8 +334,10 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
-        upgrade_package: Some(upgrade_package),
+        upgrade: Upgrade::from_args(
+            flag(upgrade, no_upgrade, "no-upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
         index_strategy,
         keyring_provider,
         resolution,
@@ -352,8 +355,10 @@ pub fn resolver_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: Some(no_build_isolation_package),
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer: ExcludeNewer::from_args(
@@ -442,18 +447,14 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade, "upgrade"),
-        upgrade_package: if upgrade_package.is_empty() {
-            None
-        } else {
-            Some(upgrade_package)
-        },
-        reinstall: flag(reinstall, no_reinstall, "reinstall"),
-        reinstall_package: if reinstall_package.is_empty() {
-            None
-        } else {
-            Some(reinstall_package)
-        },
+        upgrade: Upgrade::from_args(
+            flag(upgrade, no_upgrade, "upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
+        reinstall: Reinstall::from_args(
+            flag(reinstall, no_reinstall, "reinstall"),
+            reinstall_package,
+        ),
         index_strategy,
         keyring_provider,
         resolution,
@@ -471,12 +472,10 @@ pub fn resolver_installer_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: if no_build_isolation_package.is_empty() {
-            None
-        } else {
-            Some(no_build_isolation_package)
-        },
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,

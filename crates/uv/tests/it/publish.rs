@@ -1,10 +1,16 @@
 use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
-use indoc::indoc;
+use fs_err::OpenOptions;
+use indoc::{formatdoc, indoc};
+use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::env::current_dir;
+use std::io::Write;
 use uv_static::EnvVars;
+use wiremock::matchers::{basic_auth, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
 fn username_password_no_longer_supported() {
@@ -385,5 +391,112 @@ fn invalid_index() {
     ----- stderr -----
     error: Index is missing a publish URL: `foo`
     "###
+    );
+}
+
+/// Ensure that we read index credentials from the environment when publishing.
+///
+/// <https://github.com/astral-sh/uv/issues/11836#issuecomment-3022735011>
+#[tokio::test]
+async fn read_index_credential_env_vars_for_check_url() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    context
+        .init()
+        .arg("--name")
+        .arg("astral-test-private")
+        .arg(".")
+        .assert()
+        .success();
+
+    context.build().arg("--wheel").assert().success();
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(false)
+        .open(context.temp_dir.join("pyproject.toml"))
+        .unwrap();
+    file.write_all(
+        formatdoc! {
+            r#"
+            [[tool.uv.index]]
+            name = "private-index"
+            url = "{index_uri}/simple/"
+            publish-url = "{index_uri}/upload"
+            "#,
+            index_uri = server.uri()
+        }
+        .as_bytes(),
+    )
+    .unwrap();
+
+    let filename = "astral_test_private-0.1.0-py3-none-any.whl";
+    let wheel = context.temp_dir.join("dist").join(filename);
+    let sha256 = format!("{:x}", Sha256::digest(fs_err::read(&wheel).unwrap()));
+
+    let simple_index = json! ({
+          "files": [
+            {
+              "filename": filename,
+              "hashes": {
+                "sha256": sha256
+              },
+              "url": format!("{}/{}", server.uri(), filename),
+            }
+        ]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/astral-test-private/"))
+        .and(basic_auth("username", "secret"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    // Test that we fail without credentials
+    uv_snapshot!(context.filters(), context.publish()
+        .current_dir(&context.temp_dir)
+        .arg(&wheel)
+        .arg("--index")
+        .arg("private-index")
+        .arg("--trusted-publishing")
+        .arg("never"),
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Failed to send POST request
+      Caused by: Missing credentials for http://[LOCALHOST]/upload
+    "
+    );
+    // Test that it works with credentials
+    uv_snapshot!(context.filters(), context.publish()
+        .current_dir(&context.temp_dir)
+        .arg(&wheel)
+        .arg("--index")
+        .arg("private-index")
+        .env("UV_INDEX_PRIVATE_INDEX_USERNAME", "username")
+        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret")
+        .arg("--trusted-publishing")
+        .arg("never"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    "
     );
 }

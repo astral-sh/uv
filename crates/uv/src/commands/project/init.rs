@@ -1,24 +1,25 @@
-use anyhow::{Context, Result, anyhow};
-use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
-use uv_distribution_types::RequiresPython;
 
+use anyhow::{Context, Result, anyhow};
+use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
+
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
-    VersionControlSystem,
+    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
+use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,

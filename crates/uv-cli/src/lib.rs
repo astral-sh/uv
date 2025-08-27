@@ -10,8 +10,8 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -19,6 +19,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -312,7 +313,7 @@ pub struct GlobalArgs {
     /// parent directories, or user configuration directories.
     ///
     /// This option is deprecated in favor of `--no-config`.
-    #[arg(global = true, long, hide = true)]
+    #[arg(global = true, long, hide = true, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
@@ -1006,6 +1007,21 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Format Python code in the project.
+    ///
+    /// Formats Python code using the Ruff formatter. By default, all Python files in the project
+    /// are formatted. This command has the same behavior as running `ruff format` in the project
+    /// root.
+    ///
+    /// To check if files are formatted without modifying them, use `--check`. To see a diff of
+    /// formatting changes, use `--diff`.
+    ///
+    /// Additional arguments can be passed to Ruff after `--`.
+    #[command(
+        after_help = "Use `uv help format` for more details.",
+        after_long_help = ""
+    )]
+    Format(FormatArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -2357,6 +2373,27 @@ pub struct PipCheckArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// The Python version against which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the version of the current
+    /// interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the platform of the current
+    /// interpreter.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -3154,7 +3191,7 @@ pub struct RunArgs {
     ///
     /// When used with `--with` or `--with-requirements`, the additional dependencies will still be
     /// layered in a second environment.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -3420,6 +3457,14 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_workspace: bool,
 
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long)]
+    pub no_install_local: bool,
+
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
@@ -3488,6 +3533,7 @@ pub struct SyncArgs {
         conflicts_with = "package",
         conflicts_with = "no_install_project",
         conflicts_with = "no_install_workspace",
+        conflicts_with = "no_install_local",
         conflicts_with = "extra",
         conflicts_with = "all_extras",
         conflicts_with = "no_extra",
@@ -3812,6 +3858,34 @@ pub struct AddArgs {
     /// as direct path dependency instead.
     #[arg(long, overrides_with = "workspace")]
     pub no_workspace: bool,
+
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like building
+    /// Docker images where installing the project separately from its dependencies allows optimal
+    /// layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the current project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_local: bool,
 }
 
 #[derive(Args)]
@@ -4204,6 +4278,14 @@ pub struct ExportArgs {
     #[arg(long, alias = "no-install-workspace")]
     pub no_emit_workspace: bool,
 
+    /// Do not include local path dependencies in the exported requirements.
+    ///
+    /// Omits the current project, workspace members, and any other local (path or editable)
+    /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
+    /// and CI flows that want to export and cache third-party dependencies first.
+    #[arg(long, alias = "no-install-local")]
+    pub no_emit_local: bool,
+
     /// Do not emit the given package(s).
     ///
     /// By default, all of the project's dependencies are included in the exported requirements
@@ -4259,6 +4341,32 @@ pub struct ExportArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct FormatArgs {
+    /// Check if files are formatted without applying changes.
+    #[arg(long)]
+    pub check: bool,
+
+    /// Show a diff of formatting changes without applying them.
+    ///
+    /// Implies `--check`.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// The version of Ruff to use for formatting.
+    ///
+    /// By default, a version of Ruff pinned by uv will be used.
+    #[arg(long)]
+    pub version: Option<String>,
+
+    /// Additional arguments to pass to Ruff.
+    ///
+    /// For example, use `uv format -- --line-length 100` to set the line length or
+    /// `uv format -- src/module/foo.py` to format a specific file.
+    #[arg(last = true)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Args)]
@@ -4415,7 +4523,7 @@ pub struct ToolRunArgs {
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Load environment variables from a `.env` file.

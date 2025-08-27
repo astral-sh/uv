@@ -9,18 +9,19 @@ use uv_small_str::SmallString;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
-/// A collection of "files" from `PyPI`'s JSON API for a single package.
+/// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
+/// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SimpleJson {
-    /// The list of [`File`]s available for download sorted by filename.
+pub struct PypiSimpleDetail {
+    /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]
-    pub files: Vec<File>,
+    pub files: Vec<PypiFile>,
 }
 
 /// Deserializes a sequence of "simple" files from `PyPI` and ensures that they
 /// are sorted in a stable order.
-fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>, D::Error> {
-    let mut files = <Vec<File>>::deserialize(d)?;
+fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<PypiFile>, D::Error> {
+    let mut files = <Vec<PypiFile>>::deserialize(d)?;
     // While it has not been positively observed, we sort the files
     // to ensure we have a defined ordering. Otherwise, if we rely on
     // the API to provide a stable ordering and doesn't, it can lead
@@ -33,11 +34,12 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
     Ok(files)
 }
 
-/// A single (remote) file belonging to a package, either a wheel or a source distribution.
+/// A single (remote) file belonging to a package, either a wheel or a source distribution, as
+/// served by the `vnd.pypi.simple.v1` media type.
 ///
 /// <https://peps.python.org/pep-0691/#project-detail>
 #[derive(Debug, Clone)]
-pub struct File {
+pub struct PypiFile {
     pub core_metadata: Option<CoreMetadata>,
     pub filename: SmallString,
     pub hashes: Hashes,
@@ -48,7 +50,7 @@ pub struct File {
     pub yanked: Option<Box<Yanked>>,
 }
 
-impl<'de> Deserialize<'de> for File {
+impl<'de> Deserialize<'de> for PypiFile {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -56,7 +58,7 @@ impl<'de> Deserialize<'de> for File {
         struct FileVisitor;
 
         impl<'de> serde::de::Visitor<'de> for FileVisitor {
-            type Value = File;
+            type Value = PypiFile;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a map containing file metadata")
@@ -103,7 +105,7 @@ impl<'de> Deserialize<'de> for File {
                     }
                 }
 
-                Ok(File {
+                Ok(PypiFile {
                     core_metadata,
                     filename: filename
                         .ok_or_else(|| serde::de::Error::missing_field("filename"))?,
@@ -139,6 +141,18 @@ impl<'de> Deserialize<'de> for CoreMetadata {
     }
 }
 
+impl Serialize for CoreMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_available) => serializer.serialize_bool(*is_available),
+            Self::Hashes(hashes) => hashes.serialize(serializer),
+        }
+    }
+}
+
 impl CoreMetadata {
     pub fn is_available(&self) -> bool {
         match self {
@@ -164,6 +178,18 @@ impl<'de> Deserialize<'de> for Yanked {
             .bool(|bool| Ok(Self::Bool(bool)))
             .string(|string| Ok(Self::Reason(SmallString::from(string))))
             .deserialize(deserializer)
+    }
+}
+
+impl Serialize for Yanked {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_yanked) => serializer.serialize_bool(*is_yanked),
+            Self::Reason(reason) => serializer.serialize_str(reason.as_ref()),
+        }
     }
 }
 

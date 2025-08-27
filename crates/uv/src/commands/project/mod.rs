@@ -12,8 +12,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    PreviewFeatures, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -27,6 +27,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
@@ -63,6 +64,7 @@ use crate::settings::{
 pub(crate) mod add;
 pub(crate) mod environment;
 pub(crate) mod export;
+pub(crate) mod format;
 pub(crate) mod init;
 mod install_target;
 pub(crate) mod lock;
@@ -1706,8 +1708,7 @@ pub(crate) async fn resolve_names(
                 index_strategy,
                 keyring_provider,
                 link_mode,
-                no_build_isolation,
-                no_build_isolation_package,
+                build_isolation,
                 extra_build_dependencies,
                 extra_build_variables,
                 prerelease: _,
@@ -1740,14 +1741,16 @@ pub(crate) async fn resolve_names(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if *no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::Shared(&environment)
+        }
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -1868,8 +1871,7 @@ pub(crate) async fn resolve_environment(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -1914,14 +1916,16 @@ pub(crate) async fn resolve_environment(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if *no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::Shared(&environment)
+        }
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     let options = OptionsBuilder::new()
@@ -2060,8 +2064,7 @@ pub(crate) async fn sync_environment(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -2097,12 +2100,12 @@ pub(crate) async fn sync_environment(
         .build();
 
     // Determine whether to enable build isolation.
-    let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(&venv)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(&venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(&venv, packages)
+        }
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -2145,7 +2148,7 @@ pub(crate) async fn sync_environment(
         link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         workspace_cache,
         concurrency,
@@ -2234,8 +2237,7 @@ pub(crate) async fn update_environment(
                 index_strategy,
                 keyring_provider,
                 link_mode,
-                no_build_isolation,
-                no_build_isolation_package,
+                build_isolation,
                 extra_build_dependencies: _,
                 extra_build_variables,
                 prerelease,
@@ -2264,9 +2266,10 @@ pub(crate) async fn update_environment(
         ..
     } = spec;
 
-    // Determine markers to use for resolution.
+    // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
     let marker_env = venv.interpreter().resolver_marker_environment();
+    let tags = venv.interpreter().tags()?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2280,6 +2283,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
+            tags,
             config_setting,
             config_settings_package,
             &extra_build_requires,
@@ -2324,12 +2328,12 @@ pub(crate) async fn update_environment(
         .build();
 
     // Determine whether to enable build isolation.
-    let build_isolation = if *no_build_isolation {
-        BuildIsolation::Shared(&venv)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(&venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(&venv, packages)
+        }
     };
 
     let options = OptionsBuilder::new()

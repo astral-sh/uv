@@ -1,9 +1,10 @@
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, iter, mem};
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
@@ -12,9 +13,9 @@ use toml_edit::{
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
-use uv_normalize::GroupName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};

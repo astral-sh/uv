@@ -303,7 +303,7 @@ impl<'lock> ExportableRequirements<'lock> {
             })
             .filter(|(_index, package)| {
                 install_options.include_package(
-                    &package.id.name,
+                    package.as_install_target(),
                     target.project_name(),
                     target.lock().members(),
                 )

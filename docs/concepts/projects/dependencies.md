@@ -86,7 +86,8 @@ Dependencies declared in a `requirements.txt` file can be added to the project w
 uv add -r requirements.txt
 ```
 
-See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files) for more details.
+See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
+for more details.
 
 ## Removing dependencies
 
@@ -542,8 +543,8 @@ installation of Excel parsers and `matplotlib` unless someone explicitly require
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
-from extra name to its dependencies, following
-[dependency specifiers](#dependency-specifiers) syntax.
+from extra name to its dependencies, following [dependency specifiers](#dependency-specifiers)
+syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 

@@ -1269,6 +1269,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            self.tags.as_ref(),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1485,6 +1486,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            self.tags.as_ref(),
         ) else {
             return Ok(None);
         };
@@ -1839,6 +1841,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .torch_backend
                     .as_ref()
                     .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
+                    .filter(|torch_backend| torch_backend.has_system_dependency(name))
                     .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
                     .map(IndexUrl::url)
                     .and_then(SystemDependency::from_index)
@@ -2446,6 +2449,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     None,
                     &env,
+                    self.tags.as_ref(),
                 ) else {
                     return Ok(None);
                 };

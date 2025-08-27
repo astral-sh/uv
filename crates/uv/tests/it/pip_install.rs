@@ -8745,7 +8745,7 @@ fn no_extension() {
 
 /// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
 #[test]
-fn switch_platform() -> Result<()> {
+fn switch_python_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -9714,6 +9714,74 @@ fn dependency_group() -> Result<()> {
      + iniconfig==2.0.0
      + sortedcontainers==2.4.0
      + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn recursive_dependency_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Test a self-referencing group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "test" },
+            "requests"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `test` -> `test`
+    ");
+
+    // Test mutually recursive groups.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "dev" },
+            "requests"
+        ]
+        dev = [
+            { include-group = "test" },
+            "pytest"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())
@@ -12582,4 +12650,133 @@ fn overlapping_packages_warning() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/15386>
+#[test]
+fn transitive_dependency_config_settings_invalidation() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package named `idna`.
+    context
+        .temp_dir
+        .child("idna")
+        .child("pyproject.toml")
+        .write_str(indoc! {
+            r#"
+        [project]
+        name = "idna"
+        version = "3.6"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        })?;
+    context
+        .temp_dir
+        .child("idna")
+        .child("src")
+        .child("idna")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install the local `idna` package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.temp_dir.child("idna").path()),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6 (from file://[TEMP_DIR]/idna)
+    "
+    );
+
+    // Install a package that depends on `idna`, with a `--config-settings` value.
+    //
+    // This "should" rebuild `idna`, but for now, we reuse the "stale" distribution. Prior to
+    // https://github.com/astral-sh/uv/pull/15389, this would panic.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--config-settings=foo=bar"),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn switch_platform() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + cffi==1.16.0
+     + pycparser==2.21
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("linux"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `cffi` was built for a different platform
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ cffi==1.16.0
+    "
+    );
 }

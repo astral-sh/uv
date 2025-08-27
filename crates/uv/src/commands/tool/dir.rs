@@ -2,8 +2,8 @@ use anstream::println;
 use anyhow::Context;
 use owo_colors::OwoColorize;
 
-use uv_configuration::Preview;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_tool::{InstalledTools, tool_executable_dir};
 
 /// Show the tool directory.

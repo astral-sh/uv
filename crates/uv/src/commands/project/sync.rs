@@ -14,7 +14,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    Preview, PreviewFeatures, TargetTriple, Upgrade,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -25,6 +25,7 @@ use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
@@ -583,8 +584,7 @@ pub(super) async fn do_sync(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -629,8 +629,7 @@ pub(super) async fn do_sync(
                 index_strategy,
                 keyring_provider,
                 link_mode,
-                no_build_isolation,
-                no_build_isolation_package: no_build_isolation_package.to_vec(),
+                build_isolation: build_isolation.clone(),
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
@@ -733,12 +732,12 @@ pub(super) async fn do_sync(
         .build();
 
     // Determine whether to enable build isolation.
-    let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(venv)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(venv, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(venv, packages)
+        }
     };
 
     // Read the build constraints from the lockfile.
