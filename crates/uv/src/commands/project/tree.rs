@@ -274,7 +274,7 @@ pub(crate) async fn tree(
     };
 
     // Render the tree.
-    let mut tree = TreeDisplay::new(
+    let tree = TreeDisplay::new(
         &lock,
         markers.as_ref(),
         &latest,
