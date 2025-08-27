@@ -5,7 +5,6 @@ use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{KeyringProviderType, Service};
 
-use crate::commands::auth::login::is_pyx_url;
 use crate::settings::NetworkSettings;
 use crate::{commands::ExitStatus, printer::Printer};
 
@@ -25,8 +24,9 @@ pub(crate) async fn logout(
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
 
-    if is_pyx_url(url) {
-        return pyx_logout(network_settings, printer).await;
+    let pyx_store = PyxTokenStore::from_settings()?;
+    if pyx_store.is_known_url(url) {
+        return pyx_logout(&pyx_store, network_settings, printer).await;
     }
 
     let username = username.unwrap_or_else(|| String::from("__token__"));
@@ -57,11 +57,10 @@ pub(crate) async fn logout(
 }
 
 async fn pyx_logout(
+    store: &PyxTokenStore,
     network_settings: &NetworkSettings,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let store = PyxTokenStore::from_settings()?;
-
     // Initialize the client.
     let client = BaseClientBuilder::default()
         .connectivity(network_settings.connectivity)

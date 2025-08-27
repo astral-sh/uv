@@ -9,7 +9,6 @@ use uuid::Uuid;
 use uv_auth::{AccessToken, Credentials, OAuthTokens, PyxTokenStore, Tokens};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_configuration::{KeyringProviderType, Service};
-use uv_redacted::DisplaySafeUrl;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -31,8 +30,8 @@ pub(crate) async fn login(
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
 
-    if is_pyx_url(url) {
-        let store = PyxTokenStore::from_settings()?;
+    let pyx_store = PyxTokenStore::from_settings()?;
+    if pyx_store.is_known_url(url) {
         let client = BaseClientBuilder::default()
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
@@ -40,7 +39,7 @@ pub(crate) async fn login(
             .auth_integration(AuthIntegration::NoAuthMiddleware)
             .build();
 
-        pyx_login_with_browser(&store, &client, &printer).await?;
+        pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         writeln!(printer.stderr(), "Logged in to {display_url}")?;
         return Ok(ExitStatus::Success);
     }
@@ -99,13 +98,6 @@ pub(crate) async fn login(
     writeln!(printer.stderr(), "Logged in to {display_url}")?;
 
     Ok(ExitStatus::Success)
-}
-
-pub(crate) fn is_pyx_url(url: &DisplaySafeUrl) -> bool {
-    let Some(domain) = url.domain() else {
-        return false;
-    };
-    domain == "pyx.dev" || domain.ends_with(".pyx.dev")
 }
 
 async fn pyx_login_with_browser(
