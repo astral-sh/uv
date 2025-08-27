@@ -400,12 +400,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name,
-                extra,
-                group: dev,
-                ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
+                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
                     Some("your project".to_string())
                 } else {
                     Some(format!("{package}"))
@@ -431,12 +428,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name,
-                extra,
-                group: dev,
-                ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+                self.is_single_project_workspace() && extra.is_none() && group.is_none()
             }
             _ => false,
         }

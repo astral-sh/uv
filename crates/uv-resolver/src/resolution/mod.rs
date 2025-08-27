@@ -28,7 +28,7 @@ pub(crate) struct AnnotatedDist {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
     pub(crate) extra: Option<ExtraName>,
-    pub(crate) dev: Option<GroupName>,
+    pub(crate) group: Option<GroupName>,
     pub(crate) hashes: HashDigests,
     pub(crate) metadata: Option<Metadata>,
     /// The "full" marker for this distribution. It precisely describes all
@@ -43,7 +43,7 @@ impl AnnotatedDist {
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
-        self.extra.is_none() && self.dev.is_none()
+        self.extra.is_none() && self.group.is_none()
     }
 
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.

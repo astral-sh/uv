@@ -44,7 +44,7 @@ impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
         conflicts: &Conflicts,
         requirement: Cow<'a, Requirement>,
-        dev: Option<&'a GroupName>,
+        group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
     ) -> impl Iterator<Item = Self> + 'a {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
@@ -128,7 +128,7 @@ impl PubGrubDependency {
                     url,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
-                    if dev.is_none() {
+                    if group_name.is_none() {
                         debug_assert!(
                             parent_name.is_none_or(|parent_name| parent_name != name),
                             "extras not flattened for {name}"
@@ -142,7 +142,7 @@ impl PubGrubDependency {
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
-                    if dev.is_none() {
+                    if group_name.is_none() {
                         debug_assert!(
                             parent_name.is_none_or(|parent_name| parent_name != name),
                             "group not flattened for {name}"
