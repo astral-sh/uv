@@ -1618,7 +1618,6 @@ fn create_venv_current_working_directory() {
         .arg("--clear")
         .arg("--python")
         .arg("3.12")
-        .arg("--verbose")
         .current_dir(&context.venv), @r"
     success: true
     exit_code: 0
