@@ -57,9 +57,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
-use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
-};
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -175,7 +173,8 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
 
-    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold()
+    )]
     OverlappingMarkers(String, String, String),
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
@@ -652,7 +651,7 @@ impl ScriptInterpreter {
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -701,12 +700,6 @@ impl ScriptInterpreter {
             Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
-
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -892,7 +885,7 @@ impl ProjectInterpreter {
         project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -985,12 +978,6 @@ impl ProjectInterpreter {
             }
             Err(err) => return Err(err.into()),
         }
-
-        let client_builder = BaseClientBuilder::default()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -1274,7 +1261,7 @@ impl ProjectEnvironment {
         groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         no_sync: bool,
@@ -1303,7 +1290,7 @@ impl ProjectEnvironment {
             workspace.install_path().as_ref(),
             groups,
             python,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1505,7 +1492,7 @@ impl ScriptEnvironment {
     pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -1532,7 +1519,7 @@ impl ScriptEnvironment {
         match ScriptInterpreter::discover(
             script,
             python_request,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1670,7 +1657,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: Concurrency,
     cache: &Cache,
@@ -1720,13 +1707,7 @@ pub(crate) async fn resolve_names(
         reinstall: _,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()
-        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -1850,7 +1831,7 @@ pub(crate) async fn resolve_environment(
     python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -1890,12 +1871,7 @@ pub(crate) async fn resolve_environment(
         ..
     } = spec.requirements;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = pip::resolution_tags(None, python_platform, interpreter)?;
@@ -2045,7 +2021,7 @@ pub(crate) async fn sync_environment(
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -2072,12 +2048,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2206,7 +2177,7 @@ pub(crate) async fn update_environment(
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
@@ -2245,12 +2216,7 @@ pub(crate) async fn update_environment(
         reinstall,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {

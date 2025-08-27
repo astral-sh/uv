@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_preview::Preview;
@@ -19,7 +20,6 @@ use crate::commands::{
     project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
 };
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Find a Python interpreter.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -118,7 +118,7 @@ pub(crate) async fn find(
 pub(crate) async fn find_script(
     script: Pep723ItemRef<'_>,
     show_version: bool,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -129,7 +129,7 @@ pub(crate) async fn find_script(
     let interpreter = match ScriptInterpreter::discover(
         script,
         None,
-        network_settings,
+        client_builder,
         python_preference,
         python_downloads,
         &PythonInstallMirrors::default(),

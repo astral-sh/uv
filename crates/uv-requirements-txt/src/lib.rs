@@ -1406,7 +1406,7 @@ mod test {
         let actual = RequirementsTxt::parse(
             requirements_txt.clone(),
             &working_dir,
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -1455,10 +1455,13 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual =
-            RequirementsTxt::parse(&requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            &requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
 
@@ -1477,10 +1480,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1499,10 +1505,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap_err();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap_err();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1521,10 +1530,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
 
@@ -1547,7 +1559,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1592,7 +1604,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1625,7 +1637,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1658,7 +1670,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1691,7 +1703,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1722,7 +1734,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1755,7 +1767,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1786,7 +1798,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1818,7 +1830,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1851,7 +1863,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1894,7 +1906,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             parent_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -1958,7 +1970,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2033,7 +2045,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2135,7 +2147,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -2183,7 +2195,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2398,7 +2410,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2740,7 +2752,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();

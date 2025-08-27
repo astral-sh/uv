@@ -39,7 +39,6 @@ use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{WorkspacePython, validate_project_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 use super::project::default_dependency_groups;
 
@@ -72,7 +71,7 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     seed: bool,
@@ -125,14 +124,6 @@ pub(crate) async fn venv(
             })
             .unwrap_or(PathBuf::from(".venv")),
     );
-
-    // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
-    // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
-    // using them elsewhere.
-    let client_builder = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -224,12 +215,11 @@ pub(crate) async fn venv(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::try_from(client_builder)?
+        let client = RegistryClientBuilder::try_from(client_builder.clone())?
             .cache(cache.clone())
             .index_locations(index_locations.clone())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();

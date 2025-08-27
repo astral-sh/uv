@@ -34,7 +34,6 @@ use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -47,7 +46,7 @@ pub(crate) async fn pip_list(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: ExcludeNewer,
@@ -88,12 +87,7 @@ pub(crate) async fn pip_list(
     let latest = if outdated && !results.is_empty() {
         let capabilities = IndexCapabilities::default();
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        let client_builder = client_builder.clone().keyring(keyring_provider);
 
         // Initialize the registry client.
         let client = RegistryClientBuilder::try_from(client_builder)?

@@ -62,7 +62,8 @@ impl RegistryClientBuilder<'_> {
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder: BaseClientBuilder::new(),
+            // STOPSHIP
+            base_client_builder: BaseClientBuilder::new(Connectivity::Online, false, Vec::new()),
         }
     }
 }
@@ -70,7 +71,7 @@ impl RegistryClientBuilder<'_> {
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
-        self.base_client_builder = self.base_client_builder.with_custom_client(client);
+        self.base_client_builder = self.base_client_builder.custom_client(client);
         self
     }
 
