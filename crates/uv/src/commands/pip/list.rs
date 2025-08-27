@@ -358,7 +358,6 @@ impl<'a> Column {
             self.rows.iter().map(|f| f.width()).max().unwrap_or(0),
         )
     }
-
     /// Return an iterator of the column, with the header and rows formatted to the maximum width.
     fn fmt(&'a self) -> impl Iterator<Item = String> + 'a {
         let max_width = self.max_width();
