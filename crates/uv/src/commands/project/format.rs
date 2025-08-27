@@ -46,9 +46,11 @@ pub(crate) async fn format(
         Ok(proj) => proj.root().to_owned(),
         // If there is a problem finding a project, we just use the provided directory
         // e.g. unmanaged projects
-        Err(WorkspaceError::MissingPyprojectToml)
-        | Err(WorkspaceError::MissingProject(_))
-        | Err(WorkspaceError::NonWorkspace(_)) => project_dir.to_owned(),
+        Err(
+            WorkspaceError::MissingPyprojectToml
+            | WorkspaceError::MissingProject(_)
+            | WorkspaceError::NonWorkspace(_),
+        ) => project_dir.to_owned(),
         Err(err) => return Err(err.into()),
     };
 
