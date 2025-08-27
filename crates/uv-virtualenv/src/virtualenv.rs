@@ -606,6 +606,9 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     #[cfg(windows)]
     if let Ok(itself) = std::env::current_exe() {
         let target = std::path::absolute(location)?;
+        debug!("location: {:?}", location);
+        debug!("itself: {:?}", itself);
+        debug!("target: {:?}", target);
         if itself.starts_with(&target) {
             debug!("Detected self-delete of executable: {}", itself.display());
             self_replace::self_delete_outside_path(location)?;
