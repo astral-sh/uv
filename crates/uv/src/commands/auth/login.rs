@@ -1,7 +1,9 @@
-use anyhow::{Result, bail};
 use std::fmt::Write;
 
+use anyhow::{Result, bail};
 use console::Term;
+use owo_colors::OwoColorize;
+
 use uv_auth::Credentials;
 use uv_configuration::{KeyringProviderType, Service};
 use uv_preview::Preview;
@@ -116,6 +118,10 @@ pub(crate) async fn login(
     let credentials = Credentials::basic(Some(username), Some(password));
     provider.store(url, &credentials).await?;
 
-    writeln!(printer.stderr(), "Logged in to {display_url}")?;
+    writeln!(
+        printer.stderr(),
+        "Stored credentials for {}",
+        display_url.cyan()
+    )?;
     Ok(ExitStatus::Success)
 }
