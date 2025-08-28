@@ -99,7 +99,7 @@ pub(crate) async fn lock(
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
-            let client_builder = BaseClientBuilder::new()
+            let client_builder = BaseClientBuilder::new(preview)
                 .retries_from_env()?
                 .connectivity(network_settings.connectivity)
                 .native_tls(network_settings.native_tls)
@@ -621,7 +621,7 @@ async fn do_lock(
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Initialize the client.
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

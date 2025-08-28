@@ -46,7 +46,7 @@ pub(crate) async fn format(
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
 
-    let client = BaseClientBuilder::new()
+    let client = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

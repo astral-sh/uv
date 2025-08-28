@@ -82,7 +82,7 @@ pub(crate) async fn upgrade(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

@@ -116,7 +116,7 @@ pub(crate) async fn pin(
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

@@ -634,7 +634,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let client_builder = BaseClientBuilder::new()
+                let client_builder = BaseClientBuilder::new(preview)
                     .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
@@ -878,7 +878,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             debug!("No project found; searching for Python interpreter");
 
             let interpreter = {
-                let client_builder = BaseClientBuilder::new()
+                let client_builder = BaseClientBuilder::new(preview)
                     .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
@@ -949,7 +949,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let spec = if requirements.is_empty() {
         None
     } else {
-        let client_builder = BaseClientBuilder::new()
+        let client_builder = BaseClientBuilder::new(preview)
             .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
@@ -1668,7 +1668,7 @@ async fn resolve_gist_url(
     // Build the API URL.
     let api_url = format!("https://api.github.com/gists/{gist_id}");
 
-    let client = BaseClientBuilder::new()
+    let client = BaseClientBuilder::new(Preview::default())
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
@@ -1768,7 +1768,7 @@ impl RunCommand {
                     .suffix(".py")
                     .tempfile()?;
 
-                let client = BaseClientBuilder::new()
+                let client = BaseClientBuilder::new(Preview::default())
                     .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)

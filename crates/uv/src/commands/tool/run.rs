@@ -690,7 +690,7 @@ async fn get_or_create_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

@@ -6,6 +6,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
+use uv_preview::Preview;
 use uv_requirements_txt::RequirementsTxt;
 use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind};
 
@@ -31,6 +32,7 @@ impl LockedRequirements {
 pub async fn read_requirements_txt(
     output_file: &Path,
     upgrade: &Upgrade,
+    preview: Preview,
 ) -> Result<Vec<Preference>> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
@@ -41,7 +43,7 @@ pub async fn read_requirements_txt(
     let requirements_txt = RequirementsTxt::parse(
         output_file,
         &*CWD,
-        &BaseClientBuilder::new().connectivity(Connectivity::Offline),
+        &BaseClientBuilder::new(preview).connectivity(Connectivity::Offline),
     )
     .await?;
 

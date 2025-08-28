@@ -19,7 +19,7 @@ pub(crate) struct ValidateZipArgs {
 
 pub(crate) async fn validate_zip(args: ValidateZipArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(cache, uv_preview::Preview::default()).build();
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only archive URLs are supported");

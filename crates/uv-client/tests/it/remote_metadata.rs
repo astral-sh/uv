@@ -12,7 +12,7 @@ use uv_redacted::DisplaySafeUrl;
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
     let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(cache, uv_preview::Preview::default()).build();
 
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run.

@@ -20,7 +20,7 @@ pub(crate) struct WheelMetadataArgs {
 
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(cache, uv_preview::Preview::default()).build();
     let capabilities = IndexCapabilities::default();
 
     let filename = WheelFilename::from_str(&args.url.filename()?)?;

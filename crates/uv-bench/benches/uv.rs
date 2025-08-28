@@ -63,7 +63,7 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(cache.clone()).build();
+    let client = RegistryClientBuilder::new(cache.clone(), uv_preview::Preview::default()).build();
 
     move |universal| {
         runtime
