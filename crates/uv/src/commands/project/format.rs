@@ -29,6 +29,7 @@ pub(crate) async fn format(
     cache: Cache,
     printer: Printer,
     preview: Preview,
+    no_project: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
     if !preview.is_enabled(PreviewFeatures::FORMAT) {
@@ -39,7 +40,11 @@ pub(crate) async fn format(
     }
 
     let workspace_cache = WorkspaceCache::default();
-    let target_dir =
+    // If `no_project` is provided, we use the provided directory
+    // Otherwise, we discover the project and use the project root.
+    let target_dir = if no_project {
+        project_dir.to_owned()
+    } else {
         match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
             .await
         {
@@ -53,7 +58,8 @@ pub(crate) async fn format(
                 | WorkspaceError::NonWorkspace(_),
             ) => project_dir.to_owned(),
             Err(err) => return Err(err.into()),
-        };
+        }
+    };
 
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
