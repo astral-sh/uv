@@ -269,6 +269,41 @@ fn token_native_keyring() -> Result<()> {
     ----- stderr -----
     ");
 
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .status()?;
+
+    // Retrieve token using URL with embedded username (no --username needed)
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // Conflict between --username and URL username is rejected
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("different")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username both via the URL and CLI; found `--username different` and `public`
+    ");
+
     Ok(())
 }
 
@@ -286,7 +321,7 @@ fn token_subprocess_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -314,9 +349,9 @@ fn token_subprocess_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for __token__@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for __token__@pypi-proxy.fly.dev
-    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -328,14 +363,14 @@ fn token_subprocess_keyring() {
         .arg("subprocess")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    Keyring request for __token__@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for __token__@pypi-proxy.fly.dev
-    error: Failed to fetch credentials for https://****@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
     "
     );
 
@@ -348,14 +383,12 @@ fn token_subprocess_keyring() {
         .arg("public")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
-    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    error: Cannot specify a username both via the URL and CLI; found `--username public` and `public`
     "
     );
 }
@@ -596,6 +629,62 @@ fn logout_native_keyring() -> Result<()> {
     Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
+    // Login again
+    context
+        .auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .arg("--keyring-provider")
+        .arg("native")
+        .assert()
+        .success();
+
+    // Logout with a username in the URL
+    uv_snapshot!(context.auth_logout()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // Conflict between --username and a URL username is rejected
+    uv_snapshot!(context.auth_logout()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("foo")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username both via the URL and CLI; found `--username foo` and `public`
+    ");
+
+    // Conflict between --token and a URL username is rejected
+    uv_snapshot!(context.auth_login()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--token")
+        .arg("foo")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: When using `--token`, a username cannot not be provided; found: public
+    ");
+
     Ok(())
 }
 
@@ -642,7 +731,7 @@ fn logout_token_native_keyring() -> Result<()> {
 }
 
 #[test]
-fn login_url_parsing() {
+fn login_native_keyring_url() {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
     // A domain-only service name gets https:// prepended
@@ -729,5 +818,80 @@ fn login_url_parsing() {
     error: invalid value 'not a valid url' for '<SERVICE>': invalid international domain name
 
     For more information, try '--help'.
+    ");
+
+    // URL with embedded credentials works
+    uv_snapshot!(context.auth_login()
+        .arg("https://test:password@example.com/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@https://example.com/simple
+    ");
+
+    // URL with embedded username and separate password works
+    uv_snapshot!(context.auth_login()
+        .arg("https://test@example.com/simple")
+        .arg("--password")
+        .arg("password")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Logged in to test@https://example.com/simple
+    ");
+
+    // Conflict between --username and URL username is rejected
+    uv_snapshot!(context.auth_login()
+        .arg("https://test@example.com/simple")
+        .arg("--username")
+        .arg("different")
+        .arg("--password")
+        .arg("password")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username both via the URL and CLI; found `--username different` and `test`
+    ");
+
+    // Conflict between --password and URL password is rejected
+    uv_snapshot!(context.auth_login()
+        .arg("https://test:password@example.com/simple")
+        .arg("--password")
+        .arg("different")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a password both via the URL and CLI
+    ");
+
+    // Conflict between --token and URL credentials is rejected
+    uv_snapshot!(context.auth_login()
+        .arg("https://test:password@example.com/simple")
+        .arg("--token")
+        .arg("some-token")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: When using `--token`, a username cannot not be provided; found: test
     ");
 }
