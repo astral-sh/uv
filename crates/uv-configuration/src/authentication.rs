@@ -1,4 +1,6 @@
+use std::str::FromStr;
 use uv_auth::{self, KeyringProvider};
+use uv_redacted::DisplaySafeUrl;
 
 /// Keyring provider type to use for credential lookup.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -9,6 +11,8 @@ pub enum KeyringProviderType {
     /// Do not use keyring for credential lookup.
     #[default]
     Disabled,
+    /// Use a native integration with the system keychain for credential lookup.
+    Native,
     /// Use the `keyring` command for credential lookup.
     Subprocess,
     // /// Not yet implemented
@@ -22,7 +26,60 @@ impl KeyringProviderType {
     pub fn to_provider(&self) -> Option<KeyringProvider> {
         match self {
             Self::Disabled => None,
+            Self::Native => Some(KeyringProvider::native()),
             Self::Subprocess => Some(KeyringProvider::subprocess()),
         }
+    }
+}
+
+impl std::fmt::Display for KeyringProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disabled => write!(f, "disabled"),
+            Self::Native => write!(f, "native"),
+            Self::Subprocess => write!(f, "subprocess"),
+        }
+    }
+}
+
+/// A service URL that wraps [`DisplaySafeUrl`] for CLI usage.
+///
+/// This type provides automatic URL parsing and validation when used as a CLI argument,
+/// eliminating the need for manual parsing in command functions.
+#[derive(Debug, Clone)]
+pub struct Service(DisplaySafeUrl);
+
+impl Service {
+    /// Get the underlying [`DisplaySafeUrl`].
+    pub fn url(&self) -> &DisplaySafeUrl {
+        &self.0
+    }
+
+    /// Convert into the underlying [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
+        self.0
+    }
+}
+
+impl FromStr for Service {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // First try parsing as-is
+        match DisplaySafeUrl::parse(s) {
+            Ok(url) => Ok(Self(url)),
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                // If it's a relative URL, try prepending https://
+                let with_https = format!("https://{s}");
+                DisplaySafeUrl::parse(&with_https).map(Service)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl std::fmt::Display for Service {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
