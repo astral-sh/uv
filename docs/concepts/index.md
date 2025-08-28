@@ -9,7 +9,7 @@ Read the concept documents to learn more about uv's features:
 - [Package indexes](./indexes.md)
 - [Resolution](./resolution.md)
 - [The uv build backend](./build-backend.md)
-- [Authentication](./authentication.md)
+- [Authentication](./authentication/index.md)
 - [Caching](./cache.md)
 - [The pip interface](../pip/index.md)
 

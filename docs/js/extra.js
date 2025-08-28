@@ -88,6 +88,22 @@ document$.subscribe(function () {
       "concepts/projects/run/#legacy-scripts-on-windows",
     "concepts/projects/sync/#checking-if-the-lockfile-is-up-to-date":
       "concepts/projects/sync/#checking-the-lockfile",
+    "concepts/authentication/#git-authentication":
+      "concepts/authentication/git/",
+    "concepts/authentication/#git-credential-helpers":
+      "concepts/authentication/git/#git-credential-helpers",
+    "concepts/authentication/#http-authentication":
+      "concepts/authentication/http/",
+    "concepts/authentication/#using-netrc-files":
+      "concepts/authentication/http/#using-netrc-files",
+    "concepts/authentication/#using-the-keyring":
+      "concepts/authentication/http/#using-the-keyring",
+    "concepts/authentication/#authentication-with-alternative-package-indexes":
+      "concepts/authentication/http/#authentication-with-alternative-package-indexes",
+    "concepts/authentication/#custom-ca-certificates":
+      "concepts/authentication/certificates/",
+    "concepts/authentication/#hugging-face-support":
+      "concepts/authentication/third-party/#hugging-face-support",
   };
 
   // The prefix for the site, see `site_dir` in `mkdocs.yml`
