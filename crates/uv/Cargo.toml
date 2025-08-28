@@ -131,6 +131,7 @@ insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+sha2 = { workspace = true }
 similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }

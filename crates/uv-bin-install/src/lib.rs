@@ -165,8 +165,6 @@ pub async fn bin_install(
 ) -> Result<PathBuf, Error> {
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
-
-    // Check the cache first
     let cache_entry = CacheEntry::new(
         cache
             .bucket(CacheBucket::Binaries)
@@ -176,6 +174,8 @@ pub async fn bin_install(
         binary.executable(),
     );
 
+    // Lock the directory to prevent racing installs
+    let _lock = cache_entry.with_file(".lock").lock().await?;
     if cache_entry.path().exists() {
         return Ok(cache_entry.into_path_buf());
     }

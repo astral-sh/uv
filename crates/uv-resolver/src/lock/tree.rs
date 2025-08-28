@@ -46,7 +46,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
-        dev: &DependencyGroupsWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
@@ -101,7 +101,7 @@ impl<'env> TreeDisplay<'env> {
             // Add an edge from the root.
             graph.add_edge(root, index, Edge::Prod(None));
 
-            if dev.prod() {
+            if groups.prod() {
                 // Push its dependencies on the queue.
                 if seen.insert((id, None)) {
                     queue.push_back((id, None));
@@ -120,7 +120,7 @@ impl<'env> TreeDisplay<'env> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
+                    if groups.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None

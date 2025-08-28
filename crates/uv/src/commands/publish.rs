@@ -11,7 +11,7 @@ use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
-use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
     CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
@@ -32,6 +32,7 @@ pub(crate) async fn publish(
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
+    index_locations: IndexLocations,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -88,11 +89,7 @@ pub(crate) async fn publish(
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
-        let index_locations = IndexLocations::new(
-            vec![Index::from_index_url(index_url.clone())],
-            Vec::new(),
-            false,
-        );
+        index_locations.cache_index_credentials();
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .retries_from_env()?
             .native_tls(network_settings.native_tls)

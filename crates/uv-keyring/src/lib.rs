@@ -406,7 +406,9 @@ doc_comment::doctest!("../README.md", readme);
 /// Instead, it contains generics that each keystore invokes in their tests,
 /// passing their store-specific parameters for the generic ones.
 mod tests {
-    use super::{Entry, Error, Result, credential::CredentialApi};
+    use super::{Entry, Error};
+    #[cfg(feature = "keyring-tests")]
+    use super::{Result, credential::CredentialApi};
     use std::collections::HashMap;
 
     /// Create a platform-specific credential given the constructor, service, and user

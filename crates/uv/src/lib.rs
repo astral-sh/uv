@@ -1626,6 +1626,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 username,
                 password,
                 check_url,
+                index_locations,
                 &cache,
                 printer,
             )
