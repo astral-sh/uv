@@ -10,6 +10,7 @@ use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
 use reqwest_retry::RetryPolicy;
+use reqwest_retry::policies::ExponentialBackoff;
 use std::fmt;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
@@ -19,7 +20,7 @@ use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry};
-use uv_client::{BaseClient, is_extended_transient_error};
+use uv_client::{BaseClient, is_transient_network_error};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
 use uv_platform::Platform;
@@ -160,6 +161,7 @@ pub async fn bin_install(
     binary: Binary,
     version: &Version,
     client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
@@ -195,6 +197,7 @@ pub async fn bin_install(
         binary,
         version,
         client,
+        retry_policy,
         cache,
         reporter,
         &platform_name,
@@ -227,6 +230,7 @@ async fn download_and_unpack_with_retry(
     binary: Binary,
     version: &Version,
     client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
     reporter: &dyn Reporter,
     platform_name: &str,
@@ -237,7 +241,6 @@ async fn download_and_unpack_with_retry(
     let mut total_attempts = 0;
     let mut retried_here = false;
     let start_time = SystemTime::now();
-    let retry_policy = client.retry_policy();
 
     loop {
         let result = download_and_unpack(
@@ -259,7 +262,7 @@ async fn download_and_unpack_with_retry(
                 total_attempts += err.attempts();
                 let past_retries = total_attempts - 1;
 
-                if is_extended_transient_error(&err) {
+                if is_transient_network_error(&err) {
                     let retry_decision = retry_policy.should_retry(start_time, past_retries);
                     if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                         debug!(

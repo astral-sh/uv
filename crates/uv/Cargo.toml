@@ -88,6 +88,7 @@ owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
