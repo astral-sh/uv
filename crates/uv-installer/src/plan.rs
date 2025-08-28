@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall, SourceStrategy};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -56,6 +56,7 @@ impl<'a> Planner<'a> {
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
+        source_strategy: SourceStrategy,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -125,6 +126,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
+                            source_strategy,
                             tags,
                             config_settings,
                             config_settings_package,

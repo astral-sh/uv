@@ -1370,6 +1370,7 @@ fn can_skip_ephemeral(
         &spec.constraints,
         &spec.overrides,
         &markers,
+        settings.resolver.sources,
         tags,
         config_setting,
         config_settings_package,

@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{
     ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
     InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
@@ -315,6 +316,7 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
+        source_strategy: SourceStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -405,6 +407,7 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
             markers,
+            source_strategy,
             tags,
             config_settings,
             config_settings_package,
@@ -420,6 +423,7 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
         markers: &ResolverMarkerEnvironment,
+        source_strategy: SourceStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -482,6 +486,7 @@ impl SitePackages {
                             name,
                             distribution,
                             &requirement.source,
+                            source_strategy,
                             tags,
                             config_settings,
                             config_settings_package,
@@ -504,6 +509,7 @@ impl SitePackages {
                                 name,
                                 distribution,
                                 &constraint.source,
+                                source_strategy,
                                 tags,
                                 config_settings,
                                 config_settings_package,

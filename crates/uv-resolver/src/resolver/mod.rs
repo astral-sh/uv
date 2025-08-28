@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Overrides, SourceStrategy};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
@@ -200,6 +200,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.git(),
             build_context.capabilities(),
             build_context.locations(),
+            build_context.sources(),
             provider,
             installed_packages,
         )
@@ -223,6 +224,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         git: &GitResolver,
         capabilities: &IndexCapabilities,
         locations: &IndexLocations,
+        source_strategy: SourceStrategy,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -230,7 +232,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(&options, &manifest, &env),
+            selector: CandidateSelector::for_resolution(&options, &manifest, &env, source_strategy),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),

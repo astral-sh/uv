@@ -977,6 +977,7 @@ async fn get_or_create_environment(
                             constraints.iter(),
                             overrides.iter(),
                             &markers,
+                            settings.resolver.sources,
                             tags,
                             config_setting,
                             config_settings_package,

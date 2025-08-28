@@ -296,6 +296,7 @@ pub(crate) async fn pip_install(
             &constraints,
             &overrides,
             &marker_env,
+            sources,
             &tags,
             config_settings,
             config_settings_package,

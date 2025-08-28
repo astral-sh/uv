@@ -7,6 +7,7 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
@@ -33,6 +34,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        source_strategy: SourceStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -65,6 +67,17 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
+                if matches!(source_strategy, SourceStrategy::Disabled) {
+                    // Check if the installed distribution is not from registry
+                    if !matches!(distribution.kind, InstalledDistKind::Registry(_)) {
+                        trace!(
+                            "Source strategy is disabled (sync mode), rejecting non-registry installation: {:?}",
+                            distribution
+                        );
+                        return Self::Mismatch;
+                    }
+                }
+
                 if !specifier.contains(distribution.version()) {
                     return Self::Mismatch;
                 }
