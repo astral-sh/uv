@@ -7,10 +7,11 @@ use tokio::process::Command;
 use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -29,6 +30,7 @@ pub(crate) async fn format(
     cache: Cache,
     printer: Printer,
     preview: Preview,
+    no_project: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
     if !preview.is_enabled(PreviewFeatures::FORMAT) {
@@ -39,9 +41,30 @@ pub(crate) async fn format(
     }
 
     let workspace_cache = WorkspaceCache::default();
-    let project =
-        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await?;
+    let project = if no_project {
+        None
+    } else {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingProject(_)) => None,
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(WorkspaceError::Toml(path, err)) => {
+                warn_user!(
+                    "Failed to parse `{}` during formatting:\n{}",
+                    path.user_display().cyan(),
+                    textwrap::indent(&err.to_string(), "  ")
+                );
+                None
+            }
+            Err(err) => {
+                warn_user!("{err}");
+                None
+            }
+        }
+    };
 
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
@@ -62,8 +85,11 @@ pub(crate) async fn format(
         .with_context(|| format!("Failed to install ruff {version}"))?;
 
     let mut command = Command::new(&ruff_path);
+
     // Run ruff in the project root
-    command.current_dir(project.root());
+    if let Some(project) = project {
+        command.current_dir(project.root());
+    }
     command.arg("format");
 
     if check {
