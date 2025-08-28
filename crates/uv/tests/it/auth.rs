@@ -299,6 +299,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -314,6 +315,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Cannot specify a username both via the URL and CLI; found `--username different` and `public`
     ");
 
@@ -443,6 +445,7 @@ fn login_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: No username provided; did you mean to provide `--username` or `--token`?
     ");
 
@@ -674,6 +677,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -704,13 +708,8 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: unexpected argument '--token' found
-
-      tip: to pass '--token' as a value, use '-- --token'
-
-    Usage: uv auth logout --cache-dir [CACHE_DIR] <SERVICE>
-
-    For more information, try '--help'.
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
+    error: When using `--token`, a username cannot not be provided; found: public
     ");
 
     Ok(())
@@ -865,6 +864,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@https://example.com/simple
     ");
 
@@ -880,6 +880,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@https://example.com/simple
     ");
 
@@ -897,6 +898,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Cannot specify a username both via the URL and CLI; found `--username different` and `test`
     ");
 
@@ -912,6 +914,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Cannot specify a password both via the URL and CLI
     ");
 
@@ -927,6 +930,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: When using `--token`, a username cannot not be provided; found: test
     ");
 }
