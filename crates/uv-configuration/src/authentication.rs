@@ -52,6 +52,14 @@ impl std::fmt::Display for KeyringProviderType {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ServiceParseError {
+    #[error("failed to parse URL: {0}")]
+    InvalidUrl(#[from] url::ParseError),
+    #[error("only HTTPS is supported")]
+    UnsupportedScheme,
+}
+
 /// A service URL that wraps [`DisplaySafeUrl`] for CLI usage.
 ///
 /// This type provides automatic URL parsing and validation when used as a CLI argument,
@@ -72,19 +80,26 @@ impl Service {
 }
 
 impl FromStr for Service {
-    type Err = url::ParseError;
+    type Err = ServiceParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // First try parsing as-is
-        match DisplaySafeUrl::parse(s) {
-            Ok(url) => Ok(Self(url)),
+        let url = match DisplaySafeUrl::parse(s) {
+            Ok(url) => url,
             Err(url::ParseError::RelativeUrlWithoutBase) => {
                 // If it's a relative URL, try prepending https://
                 let with_https = format!("https://{s}");
-                DisplaySafeUrl::parse(&with_https).map(Service)
+                DisplaySafeUrl::parse(&with_https)?
             }
-            Err(e) => Err(e),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Only allow HTTPS URLs
+        if url.scheme() != "https" {
+            return Err(ServiceParseError::UnsupportedScheme);
         }
+
+        Ok(Self(url))
     }
 }
 
