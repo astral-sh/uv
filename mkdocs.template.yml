@@ -77,7 +77,7 @@ plugins:
         "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
         "reference/resolver-internals.md": "reference/internals/resolver.md"
         "configuration/installer.md": "reference/installer.md"
-        "configuration/authentication.md": "concepts/authentication.md"
+        "configuration/authentication.md": "concepts/authentication/index.md"
         "configuration/build-backend.md": "concepts/build-backend.md"
         "configuration/files.md": "concepts/configuration-files.md"
         "configuration/indexes.md": "concepts/indexes.md"
@@ -130,7 +130,7 @@ plugins:
           - concepts/indexes.md
           - concepts/resolution.md
           - concepts/build-backend.md
-          - concepts/authentication.md
+          - concepts/authentication/index.md
           - concepts/cache.md
           - concepts/preview.md
         The pip interface:
@@ -210,7 +210,12 @@ nav:
       - Package indexes: concepts/indexes.md
       - Resolution: concepts/resolution.md
       - Build backend: concepts/build-backend.md
-      - Authentication: concepts/authentication.md
+      - Authentication:
+          - concepts/authentication/index.md
+          - HTTP credentials: concepts/authentication/http.md
+          - Git credentials: concepts/authentication/git.md
+          - TLS certificates: concepts/authentication/certificates.md
+          - Third-party services: concepts/authentication/third-party.md
       - Caching: concepts/cache.md
       - Preview features: concepts/preview.md
       # Note:  The `pip` section was moved to the `concepts/` section but the

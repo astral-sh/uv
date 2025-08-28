@@ -325,8 +325,8 @@ secret].
 
 Then, you can use the [`gh`](https://cli.github.com/) CLI (which is installed in GitHub Actions
 runners by default) to configure a
-[credential helper for Git](../../concepts/authentication.md#git-credential-helpers) to use the PAT
-for queries to repositories hosted on `github.com`.
+[credential helper for Git](../../concepts/authentication/git.md#git-credential-helpers) to use the
+PAT for queries to repositories hosted on `github.com`.
 
 For example, if you called your repository secret `MY_PAT`:
 
