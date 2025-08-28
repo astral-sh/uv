@@ -217,6 +217,7 @@ pub(crate) async fn tree(
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
+                preview,
             )
             .retries_from_env()?
             .native_tls(network_settings.native_tls)

@@ -702,7 +702,7 @@ impl ScriptInterpreter {
             Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
-        let client_builder = BaseClientBuilder::new()
+        let client_builder = BaseClientBuilder::new(preview)
             .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
@@ -1720,7 +1720,7 @@ pub(crate) async fn resolve_names(
         reinstall: _,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()
         .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
         .connectivity(network_settings.connectivity)
@@ -1891,7 +1891,7 @@ pub(crate) async fn resolve_environment(
         ..
     } = spec.requirements;
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
@@ -2075,7 +2075,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
@@ -2249,7 +2249,7 @@ pub(crate) async fn update_environment(
         reinstall,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

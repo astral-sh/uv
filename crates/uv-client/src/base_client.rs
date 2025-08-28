@@ -32,6 +32,7 @@ use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
@@ -67,6 +68,7 @@ pub enum AuthIntegration {
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
+    preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     built_in_root_certs: bool,
@@ -122,14 +124,15 @@ impl Debug for ExtraMiddleware {
 
 impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
-        Self::new()
+        Self::new(Preview::default())
     }
 }
 
 impl BaseClientBuilder<'_> {
-    pub fn new() -> Self {
+    pub fn new(preview: Preview) -> Self {
         Self {
             keyring: KeyringProviderType::default(),
+            preview,
             allow_insecure_host: vec![],
             native_tls: false,
             built_in_root_certs: false,
@@ -472,13 +475,13 @@ impl<'a> BaseClientBuilder<'a> {
                     AuthIntegration::Default => {
                         let auth_middleware = AuthMiddleware::new()
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider());
+                            .with_keyring(self.keyring.to_provider(&self.preview));
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
                         let auth_middleware = AuthMiddleware::new()
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider())
+                            .with_keyring(self.keyring.to_provider(&self.preview))
                             .with_only_authenticated(true);
 
                         client = client.with(auth_middleware);

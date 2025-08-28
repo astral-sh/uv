@@ -88,7 +88,7 @@ pub(crate) async fn pip_tree(
     let latest = if outdated && !packages.is_empty() {
         let capabilities = IndexCapabilities::default();
 
-        let client_builder = BaseClientBuilder::new()
+        let client_builder = BaseClientBuilder::new(preview)
             .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)

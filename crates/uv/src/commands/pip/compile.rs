@@ -195,7 +195,7 @@ pub(crate) async fn pip_compile(
         ));
     }
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
@@ -436,7 +436,7 @@ pub(crate) async fn pip_compile(
         if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
             match format {
                 ExportFormat::RequirementsTxt => LockedRequirements::from_preferences(
-                    read_requirements_txt(output_file, &upgrade).await?,
+                    read_requirements_txt(output_file, &upgrade, preview).await?,
                 ),
                 ExportFormat::PylockToml => {
                     read_pylock_toml_requirements(output_file, &upgrade).await?

@@ -5403,6 +5403,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
@@ -5439,8 +5440,10 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-redacted",
  "uv-static",
+ "uv-warnings",
 ]
 
 [[package]]
@@ -6031,6 +6034,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-metadata",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
@@ -6169,6 +6173,7 @@ dependencies = [
  "uv-git",
  "uv-normalize",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-requirements-txt",
@@ -6205,6 +6210,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-warnings",

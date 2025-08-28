@@ -403,7 +403,7 @@ pub(crate) async fn install(
         .collect::<Vec<_>>();
 
     // Download and unpack the Python versions concurrently
-    let client = uv_client::BaseClientBuilder::new()
+    let client = uv_client::BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

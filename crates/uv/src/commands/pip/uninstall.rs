@@ -42,7 +42,7 @@ pub(crate) async fn pip_uninstall(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    let client_builder = BaseClientBuilder::new()
+    let client_builder = BaseClientBuilder::new(preview)
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

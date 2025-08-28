@@ -29,6 +29,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_preview::Preview;
 use uv_pypi_types::{PypiSimpleDetail, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -56,13 +57,13 @@ pub struct RegistryClientBuilder<'a> {
 }
 
 impl RegistryClientBuilder<'_> {
-    pub fn new(cache: Cache) -> Self {
+    pub fn new(cache: Cache, preview: Preview) -> Self {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder: BaseClientBuilder::new(),
+            base_client_builder: BaseClientBuilder::new(preview),
         }
     }
 }
@@ -1317,7 +1318,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(cache, uv_preview::Preview::default())
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1377,7 +1378,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(cache, uv_preview::Preview::default())
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1425,7 +1426,7 @@ mod tests {
             .await;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(cache, uv_preview::Preview::default())
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();

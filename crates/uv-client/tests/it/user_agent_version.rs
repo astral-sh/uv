@@ -52,7 +52,7 @@ async fn test_user_agent_has_version() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(cache, uv_preview::Preview::default()).build();
 
     // Send request to our dummy server
     let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
@@ -128,7 +128,8 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
-    let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
+    let mut builder =
+        RegistryClientBuilder::new(cache, uv_preview::Preview::default()).markers(&markers);
 
     let linux = Platform::new(
         Os::Manylinux {
