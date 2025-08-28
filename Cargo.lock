@@ -5837,6 +5837,7 @@ dependencies = [
  "fastrand",
  "secret-service",
  "security-framework",
+ "thiserror 2.0.16",
  "tokio",
  "windows-sys 0.59.0",
  "zeroize",
