@@ -70,6 +70,7 @@ pub(crate) async fn login(
         }
     };
 
+    // TODO(zanieb): Add support for other authentication schemes here, e.g., `Credentials::Bearer`
     let credentials = Credentials::basic(Some(username), Some(password));
     provider.store(url, &credentials).await?;
 

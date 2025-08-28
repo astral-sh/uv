@@ -13,12 +13,6 @@ pub(crate) async fn token(
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let name = if username.is_some() {
-        "password"
-    } else {
-        "token"
-    };
-
     // Determine the keyring provider to use
     let Some(keyring_provider) = &keyring_provider else {
         bail!("Retrieving credentials requires setting a `keyring-provider`");
@@ -39,7 +33,14 @@ pub(crate) async fn token(
         .with_context(|| format!("Failed to fetch credentials for {display_url}"))?;
 
     let Some(password) = credentials.password() else {
-        bail!("No {name} found for {display_url}");
+        bail!(
+            "No {} found for {display_url}",
+            if username.is_some() {
+                "password"
+            } else {
+                "token"
+            }
+        );
     };
 
     writeln!(printer.stdout(), "{password}")?;

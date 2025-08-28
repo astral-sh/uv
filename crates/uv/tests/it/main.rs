@@ -3,7 +3,7 @@
 
 pub(crate) mod common;
 
-// #[cfg(feature = "keyring-tests")]
+#[cfg(feature = "keyring-tests")]
 mod auth;
 
 mod branching_urls;

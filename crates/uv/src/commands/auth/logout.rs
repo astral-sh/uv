@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use std::fmt::Write;
+use std::{borrow::Cow, fmt::Write};
 use uv_configuration::{KeyringProviderType, Service};
 
 use crate::{commands::ExitStatus, printer::Printer};
@@ -18,7 +18,9 @@ pub(crate) async fn logout(
         .as_ref()
         .map(|username| format!("{username}@{url}"))
         .unwrap_or_else(|| url.to_string());
-    let username = username.unwrap_or_else(|| String::from("__token__"));
+    let username = username
+        .map(Cow::Owned)
+        .unwrap_or(Cow::Borrowed("__token__"));
 
     // Unlike login, we'll default to the native provider if none is requested since it's the only
     // valid option and it doesn't matter if the credentials are available in subsequent commands.
