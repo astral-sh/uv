@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
-use std::{borrow::Cow, fmt::Write};
+use std::fmt::Write;
+use uv_auth::Credentials;
 use uv_configuration::{KeyringProviderType, Service};
 use uv_preview::Preview;
 
@@ -16,13 +17,27 @@ pub(crate) async fn logout(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-    let display_url = username
-        .as_ref()
-        .map(|username| format!("{username}@{url}"))
-        .unwrap_or_else(|| url.to_string());
-    let username = username
-        .map(Cow::Owned)
-        .unwrap_or(Cow::Borrowed("__token__"));
+
+    // Extract credentials from URL if present
+    let url_credentials = Credentials::from_url(url);
+    let url_username = url_credentials.as_ref().and_then(|c| c.username());
+
+    let username = match (username, url_username) {
+        (Some(cli), Some(url)) => {
+            bail!(
+                "Cannot specify a username both via the URL and CLI; found `--username {cli}` and `{url}`"
+            );
+        }
+        (Some(cli), None) => cli,
+        (None, Some(url)) => url.to_string(),
+        (None, None) => "__token__".to_string(),
+    };
+
+    let display_url = if username == "__token__" {
+        url.without_credentials().to_string()
+    } else {
+        format!("{username}@{}", url.without_credentials())
+    };
 
     // Unlike login, we'll default to the native provider if none is requested since it's the only
     // valid option and it doesn't matter if the credentials are available in subsequent commands.
