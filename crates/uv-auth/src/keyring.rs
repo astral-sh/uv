@@ -84,6 +84,9 @@ impl KeyringProvider {
             return Ok(false);
         };
 
+        // Ensure we strip credentials from the URL before storing
+        let url = url.without_credentials();
+
         match &self.backend {
             KeyringProviderBackend::Native => {
                 self.store_native(url.as_str(), username, password).await?;
@@ -116,6 +119,9 @@ impl KeyringProvider {
     /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
+        // Ensure we strip credentials from the URL before storing
+        let url = url.without_credentials();
+
         match &self.backend {
             KeyringProviderBackend::Native => {
                 self.remove_native(url.as_str(), username).await?;
