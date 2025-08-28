@@ -60,7 +60,7 @@ fn add_package_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -93,7 +93,7 @@ fn add_package_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -199,7 +199,7 @@ fn token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -264,7 +264,7 @@ fn token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -493,7 +493,7 @@ fn login_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -525,7 +525,7 @@ fn login_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -568,7 +568,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Logout before logging in (without a username)
@@ -618,7 +618,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -651,7 +651,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Login again
@@ -678,7 +678,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Conflict between --username and a URL username is rejected
@@ -738,7 +738,7 @@ fn logout_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -753,7 +753,7 @@ fn logout_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     Ok(())
@@ -778,7 +778,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@https://example.com/
+    Stored credentials for test@https://example.com/
     ");
 
     // HTTP URLs are not allowed - only HTTPS
@@ -814,7 +814,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@https://example.com/
+    Stored credentials for test@https://example.com/
     ");
 
     // A domain-only service with a path also gets https:// prepended
@@ -832,7 +832,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@https://example.com/simple
+    Stored credentials for test@https://example.com/simple
     ");
 
     // An invalid URL is rejected
@@ -865,7 +865,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@https://example.com/simple
+    Stored credentials for test@https://example.com/simple
     ");
 
     // URL with embedded username and separate password works
@@ -881,7 +881,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@https://example.com/simple
+    Stored credentials for test@https://example.com/simple
     ");
 
     // Conflict between --username and URL username is rejected
