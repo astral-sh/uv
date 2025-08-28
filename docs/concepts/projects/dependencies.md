@@ -78,13 +78,16 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
-### Importing dependencies
+### Importing dependencies from requirements files
 
 Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
 
 ```
 uv add -r requirements.txt
 ```
+
+See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
+for more details.
 
 ## Removing dependencies
 

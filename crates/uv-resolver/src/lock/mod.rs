@@ -314,7 +314,7 @@ impl Lock {
                     )?;
                 }
             }
-            if let Some(group) = dist.dev.as_ref() {
+            if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {

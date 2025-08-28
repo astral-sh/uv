@@ -82,7 +82,7 @@ explicitly updated using `uv lock`.
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually. The
 `uv.lock` format is specific to uv and not usable by other tools.
 
-### `pylock.toml`
+### Relationship to `pylock.toml`
 
 In [PEP 751](https://peps.python.org/pep-0751/), Python standardized a new resolution file format,
 `pylock.toml`.
