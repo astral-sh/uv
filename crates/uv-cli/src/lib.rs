@@ -11,7 +11,7 @@ use clap::{Args, Parser, Subcommand};
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
-    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    Service, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -399,6 +399,13 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Manage authentication.
+    #[command(
+        after_help = "Use `uv help auth` for more details.",
+        after_long_help = ""
+    )]
+    Auth(AuthNamespace),
+
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
@@ -4370,6 +4377,22 @@ pub struct FormatArgs {
 }
 
 #[derive(Args)]
+pub struct AuthNamespace {
+    #[command(subcommand)]
+    pub command: AuthCommand,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommand {
+    /// Login to a service
+    Login(AuthLoginArgs),
+    /// Logout of a service
+    Logout(AuthLogoutArgs),
+    /// Show the authentication token for a service
+    Token(AuthTokenArgs),
+}
+
+#[derive(Args)]
 pub struct ToolNamespace {
     #[command(subcommand)]
     pub command: ToolCommand,
@@ -5431,6 +5454,76 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+}
+
+#[derive(Args)]
+pub struct AuthLogoutArgs {
+    /// The service to logout of.
+    pub service: Service,
+
+    /// The username to logout.
+    #[arg(long, short)]
+    pub username: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `logout`, which uses the system keyring
+    /// via an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthLoginArgs {
+    /// The service to login to.
+    pub service: Service,
+
+    /// The username to use for the service.
+    #[arg(long, short, conflicts_with = "token")]
+    pub username: Option<String>,
+
+    /// The password to use for the service.
+    #[arg(long, conflicts_with = "token")]
+    pub password: Option<String>,
+
+    /// The token to use for the service.
+    ///
+    /// The username will be set to `__token__`.
+    #[arg(long, short, conflicts_with = "username", conflicts_with = "password")]
+    pub token: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `login`, which uses the system keyring via
+    /// an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthTokenArgs {
+    /// The service to lookup.
+    pub service: Service,
+
+    /// The username to lookup.
+    #[arg(long, short)]
+    pub username: Option<String>,
+
+    /// The keyring provider to use for reading credentials.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]

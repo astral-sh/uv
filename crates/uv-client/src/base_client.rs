@@ -27,8 +27,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::Credentials;
-use uv_auth::{AuthMiddleware, Indexes};
+use uv_auth::{AuthMiddleware, Credentials, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;

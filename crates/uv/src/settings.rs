@@ -7,12 +7,13 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
+    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
+    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
+    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
+    VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -24,7 +25,8 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    Service, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3465,6 +3467,101 @@ impl PublishSettings {
                 Vec::new(),
                 false,
             ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth logout` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthLogoutSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
+}
+
+impl AuthLogoutSettings {
+    /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthLogoutArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerSchema {
+            keyring_provider, ..
+        } = top_level;
+
+        Self {
+            service: args.service,
+            username: args.username,
+            keyring_provider,
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth token` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthTokenSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
+}
+
+impl AuthTokenSettings {
+    /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthTokenArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerSchema {
+            keyring_provider, ..
+        } = top_level;
+
+        let keyring_provider = args.keyring_provider.combine(keyring_provider);
+
+        Self {
+            service: args.service,
+            username: args.username,
+            keyring_provider,
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth set` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthLoginSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
+    pub(crate) token: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
+}
+
+impl AuthLoginSettings {
+    /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthLoginArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerSchema {
+            keyring_provider, ..
+        } = top_level;
+
+        let keyring_provider = args.keyring_provider.combine(keyring_provider);
+
+        Self {
+            service: args.service,
+            username: args.username,
+            password: args.password,
+            token: args.token,
+            keyring_provider,
         }
     }
 }
