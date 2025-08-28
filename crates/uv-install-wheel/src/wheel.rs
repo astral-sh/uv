@@ -17,6 +17,7 @@ use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
+use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
@@ -225,18 +226,14 @@ pub(crate) fn write_script_entrypoints(
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
-        #[cfg(windows)]
-        {
-            use uv_trampoline_builder::windows_script_launcher;
+        if cfg!(windows) {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
                 &windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)?,
                 record,
             )?;
-        }
-        #[cfg(not(windows))]
-        {
+        } else {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,

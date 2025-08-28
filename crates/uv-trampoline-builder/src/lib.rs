@@ -51,109 +51,113 @@ pub struct Launcher {
 }
 
 impl Launcher {
+    /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
+    ///
+    /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot
+    /// be read on other platforms.
+    #[cfg(not(windows))]
+    pub fn try_from_path(_path: &Path) -> Result<Option<Self>, Error> {
+        Ok(None)
+    }
+
     /// Read [`Launcher`] metadata from a trampoline executable file.
     ///
     /// Returns `Ok(None)` if the file is not a trampoline executable.
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
-    #[allow(unused_variables)]
+    #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        #[cfg(not(windows))]
-        {
-            Err(Error::NotWindows)
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::ffi::OsStrExt;
-            use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
-            use windows::Win32::System::LibraryLoader::LoadLibraryExW;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
+        use windows::Win32::System::LibraryLoader::LoadLibraryExW;
 
-            let path_str = path
-                .as_os_str()
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect::<Vec<_>>();
+        let path_str = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
 
-            // SAFETY: winapi call; null-terminated strings
-            #[allow(unsafe_code)]
-            let Some(module) = (unsafe {
-                LoadLibraryExW(
-                    windows::core::PCWSTR(path_str.as_ptr()),
-                    None,
-                    LOAD_LIBRARY_AS_DATAFILE,
-                )
-                .ok()
-            }) else {
+        // SAFETY: winapi call; null-terminated strings
+        #[allow(unsafe_code)]
+        let Some(module) = (unsafe {
+            LoadLibraryExW(
+                windows::core::PCWSTR(path_str.as_ptr()),
+                None,
+                LOAD_LIBRARY_AS_DATAFILE,
+            )
+            .ok()
+        }) else {
+            return Ok(None);
+        };
+
+        let result = (|| {
+            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
                 return Ok(None);
             };
-
-            let result = (|| {
-                let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
-                    return Ok(None);
-                };
-                let Some(kind) = LauncherKind::from_resource_value(kind_data[0]) else {
-                    return Err(Error::UnprocessableMetadata);
-                };
-
-                let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
-                    return Ok(None);
-                };
-                let python_path = PathBuf::from(
-                    String::from_utf8(path_data)
-                        .map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-                );
-
-                let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
-
-                Ok(Some(Self {
-                    kind,
-                    python_path,
-                    script_data,
-                }))
-            })();
-
-            // SAFETY: winapi call; handle is known to be valid.
-            #[allow(unsafe_code)]
-            unsafe {
-                windows::Win32::Foundation::FreeLibrary(module)
-                    .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            let Some(kind) = LauncherKind::from_resource_value(kind_data[0]) else {
+                return Err(Error::UnprocessableMetadata);
             };
 
-            result
-        }
+            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
+                return Ok(None);
+            };
+            let python_path = PathBuf::from(
+                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+            );
+
+            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
+
+            Ok(Some(Self {
+                kind,
+                python_path,
+                script_data,
+            }))
+        })();
+
+        // SAFETY: winapi call; handle is known to be valid.
+        #[allow(unsafe_code)]
+        unsafe {
+            windows::Win32::Foundation::FreeLibrary(module)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        };
+
+        result
     }
 
-    #[allow(unused_variables)]
+    /// Write this trampoline launcher to a file.
+    ///
+    /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific
+    /// feature and cannot be written on other platforms.
+    #[cfg(not(windows))]
+    pub fn write_to_file(self, _file_path: &Path, _is_gui: bool) -> Result<(), Error> {
+        Err(Error::NotWindows)
+    }
+
+    /// Write this trampoline launcher to a file.
+    #[cfg(windows)]
     pub fn write_to_file(self, file_path: &Path, is_gui: bool) -> Result<(), Error> {
-        #[cfg(not(windows))]
-        {
-            Err(Error::NotWindows)
+        use uv_fs::Simplified;
+        let python_path = self.python_path.simplified_display().to_string();
+
+        // Write the launcher binary
+        fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
+
+        // Write resources
+        let resources = &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[self.kind.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        ];
+        if let Some(script_data) = self.script_data {
+            let mut all_resources = resources.to_vec();
+            all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+            write_resources(file_path, &all_resources)?;
+        } else {
+            write_resources(file_path, resources)?;
         }
-        #[cfg(windows)]
-        {
-            use uv_fs::Simplified;
-            let python_path = self.python_path.simplified_display().to_string();
 
-            // Write the launcher binary
-            fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
-
-            // Write resources
-            let resources = &[
-                (
-                    RESOURCE_TRAMPOLINE_KIND,
-                    &[self.kind.to_resource_value()][..],
-                ),
-                (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-            ];
-            if let Some(script_data) = self.script_data {
-                let mut all_resources = resources.to_vec();
-                all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
-                write_resources(file_path, &all_resources)?;
-            } else {
-                write_resources(file_path, resources)?;
-            }
-
-            Ok(())
-        }
+        Ok(())
     }
 
     #[must_use]
@@ -251,7 +255,6 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
 }
 
 /// Helper to write Windows PE resources
-#[allow(unused_variables)]
 #[cfg(windows)]
 fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) -> Result<(), Error> {
     // SAFETY: winapi calls; null-terminated strings
@@ -289,8 +292,8 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
     Ok(())
 }
 
-#[cfg(windows)]
 /// Safely reads a resource from a PE file
+#[cfg(windows)]
 fn read_resource(
     handle: windows::Win32::Foundation::HMODULE,
     name: windows::core::PCWSTR,
@@ -327,125 +330,136 @@ fn read_resource(
     }
 }
 
+/// Construct a Windows script launcher.
+///
+/// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
+/// and cannot be created on other platforms.
+#[cfg(not(windows))]
+pub fn windows_script_launcher(
+    _launcher_python_script: &str,
+    _is_gui: bool,
+    _python_executable: impl AsRef<Path>,
+) -> Result<Vec<u8>, Error> {
+    Err(Error::NotWindows)
+}
+
+/// Construct a Windows script launcher.
+///
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
 /// stored zip file.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
-#[allow(unused_variables)]
+#[cfg(windows)]
 pub fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid function-scope
-    // `#[cfg(windows)]` to retain compilation on all platforms.
-    #[cfg(not(windows))]
+    use std::io::{Cursor, Write};
+
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
+
+    use uv_fs::Simplified;
+
+    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+
+    let mut payload: Vec<u8> = Vec::new();
     {
-        Err(Error::NotWindows)
+        // We're using the zip writer, but with stored compression
+        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+        let stored =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
+        let error_msg = "Writing to Vec<u8> should never fail";
+        archive.start_file("__main__.py", stored).expect(error_msg);
+        archive
+            .write_all(launcher_python_script.as_bytes())
+            .expect(error_msg);
+        archive.finish().expect(error_msg);
     }
-    #[cfg(windows)]
-    {
-        use std::io::{Cursor, Write};
 
-        use zip::ZipWriter;
-        use zip::write::SimpleFileOptions;
+    let python = python_executable.as_ref();
+    let python_path = python.simplified_display().to_string();
 
-        use uv_fs::Simplified;
+    // Start with base launcher binary
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
 
-        let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Script.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        (RESOURCE_SCRIPT_DATA, &payload),
+    ];
+    write_resources(&temp_file, resources)?;
 
-        let mut payload: Vec<u8> = Vec::new();
-        {
-            // We're using the zip writer, but with stored compression
-            // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-            // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-            let stored =
-                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-            let mut archive = ZipWriter::new(Cursor::new(&mut payload));
-            let error_msg = "Writing to Vec<u8> should never fail";
-            archive.start_file("__main__.py", stored).expect(error_msg);
-            archive
-                .write_all(launcher_python_script.as_bytes())
-                .expect(error_msg);
-            archive.finish().expect(error_msg);
-        }
+    // Read back the complete file
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
-        let python = python_executable.as_ref();
-        let python_path = python.simplified_display().to_string();
-
-        // Start with base launcher binary
-        // Create temporary file for the launcher
-        let temp_dir = tempfile::TempDir::new()?;
-        let temp_file = temp_dir
-            .path()
-            .join(format!("uv-trampoline-{}.exe", std::process::id()));
-        fs_err::write(&temp_file, launcher_bin)?;
-
-        // Write resources
-        let resources = &[
-            (
-                RESOURCE_TRAMPOLINE_KIND,
-                &[LauncherKind::Script.to_resource_value()][..],
-            ),
-            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-            (RESOURCE_SCRIPT_DATA, &payload),
-        ];
-        write_resources(&temp_file, resources)?;
-
-        // Read back the complete file
-        let launcher = fs_err::read(&temp_file)?;
-        fs_err::remove_file(temp_file)?;
-
-        Ok(launcher)
-    }
+    Ok(launcher)
 }
 
+/// Construct a Windows Python launcher.
+///
+/// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
+/// and cannot be created on other platforms.
+#[cfg(not(windows))]
+pub fn windows_python_launcher(
+    _python_executable: impl AsRef<Path>,
+    _is_gui: bool,
+) -> Result<Vec<u8>, Error> {
+    Err(Error::NotWindows)
+}
+
+/// Construct a Windows Python launcher.
+///
 /// A minimal .exe launcher binary for Python.
 ///
 /// Sort of equivalent to a `python` symlink on Unix.
-#[allow(unused_variables)]
+#[cfg(windows)]
 pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     is_gui: bool,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid function-scope
-    // `#[cfg(windows)]` to retain compilation on all platforms.
-    #[cfg(not(windows))]
-    {
-        Err(Error::NotWindows)
-    }
-    #[cfg(windows)]
-    {
-        use uv_fs::Simplified;
+    use uv_fs::Simplified;
 
-        let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
-        let python = python_executable.as_ref();
-        let python_path = python.simplified_display().to_string();
+    let python = python_executable.as_ref();
+    let python_path = python.simplified_display().to_string();
 
-        // Create temporary file for the launcher
-        let temp_dir = tempfile::TempDir::new()?;
-        let temp_file = temp_dir
-            .path()
-            .join(format!("uv-trampoline-{}.exe", std::process::id()));
-        fs_err::write(&temp_file, launcher_bin)?;
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
 
-        // Write resources
-        let resources = &[
-            (
-                RESOURCE_TRAMPOLINE_KIND,
-                &[LauncherKind::Python.to_resource_value()][..],
-            ),
-            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-        ];
-        write_resources(&temp_file, resources)?;
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Python.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+    ];
+    write_resources(&temp_file, resources)?;
 
-        // Read back the complete file
-        let launcher = fs_err::read(&temp_file)?;
-        fs_err::remove_file(temp_file)?;
+    // Read back the complete file
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
-        Ok(launcher)
-    }
+    Ok(launcher)
 }
 
 #[cfg(all(test, windows))]

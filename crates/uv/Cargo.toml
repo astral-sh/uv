@@ -53,6 +53,7 @@ uv-shell = { workspace = true }
 uv-static = { workspace = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
@@ -107,13 +108,8 @@ walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-uv-trampoline-builder = { workspace = true }
-
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
-windows = { workspace = true }
-windows-result = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
@@ -134,6 +130,10 @@ tempfile = { workspace = true }
 whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+windows-result = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
