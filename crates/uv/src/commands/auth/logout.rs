@@ -1,5 +1,8 @@
-use anyhow::{Context, Result, bail};
 use std::fmt::Write;
+
+use anyhow::{Context, Result, bail};
+use owo_colors::OwoColorize;
+
 use uv_auth::Credentials;
 use uv_configuration::{KeyringProviderType, Service};
 use uv_preview::Preview;
@@ -59,7 +62,11 @@ pub(crate) async fn logout(
         .await
         .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
 
-    writeln!(printer.stderr(), "Logged out of {display_url}")?;
+    writeln!(
+        printer.stderr(),
+        "Removed credentials for {}",
+        display_url.cyan()
+    )?;
 
     Ok(ExitStatus::Success)
 }
