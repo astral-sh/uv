@@ -704,7 +704,13 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: When using `--token`, a username cannot not be provided; found: public
+    error: unexpected argument '--token' found
+
+      tip: to pass '--token' as a value, use '-- --token'
+
+    Usage: uv auth logout --cache-dir [CACHE_DIR] <SERVICE>
+
+    For more information, try '--help'.
     ");
 
     Ok(())
@@ -776,7 +782,7 @@ fn login_native_keyring_url() {
     Logged in to test@https://example.com/
     ");
 
-    // When including a protocol explicitly, it is retained
+    // HTTP URLs are not allowed - only HTTPS
     uv_snapshot!(context.auth_login()
         .arg("http://example.com")
         .arg("--username")
@@ -785,13 +791,14 @@ fn login_native_keyring_url() {
         .arg("test")
         .arg("--keyring-provider")
         .arg("native"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Logged in to test@http://example.com/
+    error: invalid value 'http://example.com' for '<SERVICE>': only HTTPS is supported
+
+    For more information, try '--help'.
     ");
 
     uv_snapshot!(context.auth_login()
@@ -843,7 +850,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'not a valid url' for '<SERVICE>': invalid international domain name
+    error: invalid value 'not a valid url' for '<SERVICE>': failed to parse URL: invalid international domain name
 
     For more information, try '--help'.
     ");
