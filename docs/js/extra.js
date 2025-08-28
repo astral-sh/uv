@@ -80,6 +80,14 @@ document$.subscribe(function () {
       "concepts/projects/config/#build-isolation",
     "concepts/projects/dependencies/#dependency-specifiers-pep-508":
       "concepts/projects/dependencies/#dependency-specifiers",
+    "concepts/projects/dependencies/#importing-dependencies":
+      "concepts/projects/dependencies/#importing-dependencies-from-requirements-files",
+    "concepts/projects/layout/#pylock-toml":
+      "concepts/projects/layout/#relationship-to-pylock-toml",
+    "concepts/projects/run/#legacy-windows-scripts":
+      "concepts/projects/run/#legacy-scripts-on-windows",
+    "concepts/projects/sync/#checking-if-the-lockfile-is-up-to-date":
+      "concepts/projects/sync/#checking-the-lockfile",
   };
 
   // The prefix for the site, see `site_dir` in `mkdocs.yml`

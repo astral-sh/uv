@@ -87,7 +87,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
-                let group = dist.dev.as_ref()?;
+                let group = dist.group.as_ref()?;
                 Some((&dist.name, group))
             }
         }
@@ -294,7 +294,7 @@ impl ResolverOutput {
                 url: edge.from_url.as_ref(),
                 index: edge.from_index.as_ref(),
                 extra: edge.from_extra.as_ref(),
-                group: edge.from_dev.as_ref(),
+                group: edge.from_group.as_ref(),
             }]
         });
         let to_index = inverse[&PackageRef {
@@ -303,7 +303,7 @@ impl ResolverOutput {
             url: edge.to_url.as_ref(),
             index: edge.to_index.as_ref(),
             extra: edge.to_extra.as_ref(),
-            group: edge.to_dev.as_ref(),
+            group: edge.to_group.as_ref(),
         }];
 
         let edge_marker = {
@@ -338,7 +338,7 @@ impl ResolverOutput {
         let ResolutionPackage {
             name,
             extra,
-            dev,
+            dev: group,
             url,
             index,
         } = &package;
@@ -367,11 +367,11 @@ impl ResolverOutput {
             }
 
             // Validate the development dependency group.
-            if let Some(dev) = dev {
+            if let Some(dev) = group {
                 if !metadata.dependency_groups.contains_key(dev) {
-                    diagnostics.push(ResolutionDiagnostic::MissingDev {
+                    diagnostics.push(ResolutionDiagnostic::MissingGroup {
                         dist: dist.clone(),
-                        dev: dev.clone(),
+                        group: dev.clone(),
                     });
                 }
             }
@@ -383,7 +383,7 @@ impl ResolverOutput {
             name: name.clone(),
             version: version.clone(),
             extra: extra.clone(),
-            dev: dev.clone(),
+            group: group.clone(),
             hashes,
             metadata,
             marker: UniversalMarker::TRUE,
@@ -395,7 +395,7 @@ impl ResolverOutput {
                 url: url.as_ref(),
                 index: index.as_ref(),
                 extra: extra.as_ref(),
-                group: dev.as_ref(),
+                group: group.as_ref(),
             },
             node,
         );
@@ -914,8 +914,8 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
                     let edge = if let Some(extra) = source_dist.extra.as_ref() {
                         Edge::Optional(extra.clone())
-                    } else if let Some(dev) = source_dist.dev.as_ref() {
-                        Edge::Dev(dev.clone())
+                    } else if let Some(group) = source_dist.group.as_ref() {
+                        Edge::Dev(group.clone())
                     } else {
                         Edge::Prod
                     };

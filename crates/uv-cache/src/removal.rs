@@ -64,9 +64,22 @@ impl Removal {
 
             // Remove the file.
             self.total_bytes += metadata.len();
-            if cfg!(windows) && metadata.is_symlink() {
-                // Remove the junction.
-                remove_dir(path)?;
+            if metadata.is_symlink() {
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::FileTypeExt;
+
+                    if metadata.file_type().is_symlink_dir() {
+                        remove_dir(path)?;
+                    } else {
+                        remove_file(path)?;
+                    }
+                }
+
+                #[cfg(not(windows))]
+                {
+                    remove_file(path)?;
+                }
             } else {
                 remove_file(path)?;
             }
@@ -94,8 +107,17 @@ impl Removal {
             }
 
             let entry = entry?;
-            if cfg!(windows) && entry.file_type().is_symlink() {
-                // Remove the junction.
+            if entry.file_type().is_symlink() && {
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::FileTypeExt;
+                    entry.file_type().is_symlink_dir()
+                }
+                #[cfg(not(windows))]
+                {
+                    false
+                }
+            } {
                 self.num_files += 1;
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {

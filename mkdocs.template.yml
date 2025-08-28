@@ -228,7 +228,7 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Environment variables: reference/environment.md
-      - Installer: reference/installer.md
+      - Installer options: reference/installer.md
       - Troubleshooting:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
