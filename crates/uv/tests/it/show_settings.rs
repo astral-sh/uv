@@ -3464,6 +3464,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         build_constraints: [],
         python: None,
+        python_platform: None,
         refresh: None(
             Timestamp(
                 SystemTime {
