@@ -10,6 +10,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-dirs = { workspace = true }
 uv-keyring = { workspace = true, features = ["apple-native", "secret-service", "windows-native"] }
 uv-once-map = { workspace = true }
 uv-redacted = { workspace = true }

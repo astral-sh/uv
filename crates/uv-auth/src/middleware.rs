@@ -51,12 +51,67 @@ impl NetrcMode {
     }
 }
 
+/// Strategy for loading text-based credential files.
+enum TextStoreMode {
+    Automatic(LazyLock<Option<crate::store::TomlCredentialStore>>),
+    Enabled(crate::store::TomlCredentialStore),
+    Disabled,
+}
+
+impl Default for TextStoreMode {
+    fn default() -> Self {
+        Self::Automatic(LazyLock::new(|| {
+            let state_dir = uv_dirs::user_state_dir()?;
+            let credentials_path = state_dir.join("credentials").join("credentials.toml");
+
+            match crate::store::TomlCredentialStore::load_from_file(&credentials_path) {
+                Ok(store) => {
+                    debug!(
+                        "Loaded TOML credential store from {}",
+                        credentials_path.display()
+                    );
+                    Some(store)
+                }
+                Err(crate::store::TomlCredentialError::Io(err))
+                    if err.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    debug!(
+                        "No TOML credentials file found at {}",
+                        credentials_path.display()
+                    );
+                    None
+                }
+                Err(err) => {
+                    warn!(
+                        "Failed to load TOML credentials from {}: {}",
+                        credentials_path.display(),
+                        err
+                    );
+                    None
+                }
+            }
+        }))
+    }
+}
+
+impl TextStoreMode {
+    /// Get the parsed credential store if enabled.
+    fn get(&self) -> Option<&crate::store::TomlCredentialStore> {
+        match self {
+            Self::Automatic(lock) => lock.as_ref(),
+            Self::Enabled(store) => Some(store),
+            Self::Disabled => None,
+        }
+    }
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
-/// fetches credentials from a netrc file and the keyring.
+/// fetches credentials from a netrc file, TOML file, and the keyring.
 pub struct AuthMiddleware {
     netrc: NetrcMode,
+    text_store: TextStoreMode,
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
     /// Auth policies for specific URLs.
@@ -70,6 +125,7 @@ impl AuthMiddleware {
     pub fn new() -> Self {
         Self {
             netrc: NetrcMode::default(),
+            text_store: TextStoreMode::default(),
             keyring: None,
             cache: None,
             indexes: Indexes::new(),
@@ -86,6 +142,19 @@ impl AuthMiddleware {
             NetrcMode::Enabled(netrc)
         } else {
             NetrcMode::Disabled
+        };
+        self
+    }
+
+    /// Configure the text credential store to use.
+    ///
+    /// `None` disables authentication via text store.
+    #[must_use]
+    pub fn with_text_store(mut self, store: Option<crate::store::TomlCredentialStore>) -> Self {
+        self.text_store = if let Some(store) = store {
+            TextStoreMode::Enabled(store)
+        } else {
+            TextStoreMode::Disabled
         };
         self
     }
@@ -523,6 +592,14 @@ impl AuthMiddleware {
             )
         }) {
             debug!("Found credentials in netrc file for {url}");
+            Some(credentials)
+
+        // Text credential store support.
+        } else if let Some(credentials) = self.text_store.get().and_then(|text_store| {
+            debug!("Checking text store for credentials for {url}");
+            text_store.get_credentials(&url::Url::from(url.clone()))
+        }) {
+            debug!("Found credentials in text store for {url}");
             Some(credentials)
 
         // N.B. The keyring provider performs lookups for the exact URL then falls back to the host.
@@ -2139,6 +2216,62 @@ mod tests {
             DisplaySafeUrl::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple")
                 .unwrap()
         );
+    }
+
+    #[test(tokio::test)]
+    async fn test_text_store_basic_auth() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        // Create a text credential store with matching credentials
+        let mut store =
+            crate::store::TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let service = crate::Service::try_from(base_url.to_string()).unwrap();
+        let credentials =
+            crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
+        store.store_credentials(&service, credentials);
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(Some(store)),
+            )
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Credentials should be pulled from the text store"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_text_store_disabled() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+        let server = start_test_server(username, password).await;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(None), // Explicitly disable text store
+            )
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            401,
+            "Credentials should not be found when text store is disabled"
+        );
+
+        Ok(())
     }
 
     fn create_request(url: &str) -> Request {

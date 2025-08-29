@@ -7,9 +7,9 @@ pub use credentials::Credentials;
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-pub use service::{Service, ServiceParseError};
-pub use store::{AuthScheme, TomlCredentialStore, TomlCredentialError};
 use realm::Realm;
+pub use service::{Service, ServiceParseError};
+pub use store::{AuthScheme, TomlCredentialError, TomlCredentialStore};
 use uv_redacted::DisplaySafeUrl;
 
 mod cache;

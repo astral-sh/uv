@@ -49,4 +49,3 @@ impl std::fmt::Display for KeyringProviderType {
         }
     }
 }
-

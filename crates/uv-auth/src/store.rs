@@ -167,7 +167,7 @@ impl TomlCredentialStore {
             }
             Err(e) => return Err(TomlCredentialError::Io(e)),
         };
-        
+
         let toml_creds: TomlCredentials = toml::from_str(&content).unwrap_or_default();
 
         let credentials: HashMap<String, Credentials> = toml_creds
@@ -316,8 +316,11 @@ mod tests {
         assert_eq!(credentials.username(), Some("user"));
         assert_eq!(credentials.password(), Some("pass"));
 
-        let back_to_toml =
-            TomlCredential::from_credentials(Service::from_str("https://example.com").unwrap(), &credentials).unwrap();
+        let back_to_toml = TomlCredential::from_credentials(
+            Service::from_str("https://example.com").unwrap(),
+            &credentials,
+        )
+        .unwrap();
         assert_eq!(back_to_toml.service.to_string(), "https://example.com/");
         assert_eq!(back_to_toml.username.as_deref(), Some("user"));
         assert_eq!(back_to_toml.password.as_ref().unwrap().as_str(), "pass");
@@ -349,8 +352,14 @@ mod tests {
         let parsed: TomlCredentials = toml::from_str(&toml_str).unwrap();
 
         assert_eq!(parsed.credentials.len(), 2);
-        assert_eq!(parsed.credentials[0].service.to_string(), "https://example.com/");
-        assert_eq!(parsed.credentials[1].service.to_string(), "https://test.org/");
+        assert_eq!(
+            parsed.credentials[0].service.to_string(),
+            "https://example.com/"
+        );
+        assert_eq!(
+            parsed.credentials[1].service.to_string(),
+            "https://test.org/"
+        );
     }
 
     #[test]
@@ -429,10 +438,7 @@ password = "pass2"
         for url_str in matching_urls {
             let url = Url::parse(url_str).unwrap();
             let cred = store.get_credentials(&url);
-            assert!(
-                cred.is_some(),
-                "Failed to match URL with prefix: {url_str}"
-            );
+            assert!(cred.is_some(), "Failed to match URL with prefix: {url_str}");
         }
 
         // Should NOT match URLs that are not prefixes
@@ -445,10 +451,7 @@ password = "pass2"
         for url_str in non_matching_urls {
             let url = Url::parse(url_str).unwrap();
             let cred = store.get_credentials(&url);
-            assert!(
-                cred.is_none(),
-                "Should not match non-prefix URL: {url_str}"
-            );
+            assert!(cred.is_none(), "Should not match non-prefix URL: {url_str}");
         }
     }
 
