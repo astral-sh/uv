@@ -997,7 +997,7 @@ mod tests {
         project_urls: Source, https://github.com/unknown/tqdm
         "###);
 
-        let client = BaseClientBuilder::new().build();
+        let client = BaseClientBuilder::default().build();
         let (request, _) = build_request(
             &file,
             raw_filename,
@@ -1149,7 +1149,7 @@ mod tests {
         requires_dist: requests ; extra == 'telegram'
         "###);
 
-        let client = BaseClientBuilder::new().build();
+        let client = BaseClientBuilder::default().build();
         let (request, _) = build_request(
             &file,
             raw_filename,

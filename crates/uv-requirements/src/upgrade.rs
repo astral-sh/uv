@@ -41,7 +41,8 @@ pub async fn read_requirements_txt(
     let requirements_txt = RequirementsTxt::parse(
         output_file,
         &*CWD,
-        &BaseClientBuilder::new().connectivity(Connectivity::Offline),
+        // Pseudo-client for reading local-only requirements.
+        &BaseClientBuilder::default().connectivity(Connectivity::Offline),
     )
     .await?;
 

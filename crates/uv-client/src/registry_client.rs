@@ -17,8 +17,8 @@ use url::Url;
 
 use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
-use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -55,22 +55,20 @@ pub struct RegistryClientBuilder<'a> {
     base_client_builder: BaseClientBuilder<'a>,
 }
 
-impl RegistryClientBuilder<'_> {
-    pub fn new(cache: Cache) -> Self {
+impl<'a> RegistryClientBuilder<'a> {
+    pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
         Self {
             index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder: BaseClientBuilder::new(),
+            base_client_builder,
         }
     }
-}
 
-impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
-        self.base_client_builder = self.base_client_builder.with_custom_client(client);
+        self.base_client_builder = self.base_client_builder.custom_client(client);
         self
     }
 
@@ -95,37 +93,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
-        self
-    }
-
-    #[must_use]
-    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .allow_insecure_host(allow_insecure_host);
-        self
-    }
-
-    #[must_use]
-    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
-        self
-    }
-
-    #[must_use]
-    pub fn retries(mut self, retries: u32) -> Self {
-        self.base_client_builder = self.base_client_builder.retries(retries);
-        self
-    }
-
-    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
-        self.base_client_builder = self.base_client_builder.retries_from_env()?;
-        Ok(self)
-    }
-
-    #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
         self
     }
 
@@ -236,20 +203,6 @@ impl<'a> RegistryClientBuilder<'a> {
             timeout,
             flat_indexes: Arc::default(),
         }
-    }
-}
-
-impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    type Error = std::io::Error;
-
-    fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            index_locations: IndexLocations::default(),
-            index_strategy: IndexStrategy::default(),
-            torch_backend: None,
-            cache: Cache::temp()?,
-            base_client_builder: value,
-        })
     }
 }
 
@@ -1275,7 +1228,7 @@ mod tests {
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
+    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
@@ -1324,7 +1277,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1384,7 +1337,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1432,7 +1385,7 @@ mod tests {
             .await;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();

@@ -123,12 +123,6 @@ impl Debug for ExtraMiddleware {
 
 impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl BaseClientBuilder<'_> {
-    pub fn new() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
             allow_insecure_host: vec![],
@@ -150,6 +144,21 @@ impl BaseClientBuilder<'_> {
     }
 }
 
+impl BaseClientBuilder<'_> {
+    pub fn new(
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: Vec<TrustedHost>,
+    ) -> Self {
+        Self {
+            allow_insecure_host,
+            native_tls,
+            connectivity,
+            ..Self::default()
+        }
+    }
+}
+
 impl<'a> BaseClientBuilder<'a> {
     /// Use a custom reqwest client instead of creating a new one.
     ///
@@ -157,7 +166,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// Note that some configuration options from this builder will still be applied
     /// to the client via middleware.
     #[must_use]
-    pub fn with_custom_client(mut self, client: Client) -> Self {
+    pub fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
         self
     }
@@ -265,6 +274,10 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
+    }
+
+    pub fn is_native_tls(&self) -> bool {
+        self.native_tls
     }
 
     pub fn is_offline(&self) -> bool {

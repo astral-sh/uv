@@ -72,7 +72,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -99,7 +99,7 @@ pub(crate) async fn run(
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -240,7 +240,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let environment = ScriptEnvironment::get_or_init(
                 (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -276,7 +276,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let lock = match project::lock::LockOperation::new(
                 mode,
                 &settings.resolver,
-                &network_settings,
+                &client_builder,
                 &lock_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
@@ -295,7 +295,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("script")
                     .report(err)
@@ -322,7 +322,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 modifications,
                 python_platform.as_ref(),
                 (&settings).into(),
-                &network_settings,
+                &client_builder,
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
@@ -342,7 +342,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Ok(()) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("script")
                     .report(err)
@@ -378,7 +378,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
@@ -426,7 +426,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
-                    &network_settings,
+                    &client_builder,
                     &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
@@ -451,7 +451,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .with_context("script")
                         .report(err)
@@ -464,7 +464,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let interpreter = ScriptInterpreter::discover(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
@@ -636,11 +636,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let client_builder = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -703,7 +698,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     no_sync,
@@ -754,7 +749,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let result = match project::lock::LockOperation::new(
                     mode,
                     &settings.resolver,
-                    &network_settings,
+                    &client_builder,
                     &lock_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
@@ -773,7 +768,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -841,7 +836,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     modifications,
                     python_platform.as_ref(),
                     (&settings).into(),
-                    &network_settings,
+                    &client_builder,
                     &sync_state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
@@ -861,7 +856,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Ok(()) => {}
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -880,12 +875,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             debug!("No project found; searching for Python interpreter");
 
             let interpreter = {
-                let client_builder = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
                     Some(PythonRequest::parse(request))
@@ -951,12 +940,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let spec = if requirements.is_empty() {
         None
     } else {
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
@@ -1002,7 +985,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &base_interpreter,
                 python_platform.as_ref(),
                 &settings,
-                &network_settings,
+                &client_builder,
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
@@ -1026,7 +1009,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("`--with`")
                     .report(err)
@@ -1660,7 +1643,7 @@ impl std::fmt::Display for RunCommand {
 /// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
 async fn resolve_gist_url(
     url: &DisplaySafeUrl,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
 ) -> anyhow::Result<DisplaySafeUrl> {
     // Extract the Gist ID from the URL.
     let gist_id = url
@@ -1671,12 +1654,7 @@ async fn resolve_gist_url(
     // Build the API URL.
     let api_url = format!("https://api.github.com/gists/{gist_id}");
 
-    let client = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    let client = client_builder.build();
 
     // Build the request with appropriate headers.
     let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
@@ -1722,7 +1700,7 @@ impl RunCommand {
     #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
-        network_settings: NetworkSettings,
+        client_builder: BaseClientBuilder<'_>,
         module: bool,
         script: bool,
         gui_script: bool,
@@ -1758,7 +1736,7 @@ impl RunCommand {
 
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
                 if url.host_str() == Some("gist.github.com") {
-                    url = resolve_gist_url(&url, &network_settings).await?;
+                    url = resolve_gist_url(&url, &client_builder).await?;
                 }
 
                 let file_stem = url
@@ -1771,12 +1749,7 @@ impl RunCommand {
                     .suffix(".py")
                     .tempfile()?;
 
-                let client = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone())
-                    .build();
+                let client = client_builder.build();
                 let response = client
                     .for_host(&url)
                     .get(Url::from(url.clone()))
