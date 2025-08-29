@@ -453,6 +453,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.token,
                 args.keyring_provider,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -463,7 +464,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthLogoutSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_logout(args.service, args.username, args.keyring_provider, printer).await
+            commands::auth_logout(
+                args.service,
+                args.username,
+                args.keyring_provider,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Token(args),
@@ -472,7 +480,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthTokenSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::auth_token(args.service, args.username, args.keyring_provider, printer).await
+            commands::auth_token(
+                args.service,
+                args.username,
+                args.keyring_provider,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
@@ -1668,6 +1683,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index_locations,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }

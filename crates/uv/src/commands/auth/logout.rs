@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use std::{borrow::Cow, fmt::Write};
 use uv_configuration::{KeyringProviderType, Service};
+use uv_preview::Preview;
 
 use crate::{commands::ExitStatus, printer::Printer};
 
@@ -12,6 +13,7 @@ pub(crate) async fn logout(
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
     let display_url = username
@@ -28,7 +30,7 @@ pub(crate) async fn logout(
 
     // Be helpful about incompatible `keyring-provider` settings
     let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider().unwrap(),
+        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
         KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
             bail!(
                 "Cannot logout with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
