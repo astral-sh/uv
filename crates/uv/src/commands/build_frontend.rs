@@ -527,8 +527,6 @@ async fn build_package(
     .await?
     .into_interpreter();
 
-    index_locations.cache_index_credentials();
-
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
@@ -556,7 +554,7 @@ async fn build_package(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())

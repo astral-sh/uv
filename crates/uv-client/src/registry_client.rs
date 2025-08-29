@@ -48,7 +48,7 @@ use crate::{
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchStrategy>,
     cache: Cache,
@@ -58,7 +58,7 @@ pub struct RegistryClientBuilder<'a> {
 impl RegistryClientBuilder<'_> {
     pub fn new(cache: Cache) -> Self {
         Self {
-            index_urls: IndexUrls::default(),
+            index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
@@ -75,11 +75,8 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
-        self.index_urls = index_locations.index_urls();
-        self.base_client_builder = self
-            .base_client_builder
-            .indexes(Indexes::from(index_locations));
+    pub fn index_locations(mut self, index_locations: IndexLocations) -> Self {
+        self.index_locations = index_locations;
         self
     }
 
@@ -183,9 +180,13 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     pub fn build(self) -> RegistryClient {
+        self.index_locations.cache_index_credentials();
+        let index_urls = self.index_locations.index_urls();
+
         // Build a base client
         let builder = self
             .base_client_builder
+            .indexes(Indexes::from(&self.index_locations))
             .redirect(RedirectPolicy::RetriggerMiddleware);
 
         let client = builder.build();
@@ -197,7 +198,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let client = CachedClient::new(client);
 
         RegistryClient {
-            index_urls: self.index_urls,
+            index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -210,8 +211,14 @@ impl<'a> RegistryClientBuilder<'a> {
 
     /// Share the underlying client between two different middleware configurations.
     pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
+        self.index_locations.cache_index_credentials();
+        let index_urls = self.index_locations.index_urls();
+
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.base_client_builder.wrap_existing(existing);
+        let client = self
+            .base_client_builder
+            .indexes(Indexes::from(&self.index_locations))
+            .wrap_existing(existing);
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();
@@ -220,7 +227,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let client = CachedClient::new(client);
 
         RegistryClient {
-            index_urls: self.index_urls,
+            index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -237,7 +244,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
 
     fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
         Ok(Self {
-            index_urls: IndexUrls::default(),
+            index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache: Cache::temp()?,

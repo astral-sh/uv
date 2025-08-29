@@ -57,8 +57,8 @@ $ # Install a branch
 $ uv pip install "git+https://github.com/astral-sh/ruff@main"
 ```
 
-See the [Git authentication](../concepts/authentication.md#git-authentication) documentation for
-installation from a private repository.
+See the [Git authentication](../concepts/authentication/git.md) documentation for installation from
+a private repository.
 
 ## Editable packages
 

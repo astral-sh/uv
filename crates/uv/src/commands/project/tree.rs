@@ -45,6 +45,7 @@ pub(crate) async fn tree(
     no_dedupe: bool,
     invert: bool,
     outdated: bool,
+    show_sizes: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
@@ -222,7 +223,7 @@ pub(crate) async fn tree(
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .index_locations(index_locations)
+            .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);
@@ -283,6 +284,7 @@ pub(crate) async fn tree(
         &groups,
         no_dedupe,
         invert,
+        show_sizes,
     );
 
     print!("{tree}");

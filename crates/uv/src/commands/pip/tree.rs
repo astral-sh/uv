@@ -98,7 +98,7 @@ pub(crate) async fn pip_tree(
         // Initialize the registry client.
         let client = RegistryClientBuilder::try_from(client_builder)?
             .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-            .index_locations(&index_locations)
+            .index_locations(index_locations)
             .index_strategy(index_strategy)
             .markers(environment.interpreter().markers())
             .platform(environment.interpreter().platform())

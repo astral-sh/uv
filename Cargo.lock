@@ -4986,7 +4986,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5183,7 +5183,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5837,6 +5837,7 @@ dependencies = [
  "fastrand",
  "secret-service",
  "security-framework",
+ "thiserror 2.0.16",
  "tokio",
  "windows-sys 0.59.0",
  "zeroize",
@@ -6240,6 +6241,7 @@ dependencies = [
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
+ "uv-console",
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
@@ -6451,7 +6453,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.8.13"
+version = "0.8.14"
 
 [[package]]
 name = "uv-virtualenv"

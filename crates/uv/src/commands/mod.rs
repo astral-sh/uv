@@ -52,6 +52,7 @@ pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
+pub(crate) use uv_console::human_readable_bytes;
 use uv_distribution_types::InstalledMetadata;
 use uv_fs::{CWD, Simplified};
 use uv_installer::compile_tree;
@@ -184,22 +185,6 @@ pub(super) async fn compile_bytecode(
         .dimmed()
     )?;
     Ok(())
-}
-
-/// Formats a number of bytes into a human readable SI-prefixed size.
-///
-/// Returns a tuple of `(quantity, units)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
-pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
-    static UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    let bytes = bytes as f32;
-    let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
-    (bytes / 1024_f32.powi(i as i32), UNITS[i])
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
