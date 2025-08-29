@@ -512,8 +512,7 @@ async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
     Mock::given(method("GET"))
         .and(path("/_/oidc/audience"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+            ResponseTemplate::new(200).set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
         )
         .mount(&server)
         .await;
@@ -622,8 +621,7 @@ async fn gitlab_trusted_publishing_with_index_config() {
     Mock::given(method("GET"))
         .and(path("/_/oidc/audience"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+            ResponseTemplate::new(200).set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
         )
         .mount(&server)
         .await;
