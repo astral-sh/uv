@@ -7,6 +7,8 @@ pub use credentials::Credentials;
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
+pub use service::{Service, ServiceParseError};
+pub use store::{AuthScheme, TomlCredentialStore, TomlCredentialError};
 use realm::Realm;
 use uv_redacted::DisplaySafeUrl;
 
@@ -17,6 +19,8 @@ mod keyring;
 mod middleware;
 mod providers;
 mod realm;
+mod service;
+pub mod store;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
 

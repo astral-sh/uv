@@ -4,7 +4,8 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
 use uv_auth::Credentials;
-use uv_configuration::{KeyringProviderType, Service};
+use uv_auth::Service;
+use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
 use crate::{commands::ExitStatus, printer::Printer};

@@ -21,11 +21,12 @@ use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
 };
 use uv_client::Connectivity;
+use uv_auth::Service;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
-    Service, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
     VersionControlSystem,
 };
 use uv_distribution_types::{
