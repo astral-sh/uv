@@ -6355,6 +6355,10 @@ pub struct DisplayTreeArgs {
     /// Show the latest available version of each package in the tree.
     #[arg(long)]
     pub outdated: bool,
+
+    /// Show compressed wheel sizes for packages in the tree.
+    #[arg(long)]
+    pub show_sizes: bool,
 }
 
 #[derive(Args, Debug)]

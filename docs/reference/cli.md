@@ -1884,6 +1884,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul></dd><dt id="uv-tree--script"><a href="#uv-tree--script"><code>--script</code></a> <i>script</i></dt><dd><p>Show the dependency tree the specified PEP 723 Python script, rather than the current project.</p>
 <p>If provided, uv will resolve the dependencies based on its inline metadata table, in adherence with PEP 723.</p>
+</dd><dt id="uv-tree--show-sizes"><a href="#uv-tree--show-sizes"><code>--show-sizes</code></a></dt><dd><p>Show compressed wheel sizes for packages in the tree</p>
 </dd><dt id="uv-tree--universal"><a href="#uv-tree--universal"><code>--universal</code></a></dt><dd><p>Show a platform-independent dependency tree.</p>
 <p>Shows resolved package versions for all Python versions and platforms, rather than filtering to those that are relevant for the current environment.</p>
 <p>Multiple versions may be shown for a each package.</p>
@@ -4938,6 +4939,7 @@ Python environment if no virtual environment is found.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-tree--quiet"><a href="#uv-pip-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-pip-tree--show-sizes"><a href="#uv-pip-tree--show-sizes"><code>--show-sizes</code></a></dt><dd><p>Show compressed wheel sizes for packages in the tree</p>
 </dd><dt id="uv-pip-tree--show-version-specifiers"><a href="#uv-pip-tree--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Show the version constraint(s) imposed on each package</p>
 </dd><dt id="uv-pip-tree--strict"><a href="#uv-pip-tree--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment, to detect packages with missing dependencies and other issues</p>
 </dd><dt id="uv-pip-tree--system"><a href="#uv-pip-tree--system"><code>--system</code></a></dt><dd><p>List packages in the system Python environment.</p>

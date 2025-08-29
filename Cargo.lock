@@ -6241,6 +6241,7 @@ dependencies = [
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
+ "uv-console",
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",

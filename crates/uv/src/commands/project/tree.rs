@@ -45,6 +45,7 @@ pub(crate) async fn tree(
     no_dedupe: bool,
     invert: bool,
     outdated: bool,
+    show_sizes: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
@@ -283,6 +284,7 @@ pub(crate) async fn tree(
         &groups,
         no_dedupe,
         invert,
+        show_sizes,
     );
 
     print!("{tree}");
