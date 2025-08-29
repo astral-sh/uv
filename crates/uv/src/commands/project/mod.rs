@@ -60,7 +60,6 @@ use crate::printer::Printer;
 use crate::settings::{
     InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
 };
-use std::str::FromStr;
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -1122,20 +1121,7 @@ impl WorkspacePython {
     ) -> Result<Self, ProjectError> {
         // Helper to parse a concrete version from the request (non-range) for compatibility check
         fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-            let version_request = match request {
-                PythonRequest::Version(version)
-                | PythonRequest::ImplementationVersion(_, version) => version,
-                PythonRequest::Key(download_request) => download_request.version()?,
-                _ => {
-                    return None;
-                }
-            };
-            if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
-                return None;
-            }
-            // Remove Python variant and parse to PEP 440 version
-            let s = version_request.clone().without_python_variant().to_string();
-            Some(uv_pep440::Version::from_str(&s).unwrap())
+            request.as_pep440_version()
         }
 
         let requires_python = workspace
@@ -1162,39 +1148,26 @@ impl WorkspacePython {
             // If the discovered version file is a GLOBAL pin and it conflicts with the
             // project's `requires-python`, ignore the pin and fall back to the project
             // requirement instead of erroring.
-            let request_from_file = file.clone().into_version();
+            let dot_source = PythonRequestSource::DotPythonVersion(file.clone());
+            let mut result = (dot_source, file.version().cloned());
 
             if file.is_global() {
-                if let (Some(req), Some(rp)) =
-                    (request_from_file.as_ref(), requires_python.as_ref())
-                {
+                if let (Some(req), Some(rp)) = (result.1.as_ref(), requires_python.as_ref()) {
                     if let Some(ver) = pep440_version_from_request(req) {
                         if !rp.contains(&ver) {
                             // Incompatible global pin; ignore it and use project's requires-python
-                            let source = PythonRequestSource::RequiresPython;
-                            let request = Some(PythonRequest::Version(VersionRequest::Range(
-                                rp.specifiers().clone(),
-                                PythonVariant::Default,
-                            )));
-                            (source, request)
-                        } else {
-                            let source = PythonRequestSource::DotPythonVersion(file.clone());
-                            (source, request_from_file)
+                            result = (
+                                PythonRequestSource::RequiresPython,
+                                Some(PythonRequest::Version(VersionRequest::Range(
+                                    rp.specifiers().clone(),
+                                    PythonVariant::Default,
+                                ))),
+                            );
                         }
-                    } else {
-                        // Non-concrete request; defer to the version file as-is
-                        let source = PythonRequestSource::DotPythonVersion(file.clone());
-                        (source, request_from_file)
                     }
-                } else {
-                    let source = PythonRequestSource::DotPythonVersion(file.clone());
-                    (source, request_from_file)
                 }
-            } else {
-                let source = PythonRequestSource::DotPythonVersion(file.clone());
-                let request = request_from_file;
-                (source, request)
             }
+            result
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
