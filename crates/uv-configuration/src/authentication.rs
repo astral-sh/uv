@@ -1,6 +1,8 @@
 use std::str::FromStr;
 use uv_auth::{self, KeyringProvider};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user_once;
 
 /// Keyring provider type to use for credential lookup.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -23,10 +25,18 @@ pub enum KeyringProviderType {
 // See <https://pip.pypa.io/en/stable/topics/authentication/#keyring-support> for details.
 
 impl KeyringProviderType {
-    pub fn to_provider(&self) -> Option<KeyringProvider> {
+    pub fn to_provider(&self, preview: &Preview) -> Option<KeyringProvider> {
         match self {
             Self::Disabled => None,
-            Self::Native => Some(KeyringProvider::native()),
+            Self::Native => {
+                if !preview.is_enabled(PreviewFeatures::NATIVE_KEYRING) {
+                    warn_user_once!(
+                        "The native keyring provider is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                        PreviewFeatures::NATIVE_KEYRING
+                    );
+                }
+                Some(KeyringProvider::native())
+            }
             Self::Subprocess => Some(KeyringProvider::subprocess()),
         }
     }
