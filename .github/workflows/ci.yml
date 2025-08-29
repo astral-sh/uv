@@ -1848,7 +1848,7 @@ jobs:
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@db8f07d3871a0a180efa06b95d467625c19d5d5f # release/v1
+        uses: konstin/gh-action-pypi-publish@ed01280d14b6f9a0edaa1a5494d8f7ffed709083 # release/v1
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
