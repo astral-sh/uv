@@ -331,9 +331,7 @@ pub async fn check_trusted_publishing(
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!(
-                "Running on CI without explicit credentials, checking for trusted publishing"
-            );
+            debug!("Running on CI without explicit credentials, checking for trusted publishing");
             match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
                 .await
             {
@@ -364,9 +362,11 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
+            let in_github = env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string());
+            let in_gitlab = env::var(EnvVars::GITLAB_CI).is_ok();
+            if !(in_github || in_gitlab) {
                 warn_user_once!(
-                    "Trusted publishing was requested, but you're not in GitHub Actions."
+                    "Trusted publishing was requested, but you're not in a supported CI (GitHub Actions or GitLab CI)."
                 );
             }
 

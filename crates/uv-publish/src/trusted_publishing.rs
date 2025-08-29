@@ -225,7 +225,8 @@ async fn get_publish_token(
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     let mint_token_url = DisplaySafeUrl::parse(&format!(
-        "https://{}/_/oidc/mint-token",
+        "{}://{}/_/oidc/mint-token",
+        registry.scheme(),
         registry.authority()
     ))?;
     debug!("Querying the trusted publishing upload token from {mint_token_url}");
