@@ -12,7 +12,7 @@ is not much of a burden on the platform-specific store providers.)
 
 use crate::Credential;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 /// Each variant of the `Error` enum provides a summary of the error.
 /// More details, if relevant, are contained in the associated value,
 /// which may be platform-specific.
@@ -25,84 +25,49 @@ pub enum Error {
     /// This indicates runtime failure in the underlying
     /// platform storage system.  The details of the failure can
     /// be retrieved from the attached platform error.
-    PlatformFailure(Box<dyn std::error::Error + Send + Sync>),
+    #[error("Platform secure storage failure")]
+    PlatformFailure(#[source] Box<dyn std::error::Error + Send + Sync>),
     /// This indicates that the underlying secure storage
     /// holding saved items could not be accessed.  Typically, this
     /// is because of access rules in the platform; for example, it
     /// might be that the credential store is locked.  The underlying
     /// platform error will typically give the reason.
-    NoStorageAccess(Box<dyn std::error::Error + Send + Sync>),
+    #[error("Couldn't access platform secure storage")]
+    NoStorageAccess(#[source] Box<dyn std::error::Error + Send + Sync>),
     /// This indicates that there is no underlying credential
     /// entry in the platform for this entry.  Either one was
     /// never set, or it was deleted.
+    #[error("No matching entry found in secure storage")]
     NoEntry,
     /// This indicates that the retrieved password blob was not
     /// a UTF-8 string.  The underlying bytes are available
     /// for examination in the attached value.
+    #[error("Data is not UTF-8 encoded")]
     BadEncoding(Vec<u8>),
     /// This indicates that one of the entry's credential
     /// attributes exceeded a
     /// length limit in the underlying platform.  The
     /// attached values give the name of the attribute and
     /// the platform length limit that was exceeded.
+    #[error("Attribute '{0}' is longer than platform limit of {1} chars")]
     TooLong(String, u32),
     /// This indicates that one of the entry's required credential
     /// attributes was invalid.  The
     /// attached value gives the name of the attribute
     /// and the reason it's invalid.
+    #[error("Attribute {0} is invalid: {1}")]
     Invalid(String, String),
     /// This indicates that there is more than one credential found in the store
     /// that matches the entry.  Its value is a vector of the matching credentials.
+    #[error("Entry is matched by multiple credentials: {0:?}")]
     Ambiguous(Vec<Box<Credential>>),
     /// This indicates that there was no default credential builder to use;
     /// the client must set one before creating entries.
+    #[error("No default credential builder is available; set one before creating entries")]
     NoDefaultCredentialBuilder,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::PlatformFailure(err) => write!(f, "Platform secure storage failure: {err}"),
-            Self::NoStorageAccess(err) => {
-                write!(f, "Couldn't access platform secure storage: {err}")
-            }
-            Self::NoEntry => write!(f, "No matching entry found in secure storage"),
-            Self::BadEncoding(_) => write!(f, "Data is not UTF-8 encoded"),
-            Self::TooLong(name, len) => write!(
-                f,
-                "Attribute '{name}' is longer than platform limit of {len} chars"
-            ),
-            Self::Invalid(attr, reason) => {
-                write!(f, "Attribute {attr} is invalid: {reason}")
-            }
-            Self::Ambiguous(items) => {
-                write!(
-                    f,
-                    "Entry is matched by {} credentials: {items:?}",
-                    items.len(),
-                )
-            }
-            Self::NoDefaultCredentialBuilder => {
-                write!(
-                    f,
-                    "No default credential builder is available; set one before creating entries"
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::PlatformFailure(err) => Some(err.as_ref()),
-            Self::NoStorageAccess(err) => Some(err.as_ref()),
-            _ => None,
-        }
-    }
-}
 
 /// Try to interpret a byte vector as a password string
 pub fn decode_password(bytes: Vec<u8>) -> Result<String> {

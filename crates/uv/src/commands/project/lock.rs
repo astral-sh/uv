@@ -628,8 +628,6 @@ async fn do_lock(
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    index_locations.cache_index_credentials();
-
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             let credentials = Arc::new(credentials);
@@ -643,7 +641,7 @@ async fn do_lock(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())

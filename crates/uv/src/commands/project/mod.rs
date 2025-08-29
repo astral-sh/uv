@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -1728,12 +1728,10 @@ pub(crate) async fn resolve_names(
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1849,6 +1847,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
     network_settings: &NetworkSettings,
@@ -1899,16 +1898,14 @@ pub(crate) async fn resolve_environment(
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
-    let marker_env = interpreter.resolver_marker_environment();
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
-
-    index_locations.cache_index_credentials();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1973,7 +1970,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     let workspace_cache = WorkspaceCache::default();
@@ -2024,7 +2021,7 @@ pub(crate) async fn resolve_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
         interpreter.markers(),
@@ -2088,12 +2085,10 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2207,6 +2202,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2268,8 +2264,8 @@ pub(crate) async fn update_environment(
 
     // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = venv.interpreter().resolver_marker_environment();
-    let tags = venv.interpreter().tags()?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2283,7 +2279,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
-            tags,
+            &tags,
             config_setting,
             config_settings_package,
             &extra_build_requires,
@@ -2316,12 +2312,10 @@ pub(crate) async fn update_environment(
         }
     }
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2354,7 +2348,6 @@ pub(crate) async fn update_environment(
     let preferences = Vec::default();
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
@@ -2363,7 +2356,7 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -2407,7 +2400,7 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         venv.interpreter().markers(),
@@ -2437,7 +2430,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         *compile_bytecode,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,

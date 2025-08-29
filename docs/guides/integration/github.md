@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           # Install a specific version of uv.
-          version: "0.8.13"
+          version: "0.8.14"
 ```
 
 ## Setting up Python
@@ -325,8 +325,8 @@ secret].
 
 Then, you can use the [`gh`](https://cli.github.com/) CLI (which is installed in GitHub Actions
 runners by default) to configure a
-[credential helper for Git](../../concepts/authentication.md#git-credential-helpers) to use the PAT
-for queries to repositories hosted on `github.com`.
+[credential helper for Git](../../concepts/authentication/git.md#git-credential-helpers) to use the
+PAT for queries to repositories hosted on `github.com`.
 
 For example, if you called your repository secret `MY_PAT`:
 

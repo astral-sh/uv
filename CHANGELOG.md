@@ -3,6 +3,57 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.14
+
+### Python
+
+- Add managed CPython distributions for aarch64 musl
+
+### Enhancements
+
+- Add `--python-platform` to `uv pip check` ([#15486](https://github.com/astral-sh/uv/pull/15486))
+- Add an environment variable for `UV_ISOLATED` ([#15428](https://github.com/astral-sh/uv/pull/15428))
+- Add logging to the uv build backend ([#15533](https://github.com/astral-sh/uv/pull/15533))
+- Allow more trailing null bytes in zip files ([#15452](https://github.com/astral-sh/uv/pull/15452))
+- Allow pinning managed Python versions to specific build versions ([#15314](https://github.com/astral-sh/uv/pull/15314))
+- Cache PyTorch wheels by default ([#15481](https://github.com/astral-sh/uv/pull/15481))
+- Reject already-installed wheels that don't match the target platform ([#15484](https://github.com/astral-sh/uv/pull/15484))
+- Add `--no-install-local` option to `uv sync`, `uv add` and `uv export`  ([#15328](https://github.com/astral-sh/uv/pull/15328))
+- Include cycle error message in `uv pip` CLI ([#15453](https://github.com/astral-sh/uv/pull/15453))
+
+### Preview features
+
+- Fix format of `{version}` on `uv format` failure ([#15527](https://github.com/astral-sh/uv/pull/15527))
+- Lock during installs in `uv format` to prevent races ([#15551](https://github.com/astral-sh/uv/pull/15551))
+- Respect `--project` in `uv format` ([#15438](https://github.com/astral-sh/uv/pull/15438))
+- Run `uv format` in the project root ([#15440](https://github.com/astral-sh/uv/pull/15440))
+
+### Configuration
+
+- Add file-to-CLI overrides for build isolation configuration ([#15437](https://github.com/astral-sh/uv/pull/15437))
+- Add file-to-CLI overrides for reinstall configuration ([#15426](https://github.com/astral-sh/uv/pull/15426))
+
+### Performance
+
+- Cache `WHEEL` and `METADATA` reads in installed distributions ([#15489](https://github.com/astral-sh/uv/pull/15489))
+
+### Bug fixes
+
+- Avoid erroring when creating `venv` in current working directory ([#15537](https://github.com/astral-sh/uv/pull/15537))
+- Avoid introducing unnecessary system dependency on CUDA ([#15449](https://github.com/astral-sh/uv/pull/15449))
+- Clear discovered site packages when creating virtual environment ([#15522](https://github.com/astral-sh/uv/pull/15522))
+- Read index credentials from the environment during `uv publish` checks ([#15545](https://github.com/astral-sh/uv/pull/15545))
+- Refuse to remove non-virtual environments in `uv venv` ([#15538](https://github.com/astral-sh/uv/pull/15538))
+- Stop setting `CLICOLOR_FORCE=1` when calling build backends ([#15472](https://github.com/astral-sh/uv/pull/15472))
+- Support file or directory removal for Windows symlinks ([#15543](https://github.com/astral-sh/uv/pull/15543))
+
+### Documentation
+
+- Fix GitHub guide highlight lines ([#15443](https://github.com/astral-sh/uv/pull/15443))
+- Move Resolver to new Internals section in the Reference ([#15465](https://github.com/astral-sh/uv/pull/15465))
+- Split the "Authentication" page into sections ([#15575](https://github.com/astral-sh/uv/pull/15575))
+- Update uninstall docs to mention `uvw.exe` needs to be removed ([#15536](https://github.com/astral-sh/uv/pull/15536))
+
 ## 0.8.13
 
 ### Enhancements

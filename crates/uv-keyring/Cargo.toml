@@ -22,6 +22,7 @@ windows-native = ["dep:windows-sys", "dep:byteorder"]
 
 [dependencies]
 async-trait = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
