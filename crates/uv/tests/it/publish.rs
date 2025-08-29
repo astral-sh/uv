@@ -508,6 +508,16 @@ async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
 
     let server = MockServer::start().await;
 
+    // Audience endpoint (PyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
     // Mint token endpoint
     Mock::given(method("POST"))
         .and(path("/_/oidc/mint-token"))
@@ -553,6 +563,16 @@ async fn gitlab_trusted_publishing_via_ci_job_jwt_v2() {
 
     let server = MockServer::start().await;
 
+    // Audience endpoint (TestPyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"audience\":\"testpypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
     // Mint token endpoint exchanges the GitLab OIDC JWT for a short-lived API token
     Mock::given(method("POST"))
         .and(path("/_/oidc/mint-token"))
@@ -597,6 +617,16 @@ async fn gitlab_trusted_publishing_with_index_config() {
     let context = TestContext::new("3.12");
 
     let server = MockServer::start().await;
+
+    // Audience endpoint (PyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
 
     // Create a project config with a named index that includes a publish-url
     let pyproject_toml = formatdoc! {
