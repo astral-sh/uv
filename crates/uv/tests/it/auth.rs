@@ -38,6 +38,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
@@ -58,6 +59,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -70,6 +72,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -89,6 +92,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -100,6 +104,7 @@ fn add_package_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
@@ -159,6 +164,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -174,6 +180,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -191,6 +198,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -208,6 +216,7 @@ fn token_native_keyring() -> Result<()> {
     heron
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     ");
 
     // Without the username
@@ -221,6 +230,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -237,6 +247,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Failed to fetch credentials for private@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -252,6 +263,7 @@ fn token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -267,6 +279,7 @@ fn token_native_keyring() -> Result<()> {
     heron
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     ");
 
     Ok(())
@@ -412,6 +425,7 @@ fn login_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: No password provided; did you mean to provide `--password` or `--token`?
     ");
 
@@ -442,6 +456,7 @@ fn login_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -473,6 +488,7 @@ fn login_token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -515,6 +531,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -528,6 +545,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
       Caused by: No matching entry found in secure storage
     ");
@@ -544,6 +562,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Unable to remove credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
       Caused by: No matching entry found in secure storage
     ");
@@ -562,6 +581,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -577,6 +597,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
       Caused by: No matching entry found in secure storage
     ");
@@ -593,6 +614,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged out of public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -621,6 +643,7 @@ fn logout_token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -635,6 +658,7 @@ fn logout_token_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged out of https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
@@ -659,6 +683,7 @@ fn login_url_parsing() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@https://example.com/
     ");
 
@@ -676,6 +701,7 @@ fn login_url_parsing() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@http://example.com/
     ");
 
@@ -692,6 +718,7 @@ fn login_url_parsing() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@https://example.com/
     ");
 
@@ -709,6 +736,7 @@ fn login_url_parsing() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Logged in to test@https://example.com/simple
     ");
 

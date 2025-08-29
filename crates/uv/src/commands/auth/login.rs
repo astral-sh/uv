@@ -4,6 +4,7 @@ use std::fmt::Write;
 use console::Term;
 use uv_auth::Credentials;
 use uv_configuration::{KeyringProviderType, Service};
+use uv_preview::Preview;
 
 use crate::{commands::ExitStatus, printer::Printer};
 
@@ -15,6 +16,7 @@ pub(crate) async fn login(
     token: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
     let display_url = username
@@ -44,7 +46,7 @@ pub(crate) async fn login(
         );
     };
     let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider().unwrap(),
+        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
         KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
             bail!(
                 "Cannot login with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
