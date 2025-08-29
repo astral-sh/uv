@@ -4,8 +4,8 @@ use anyhow::{Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 
-use uv_auth::Credentials;
 use uv_auth::Service;
+use uv_auth::{Credentials, TomlCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
@@ -23,21 +23,20 @@ pub(crate) async fn login(
 ) -> Result<ExitStatus> {
     let url = service.url();
 
-    // Be helpful about incompatible `keyring-provider` settings
-    let Some(keyring_provider) = &keyring_provider else {
-        bail!(
-            "Logging in requires setting `keyring-provider = {}` for credentials to be retrieved in subsequent commands",
-            KeyringProviderType::Native
-        );
+    // Use text store by default, keyring only when explicitly requested
+    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
+
+    let provider = if use_keyring {
+        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
+        Some(provider)
+    } else {
+        None
     };
-    let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
-        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
-            bail!(
-                "Cannot login with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
-                KeyringProviderType::Native
-            );
-        }
+
+    let text_store = if !use_keyring {
+        Some(TomlCredentialStore::load_default()?)
+    } else {
+        None
     };
 
     // Extract credentials from URL if present
@@ -117,7 +116,13 @@ pub(crate) async fn login(
 
     // TODO(zanieb): Add support for other authentication schemes here, e.g., `Credentials::Bearer`
     let credentials = Credentials::basic(Some(username), Some(password));
-    provider.store(url, &credentials).await?;
+
+    if let Some(provider) = provider {
+        provider.store(url, &credentials).await?;
+    } else if let Some(mut text_store) = text_store {
+        text_store.store_credentials(&service, credentials);
+        text_store.save_to_default_file()?;
+    }
 
     writeln!(
         printer.stderr(),

@@ -1,9 +1,9 @@
 use std::fmt::Write;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
-use uv_auth::Credentials;
 use uv_auth::Service;
+use uv_auth::{Credentials, TomlCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
@@ -18,12 +18,21 @@ pub(crate) async fn token(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-    // Determine the keyring provider to use
-    let Some(keyring_provider) = &keyring_provider else {
-        bail!("Retrieving credentials requires setting a `keyring-provider`");
+
+    // Use text store by default, keyring only when explicitly requested
+    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
+
+    let provider = if use_keyring {
+        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
+        Some(provider)
+    } else {
+        None
     };
-    let Some(provider) = keyring_provider.to_provider(&preview) else {
-        bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`");
+
+    let text_store = if !use_keyring {
+        Some(TomlCredentialStore::load_default()?)
+    } else {
+        None
     };
 
     // Extract credentials from URL if present
@@ -47,10 +56,18 @@ pub(crate) async fn token(
         format!("{username}@{}", url.without_credentials())
     };
 
-    let credentials = provider
-        .fetch(url, Some(&username))
-        .await
-        .with_context(|| format!("Failed to fetch credentials for {display_url}"))?;
+    let credentials = if let Some(provider) = provider {
+        provider
+            .fetch(url, Some(&username))
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?
+    } else if let Some(text_store) = text_store {
+        text_store
+            .get_credentials(url)
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?
+    } else {
+        bail!("No credential store available")
+    };
 
     let Some(password) = credentials.password() else {
         bail!(

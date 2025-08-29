@@ -3,8 +3,8 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::Credentials;
 use uv_auth::Service;
+use uv_auth::{Credentials, TomlCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
@@ -43,25 +43,36 @@ pub(crate) async fn logout(
         format!("{username}@{}", url.without_credentials())
     };
 
-    // Unlike login, we'll default to the native provider if none is requested since it's the only
-    // valid option and it doesn't matter if the credentials are available in subsequent commands.
-    let keyring_provider = keyring_provider.unwrap_or(KeyringProviderType::Native);
+    // Use text store by default, keyring only when explicitly requested
+    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
 
-    // Be helpful about incompatible `keyring-provider` settings
-    let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
-        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
-            bail!(
-                "Cannot logout with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
-                KeyringProviderType::Native
-            );
-        }
+    let provider = if use_keyring {
+        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
+        Some(provider)
+    } else {
+        None
     };
 
-    provider
-        .remove(url, &username)
-        .await
-        .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+    let text_store = if !use_keyring {
+        Some(TomlCredentialStore::load_default()?)
+    } else {
+        None
+    };
+
+    if let Some(provider) = provider {
+        provider
+            .remove(url, &username)
+            .await
+            .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+    } else if let Some(mut text_store) = text_store {
+        let url_str = url.without_credentials().to_string();
+        if !text_store.remove_credentials(&url_str) {
+            bail!("No matching entry found for {display_url}");
+        }
+        text_store
+            .save_to_default_file()
+            .with_context(|| "Unable to save credentials after removal")?;
+    }
 
     writeln!(
         printer.stderr(),

@@ -154,6 +154,18 @@ pub struct TomlCredentialStore {
 }
 
 impl TomlCredentialStore {
+    /// Load credentials from the default location.
+    /// Creates an empty store if the file doesn't exist.
+    pub fn load_default() -> Result<Self, TomlCredentialError> {
+        let state_dir = uv_dirs::user_state_dir().ok_or_else(|| {
+            TomlCredentialError::Io(std::io::Error::other(
+                "Failed to determine user state directory",
+            ))
+        })?;
+        let credentials_path = state_dir.join("credentials").join("credentials.toml");
+        Self::load_from_file(credentials_path)
+    }
+
     /// Load credentials from a TOML file.
     /// Returns an empty store if the file doesn't exist.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
@@ -192,6 +204,24 @@ impl TomlCredentialStore {
         debug!("Loaded {} credentials from TOML file", credentials.len());
 
         Ok(Self { credentials })
+    }
+
+    /// Save credentials to the default location.
+    pub fn save_to_default_file(&self) -> Result<(), TomlCredentialError> {
+        let state_dir = uv_dirs::user_state_dir().ok_or_else(|| {
+            TomlCredentialError::Io(std::io::Error::other(
+                "Failed to determine user state directory",
+            ))
+        })?;
+        let credentials_dir = state_dir.join("credentials");
+
+        // Create directory if it doesn't exist
+        if !credentials_dir.exists() {
+            fs::create_dir_all(&credentials_dir)?;
+        }
+
+        let credentials_path = credentials_dir.join("credentials.toml");
+        self.save_to_file(credentials_path)
     }
 
     /// Save credentials to a TOML file.
