@@ -405,8 +405,6 @@ pub(crate) async fn pip_compile(
         no_index,
     );
 
-    index_locations.cache_index_credentials();
-
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
@@ -424,7 +422,7 @@ pub(crate) async fn pip_compile(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(&index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())

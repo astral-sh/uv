@@ -89,13 +89,12 @@ pub(crate) async fn publish(
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
-        index_locations.cache_index_credentials();
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .index_locations(&index_locations)
+            .index_locations(index_locations)
             .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),

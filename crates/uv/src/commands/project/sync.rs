@@ -718,15 +718,13 @@ pub(super) async fn do_sync(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
-    index_locations.cache_index_credentials();
-
     // Populate credentials from the target.
     store_credentials_from_target(target);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_locations(index_locations)
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
