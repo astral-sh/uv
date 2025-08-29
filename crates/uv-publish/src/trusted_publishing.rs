@@ -121,7 +121,7 @@ pub(crate) async fn get_token(
     // GitLab CI flow: discover OIDC token via {AUD}_ID_TOKEN (PYPI_ID_TOKEN, TESTPYPI_ID_TOKEN)
     if env::var(EnvVars::GITLAB_CI).is_ok() {
         let audience = get_audience(registry, client).await?;
-        let env_key = format!("{}_ID_TOKEN", audience.to_ascii_uppercase());
+        let env_key = format!("{}_ID_TOKEN", normalize_env_key_audience(&audience));
         if let Ok(jwt) = env::var(&env_key) {
             let publish_token = get_publish_token(registry, &jwt, client).await?;
             debug!("Received token, using trusted publishing via GitLab (audience: {audience})");
@@ -140,9 +140,7 @@ pub(crate) async fn get_token(
     }
     // For GitLab CI, indicate the expected variables.
     if env::var(EnvVars::GITLAB_CI).is_ok() {
-        return Err(TrustedPublishingError::MissingEnvVar(
-            "PYPI_ID_TOKEN/TESTPYPI_ID_TOKEN",
-        ));
+        return Err(TrustedPublishingError::MissingEnvVar("{AUD}_ID_TOKEN"));
     }
     // Otherwise, indicate that the OIDC token is missing for the environment.
     Err(TrustedPublishingError::MissingEnvVar(
@@ -272,4 +270,32 @@ async fn get_publish_token(
             }
         }
     }
+}
+
+/// Normalize an audience string into an environment key component.
+///
+/// Rules:
+/// - Uppercase ASCII
+/// - Replace any sequence of non-alphanumeric characters with a single underscore
+/// - Trim leading/trailing underscores
+fn normalize_env_key_audience(aud: &str) -> String {
+    let mut out = String::with_capacity(aud.len());
+    let mut last_was_sep = false;
+    for ch in aud.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_uppercase());
+            last_was_sep = false;
+        } else if !last_was_sep {
+            out.push('_');
+            last_was_sep = true;
+        }
+    }
+    // Trim leading/trailing underscores
+    while out.starts_with('_') {
+        out.remove(0);
+    }
+    while out.ends_with('_') {
+        out.pop();
+    }
+    out
 }
