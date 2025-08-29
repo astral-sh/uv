@@ -3,6 +3,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 
 use uv_configuration::{KeyringProviderType, Service};
+use uv_preview::Preview;
 
 use crate::{Printer, commands::ExitStatus};
 
@@ -12,12 +13,13 @@ pub(crate) async fn token(
     username: Option<String>,
     keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Determine the keyring provider to use
     let Some(keyring_provider) = &keyring_provider else {
         bail!("Retrieving credentials requires setting a `keyring-provider`");
     };
-    let Some(provider) = keyring_provider.to_provider() else {
+    let Some(provider) = keyring_provider.to_provider(&preview) else {
         bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`");
     };
 
