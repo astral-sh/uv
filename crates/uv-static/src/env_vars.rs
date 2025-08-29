@@ -615,6 +615,27 @@ impl EnvVars {
     /// Used for trusted publishing via `uv publish`. Contains the oidc request token.
     pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &'static str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
 
+    /// Indicates that the current process is running in GitLab CI.
+    ///
+    /// When set (typically to `true`), uv may attempt GitLab-specific trusted publishing flows.
+    pub const GITLAB_CI: &'static str = "GITLAB_CI";
+
+    /// GitLab CI/CD-provided JWT for the current job (v2 format).
+    ///
+    /// When using GitLab's `id_tokens` feature with audience set for PyPI, this token can be
+    /// submitted to PyPI's `/_/oidc/mint-token` endpoint to obtain a short-lived publish token.
+    pub const CI_JOB_JWT_V2: &'static str = "CI_JOB_JWT_V2";
+
+    /// GitLab CI/CD-provided JSON Web Token (JWT) for the current job (legacy format).
+    pub const CI_JOB_JWT: &'static str = "CI_JOB_JWT";
+
+    /// Explicit override for passing an OIDC token for trusted publishing.
+    ///
+    /// If set, uv will use this value as an OIDC token and exchange it via the registry's
+    /// `/_/oidc/mint-token` endpoint to obtain a short-lived publish token. This can be used in
+    /// GitLab CI by mapping the `id_tokens` variable (e.g., `$PYPI_ID_TOKEN`) into this variable.
+    pub const UV_TRUSTED_PUBLISHING_OIDC_TOKEN: &'static str = "UV_TRUSTED_PUBLISHING_OIDC_TOKEN";
+
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
     pub const PYTHONIOENCODING: &'static str = "PYTHONIOENCODING";

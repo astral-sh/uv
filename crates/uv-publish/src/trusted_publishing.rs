@@ -1,4 +1,4 @@
-//! Trusted publishing (via OIDC) with GitHub actions.
+//! Trusted publishing (via OIDC) with GitHub Actions and GitLab CI.
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -98,30 +98,60 @@ pub(crate) async fn get_token(
     registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    // If this fails, we can skip the audience request.
-    let oidc_token_request_token =
-        env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
-            TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
-        })?;
-
-    // Request 1: Get the audience
-    let audience = get_audience(registry, client).await?;
-
-    // Request 2: Get the OIDC token from GitHub.
-    let oidc_token = get_oidc_token(&audience, &oidc_token_request_token, client).await?;
-
-    // Request 3: Get the publishing token from PyPI.
-    let publish_token = get_publish_token(registry, &oidc_token, client).await?;
-
-    debug!("Received token, using trusted publishing");
-
-    // Tell GitHub Actions to mask the token in any console logs.
-    #[allow(clippy::print_stdout)]
-    if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
-        println!("::add-mask::{}", &publish_token);
+    // Prefer an explicitly provided OIDC token when present
+    if let Ok(explicit_oidc) = env::var(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN) {
+        let token = get_publish_token(registry, &explicit_oidc, client).await?;
+        return Ok(token);
     }
 
-    Ok(publish_token)
+    // GitHub Actions flow
+    if let (Ok(_), Ok(oidc_token_request_token)) = (
+        env::var(EnvVars::GITHUB_ACTIONS),
+        env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN),
+    ) {
+        // Request 1: Get the audience
+        let audience = get_audience(registry, client).await?;
+        // Request 2: Get the OIDC token from GitHub.
+        let oidc_token = get_oidc_token(&audience, &oidc_token_request_token, client).await?;
+        // Request 3: Get the publishing token from PyPI.
+        let publish_token = get_publish_token(registry, &oidc_token, client).await?;
+        debug!("Received token, using trusted publishing via GitHub Actions");
+        // Tell GitHub Actions to mask the token in any console logs.
+        #[allow(clippy::print_stdout)]
+        if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
+            println!("::add-mask::{}", &publish_token);
+        }
+        return Ok(publish_token);
+    }
+
+    // GitLab CI flow: if a job token is present, exchange it directly
+    // Users can provide an id_token in GitLab with `id_tokens` and map it to CI_JOB_JWT_V2/CI_JOB_JWT
+    if env::var(EnvVars::GITLAB_CI).is_ok() {
+        if let Ok(jwt) = env::var(EnvVars::CI_JOB_JWT_V2) {
+            let publish_token = get_publish_token(registry, &jwt, client).await?;
+            debug!("Received token, using trusted publishing via GitLab (v2)");
+            return Ok(publish_token);
+        }
+        if let Ok(jwt) = env::var(EnvVars::CI_JOB_JWT) {
+            let publish_token = get_publish_token(registry, &jwt, client).await?;
+            debug!("Received token, using trusted publishing via GitLab (legacy)");
+            return Ok(publish_token);
+        }
+    }
+
+    // If we get here, we couldn't obtain a token via any known mechanism.
+    // For GitHub, surface the clearer missing-variable error.
+    let err = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+        .map(|_| String::new())
+        .err()
+        .map(|e| TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, e));
+    if let Some(err) = err {
+        return Err(err);
+    }
+    // Otherwise, indicate that the OIDC token format is invalid/missing for the environment.
+    Err(TrustedPublishingError::MissingEnvVar(
+        EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN,
+    ))
 }
 
 async fn get_audience(

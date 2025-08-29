@@ -500,3 +500,165 @@ async fn read_index_credential_env_vars_for_check_url() {
     "
     );
 }
+
+/// Verify GitLab trusted publishing via explicit OIDC env override.
+#[tokio::test]
+async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Mint token endpoint
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        // Emulate GitLab CI with explicit OIDC token provided to uv
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN, "dummy-oidc-token"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+/// Verify GitLab trusted publishing via CI-provided JWT (CI_JOB_JWT_V2).
+#[tokio::test]
+async fn gitlab_trusted_publishing_via_ci_job_jwt_v2() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Mint token endpoint exchanges the GitLab OIDC JWT for a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        // Emulate GitLab CI with CI-provided JWT
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::CI, "true")
+        .env(EnvVars::CI_JOB_JWT_V2, "gitlab-oidc-jwt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+/// Verify GitLab trusted publishing with a named index from pyproject (no CLI publish-url).
+#[tokio::test]
+async fn gitlab_trusted_publishing_with_index_config() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Create a project config with a named index that includes a publish-url
+    let pyproject_toml = formatdoc! {
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+
+        [[tool.uv.index]]
+        name = "private-index"
+        url = "{index_uri}/simple/"
+        publish-url = "{index_uri}/upload"
+        explicit = true
+        "#,
+        index_uri = server.uri()
+    };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)
+        .unwrap();
+
+    // Mint token endpoint exchanges the GitLab OIDC JWT for a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    let ok_wheel = current_dir()
+        .unwrap()
+        .join("../../scripts/links/ok-1.0.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.publish()
+        .current_dir(context.temp_dir.path())
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--index")
+        .arg("private-index")
+        .arg(&ok_wheel)
+        // Emulate GitLab CI with explicit OIDC token provided to uv
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN, "dummy-oidc-token"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
