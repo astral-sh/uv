@@ -501,7 +501,7 @@ async fn read_index_credential_env_vars_for_check_url() {
     );
 }
 
-/// Verify GitLab trusted publishing via explicit OIDC env override.
+/// Verify GitLab trusted publishing via {AUD}_ID_TOKEN discovery
 #[tokio::test]
 async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
     let context = TestContext::new("3.12");
@@ -533,7 +533,8 @@ async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate GitLab CI with explicit OIDC token provided to uv
         .env(EnvVars::GITLAB_CI, "true")
-        .env(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN, "dummy-oidc-token"), @r"
+        // For a PyPI audience
+        .env("PYPI_ID_TOKEN", "dummy-oidc-token"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -545,7 +546,7 @@ async fn gitlab_trusted_publishing_with_explicit_oidc_env() {
     );
 }
 
-/// Verify GitLab trusted publishing via CI-provided JWT (CI_JOB_JWT_V2).
+/// Verify GitLab trusted publishing via {AUD}_ID_TOKEN (TESTPYPI_ID_TOKEN).
 #[tokio::test]
 async fn gitlab_trusted_publishing_via_ci_job_jwt_v2() {
     let context = TestContext::new("3.12");
@@ -575,10 +576,10 @@ async fn gitlab_trusted_publishing_via_ci_job_jwt_v2() {
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        // Emulate GitLab CI with CI-provided JWT
+        // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
         .env(EnvVars::CI, "true")
-        .env(EnvVars::CI_JOB_JWT_V2, "gitlab-oidc-jwt"), @r"
+        .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -590,7 +591,7 @@ async fn gitlab_trusted_publishing_via_ci_job_jwt_v2() {
     );
 }
 
-/// Verify GitLab trusted publishing with a named index from pyproject (no CLI publish-url).
+/// Verify GitLab trusted publishing with a named index from pyproject
 #[tokio::test]
 async fn gitlab_trusted_publishing_with_index_config() {
     let context = TestContext::new("3.12");
@@ -648,7 +649,7 @@ async fn gitlab_trusted_publishing_with_index_config() {
         .arg(&ok_wheel)
         // Emulate GitLab CI with explicit OIDC token provided to uv
         .env(EnvVars::GITLAB_CI, "true")
-        .env(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN, "dummy-oidc-token"), @r"
+        .env("PYPI_ID_TOKEN", "dummy-oidc-token"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

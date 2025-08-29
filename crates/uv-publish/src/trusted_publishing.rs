@@ -98,12 +98,6 @@ pub(crate) async fn get_token(
     registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    // Prefer an explicitly provided OIDC token when present
-    if let Ok(explicit_oidc) = env::var(EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN) {
-        let token = get_publish_token(registry, &explicit_oidc, client).await?;
-        return Ok(token);
-    }
-
     // GitHub Actions flow
     if let (Ok(_), Ok(oidc_token_request_token)) = (
         env::var(EnvVars::GITHUB_ACTIONS),
@@ -124,17 +118,13 @@ pub(crate) async fn get_token(
         return Ok(publish_token);
     }
 
-    // GitLab CI flow: if a job token is present, exchange it directly
-    // Users can provide an id_token in GitLab with `id_tokens` and map it to CI_JOB_JWT_V2/CI_JOB_JWT
+    // GitLab CI flow: discover OIDC token via {AUD}_ID_TOKEN (PYPI_ID_TOKEN, TESTPYPI_ID_TOKEN)
     if env::var(EnvVars::GITLAB_CI).is_ok() {
-        if let Ok(jwt) = env::var(EnvVars::CI_JOB_JWT_V2) {
+        let audience = get_audience(registry, client).await?;
+        let env_key = format!("{}_ID_TOKEN", audience.to_ascii_uppercase());
+        if let Ok(jwt) = env::var(&env_key) {
             let publish_token = get_publish_token(registry, &jwt, client).await?;
-            debug!("Received token, using trusted publishing via GitLab (v2)");
-            return Ok(publish_token);
-        }
-        if let Ok(jwt) = env::var(EnvVars::CI_JOB_JWT) {
-            let publish_token = get_publish_token(registry, &jwt, client).await?;
-            debug!("Received token, using trusted publishing via GitLab (legacy)");
+            debug!("Received token, using trusted publishing via GitLab (audience: {audience})");
             return Ok(publish_token);
         }
     }
@@ -148,9 +138,15 @@ pub(crate) async fn get_token(
     if let Some(err) = err {
         return Err(err);
     }
-    // Otherwise, indicate that the OIDC token format is invalid/missing for the environment.
+    // For GitLab CI, indicate the expected variables.
+    if env::var(EnvVars::GITLAB_CI).is_ok() {
+        return Err(TrustedPublishingError::MissingEnvVar(
+            "PYPI_ID_TOKEN/TESTPYPI_ID_TOKEN",
+        ));
+    }
+    // Otherwise, indicate that the OIDC token is missing for the environment.
     Err(TrustedPublishingError::MissingEnvVar(
-        EnvVars::UV_TRUSTED_PUBLISHING_OIDC_TOKEN,
+        EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN,
     ))
 }
 
@@ -160,8 +156,11 @@ async fn get_audience(
 ) -> Result<String, TrustedPublishingError> {
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
-    let audience_url =
-        DisplaySafeUrl::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
+    let audience_url = DisplaySafeUrl::parse(&format!(
+        "{}://{}/_/oidc/audience",
+        registry.scheme(),
+        registry.authority()
+    ))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
     let response = client
         .get(Url::from(audience_url.clone()))
