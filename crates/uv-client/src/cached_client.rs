@@ -14,7 +14,7 @@ use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
-use crate::base_client::is_extended_transient_error;
+use crate::base_client::is_transient_network_error;
 use crate::{
     Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
@@ -141,7 +141,7 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
         }
     }
 
-    fn error(&self) -> &dyn std::error::Error {
+    fn error(&self) -> &(dyn std::error::Error + 'static) {
         match self {
             Self::Client { err, .. } => err,
             Self::Callback { err, .. } => err,
@@ -452,7 +452,8 @@ impl CachedClient {
         .await
     }
 
-    #[instrument(name="read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()))]
+    #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()
+    ))]
     async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
         match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
             Ok(data) => Some(data),
@@ -680,7 +681,7 @@ impl CachedClient {
 
             if result
                 .as_ref()
-                .is_err_and(|err| is_extended_transient_error(err.error()))
+                .is_err_and(|err| is_transient_network_error(err.error()))
             {
                 // If middleware already retried, consider that in our retry budget
                 let total_retries = past_retries + middleware_retries;
@@ -739,7 +740,7 @@ impl CachedClient {
             if result
                 .as_ref()
                 .err()
-                .is_some_and(|err| is_extended_transient_error(err.error()))
+                .is_some_and(|err| is_transient_network_error(err.error()))
             {
                 let total_retries = past_retries + middleware_retries;
                 let retry_decision = retry_policy.should_retry(start_time, total_retries);
