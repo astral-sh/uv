@@ -4987,7 +4987,12 @@ fn normalize_requirement(
                 repository.set_fragment(None);
                 repository.set_query(None);
 
-                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
