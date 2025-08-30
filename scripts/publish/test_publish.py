@@ -35,6 +35,14 @@ The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
+**pypi-text-store**
+```console
+uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token <token>
+```
+The query parameter a horrible hack stolen from
+https://github.com/pypa/twine/issues/565#issue-555219267
+to prevent the other projects from implicitly using the same credentials.
+
 **pypi-trusted-publishing**
 This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
 
@@ -138,6 +146,11 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://test.pypi.org/legacy/?astral-test-keyring",
         "https://test.pypi.org/simple/",
     ),
+    "pypi-text-store": TargetConfiguration(
+        "astral-test-text-store",
+        "https://test.pypi.org/legacy/?astral-test-text-store",
+        "https://test.pypi.org/simple/",
+    ),
     "gitlab": TargetConfiguration(
         "astral-test-token",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
@@ -163,7 +176,7 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
 }
 
 
-def get_latest_version(target: str, client: httpx.Client) -> Version:
+def get_latest_version(target: str, client: httpx.Client) -> Version | None:
     """Return the latest version on all indexes of the package."""
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
@@ -196,7 +209,7 @@ def get_latest_version(target: str, client: httpx.Client) -> Version:
         raise RuntimeError(f"Failed to fetch {url}") from error
 
     if not versions:
-        raise ValueError(f"No versions found for {target_config.project_name}")
+        return None
 
     return max(versions)
 
@@ -365,7 +378,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         print(f"\nPublish {project_name} for {target}", file=sys.stderr)
 
         # The distributions are build to the dist directory of the project.
-        previous_version = get_latest_version(target, client)
+        previous_version = get_latest_version(target, client) or Version("0.0.0")
         version = get_new_version(previous_version)
         project_dir = build_project_at_version(target, version, uv)
 
@@ -506,6 +519,9 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
     elif target == "pypi-keyring":
         extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
+        env = {}
+    elif target == "pypi-text-store":
+        extra_args = ["--username", "__token__"]
         env = {}
     elif target == "pypi-trusted-publishing":
         extra_args = ["--trusted-publishing", "always"]
