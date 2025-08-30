@@ -35,6 +35,14 @@ The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
+**pypi-text-store**
+```console
+uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token <token>
+```
+The query parameter a horrible hack stolen from
+https://github.com/pypa/twine/issues/565#issue-555219267
+to prevent the other projects from implicitly using the same credentials.
+
 **pypi-trusted-publishing**
 This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
 
@@ -136,6 +144,11 @@ local_targets: dict[str, TargetConfiguration] = {
     "pypi-keyring": TargetConfiguration(
         "astral-test-keyring",
         "https://test.pypi.org/legacy/?astral-test-keyring",
+        "https://test.pypi.org/simple/",
+    ),
+    "pypi-text-store": TargetConfiguration(
+        "astral-test-text-store",
+        "https://test.pypi.org/legacy/?astral-test-text-store",
         "https://test.pypi.org/simple/",
     ),
     "gitlab": TargetConfiguration(
@@ -502,6 +515,9 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
     elif target == "pypi-keyring":
         extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
+        env = {}
+    elif target == "pypi-text-store":
+        extra_args = ["--username", "__token__"]
         env = {}
     elif target == "pypi-trusted-publishing":
         extra_args = ["--trusted-publishing", "always"]
