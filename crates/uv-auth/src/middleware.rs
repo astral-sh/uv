@@ -60,6 +60,8 @@ enum TextStoreMode {
 
 impl Default for TextStoreMode {
     fn default() -> Self {
+        // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
+        // implementation for now.
         Self::Automatic(LazyLock::new(|| {
             let state_dir = uv_dirs::user_state_dir()?;
             let credentials_path = state_dir.join("credentials").join("credentials.toml");
