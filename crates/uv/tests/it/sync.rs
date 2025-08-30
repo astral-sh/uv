@@ -13650,5 +13650,35 @@ fn sync_match_runtime() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // Trying to ask for runtime matching for a dependency that doesn't exist
+    // should be an error
+    let child_pyproject = context.temp_dir.child("child").child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.build-dependencies-metadata.foo]
+        match-runtime = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build requires for `foo` missing for metadata declared in `pyproject.toml`
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
     Ok(())
 }

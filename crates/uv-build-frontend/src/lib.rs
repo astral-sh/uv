@@ -527,6 +527,56 @@ impl SourceBuild {
         Ok(source_tree_lock)
     }
 
+    fn apply_build_metadata<'a>(
+        metadata: &BTreeMap<PackageName, BuildDependencyMetadata>,
+        build_requires: impl Iterator<Item = &'a Requirement>,
+        top_level_resolution: &Resolution,
+    ) -> Result<Vec<Requirement>, Box<Error>> {
+        let dists = top_level_resolution.distributions();
+        let dists_by_name = dists
+            .filter_map(|dist| metadata.get(dist.name()).map(|_| (dist.name(), dist)))
+            .collect::<BTreeMap<_, _>>();
+        let relevant_dists = metadata
+            .iter()
+            .filter_map(|(package_name, metadata)| {
+                if metadata.match_runtime.is_none_or(|m| !m) {
+                    return None;
+                }
+                dists_by_name
+                    .get(package_name)
+                    // when this is None, then match-runtime was requested but
+                    // top level resolution doesn't include the package. Maybe
+                    // warn here?
+                    .map(|dist| (package_name, dist))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut extra_requirements = Vec::new();
+        for requirement in build_requires {
+            if let Some(dist) = relevant_dists.get(&requirement.name) {
+                extra_requirements.push(Requirement {
+                    source: RequirementSource::from(**dist),
+                    ..requirement.clone()
+                });
+            }
+        }
+        if metadata.len() != extra_requirements.len() {
+            // metadata is requested for a package that is not a build requirement
+            let mut missing_names = metadata.iter().filter_map(|(pkg, _)| {
+                if extra_requirements.iter().all(|req| req.name != *pkg) {
+                    Some(pkg)
+                } else {
+                    None
+                }
+            });
+            return Err(Box::new(Error::MissingBuildRequirementForMetadata(
+                // SAFETY: if metadata and extra_requirements have different
+                // lengths, there must be a missing name
+                missing_names.next().unwrap().clone(),
+            )));
+        }
+        Ok(extra_requirements)
+    }
+
     async fn get_resolved_requirements(
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
@@ -570,36 +620,18 @@ impl SourceBuild {
                         "`build-system.requires` and `extra-build-dependencies`",
                     )
                 };
+
                 if let Some(build_dep_metadata) = build_dep_metadata {
-                    requirements =
-                        Cow::Owned(
-                            requirements
-                                .iter()
-                                .map(|req| {
-                                    if build_dep_metadata.0.get(&req.name).is_some_and(|metadata| {
-                                        metadata.match_runtime.unwrap_or(false)
-                                    }) {
-                                        let resolved_dist = build_context
-                                            .top_level_resolution()
-                                            .and_then(|resolution| {
-                                                resolution
-                                                    .distributions()
-                                                    .find(|dist| *dist.name() == req.name)
-                                            });
-                                        if let Some(dist) = resolved_dist {
-                                            return Requirement {
-                                                source: RequirementSource::from(dist),
-                                                ..req.clone()
-                                            };
-                                        }
-                                        // TODO: error
-                                        req.clone()
-                                    } else {
-                                        req.clone()
-                                    }
-                                })
-                                .collect(),
-                        );
+                    if let Some(resolution) = build_context.top_level_resolution() {
+                        let mut reqs_with_metadata = Self::apply_build_metadata(
+                            &build_dep_metadata.0,
+                            requirements.iter(),
+                            resolution,
+                        )
+                        .map_err(|err| *err)?;
+                        reqs_with_metadata.extend(requirements.into_owned().into_iter());
+                        requirements = Cow::Owned(reqs_with_metadata);
+                    }
                 }
 
                 build_context

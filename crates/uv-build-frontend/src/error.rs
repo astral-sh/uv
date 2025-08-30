@@ -95,6 +95,8 @@ pub enum Error {
         "Extra build requirement `{0}` was declared with `match-runtime = true`, but `{1}` does not declare static metadata, making runtime-matching impossible"
     )]
     UnmatchedRuntime(PackageName, PackageName),
+    #[error("Build requires for `{0}` missing for metadata declared in `pyproject.toml`")]
+    MissingBuildRequirementForMetadata(PackageName),
 }
 
 impl IsBuildBackendError for Error {
@@ -111,7 +113,8 @@ impl IsBuildBackendError for Error {
             | Self::NoSourceDistBuild(_)
             | Self::NoSourceDistBuilds
             | Self::CyclicBuildDependency(_)
-            | Self::UnmatchedRuntime(_, _) => false,
+            | Self::UnmatchedRuntime(_, _)
+            | Self::MissingBuildRequirementForMetadata(_) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)
