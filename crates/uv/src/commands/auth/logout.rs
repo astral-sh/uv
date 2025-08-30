@@ -3,10 +3,12 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::Credentials;
-use uv_configuration::{KeyringProviderType, Service};
+use uv_auth::Service;
+use uv_auth::{Credentials, TextCredentialStore};
+use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
@@ -20,6 +22,7 @@ pub(crate) async fn logout(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -42,25 +45,23 @@ pub(crate) async fn logout(
         format!("{username}@{}", url.without_credentials())
     };
 
-    // Unlike login, we'll default to the native provider if none is requested since it's the only
-    // valid option and it doesn't matter if the credentials are available in subsequent commands.
-    let keyring_provider = keyring_provider.unwrap_or(KeyringProviderType::Native);
-
-    // Be helpful about incompatible `keyring-provider` settings
-    let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
-        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
-            bail!(
-                "Cannot logout with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
-                KeyringProviderType::Native
-            );
+    // TODO(zanieb): Consider exhaustively logging out from all backends
+    match backend {
+        AuthBackend::Keyring(provider) => {
+            provider
+                .remove(url, &username)
+                .await
+                .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
         }
-    };
-
-    provider
-        .remove(url, &username)
-        .await
-        .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+        AuthBackend::TextStore(mut text_store) => {
+            if text_store.remove(&service).is_none() {
+                bail!("No matching entry found for {display_url}");
+            }
+            text_store
+                .write(TextCredentialStore::default_file()?)
+                .with_context(|| "Failed to persist changes to credentials after removal")?;
+        }
+    }
 
     writeln!(
         printer.stderr(),

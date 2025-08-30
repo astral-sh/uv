@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
+use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
@@ -25,8 +26,7 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
-    Service, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3505,6 +3505,8 @@ impl AuthLogoutSettings {
         let ResolverInstallerSchema {
             keyring_provider, ..
         } = top_level;
+
+        let keyring_provider = args.keyring_provider.combine(keyring_provider);
 
         Self {
             service: args.service,
