@@ -500,3 +500,111 @@ async fn read_index_credential_env_vars_for_check_url() {
     "
     );
 }
+
+/// Native GitLab CI trusted publishing using PYPI_ID_TOKEN
+#[tokio::test]
+async fn gitlab_trusted_publishing_pypi_id_token() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Audience endpoint (PyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Mint token endpoint returns a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
+        .env("PYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+/// Native GitLab CI trusted publishing using TESTPYPI_ID_TOKEN
+#[tokio::test]
+async fn gitlab_trusted_publishing_testpypi_id_token() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Audience endpoint (TestPyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"audience\":\"testpypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Mint token endpoint returns a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
+        .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
+        .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
