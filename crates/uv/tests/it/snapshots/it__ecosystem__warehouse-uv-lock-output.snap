@@ -7,4 +7,6 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
+warning: In project `warehouse`: `[tool.uv.dev-dependencies]` is deprecated.
+Instead use `[dependency-groups] dev = []`.
 Resolved 323 packages in [TIME]
