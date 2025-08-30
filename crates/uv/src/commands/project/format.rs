@@ -28,6 +28,7 @@ pub(crate) async fn format(
     cache: Cache,
     printer: Printer,
     preview: Preview,
+    no_project: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
     if !preview.is_enabled(PreviewFeatures::FORMAT) {
@@ -38,9 +39,19 @@ pub(crate) async fn format(
     }
 
     let workspace_cache = WorkspaceCache::default();
-    let project =
-        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await?;
+    let project = if no_project {
+        None
+    } else {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
+            Ok(project) => Some(project),
+            Err(err) => {
+                warn_user!("{err}");
+                None
+            }
+        }
+    };
 
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
@@ -56,8 +67,11 @@ pub(crate) async fn format(
         .with_context(|| format!("Failed to install ruff {version}"))?;
 
     let mut command = Command::new(&ruff_path);
+
     // Run ruff in the project root
-    command.current_dir(project.root());
+    if let Some(project) = project {
+        command.current_dir(project.root());
+    }
     command.arg("format");
 
     if check {
