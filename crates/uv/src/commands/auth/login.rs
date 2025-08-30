@@ -4,10 +4,12 @@ use anyhow::{Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 
-use uv_auth::Credentials;
-use uv_configuration::{KeyringProviderType, Service};
+use uv_auth::Service;
+use uv_auth::{Credentials, TextCredentialStore};
+use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Login to a service.
@@ -21,23 +23,7 @@ pub(crate) async fn login(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-
-    // Be helpful about incompatible `keyring-provider` settings
-    let Some(keyring_provider) = &keyring_provider else {
-        bail!(
-            "Logging in requires setting `keyring-provider = {}` for credentials to be retrieved in subsequent commands",
-            KeyringProviderType::Native
-        );
-    };
-    let provider = match keyring_provider {
-        KeyringProviderType::Native => keyring_provider.to_provider(&preview).unwrap(),
-        KeyringProviderType::Disabled | KeyringProviderType::Subprocess => {
-            bail!(
-                "Cannot login with `keyring-provider = {keyring_provider}`, use `keyring-provider = {}` instead",
-                KeyringProviderType::Native
-            );
-        }
-    };
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -116,7 +102,15 @@ pub(crate) async fn login(
 
     // TODO(zanieb): Add support for other authentication schemes here, e.g., `Credentials::Bearer`
     let credentials = Credentials::basic(Some(username), Some(password));
-    provider.store(url, &credentials).await?;
+    match backend {
+        AuthBackend::Keyring(provider) => {
+            provider.store(url, &credentials).await?;
+        }
+        AuthBackend::TextStore(mut text_store) => {
+            text_store.insert(service.clone(), credentials);
+            text_store.write(TextCredentialStore::default_file()?)?;
+        }
+    }
 
     writeln!(
         printer.stderr(),

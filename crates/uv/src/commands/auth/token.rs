@@ -1,11 +1,13 @@
 use std::fmt::Write;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use uv_auth::Credentials;
-use uv_configuration::{KeyringProviderType, Service};
+use uv_auth::Service;
+use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Show the token that will be used for a service.
@@ -17,13 +19,7 @@ pub(crate) async fn token(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-    // Determine the keyring provider to use
-    let Some(keyring_provider) = &keyring_provider else {
-        bail!("Retrieving credentials requires setting a `keyring-provider`");
-    };
-    let Some(provider) = keyring_provider.to_provider(&preview) else {
-        bail!("Cannot retrieve credentials with `keyring-provider = {keyring_provider}`");
-    };
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -46,10 +42,16 @@ pub(crate) async fn token(
         format!("{username}@{}", url.without_credentials())
     };
 
-    let credentials = provider
-        .fetch(url, Some(&username))
-        .await
-        .with_context(|| format!("Failed to fetch credentials for {display_url}"))?;
+    let credentials = match &backend {
+        AuthBackend::Keyring(provider) => provider
+            .fetch(url, Some(&username))
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
+        AuthBackend::TextStore(text_store) => text_store
+            .get_credentials(url)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
+    };
 
     let Some(password) = credentials.password() else {
         bail!(
