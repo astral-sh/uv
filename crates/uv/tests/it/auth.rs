@@ -3,10 +3,8 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 #[cfg(feature = "keyring-tests")]
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
-#[cfg(feature = "keyring-tests")]
 use uv_static::EnvVars;
 
-#[cfg(feature = "keyring-tests")]
 use crate::common::venv_bin_path;
 use crate::common::{TestContext, uv_snapshot};
 
@@ -333,7 +331,6 @@ fn token_native_keyring() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "keyring-tests")]
 fn token_subprocess_keyring() {
     let context = TestContext::new("3.12");
 
