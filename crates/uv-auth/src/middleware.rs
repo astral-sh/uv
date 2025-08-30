@@ -597,7 +597,7 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store.get_credentials(&url::Url::from(url.clone()))
+            text_store.get_credentials(&url::Url::from(url.clone())).cloned()
         }) {
             debug!("Found credentials in text store for {url}");
             Some(credentials)
@@ -2227,11 +2227,11 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
 
         // Create a text credential store with matching credentials
-        let mut store = crate::store::TextCredentialStore::from_file("nonexistent.toml").unwrap();
+        let mut store = crate::store::TextCredentialStore::new();
         let service = crate::Service::try_from(base_url.to_string()).unwrap();
         let credentials =
             crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
-        store.insert(&service, credentials);
+        store.insert(service.clone(), credentials);
 
         let client = test_client_builder()
             .with(

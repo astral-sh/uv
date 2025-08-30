@@ -9,6 +9,7 @@ use uv_auth::{Credentials, TextCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Login to a service.
@@ -22,22 +23,7 @@ pub(crate) async fn login(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-
-    // Use text store by default, keyring only when explicitly requested
-    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
-
-    let provider = if use_keyring {
-        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
-        Some(provider)
-    } else {
-        None
-    };
-
-    let text_store = if !use_keyring {
-        Some(TextCredentialStore::from_state_file()?)
-    } else {
-        None
-    };
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -116,12 +102,14 @@ pub(crate) async fn login(
 
     // TODO(zanieb): Add support for other authentication schemes here, e.g., `Credentials::Bearer`
     let credentials = Credentials::basic(Some(username), Some(password));
-
-    if let Some(provider) = provider {
-        provider.store(url, &credentials).await?;
-    } else if let Some(mut text_store) = text_store {
-        text_store.store_credentials(&service, credentials);
-        text_store.save_to_default_file()?;
+    match backend {
+        AuthBackend::Keyring(provider) => {
+            provider.store(url, &credentials).await?;
+        }
+        AuthBackend::TextStore(mut text_store) => {
+            text_store.insert(service.clone(), credentials);
+            text_store.write(TextCredentialStore::default_file()?)?;
+        }
     }
 
     writeln!(

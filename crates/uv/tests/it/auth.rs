@@ -6,9 +6,9 @@ use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
 #[cfg(feature = "keyring-tests")]
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
 #[cfg(feature = "keyring-tests")]
 use crate::common::venv_bin_path;
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 #[cfg(feature = "keyring-tests")]
@@ -1113,5 +1113,4 @@ fn auth_disabled_provider_uses_text_store() {
     ----- stderr -----
     "
     );
-
 }

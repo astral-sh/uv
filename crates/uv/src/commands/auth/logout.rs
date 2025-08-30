@@ -8,6 +8,7 @@ use uv_auth::{Credentials, TextCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
@@ -21,6 +22,7 @@ pub(crate) async fn logout(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -43,35 +45,22 @@ pub(crate) async fn logout(
         format!("{username}@{}", url.without_credentials())
     };
 
-    // Use text store by default, keyring only when explicitly requested
-    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
-
-    let provider = if use_keyring {
-        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
-        Some(provider)
-    } else {
-        None
-    };
-
-    let text_store = if !use_keyring {
-        Some(TextCredentialStore::from_state_file()?)
-    } else {
-        None
-    };
-
-    if let Some(provider) = provider {
-        provider
-            .remove(url, &username)
-            .await
-            .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
-    } else if let Some(mut text_store) = text_store {
-        let url_str = url.without_credentials().to_string();
-        if !text_store.remove_credentials(&url_str) {
-            bail!("No matching entry found for {display_url}");
+    // TODO(zanieb): Consider exhaustively logging out from all backends
+    match backend {
+        AuthBackend::Keyring(provider) => {
+            provider
+                .remove(url, &username)
+                .await
+                .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
         }
-        text_store
-            .save_to_default_file()
-            .with_context(|| "Unable to save credentials after removal")?;
+        AuthBackend::TextStore(mut text_store) => {
+            if text_store.remove(&service).is_none() {
+                bail!("No matching entry found for {display_url}");
+            }
+            text_store
+                .write(TextCredentialStore::default_file()?)
+                .with_context(|| "Failed to persist changes to credentials after removal")?;
+        }
     }
 
     writeln!(

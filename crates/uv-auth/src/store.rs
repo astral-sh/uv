@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use fs_err as fs;
 use serde::{Deserialize, Serialize};
@@ -9,12 +8,11 @@ use thiserror::Error;
 use tracing::debug;
 use url::Url;
 use uv_redacted::DisplaySafeUrl;
-use uv_state::{StateBucket, StateStore};
 
+use crate::Credentials;
 use crate::credentials::{Password, Username};
 use crate::realm::Realm;
 use crate::service::Service;
-use crate::{Credentials, credentials};
 
 /// Authentication scheme to use.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,6 +72,10 @@ pub enum BearerAuthError {
 }
 
 /// A single credential entry in a TOML credentials file.
+// TODO(zanieb): It's a little clunky that we need don't nest the scheme-specific fields under a
+// that scheme, but I want the username / password case to be easily accessible without
+// understanding authentication schemes. We should consider a better structure here, e.g., by
+// adding an internal type that we cast to after validation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TomlCredential {
     /// The service URL for this credential.
@@ -179,7 +181,20 @@ pub struct TextCredentialStore {
     credentials: HashMap<Service, Credentials>,
 }
 
+impl Default for TextCredentialStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextCredentialStore {
+    /// Create a new empty credential store.
+    pub fn new() -> Self {
+        Self {
+            credentials: HashMap::new(),
+        }
+    }
+
     /// Return the default credential file path.
     pub fn default_file() -> Result<PathBuf, TomlCredentialError> {
         let state_dir =
@@ -214,7 +229,7 @@ impl TextCredentialStore {
     }
 
     /// Persist credentials to a file.
-    pub fn into_file<P: AsRef<Path>>(self, path: P) -> Result<(), TomlCredentialError> {
+    pub fn write<P: AsRef<Path>>(self, path: P) -> Result<(), TomlCredentialError> {
         let credentials = self
             .credentials
             .into_iter()
@@ -242,6 +257,7 @@ impl TextCredentialStore {
 
         // Perform an exact lookup first
         // TODO(zanieb): Consider adding `DisplaySafeUrlRef` so we can avoid this clone
+        // TODO(zanieb): We could also return early here if we can't normalize to a `Service`
         if let Ok(url_service) = Service::try_from(DisplaySafeUrl::from(url.clone())) {
             if let Some(credential) = self.credentials.get(&url_service) {
                 return Some(credential);
@@ -294,6 +310,7 @@ impl TextCredentialStore {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::str::FromStr;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -312,7 +329,7 @@ mod tests {
 
         let back_to_toml = TomlCredential::from_credentials(
             Service::from_str("https://example.com").unwrap(),
-            &credentials,
+            credentials,
         )
         .unwrap();
         assert_eq!(back_to_toml.service.to_string(), "https://example.com/");
@@ -358,20 +375,22 @@ mod tests {
 
     #[test]
     fn test_credential_store_operations() {
-        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::new();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         let service = Service::from_str("https://example.com").unwrap();
-        store.insert(&service, credentials.clone());
-        assert!(store.has_credentials("https://example.com/"));
+        store.insert(service.clone(), credentials.clone());
+        let url = Url::parse("https://example.com/").unwrap();
+        assert!(store.get_credentials(&url).is_some());
 
         let url = Url::parse("https://example.com/path").unwrap();
         let retrieved = store.get_credentials(&url).unwrap();
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
 
-        assert!(store.remove("https://example.com/"));
-        assert!(!store.has_credentials("https://example.com/"));
+        assert!(store.remove(&service).is_some());
+        let url = Url::parse("https://example.com/").unwrap();
+        assert!(store.get_credentials(&url).is_none());
     }
 
     #[test]
@@ -396,8 +415,10 @@ password = "pass2"
 
         let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
 
-        assert!(store.has_credentials("https://example.com/"));
-        assert!(store.has_credentials("https://test.org/"));
+        let url = Url::parse("https://example.com/").unwrap();
+        assert!(store.get_credentials(&url).is_some());
+        let url = Url::parse("https://test.org/").unwrap();
+        assert!(store.get_credentials(&url).is_some());
 
         let url = Url::parse("https://example.com").unwrap();
         let cred = store.get_credentials(&url).unwrap();
@@ -406,7 +427,7 @@ password = "pass2"
 
         // Test saving
         let temp_output = NamedTempFile::new().unwrap();
-        store.into_file(temp_output.path()).unwrap();
+        store.write(temp_output.path()).unwrap();
 
         let content = fs::read_to_string(temp_output.path()).unwrap();
         assert!(content.contains("example.com"));
@@ -415,12 +436,12 @@ password = "pass2"
 
     #[test]
     fn test_prefix_matching() {
-        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::new();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store credentials for a specific path prefix
         let service = Service::from_str("https://example.com/api").unwrap();
-        store.insert(&service, credentials.clone());
+        store.insert(service.clone(), credentials.clone());
 
         // Should match URLs that are prefixes of the stored service
         let matching_urls = [
@@ -451,12 +472,12 @@ password = "pass2"
 
     #[test]
     fn test_realm_based_matching() {
-        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::new();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store by full URL (realm)
         let service = Service::from_str("https://example.com").unwrap();
-        store.insert(&service, credentials.clone());
+        store.insert(service.clone(), credentials.clone());
 
         // Should match URLs in the same realm
         let matching_urls = [
@@ -494,7 +515,7 @@ password = "pass2"
 
     #[test]
     fn test_most_specific_prefix_matching() {
-        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::new();
         let general_cred =
             Credentials::basic(Some("general".to_string()), Some("pass1".to_string()));
         let specific_cred =
@@ -503,8 +524,8 @@ password = "pass2"
         // Store credentials with different prefix lengths
         let general_service = Service::from_str("https://example.com/api").unwrap();
         let specific_service = Service::from_str("https://example.com/api/v1").unwrap();
-        store.insert(&general_service, general_cred);
-        store.insert(&specific_service, specific_cred);
+        store.insert(general_service.clone(), general_cred);
+        store.insert(specific_service.clone(), specific_cred);
 
         // Should match the most specific prefix
         let url = Url::parse("https://example.com/api/v1/users").unwrap();

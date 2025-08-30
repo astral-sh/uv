@@ -2,11 +2,12 @@ use std::fmt::Write;
 
 use anyhow::{Result, bail};
 
+use uv_auth::Credentials;
 use uv_auth::Service;
-use uv_auth::{Credentials, TextCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Show the token that will be used for a service.
@@ -18,22 +19,7 @@ pub(crate) async fn token(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let url = service.url();
-
-    // Use text store by default, keyring only when explicitly requested
-    let use_keyring = keyring_provider.as_ref() == Some(&KeyringProviderType::Native);
-
-    let provider = if use_keyring {
-        let provider = keyring_provider.unwrap().to_provider(&preview).unwrap();
-        Some(provider)
-    } else {
-        None
-    };
-
-    let text_store = if !use_keyring {
-        Some(TextCredentialStore::from_state_file()?)
-    } else {
-        None
-    };
+    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);
@@ -56,17 +42,15 @@ pub(crate) async fn token(
         format!("{username}@{}", url.without_credentials())
     };
 
-    let credentials = if let Some(provider) = provider {
-        provider
+    let credentials = match &backend {
+        AuthBackend::Keyring(provider) => provider
             .fetch(url, Some(&username))
             .await
-            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?
-    } else if let Some(text_store) = text_store {
-        text_store
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
+        AuthBackend::TextStore(text_store) => text_store
             .get_credentials(url)
-            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?
-    } else {
-        bail!("No credential store available")
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
     };
 
     let Some(password) = credentials.password() else {
