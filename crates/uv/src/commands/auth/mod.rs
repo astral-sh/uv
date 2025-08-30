@@ -2,6 +2,7 @@ use uv_auth::{KeyringProvider, TextCredentialStore, TomlCredentialError};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
+pub(crate) mod dir;
 pub(crate) mod login;
 pub(crate) mod logout;
 pub(crate) mod token;

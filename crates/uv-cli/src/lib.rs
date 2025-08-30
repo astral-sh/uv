@@ -4408,6 +4408,17 @@ pub enum AuthCommand {
     Logout(AuthLogoutArgs),
     /// Show the authentication token for a service
     Token(AuthTokenArgs),
+    /// Show the path to the uv credentials directory.
+    ///
+    /// By default, credentials are stored in the uv data directory at
+    /// `$XDG_DATA_HOME/uv/credentials` or `$HOME/.local/share/uv/credentials` on Unix and
+    /// `%APPDATA%\uv\data\credentials` on Windows.
+    ///
+    /// The credentials directory may be overridden with `$UV_CREDENTIALS_DIR`.
+    ///
+    /// Credentials are only stored in this directory when the plaintext backend is used, as
+    /// opposed to the native backend, which uses the system keyring.
+    Dir,
 }
 
 #[derive(Args)]

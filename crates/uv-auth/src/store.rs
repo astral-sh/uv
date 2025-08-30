@@ -181,7 +181,7 @@ pub struct TextCredentialStore {
 
 impl TextCredentialStore {
     /// Return the directory for storing credentials.
-    fn directory_path() -> Result<PathBuf, TomlCredentialError> {
+    pub fn directory_path() -> Result<PathBuf, TomlCredentialError> {
         if let Some(dir) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR)
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)

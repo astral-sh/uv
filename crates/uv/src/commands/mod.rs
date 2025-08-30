@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
+pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::login::login as auth_login;
 pub(crate) use auth::logout::logout as auth_logout;
 pub(crate) use auth::token::token as auth_token;
