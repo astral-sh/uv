@@ -24,15 +24,14 @@ pub(crate) async fn login(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let service_clone = service.clone();
-    let url = service_clone.url();
     let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
     // If the URL includes a known index URL suffix, strip it
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
+    let url = service.url().clone();
     let (service, url) = match IndexUrl::from(VerbatimUrl::from_url(url.clone())).root() {
         Some(root) => (Service::try_from(root.clone())?, root),
-        None => (service, url.clone()),
+        None => (service, url),
     };
 
     // Extract credentials from URL if present
@@ -125,7 +124,7 @@ pub(crate) async fn login(
     writeln!(
         printer.stderr(),
         "Stored credentials for {}",
-        display_url.cyan()
+        display_url.bold().cyan()
     )?;
     Ok(ExitStatus::Success)
 }
