@@ -201,6 +201,7 @@ windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Secur
 wiremock = { version = "0.6.4" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
+zstd = { version = "0.13.3" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }

@@ -2754,6 +2754,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -2828,6 +2829,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: file_url,
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(
@@ -3076,6 +3078,9 @@ impl Package {
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
+            if let Some(zstd) = wheel.zstd.as_ref() {
+                hashes.extend(zstd.hash.as_ref().map(|h| h.0.clone()));
+            }
         }
         HashDigests::from(hashes)
     }
@@ -3648,6 +3653,14 @@ impl Source {
         }
         table.insert("source", value(source_table));
     }
+
+    /// Check if a package is local by examining its source.
+    pub(crate) fn is_local(&self) -> bool {
+        matches!(
+            self,
+            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
+        )
+    }
 }
 
 impl Display for Source {
@@ -3695,14 +3708,6 @@ impl Source {
                 Some(false)
             }
         }
-    }
-
-    /// Check if a package is local by examining its source.
-    pub(crate) fn is_local(&self) -> bool {
-        matches!(
-            self,
-            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
-        )
     }
 }
 
@@ -4315,6 +4320,12 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     url
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+struct ZstdWheel {
+    hash: Option<Hash>,
+    size: Option<u64>,
+}
+
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -4345,6 +4356,8 @@ struct Wheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
+    /// The zstandard-compressed wheel metadata, if any.
+    zstd: Option<ZstdWheel>,
 }
 
 impl Wheel {
@@ -4453,12 +4466,17 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
+        let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
+            hash: zstd.hashes.iter().max().cloned().map(Hash::from),
+            size: zstd.size,
+        });
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
             filename,
+            zstd,
         })
     }
 
@@ -4471,6 +4489,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4483,6 +4502,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4516,6 +4536,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -4558,6 +4586,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
@@ -4593,6 +4629,9 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
+    /// The zstandard-compressed wheel metadata, if any.
+    #[serde(alias = "zstd")]
+    zstd: Option<ZstdWheel>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -4648,6 +4687,19 @@ impl Wheel {
         if let Some(upload_time) = self.upload_time {
             table.insert("upload-time", Value::from(upload_time.to_string()));
         }
+        if let Some(zstd) = &self.zstd {
+            let mut inner = InlineTable::new();
+            if let Some(ref hash) = zstd.hash {
+                inner.insert("hash", Value::from(hash.to_string()));
+            }
+            if let Some(size) = zstd.size {
+                inner.insert(
+                    "size",
+                    toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+                );
+            }
+            table.insert("zstd", Value::from(inner));
+        }
         Ok(table)
     }
 }
@@ -4682,6 +4734,7 @@ impl TryFrom<WheelWire> for Wheel {
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
+            zstd: wire.zstd,
             filename,
         })
     }

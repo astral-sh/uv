@@ -86,6 +86,7 @@ Ok(
                                 },
                             },
                         },
+                        zstd: None,
                     },
                 ],
                 fork_markers: [],

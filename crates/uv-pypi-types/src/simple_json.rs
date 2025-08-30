@@ -150,6 +150,7 @@ pub struct PyxFile {
     pub upload_time: Option<Timestamp>,
     pub url: SmallString,
     pub yanked: Option<Box<Yanked>>,
+    pub zstd: Option<Zstd>,
 }
 
 impl<'de> Deserialize<'de> for PyxFile {
@@ -178,6 +179,7 @@ impl<'de> Deserialize<'de> for PyxFile {
                 let mut upload_time = None;
                 let mut url = None;
                 let mut yanked = None;
+                let mut zstd = None;
 
                 while let Some(key) = access.next_key::<String>()? {
                     match key.as_str() {
@@ -201,6 +203,9 @@ impl<'de> Deserialize<'de> for PyxFile {
                         "upload-time" => upload_time = Some(access.next_value()?),
                         "url" => url = Some(access.next_value()?),
                         "yanked" => yanked = Some(access.next_value()?),
+                        "zstd" => {
+                            zstd = Some(access.next_value()?);
+                        }
                         _ => {
                             let _: serde::de::IgnoredAny = access.next_value()?;
                         }
@@ -216,6 +221,7 @@ impl<'de> Deserialize<'de> for PyxFile {
                     upload_time,
                     url: url.ok_or_else(|| serde::de::Error::missing_field("url"))?,
                     yanked,
+                    zstd,
                 })
             }
         }
@@ -318,6 +324,13 @@ impl Default for Yanked {
     fn default() -> Self {
         Self::Bool(false)
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
+pub struct Zstd {
+    pub hashes: Hashes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
 }
 
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
