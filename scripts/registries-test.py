@@ -215,13 +215,7 @@ def run_test(
     with tempfile.TemporaryDirectory() as project_dir:
         setup_test_project(registry_name, registry_url, project_dir, requires_python)
 
-        cmd = [
-            uv,
-            "add",
-            package,
-            "--directory",
-            project_dir,
-        ]
+        cmd = [uv, "add", package, "--directory", project_dir, "--no-cache"]
         if verbosity:
             cmd.extend(["-" + "v" * verbosity])
 
