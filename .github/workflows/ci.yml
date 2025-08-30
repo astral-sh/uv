@@ -1779,8 +1779,32 @@ jobs:
           echo "::add-mask::$UV_TEST_GCP_TOKEN"
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
-      - name: "Run registry tests"
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all
+      - name: "Run registry tests with environment variable backend"
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+          UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+          UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
+          UV_TEST_AWS_USERNAME: aws
+          UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
+          UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
+          UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
+          UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
+          UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
+          UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
+          UV_TEST_GCP_USERNAME: oauth2accesstoken
+          UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
+          UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
+          UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
+          UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
+          UV_TEST_GITLAB_USERNAME: token
+
+      - name: "Run registry tests with text store backend"
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
