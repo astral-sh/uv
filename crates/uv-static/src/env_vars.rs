@@ -45,6 +45,9 @@ impl EnvVars {
     /// directory for caching instead of the default cache directory.
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
 
+    /// The directory for storage of credentials when using a plain text backend.
+    pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";
+
     /// Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
     /// cache for any operations.
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";

@@ -65,25 +65,25 @@ impl Default for TextStoreMode {
         // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
         // implementation for now.
         Self::Automatic(LazyLock::new(|| {
-            let state_dir = uv_dirs::user_state_dir()?;
-            let credentials_path = state_dir.join("credentials").join("credentials.toml");
+            let path = TextCredentialStore::default_file()
+                .inspect_err(|err| {
+                    warn!("Failed to determine credentials file path: {}", err);
+                })
+                .ok()?;
 
-            match TextCredentialStore::from_file(&credentials_path) {
+            match TextCredentialStore::from_file(&path) {
                 Ok(store) => {
-                    debug!("Loaded credential file {}", credentials_path.display());
+                    debug!("Loaded credential file {}", path.display());
                     Some(store)
                 }
                 Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    debug!(
-                        "No credentials file found at {}",
-                        credentials_path.display()
-                    );
+                    debug!("No credentials file found at {}", path.display());
                     None
                 }
                 Err(err) => {
                     warn!(
                         "Failed to load credentials from {}: {}",
-                        credentials_path.display(),
+                        path.display(),
                         err
                     );
                     None
