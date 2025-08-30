@@ -2004,10 +2004,8 @@ impl PythonRequest {
     /// Returns `None` if the request doesn't carry an exact version
     pub fn as_pep440_version(&self) -> Option<Version> {
         match self {
-            PythonRequest::Version(v) | PythonRequest::ImplementationVersion(_, v) => {
-                v.as_pep440_version()
-            }
-            PythonRequest::Key(download_request) => download_request
+            Self::Version(v) | Self::ImplementationVersion(_, v) => v.as_pep440_version(),
+            Self::Key(download_request) => download_request
                 .version()
                 .and_then(VersionRequest::as_pep440_version),
             _ => None,
