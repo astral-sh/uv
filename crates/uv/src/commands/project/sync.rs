@@ -774,6 +774,7 @@ pub(super) async fn do_sync(
         workspace_cache.clone(),
         concurrency,
         preview,
+        Some(&resolution),
     );
 
     let site_packages = SitePackages::from_environment(venv)?;

@@ -469,6 +469,7 @@ pub(crate) async fn add(
                 WorkspaceCache::default(),
                 concurrency,
                 preview,
+                None,
             );
 
             requirements.extend(

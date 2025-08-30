@@ -254,6 +254,8 @@ pub(crate) async fn venv(
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
         let extra_build_requires = ExtraBuildRequires::default();
         let extra_build_variables = uv_distribution_types::ExtraBuildVariables::default();
+        let top_level_resolution = None;
+
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
@@ -278,6 +280,7 @@ pub(crate) async fn venv(
             workspace_cache,
             concurrency,
             preview,
+            top_level_resolution,
         );
 
         // Resolve the seed packages.

@@ -111,6 +111,9 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
+    /// Get the resolution for the top-level package.
+    fn top_level_resolution(&self) -> Option<&Resolution>;
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,

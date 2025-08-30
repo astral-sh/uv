@@ -718,6 +718,7 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency,
         preview,
+        None,
     );
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);

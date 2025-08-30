@@ -103,6 +103,7 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    top_level_resolution: Option<&'a Resolution>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -129,6 +130,7 @@ impl<'a> BuildDispatch<'a> {
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
+        top_level_resolution: Option<&'a Resolution>,
     ) -> Self {
         Self {
             client,
@@ -155,6 +157,7 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            top_level_resolution,
         }
     }
 
@@ -557,6 +560,10 @@ impl BuildContext for BuildDispatch<'_> {
         .await??;
 
         Ok(Some(filename))
+    }
+
+    fn top_level_resolution(&self) -> Option<&Resolution> {
+        self.top_level_resolution
     }
 }
 
