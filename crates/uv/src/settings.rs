@@ -3506,6 +3506,8 @@ impl AuthLogoutSettings {
             keyring_provider, ..
         } = top_level;
 
+        let keyring_provider = args.keyring_provider.combine(keyring_provider);
+
         Self {
             service: args.service,
             username: args.username,

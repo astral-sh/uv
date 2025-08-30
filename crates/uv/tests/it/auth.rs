@@ -19,6 +19,8 @@ fn add_package_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Configure `pyproject.toml` with native keyring provider.
@@ -131,36 +133,9 @@ fn token_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
-        .status()?;
-
-    // Without a service name
-    uv_snapshot!(context.auth_token(), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: the following required arguments were not provided:
-      <SERVICE>
-
-    Usage: uv auth token --cache-dir [CACHE_DIR] <SERVICE>
-
-    For more information, try '--help'.
-    ");
-
-    // With keyring provider - should fail without stored credentials
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
-        .arg("native"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-    ");
+        .arg("native")
+        .status()?;
 
     // Without persisted credentials
     uv_snapshot!(context.auth_token()
@@ -423,6 +398,8 @@ fn login_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Without a service name
@@ -503,6 +480,8 @@ fn login_token_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("__token__")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Successful with token
@@ -536,6 +515,8 @@ fn logout_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Without a service name
@@ -553,7 +534,7 @@ fn logout_native_keyring() -> Result<()> {
     For more information, try '--help'.
     ");
 
-    // Logout with keyring provider (should use keyring)
+    // Logout before logging in
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
@@ -565,21 +546,6 @@ fn logout_native_keyring() -> Result<()> {
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-    ");
-
-    // Logout before logging in (without a username)
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .arg("--keyring-provider")
-        .arg("native"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-      Caused by: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
@@ -689,6 +655,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Cannot specify a username both via the URL and CLI; found `--username foo` and `public`
     ");
 
@@ -720,6 +687,8 @@ fn logout_token_native_keyring() -> Result<()> {
     context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Login with a token
