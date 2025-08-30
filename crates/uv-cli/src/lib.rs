@@ -5548,7 +5548,7 @@ pub struct AuthLogoutArgs {
 
 #[derive(Args)]
 pub struct AuthLoginArgs {
-    /// The service to login to.
+    /// The service to log into.
     pub service: Service,
 
     /// The username to use for the service.

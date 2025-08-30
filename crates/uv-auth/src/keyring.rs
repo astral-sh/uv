@@ -159,11 +159,11 @@ impl KeyringProvider {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
-            "Should only use keyring for urls with host"
+            "Should only use keyring for URLs with host"
         );
         debug_assert!(
             url.password().is_none(),
-            "Should only use keyring for urls without a password"
+            "Should only use keyring for URLs without a password"
         );
         debug_assert!(
             !username.map(str::is_empty).unwrap_or(false),
@@ -286,7 +286,7 @@ impl KeyringProvider {
                 // N.B. We do not show the `service_name` here because we'll show the warning twice
                 //      otherwise, once for the URL and once for the realm.
                 warn_user_once!(
-                    "Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` for support or provide a username"
+                    "Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username"
                 );
             } else if username.is_none() {
                 // If we captured stderr, display it in case it's helpful to the user
@@ -314,8 +314,7 @@ impl KeyringProvider {
             }
             Err(err) => {
                 warn_user_once!(
-                    "Unable to fetch credentials for {service} from system keyring: {}",
-                    err
+                    "Unable to fetch credentials for {service} from system keyring: {err}"
                 );
             }
         }
