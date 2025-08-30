@@ -194,6 +194,10 @@ def get_latest_version(target: str, client: httpx.Client) -> Version:
             time.sleep(1)
     else:
         raise RuntimeError(f"Failed to fetch {url}") from error
+
+    if not versions:
+        raise ValueError(f"No versions found for {target_config.project_name}")
+
     return max(versions)
 
 
