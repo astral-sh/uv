@@ -5,7 +5,6 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::debug;
 use url::Url;
 use uv_redacted::DisplaySafeUrl;
 
@@ -70,98 +69,100 @@ pub enum BearerAuthError {
 }
 
 /// A single credential entry in a TOML credentials file.
-// TODO(zanieb): It's a little clunky that we need don't nest the scheme-specific fields under
-// that scheme, but I want the username / password case to be easily accessible without
-// understanding authentication schemes. We should consider a better structure here, e.g., by
-// adding an internal type that we cast to after validation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "TomlCredentialWire", into = "TomlCredentialWire")]
 pub struct TomlCredential {
     /// The service URL for this credential.
     pub service: Service,
-    /// The username to use. Only allowed with [`AuthScheme::Basic`].
-    pub username: Username,
-    /// The authentication scheme.
-    #[serde(default)]
-    pub scheme: AuthScheme,
-    /// The password to use. Only allowed with [`AuthScheme::Basic`].
-    pub password: Option<Password>,
-    /// The token to use. Only allowed with [`AuthScheme::Bearer`].
-    pub token: Option<String>,
+    /// The credentials for this entry.
+    pub credentials: Credentials,
 }
 
-impl TomlCredential {
-    /// Validate that the credential configuration is correct for the scheme.
-    fn validate(&self) -> Result<(), TomlCredentialError> {
-        match self.scheme {
-            AuthScheme::Basic => {
-                if self.username.as_deref().is_none() {
-                    return Err(TomlCredentialError::BasicAuthError(
-                        BasicAuthError::MissingUsername,
-                    ));
-                }
-                if self.token.is_some() {
-                    return Err(TomlCredentialError::BasicAuthError(
-                        BasicAuthError::UnexpectedToken,
-                    ));
-                }
-            }
-            AuthScheme::Bearer => {
-                if self.username.is_some() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::UnexpectedUsername,
-                    ));
-                }
-                if self.password.is_some() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::UnexpectedPassword,
-                    ));
-                }
-                if self.token.is_none() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::MissingToken,
-                    ));
-                }
-            }
-        }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TomlCredentialWire {
+    /// The service URL for this credential.
+    service: Service,
+    /// The username to use. Only allowed with [`AuthScheme::Basic`].
+    username: Username,
+    /// The authentication scheme.
+    #[serde(default)]
+    scheme: AuthScheme,
+    /// The password to use. Only allowed with [`AuthScheme::Basic`].
+    password: Option<Password>,
+    /// The token to use. Only allowed with [`AuthScheme::Bearer`].
+    token: Option<String>,
+}
 
-        Ok(())
-    }
-
-    /// Convert to [`Credentials`].
-    ///
-    /// This method can panic if [`TomlCredential::validate`] has not been called.
-    pub fn into_credentials(self) -> Credentials {
-        match self.scheme {
-            AuthScheme::Basic => Credentials::Basic {
-                username: self.username,
-                password: self.password,
-            },
-            AuthScheme::Bearer => Credentials::Bearer {
-                token: self.token.unwrap().into_bytes(),
-            },
-        }
-    }
-
-    /// Construct a [`TomlCredential`] for a service from [`Credentials`].
-    pub fn from_credentials(
-        service: Service,
-        credentials: Credentials,
-    ) -> Result<Self, TomlCredentialError> {
-        match credentials {
-            Credentials::Basic { username, password } => Ok(Self {
-                service,
+impl From<TomlCredential> for TomlCredentialWire {
+    fn from(value: TomlCredential) -> Self {
+        match value.credentials {
+            Credentials::Basic { username, password } => Self {
+                service: value.service,
                 username,
                 scheme: AuthScheme::Basic,
                 password,
                 token: None,
-            }),
-            Credentials::Bearer { token } => Ok(Self {
-                service,
+            },
+            Credentials::Bearer { token } => Self {
+                service: value.service,
                 username: Username::new(None),
                 scheme: AuthScheme::Bearer,
                 password: None,
-                token: Some(String::from_utf8(token)?),
-            }),
+                token: Some(String::from_utf8(token).expect("Token is valid UTF-8")),
+            },
+        }
+    }
+}
+
+impl TryFrom<TomlCredentialWire> for TomlCredential {
+    type Error = TomlCredentialError;
+
+    fn try_from(value: TomlCredentialWire) -> Result<Self, Self::Error> {
+        match value.scheme {
+            AuthScheme::Basic => {
+                if value.username.as_deref().is_none() {
+                    return Err(TomlCredentialError::BasicAuthError(
+                        BasicAuthError::MissingUsername,
+                    ));
+                }
+                if value.token.is_some() {
+                    return Err(TomlCredentialError::BasicAuthError(
+                        BasicAuthError::UnexpectedToken,
+                    ));
+                }
+                let credentials = Credentials::Basic {
+                    username: value.username,
+                    password: value.password,
+                };
+                Ok(Self {
+                    service: value.service,
+                    credentials,
+                })
+            }
+            AuthScheme::Bearer => {
+                if value.username.is_some() {
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::UnexpectedUsername,
+                    ));
+                }
+                if value.password.is_some() {
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::UnexpectedPassword,
+                    ));
+                }
+                if value.token.is_none() {
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::MissingToken,
+                    ));
+                }
+                let credentials = Credentials::Bearer {
+                    token: value.token.unwrap().into_bytes(),
+                };
+                Ok(Self {
+                    service: value.service,
+                    credentials,
+                })
+            }
         }
     }
 }
@@ -206,18 +207,7 @@ impl TextCredentialStore {
         let credentials: FxHashMap<Service, Credentials> = credentials
             .credentials
             .into_iter()
-            .filter_map(|credential| {
-                // TODO(zanieb): Determine a better strategy for invalid credential entries
-                if let Err(err) = credential.validate() {
-                    debug!(
-                        "Skipping invalid credential for {}: {err}",
-                        credential.service
-                    );
-                    return None;
-                }
-
-                Some((credential.service.clone(), credential.into_credentials()))
-            })
+            .map(|credential| (credential.service.clone(), credential.credentials))
             .collect();
 
         Ok(Self { credentials })
@@ -228,8 +218,11 @@ impl TextCredentialStore {
         let credentials = self
             .credentials
             .into_iter()
-            .map(|(service, cred)| TomlCredential::from_credentials(service, cred))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|(service, credentials)| TomlCredential {
+                service,
+                credentials,
+            })
+            .collect::<Vec<_>>();
 
         let toml_creds = TomlCredentials { credentials };
         let content = toml::to_string_pretty(&toml_creds)?;
@@ -309,47 +302,22 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
-    fn test_toml_credential_conversion() {
-        let toml_cred = TomlCredential {
-            service: Service::from_str("https://example.com").unwrap(),
-            username: Username::new(Some("user".to_string())),
-            scheme: AuthScheme::Basic,
-            password: Some(Password::new("pass".to_string())),
-            token: None,
-        };
-
-        let credentials = toml_cred.into_credentials();
-        assert_eq!(credentials.username(), Some("user"));
-        assert_eq!(credentials.password(), Some("pass"));
-
-        let back_to_toml = TomlCredential::from_credentials(
-            Service::from_str("https://example.com").unwrap(),
-            credentials,
-        )
-        .unwrap();
-        assert_eq!(back_to_toml.service.to_string(), "https://example.com/");
-        assert_eq!(back_to_toml.username.as_deref(), Some("user"));
-        assert_eq!(back_to_toml.password.as_ref().unwrap().as_str(), "pass");
-        assert_eq!(back_to_toml.scheme, AuthScheme::Basic);
-    }
-
-    #[test]
     fn test_toml_serialization() {
         let credentials = TomlCredentials {
             credentials: vec![
                 TomlCredential {
                     service: Service::from_str("https://example.com").unwrap(),
-                    username: Username::new(Some("user1".to_string())),
-                    scheme: AuthScheme::Basic,
-                    password: Some(Password::new("pass1".to_string())),
-                    token: None,
+                    credentials: Credentials::Basic {
+                        username: Username::new(Some("user1".to_string())),
+                        password: Some(Password::new("pass1".to_string())),
+                    },
                 },
                 TomlCredential {
                     service: Service::from_str("https://test.org").unwrap(),
-                    username: Username::new(Some("user2".to_string())),
-                    scheme: AuthScheme::Basic,
-                    password: Some(Password::new("pass2".to_string())),
-                    token: None,
+                    credentials: Credentials::Basic {
+                        username: Username::new(Some("user2".to_string())),
+                        password: Some(Password::new("pass2".to_string())),
+                    },
                 },
             ],
         };
