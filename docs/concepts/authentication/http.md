@@ -6,6 +6,7 @@ Authentication can come from the following sources, in order of precedence:
 
 - The URL, e.g., `https://<user>:<password>@<hostname>/...`
 - A [netrc](#netrc-files) configuration file
+- The uv credentials file
 - A [keyring provider](#keyring-providers) (off by default)
 
 Authentication may be used for hosts specified in the following contexts:
@@ -23,6 +24,13 @@ for storing credentials on a system.
 
 Reading credentials from `.netrc` files is always enabled. The target file path will be loaded from
 the `NETRC` environment variable if defined, falling back to `~/.netrc` if not.
+
+## The uv credentials file
+
+uv will read credentials from `~/.local/share/uv/credentials/credentials.toml`. This file is
+currently not intended to be edited manually.
+
+To add or remove credentials, use the [`uv auth` commands](./cli.md).
 
 ## Keyring providers
 
@@ -52,7 +60,7 @@ macOS, it uses the Keychain Services. On Windows, it uses the Windows Credential
 it uses the DBus-based Secret Service API.
 
 Currently, uv only searches the native keyring provider for credentials it has added to the secret
-store.
+store. To add or remove credentials, use the [`uv auth` commands](./cli.md).
 
 Set `--keyring-provider native`, `UV_KEYRING_PROVIDER=native`, or
 `tool.uv.keyring-provider = "native"` to use the provider.
