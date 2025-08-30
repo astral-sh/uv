@@ -94,7 +94,7 @@ impl Default for TextStoreMode {
 }
 
 impl TextStoreMode {
-    /// Get the parsed credential store if enabled.
+    /// Get the parsed credential store, if enabled.
     fn get(&self) -> Option<&TextCredentialStore> {
         match self {
             Self::Automatic(lock) => lock.as_ref(),

@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
+use url::Url;
 use uv_redacted::DisplaySafeUrl;
 
 #[derive(Error, Debug)]
 pub enum ServiceParseError {
-    #[error("failed to parse URL: {0}")]
+    #[error(transparent)]
     InvalidUrl(#[from] url::ParseError),
     #[error("only HTTPS is supported")]
     UnsupportedScheme,
@@ -31,7 +32,7 @@ impl Service {
     }
 
     /// Validate that the URL scheme is supported.
-    fn check_scheme(url: &DisplaySafeUrl) -> Result<(), ServiceParseError> {
+    fn check_scheme(url: &Url) -> Result<(), ServiceParseError> {
         match url.scheme() {
             "https" => Ok(()),
             #[cfg(test)]

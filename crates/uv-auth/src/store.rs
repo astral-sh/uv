@@ -18,23 +18,18 @@ use crate::realm::Realm;
 use crate::service::Service;
 
 /// Authentication scheme to use.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthScheme {
     /// HTTP Basic Authentication
     ///
     /// Uses a username and password.
+    #[default]
     Basic,
     /// Bearer token authentication.
     ///
     /// Uses a token provided as `Bearer <token>` in the `Authorization` header.
     Bearer,
-}
-
-impl Default for AuthScheme {
-    fn default() -> Self {
-        Self::Basic
-    }
 }
 
 /// Errors that can occur when working with TOML credential storage.
@@ -75,11 +70,11 @@ pub enum BearerAuthError {
 }
 
 /// A single credential entry in a TOML credentials file.
-// TODO(zanieb): It's a little clunky that we need don't nest the scheme-specific fields under a
+// TODO(zanieb): It's a little clunky that we need don't nest the scheme-specific fields under
 // that scheme, but I want the username / password case to be easily accessible without
 // understanding authentication schemes. We should consider a better structure here, e.g., by
 // adding an internal type that we cast to after validation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TomlCredential {
     /// The service URL for this credential.
     pub service: Service,
@@ -172,10 +167,10 @@ impl TomlCredential {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TomlCredentials {
+struct TomlCredentials {
     /// Array of credential entries.
     #[serde(rename = "credential")]
-    pub credentials: Vec<TomlCredential>,
+    credentials: Vec<TomlCredential>,
 }
 
 /// A credential store with a plain text storage backend.
@@ -215,8 +210,8 @@ impl TextCredentialStore {
                 // TODO(zanieb): Determine a better strategy for invalid credential entries
                 if let Err(err) = credential.validate() {
                     debug!(
-                        "Skipping invalid credential for {}: {}",
-                        credential.service, err
+                        "Skipping invalid credential for {}: {err}",
+                        credential.service
                     );
                     return None;
                 }

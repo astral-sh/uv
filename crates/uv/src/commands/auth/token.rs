@@ -18,8 +18,8 @@ pub(crate) async fn token(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let url = service.url();
     let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
+    let url = service.url();
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(url);

@@ -815,7 +815,7 @@ fn login_native_keyring_url() {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'not a valid url' for '<SERVICE>': failed to parse URL: invalid international domain name
+    error: invalid value 'not a valid url' for '<SERVICE>': invalid international domain name
 
     For more information, try '--help'.
     ");

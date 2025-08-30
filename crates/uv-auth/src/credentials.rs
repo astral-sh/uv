@@ -80,10 +80,12 @@ impl Password {
         Self(password)
     }
 
+    /// Return the [`Password`] as a string slice.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
+    /// Convert the [`Password`] into its underlying [`String`].
     pub fn into_string(self) -> String {
         self.0
     }

@@ -63,7 +63,7 @@ uv auth login [OPTIONS] <SERVICE>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-auth-login--service"><a href="#uv-auth-login--service"<code>SERVICE</code></a></dt><dd><p>The service to login to</p>
+<dl class="cli-reference"><dt id="uv-auth-login--service"><a href="#uv-auth-login--service"<code>SERVICE</code></a></dt><dd><p>The service to log into</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
