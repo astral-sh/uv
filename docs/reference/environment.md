@@ -55,6 +55,10 @@ local `uv.toml` file to use as the configuration file.
 Equivalent to the `--constraint` command-line argument. If set, uv will use this
 file as the constraints file. Uses space-separated list of files.
 
+### `UV_CREDENTIALS_DIR`
+
+The directory for storage of credentials when using a plain text backend.
+
 ### `UV_CUSTOM_COMPILE_COMMAND`
 
 Equivalent to the `--custom-compile-command` command-line argument.
