@@ -1,0 +1,60 @@
+# The `uv auth` CLI
+
+uv provides a high-level interface for storing and retrieving credentials from services.
+
+## Logging in to a service
+
+To add credentials for service, use the `uv auth login` command:
+
+```console
+$ uv auth login example.com
+```
+
+This will prompt for the credentials.
+
+The credentials can also be provided using the `--username` and `--password` options, or the
+`--token` option for services which use a `__token__` or arbitrary username.
+
+Once credentials are added, uv will use them for packaging operations that require fetching content
+from the given service. At this time, only HTTPS Basic authentication is supported. The credentials
+will not yet be used for Git requests.
+
+!!! note
+
+    The credentials will not be validated, i.e., incorrect credentials will not fail.
+
+## Logging out of a service
+
+To remove credentials, use the `uv auth logout` command:
+
+```console
+$ uv auth logout example.com
+```
+
+!!! note
+
+    The credentials will not be invalidated with the remote server, i.e., they will only be removed
+    from local storage not rendered unusable.
+
+## Showing credentials for a service
+
+To show the credential stored for a given URL, use the `uv auth token` command:
+
+```console
+$ uv auth token example.com
+```
+
+If a username was used to log in, it will need to be provided as well, e.g.:
+
+```console
+$ uv auth token --username foo example.com
+```
+
+## Configuring the storage backend
+
+By default, credentials are persisted in plain text to the uv
+[credentials file](./http.md#the-uv-credentials-file).
+
+If the [native keyring provider](./http.md#the-native-keyring-provider) is enabled, it will be used
+instead, and the credentials will be stored in a secure system store. The native keyring is
+currently experimental, but will become the default in the future.
