@@ -16,7 +16,7 @@ pub enum ServiceParseError {
 /// This type provides automatic URL parsing and validation when used as a CLI argument,
 /// eliminating the need for manual parsing in command functions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(try_from = "String", into = "String")]
+#[serde(transparent)]
 pub struct Service(DisplaySafeUrl);
 
 impl Service {

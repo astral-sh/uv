@@ -30,6 +30,7 @@ pub enum Credentials {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Username(Option<String>);
 
 impl Username {
@@ -71,6 +72,7 @@ impl From<Option<String>> for Username {
 }
 
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Password(String);
 
 impl Password {
