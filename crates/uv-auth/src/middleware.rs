@@ -7,6 +7,8 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace, warn};
 
+use uv_redacted::DisplaySafeUrl;
+
 use crate::providers::HuggingFaceProvider;
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
@@ -16,7 +18,6 @@ use crate::{
     realm::Realm,
 };
 use crate::{TextCredentialStore, TomlCredentialError};
-use uv_redacted::DisplaySafeUrl;
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
