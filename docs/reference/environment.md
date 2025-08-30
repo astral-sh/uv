@@ -510,6 +510,10 @@ WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (
 or containerized environments and should be used with caution, as modifying the system
 Python can lead to unexpected behavior.
 
+### `UV_TARGET_PYTHON_PLATFORM`
+
+Used to set the deploymen target.
+
 ### `UV_TEST_NO_HTTP_RETRY_DELAY`
 
 Used to disable delay for HTTP retries in tests.
