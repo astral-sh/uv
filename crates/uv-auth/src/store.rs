@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
@@ -176,25 +176,12 @@ pub struct TomlCredentials {
 }
 
 /// A credential store with a plain text storage backend.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TextCredentialStore {
-    credentials: HashMap<Service, Credentials>,
-}
-
-impl Default for TextCredentialStore {
-    fn default() -> Self {
-        Self::new()
-    }
+    credentials: FxHashMap<Service, Credentials>,
 }
 
 impl TextCredentialStore {
-    /// Create a new empty credential store.
-    pub fn new() -> Self {
-        Self {
-            credentials: HashMap::new(),
-        }
-    }
-
     /// Return the default credential file path.
     pub fn default_file() -> Result<PathBuf, TomlCredentialError> {
         let state_dir =
@@ -208,7 +195,7 @@ impl TextCredentialStore {
         let content = fs::read_to_string(path)?;
         let credentials: TomlCredentials = toml::from_str(&content)?;
 
-        let credentials: HashMap<Service, Credentials> = credentials
+        let credentials: FxHashMap<Service, Credentials> = credentials
             .credentials
             .into_iter()
             .filter_map(|credential| {
@@ -375,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_credential_store_operations() {
-        let mut store = TextCredentialStore::new();
+        let mut store = TextCredentialStore::default();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         let service = Service::from_str("https://example.com").unwrap();
@@ -436,7 +423,7 @@ password = "pass2"
 
     #[test]
     fn test_prefix_matching() {
-        let mut store = TextCredentialStore::new();
+        let mut store = TextCredentialStore::default();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store credentials for a specific path prefix
@@ -472,7 +459,7 @@ password = "pass2"
 
     #[test]
     fn test_realm_based_matching() {
-        let mut store = TextCredentialStore::new();
+        let mut store = TextCredentialStore::default();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store by full URL (realm)
@@ -515,7 +502,7 @@ password = "pass2"
 
     #[test]
     fn test_most_specific_prefix_matching() {
-        let mut store = TextCredentialStore::new();
+        let mut store = TextCredentialStore::default();
         let general_cred =
             Credentials::basic(Some("general".to_string()), Some("pass1".to_string()));
         let specific_cred =

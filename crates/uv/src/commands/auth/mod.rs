@@ -29,7 +29,7 @@ impl AuthBackend {
         match TextCredentialStore::from_file(TextCredentialStore::default_file()?) {
             Ok(store) => Ok(Self::TextStore(store)),
             Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Self::TextStore(TextCredentialStore::new()))
+                Ok(Self::TextStore(TextCredentialStore::default()))
             }
             Err(err) => Err(err),
         }

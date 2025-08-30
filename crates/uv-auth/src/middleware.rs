@@ -15,6 +15,7 @@ use crate::{
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
+use crate::{TextCredentialStore, TomlCredentialError};
 use uv_redacted::DisplaySafeUrl;
 
 /// Strategy for loading netrc files.
@@ -53,8 +54,8 @@ impl NetrcMode {
 
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
-    Automatic(LazyLock<Option<crate::store::TextCredentialStore>>),
-    Enabled(crate::store::TextCredentialStore),
+    Automatic(LazyLock<Option<TextCredentialStore>>),
+    Enabled(TextCredentialStore),
     Disabled,
 }
 
@@ -66,26 +67,21 @@ impl Default for TextStoreMode {
             let state_dir = uv_dirs::user_state_dir()?;
             let credentials_path = state_dir.join("credentials").join("credentials.toml");
 
-            match crate::store::TextCredentialStore::from_file(&credentials_path) {
+            match TextCredentialStore::from_file(&credentials_path) {
                 Ok(store) => {
-                    debug!(
-                        "Loaded TOML credential store from {}",
-                        credentials_path.display()
-                    );
+                    debug!("Loaded credential file {}", credentials_path.display());
                     Some(store)
                 }
-                Err(crate::store::TomlCredentialError::Io(err))
-                    if err.kind() == std::io::ErrorKind::NotFound =>
-                {
+                Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                     debug!(
-                        "No TOML credentials file found at {}",
+                        "No credentials file found at {}",
                         credentials_path.display()
                     );
                     None
                 }
                 Err(err) => {
                     warn!(
-                        "Failed to load TOML credentials from {}: {}",
+                        "Failed to load credentials from {}: {}",
                         credentials_path.display(),
                         err
                     );
@@ -98,7 +94,7 @@ impl Default for TextStoreMode {
 
 impl TextStoreMode {
     /// Get the parsed credential store if enabled.
-    fn get(&self) -> Option<&crate::store::TextCredentialStore> {
+    fn get(&self) -> Option<&TextCredentialStore> {
         match self {
             Self::Automatic(lock) => lock.as_ref(),
             Self::Enabled(store) => Some(store),
@@ -152,7 +148,7 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via text store.
     #[must_use]
-    pub fn with_text_store(mut self, store: Option<crate::store::TextCredentialStore>) -> Self {
+    pub fn with_text_store(mut self, store: Option<TextCredentialStore>) -> Self {
         self.text_store = if let Some(store) = store {
             TextStoreMode::Enabled(store)
         } else {
@@ -2229,7 +2225,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
 
         // Create a text credential store with matching credentials
-        let mut store = crate::store::TextCredentialStore::new();
+        let mut store = TextCredentialStore::default();
         let service = crate::Service::try_from(base_url.to_string()).unwrap();
         let credentials =
             crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
