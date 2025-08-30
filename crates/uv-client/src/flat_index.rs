@@ -204,7 +204,7 @@ impl<'a> FlatIndexClient<'a> {
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, &base) {
+                        match File::try_from_pypi(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
