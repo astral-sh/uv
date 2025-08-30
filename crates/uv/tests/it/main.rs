@@ -3,6 +3,9 @@
 
 pub(crate) mod common;
 
+#[cfg(feature = "keyring-tests")]
+mod auth;
+
 mod branching_urls;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
