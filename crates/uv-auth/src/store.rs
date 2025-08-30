@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use fs_err as fs;
@@ -7,11 +8,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
+use uv_state::{StateBucket, StateStore};
 
-use crate::Credentials;
 use crate::credentials::{Password, Username};
 use crate::realm::Realm;
 use crate::service::Service;
+use crate::{Credentials, credentials};
 
 /// Authentication scheme to use.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,59 +43,82 @@ pub enum TomlCredentialError {
     Io(#[from] std::io::Error),
     #[error("Failed to parse TOML credential file: {0}")]
     ParseError(#[from] toml::de::Error),
-    #[error("Failed to serialize credentials to TOML: {0}")]
+    #[error("Failed to serialize credentials to TOML")]
     SerializeError(#[from] toml::ser::Error),
-    #[error("Invalid credential configuration: {0}")]
-    InvalidCredential(String),
+    #[error(transparent)]
+    BasicAuthError(#[from] BasicAuthError),
+    #[error(transparent)]
+    BearerAuthError(#[from] BearerAuthError),
+    #[error("Failed to determine credentials directory")]
+    CredentialsDirError,
+    #[error("Token is not valid unicode")]
+    TokenNotUnicode(#[from] std::string::FromUtf8Error),
 }
 
-/// A single credential entry in the TOML file.
+#[derive(Debug, Error)]
+pub enum BasicAuthError {
+    #[error("`username` is required with `scheme = basic`")]
+    MissingUsername,
+    #[error("`token` cannot be provided with `scheme = basic`")]
+    UnexpectedToken,
+}
+
+#[derive(Debug, Error)]
+pub enum BearerAuthError {
+    #[error("`token` is required with `scheme = bearer`")]
+    MissingToken,
+    #[error("`username` cannot be provided with `scheme = bearer`")]
+    UnexpectedUsername,
+    #[error("`password` cannot be provided with `scheme = bearer`")]
+    UnexpectedPassword,
+}
+
+/// A single credential entry in a TOML credentials file.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TomlCredential {
     /// The service URL for this credential.
     pub service: Service,
-    /// The username to use.
+    /// The username to use. Only allowed with [`AuthScheme::Basic`].
     pub username: Username,
     /// The authentication scheme.
     #[serde(default)]
     pub scheme: AuthScheme,
-    /// The password to use.
+    /// The password to use. Only allowed with [`AuthScheme::Basic`].
     pub password: Option<Password>,
-    /// The token to use.
+    /// The token to use. Only allowed with [`AuthScheme::Bearer`].
     pub token: Option<String>,
 }
 
 impl TomlCredential {
     /// Validate that the credential configuration is correct for the scheme.
-    pub fn validate(&self) -> Result<(), TomlCredentialError> {
+    fn validate(&self) -> Result<(), TomlCredentialError> {
         match self.scheme {
             AuthScheme::Basic => {
                 if self.username.as_deref().is_none() {
-                    return Err(TomlCredentialError::InvalidCredential(
-                        "Basic auth credentials must have a username".to_string(),
+                    return Err(TomlCredentialError::BasicAuthError(
+                        BasicAuthError::MissingUsername,
                     ));
                 }
                 if self.token.is_some() {
-                    return Err(TomlCredentialError::InvalidCredential(
-                        "Basic auth credentials cannot have a token".to_string(),
+                    return Err(TomlCredentialError::BasicAuthError(
+                        BasicAuthError::UnexpectedToken,
                     ));
                 }
             }
             AuthScheme::Bearer => {
                 if self.username.is_some() {
-                    return Err(TomlCredentialError::InvalidCredential(
-                        "Bearer token credentials must have empty username".to_string(),
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::UnexpectedUsername,
                     ));
                 }
                 if self.password.is_some() {
-                    return Err(TomlCredentialError::InvalidCredential(
-                        "Bearer token credentials must have empty password - use 'token' field instead"
-                            .to_string(),
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::UnexpectedPassword,
                     ));
                 }
                 if self.token.is_none() {
-                    return Err(TomlCredentialError::InvalidCredential(
-                        "Bearer token credentials must have a 'token' field".to_string(),
+                    return Err(TomlCredentialError::BearerAuthError(
+                        BearerAuthError::MissingToken,
                     ));
                 }
             }
@@ -100,18 +126,8 @@ impl TomlCredential {
 
         Ok(())
     }
-}
 
-/// The root structure for TOML credential files.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TomlCredentials {
-    /// Array of credential entries.
-    #[serde(rename = "credential")]
-    pub credentials: Vec<TomlCredential>,
-}
-
-impl TomlCredential {
-    /// Convert a TOML credential to the internal Credentials enum.
+    /// Convert to [`Credentials`].
     ///
     /// This method can panic if [`TomlCredential::validate`] has not been called.
     pub fn into_credentials(self) -> Credentials {
@@ -127,202 +143,150 @@ impl TomlCredential {
     }
 
     /// Construct a [`TomlCredential`] for a service from [`Credentials`].
-    pub fn from_credentials(service: Service, credentials: &Credentials) -> Option<Self> {
+    pub fn from_credentials(
+        service: Service,
+        credentials: Credentials,
+    ) -> Result<Self, TomlCredentialError> {
         match credentials {
-            Credentials::Basic { username, password } => password.as_ref().map(|password| Self {
+            Credentials::Basic { username, password } => Ok(Self {
                 service,
-                username: username.clone(),
+                username,
                 scheme: AuthScheme::Basic,
-                password: Some(password.clone()),
+                password,
                 token: None,
             }),
-            Credentials::Bearer { token } => Some(Self {
+            Credentials::Bearer { token } => Ok(Self {
                 service,
                 username: Username::new(None),
                 scheme: AuthScheme::Bearer,
                 password: None,
-                token: Some(String::from_utf8_lossy(token).to_string()),
+                token: Some(String::from_utf8(token)?),
             }),
         }
     }
 }
 
-/// A credential store that reads from and writes to TOML files.
-#[derive(Debug)]
-pub struct TomlCredentialStore {
-    credentials: HashMap<String, Credentials>,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TomlCredentials {
+    /// Array of credential entries.
+    #[serde(rename = "credential")]
+    pub credentials: Vec<TomlCredential>,
 }
 
-impl TomlCredentialStore {
-    /// Load credentials from the default location.
-    /// Creates an empty store if the file doesn't exist.
-    pub fn load_default() -> Result<Self, TomlCredentialError> {
-        let state_dir = uv_dirs::user_state_dir().ok_or_else(|| {
-            TomlCredentialError::Io(std::io::Error::other(
-                "Failed to determine user state directory",
-            ))
-        })?;
-        let credentials_path = state_dir.join("credentials").join("credentials.toml");
-        Self::load_from_file(credentials_path)
+/// A credential store with a plain text storage backend.
+#[derive(Debug)]
+pub struct TextCredentialStore {
+    credentials: HashMap<Service, Credentials>,
+}
+
+impl TextCredentialStore {
+    /// Return the default credential file path.
+    pub fn default_file() -> Result<PathBuf, TomlCredentialError> {
+        let state_dir =
+            uv_dirs::user_state_dir().ok_or(TomlCredentialError::CredentialsDirError)?;
+        let credentials_dir = state_dir.join("credentials");
+        Ok(credentials_dir.join("credentials.toml"))
     }
 
-    /// Load credentials from a TOML file.
-    /// Returns an empty store if the file doesn't exist.
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
-        let content = match fs::read_to_string(path) {
-            Ok(content) => content,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // File doesn't exist, return empty store
-                return Ok(Self {
-                    credentials: HashMap::new(),
-                });
-            }
-            Err(e) => return Err(TomlCredentialError::Io(e)),
-        };
+    /// Read credentials from a file.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
+        let content = fs::read_to_string(path)?;
+        let credentials: TomlCredentials = toml::from_str(&content)?;
 
-        let toml_creds: TomlCredentials = toml::from_str(&content).unwrap_or_default();
-
-        let credentials: HashMap<String, Credentials> = toml_creds
+        let credentials: HashMap<Service, Credentials> = credentials
             .credentials
             .into_iter()
-            .filter_map(|toml_cred| {
-                if let Err(e) = toml_cred.validate() {
+            .filter_map(|credential| {
+                // TODO(zanieb): Determine a better strategy for invalid credential entries
+                if let Err(err) = credential.validate() {
                     debug!(
                         "Skipping invalid credential for {}: {}",
-                        toml_cred.service, e
+                        credential.service, err
                     );
                     return None;
                 }
 
-                debug!("Loaded credential for service: {}", toml_cred.service);
-                let service_str = toml_cred.service.to_string();
-                let cred = toml_cred.into_credentials();
-                Some((service_str, cred))
+                Some((credential.service.clone(), credential.into_credentials()))
             })
             .collect();
-
-        debug!("Loaded {} credentials from TOML file", credentials.len());
 
         Ok(Self { credentials })
     }
 
-    /// Save credentials to the default location.
-    pub fn save_to_default_file(&self) -> Result<(), TomlCredentialError> {
-        let state_dir = uv_dirs::user_state_dir().ok_or_else(|| {
-            TomlCredentialError::Io(std::io::Error::other(
-                "Failed to determine user state directory",
-            ))
-        })?;
-        let credentials_dir = state_dir.join("credentials");
-
-        // Create directory if it doesn't exist
-        if !credentials_dir.exists() {
-            fs::create_dir_all(&credentials_dir)?;
-        }
-
-        let credentials_path = credentials_dir.join("credentials.toml");
-        self.save_to_file(credentials_path)
-    }
-
-    /// Save credentials to a TOML file.
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TomlCredentialError> {
+    /// Persist credentials to a file.
+    pub fn into_file<P: AsRef<Path>>(self, path: P) -> Result<(), TomlCredentialError> {
         let credentials = self
             .credentials
-            .iter()
-            .filter_map(|(service_str, cred)| {
-                Service::from_str(service_str)
-                    .ok()
-                    .and_then(|service| TomlCredential::from_credentials(service, cred))
-            })
-            .collect();
+            .into_iter()
+            .map(|(service, cred)| TomlCredential::from_credentials(service, cred))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let toml_creds = TomlCredentials { credentials };
         let content = toml::to_string_pretty(&toml_creds)?;
+        fs::create_dir_all(
+            path.as_ref()
+                .parent()
+                .ok_or(TomlCredentialError::CredentialsDirError)?,
+        )?;
+
+        // TODO(zanieb): We should use an atomic write here
         fs::write(path, content)?;
-        debug!(
-            "Saved {} credentials to TOML file",
-            toml_creds.credentials.len()
-        );
         Ok(())
     }
 
     /// Get credentials for a given URL.
     /// Uses realm-based prefix matching following RFC 7235 and 7230 specifications.
     /// Credentials are matched by finding the most specific prefix that matches the request URL.
-    pub fn get_credentials(&self, url: &Url) -> Option<Credentials> {
-        let url_str = url.to_string();
+    pub fn get_credentials(&self, url: &Url) -> Option<&Credentials> {
         let request_realm = Realm::from(url);
 
-        // Try exact URL match first
-        if let Some(cred) = self.credentials.get(&url_str) {
-            debug!("Found credentials for exact URL: {}", url_str);
-            return Some(cred.clone());
+        // Perform an exact lookup first
+        // TODO(zanieb): Consider adding `DisplaySafeUrlRef` so we can avoid this clone
+        if let Ok(url_service) = Service::try_from(DisplaySafeUrl::from(url.clone())) {
+            if let Some(credential) = self.credentials.get(&url_service) {
+                return Some(credential);
+            }
         }
 
-        // Find the most specific matching service
-        let mut best_match: Option<(usize, &String, &Credentials)> = None;
+        // If that fails, iterate through to find a prefix match
+        let mut best: Option<(usize, &Service, &Credentials)> = None;
 
-        for (service, cred) in &self.credentials {
-            // Try to parse the service as a URL for realm and prefix comparison
-            if let Ok(service_url) = Url::parse(service) {
-                let service_realm = Realm::from(&service_url);
+        for (service, credential) in &self.credentials {
+            let service_realm = Realm::from(service.url().deref());
 
-                // Only consider services in the same realm
-                if service_realm == request_realm {
-                    // Check if the service URL is a prefix of the request URL
-                    let service_path = service_url.path();
-                    let request_path = url.path();
+            // Only consider services in the same realm
+            if service_realm != request_realm {
+                continue;
+            }
 
-                    // Service path must be a prefix of request path
-                    if request_path.starts_with(service_path) {
-                        let specificity = service_path.len();
-                        debug!("Found realm+prefix match: {} for {}", service, url_str);
+            // Service path must be a prefix of request path
+            if !url.path().starts_with(service.url().path()) {
+                continue;
+            }
 
-                        // Keep this match if it's more specific than the current best
-                        if best_match
-                            .is_none_or(|(best_specificity, _, _)| specificity > best_specificity)
-                        {
-                            best_match = Some((specificity, service, cred));
-                        }
-                    }
-                }
+            // Update our best matching credential based on prefix length
+            let specificity = service.url().path().len();
+            if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
+                best = Some((specificity, service, credential));
             }
         }
 
         // Return the most specific match
-        if let Some((_, service, cred)) = best_match {
-            debug!("Selected most specific match: {} for {}", service, url_str);
-            return Some(cred.clone());
+        if let Some((_, _, credential)) = best {
+            return Some(credential);
         }
 
-        debug!("No credentials found for URL: {}", url_str);
         None
     }
 
     /// Store credentials for a given service.
-    pub fn store_credentials(&mut self, service: &Service, credentials: Credentials) {
-        let service_str = service.to_string();
-        self.credentials.insert(service_str.clone(), credentials);
-        debug!("Stored credentials for service: {}", service_str);
+    pub fn insert(&mut self, service: Service, credentials: Credentials) -> Option<Credentials> {
+        self.credentials.insert(service, credentials)
     }
 
     /// Remove credentials for a given service.
-    pub fn remove_credentials(&mut self, service: &str) -> bool {
-        let removed = self.credentials.remove(service).is_some();
-        if removed {
-            debug!("Removed credentials for service: {}", service);
-        }
-        removed
-    }
-
-    /// Get all stored service names.
-    pub fn services(&self) -> Vec<String> {
-        self.credentials.keys().cloned().collect()
-    }
-
-    /// Check if credentials exist for a service.
-    pub fn has_credentials(&self, service: &str) -> bool {
-        self.credentials.contains_key(service)
+    pub fn remove(&mut self, service: &Service) -> Option<Credentials> {
+        self.credentials.remove(service)
     }
 }
 
@@ -394,11 +358,11 @@ mod tests {
 
     #[test]
     fn test_credential_store_operations() {
-        let mut store = TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         let service = Service::from_str("https://example.com").unwrap();
-        store.store_credentials(&service, credentials.clone());
+        store.insert(&service, credentials.clone());
         assert!(store.has_credentials("https://example.com/"));
 
         let url = Url::parse("https://example.com/path").unwrap();
@@ -406,7 +370,7 @@ mod tests {
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
 
-        assert!(store.remove_credentials("https://example.com/"));
+        assert!(store.remove("https://example.com/"));
         assert!(!store.has_credentials("https://example.com/"));
     }
 
@@ -430,7 +394,7 @@ password = "pass2"
         )
         .unwrap();
 
-        let store = TomlCredentialStore::load_from_file(temp_file.path()).unwrap();
+        let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
 
         assert!(store.has_credentials("https://example.com/"));
         assert!(store.has_credentials("https://test.org/"));
@@ -442,7 +406,7 @@ password = "pass2"
 
         // Test saving
         let temp_output = NamedTempFile::new().unwrap();
-        store.save_to_file(temp_output.path()).unwrap();
+        store.into_file(temp_output.path()).unwrap();
 
         let content = fs::read_to_string(temp_output.path()).unwrap();
         assert!(content.contains("example.com"));
@@ -451,12 +415,12 @@ password = "pass2"
 
     #[test]
     fn test_prefix_matching() {
-        let mut store = TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store credentials for a specific path prefix
         let service = Service::from_str("https://example.com/api").unwrap();
-        store.store_credentials(&service, credentials.clone());
+        store.insert(&service, credentials.clone());
 
         // Should match URLs that are prefixes of the stored service
         let matching_urls = [
@@ -487,12 +451,12 @@ password = "pass2"
 
     #[test]
     fn test_realm_based_matching() {
-        let mut store = TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
         let credentials = Credentials::basic(Some("user".to_string()), Some("pass".to_string()));
 
         // Store by full URL (realm)
         let service = Service::from_str("https://example.com").unwrap();
-        store.store_credentials(&service, credentials.clone());
+        store.insert(&service, credentials.clone());
 
         // Should match URLs in the same realm
         let matching_urls = [
@@ -530,7 +494,7 @@ password = "pass2"
 
     #[test]
     fn test_most_specific_prefix_matching() {
-        let mut store = TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let mut store = TextCredentialStore::from_file("nonexistent.toml").unwrap();
         let general_cred =
             Credentials::basic(Some("general".to_string()), Some("pass1".to_string()));
         let specific_cred =
@@ -539,8 +503,8 @@ password = "pass2"
         // Store credentials with different prefix lengths
         let general_service = Service::from_str("https://example.com/api").unwrap();
         let specific_service = Service::from_str("https://example.com/api/v1").unwrap();
-        store.store_credentials(&general_service, general_cred);
-        store.store_credentials(&specific_service, specific_cred);
+        store.insert(&general_service, general_cred);
+        store.insert(&specific_service, specific_cred);
 
         // Should match the most specific prefix
         let url = Url::parse("https://example.com/api/v1/users").unwrap();

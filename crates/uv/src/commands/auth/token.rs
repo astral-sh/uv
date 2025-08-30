@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Result, bail};
 
 use uv_auth::Service;
-use uv_auth::{Credentials, TomlCredentialStore};
+use uv_auth::{Credentials, TextCredentialStore};
 use uv_configuration::KeyringProviderType;
 use uv_preview::Preview;
 
@@ -30,7 +30,7 @@ pub(crate) async fn token(
     };
 
     let text_store = if !use_keyring {
-        Some(TomlCredentialStore::load_default()?)
+        Some(TextCredentialStore::from_state_file()?)
     } else {
         None
     };

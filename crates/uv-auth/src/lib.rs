@@ -9,7 +9,7 @@ pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 use realm::Realm;
 pub use service::{Service, ServiceParseError};
-pub use store::{AuthScheme, TomlCredentialError, TomlCredentialStore};
+pub use store::{AuthScheme, TextCredentialStore, TomlCredentialError};
 use uv_redacted::DisplaySafeUrl;
 
 mod cache;

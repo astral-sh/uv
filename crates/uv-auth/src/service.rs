@@ -15,7 +15,7 @@ pub enum ServiceParseError {
 ///
 /// This type provides automatic URL parsing and validation when used as a CLI argument,
 /// eliminating the need for manual parsing in command functions.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
 pub struct Service(DisplaySafeUrl);
 
@@ -28,6 +28,16 @@ impl Service {
     /// Convert into the underlying [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
         self.0
+    }
+
+    /// Validate that the URL scheme is supported.
+    fn check_scheme(url: &DisplaySafeUrl) -> Result<(), ServiceParseError> {
+        match url.scheme() {
+            "https" => Ok(()),
+            #[cfg(test)]
+            "http" => Ok(()),
+            _ => Err(ServiceParseError::UnsupportedScheme),
+        }
     }
 }
 
@@ -46,15 +56,7 @@ impl FromStr for Service {
             Err(err) => return Err(err.into()),
         };
 
-        // Only allow HTTPS URLs (but allow HTTP in tests for convenience)
-        #[cfg(not(test))]
-        if url.scheme() != "https" {
-            return Err(ServiceParseError::UnsupportedScheme);
-        }
-        #[cfg(test)]
-        if url.scheme() != "https" && url.scheme() != "http" {
-            return Err(ServiceParseError::UnsupportedScheme);
-        }
+        Self::check_scheme(&url)?;
 
         Ok(Self(url))
     }
@@ -77,5 +79,14 @@ impl TryFrom<String> for Service {
 impl From<Service> for String {
     fn from(service: Service) -> Self {
         service.to_string()
+    }
+}
+
+impl TryFrom<DisplaySafeUrl> for Service {
+    type Error = ServiceParseError;
+
+    fn try_from(value: DisplaySafeUrl) -> Result<Self, Self::Error> {
+        Self::check_scheme(&value)?;
+        Ok(Self(value))
     }
 }

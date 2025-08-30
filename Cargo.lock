@@ -5130,6 +5130,7 @@ dependencies = [
  "uv-once-map",
  "uv-redacted",
  "uv-small-str",
+ "uv-state",
  "uv-static",
  "uv-warnings",
  "wiremock",

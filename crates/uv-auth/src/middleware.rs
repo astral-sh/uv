@@ -53,8 +53,8 @@ impl NetrcMode {
 
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
-    Automatic(LazyLock<Option<crate::store::TomlCredentialStore>>),
-    Enabled(crate::store::TomlCredentialStore),
+    Automatic(LazyLock<Option<crate::store::TextCredentialStore>>),
+    Enabled(crate::store::TextCredentialStore),
     Disabled,
 }
 
@@ -64,7 +64,7 @@ impl Default for TextStoreMode {
             let state_dir = uv_dirs::user_state_dir()?;
             let credentials_path = state_dir.join("credentials").join("credentials.toml");
 
-            match crate::store::TomlCredentialStore::load_from_file(&credentials_path) {
+            match crate::store::TextCredentialStore::from_file(&credentials_path) {
                 Ok(store) => {
                     debug!(
                         "Loaded TOML credential store from {}",
@@ -96,7 +96,7 @@ impl Default for TextStoreMode {
 
 impl TextStoreMode {
     /// Get the parsed credential store if enabled.
-    fn get(&self) -> Option<&crate::store::TomlCredentialStore> {
+    fn get(&self) -> Option<&crate::store::TextCredentialStore> {
         match self {
             Self::Automatic(lock) => lock.as_ref(),
             Self::Enabled(store) => Some(store),
@@ -150,7 +150,7 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via text store.
     #[must_use]
-    pub fn with_text_store(mut self, store: Option<crate::store::TomlCredentialStore>) -> Self {
+    pub fn with_text_store(mut self, store: Option<crate::store::TextCredentialStore>) -> Self {
         self.text_store = if let Some(store) = store {
             TextStoreMode::Enabled(store)
         } else {
@@ -2227,12 +2227,11 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
 
         // Create a text credential store with matching credentials
-        let mut store =
-            crate::store::TomlCredentialStore::load_from_file("nonexistent.toml").unwrap();
+        let mut store = crate::store::TextCredentialStore::from_file("nonexistent.toml").unwrap();
         let service = crate::Service::try_from(base_url.to_string()).unwrap();
         let credentials =
             crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
-        store.store_credentials(&service, credentials);
+        store.insert(&service, credentials);
 
         let client = test_client_builder()
             .with(
