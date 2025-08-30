@@ -68,6 +68,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             package,
             marker,
             dependents,
+            dependencies: _,
         } in &self.nodes
         {
             match &package.id.source {
