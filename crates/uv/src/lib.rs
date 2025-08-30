@@ -502,9 +502,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir,
+            command: AuthCommand::Dir(args),
         }) => {
-            commands::auth_dir()?;
+            commands::auth_dir(args.service.as_ref())?;
             Ok(ExitStatus::Success)
         }
         Commands::Help(args) => commands::help(
