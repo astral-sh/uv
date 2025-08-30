@@ -7,6 +7,8 @@ use owo_colors::OwoColorize;
 use uv_auth::Service;
 use uv_auth::{Credentials, TextCredentialStore};
 use uv_configuration::KeyringProviderType;
+use uv_distribution_types::IndexUrl;
+use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 
 use crate::commands::auth::AuthBackend;
@@ -22,11 +24,19 @@ pub(crate) async fn login(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let url = service.url();
+    let service_clone = service.clone();
+    let url = service_clone.url();
     let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
 
+    // If the URL includes a known index URL suffix, strip it
+    // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
+    let (service, url) = match IndexUrl::from(VerbatimUrl::from_url(url.clone())).root() {
+        Some(root) => (Service::try_from(root.clone())?, root),
+        None => (service, url.clone()),
+    };
+
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(url);
+    let url_credentials = Credentials::from_url(&url);
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
     let url_password = url_credentials.as_ref().and_then(|c| c.password());
 
@@ -104,7 +114,7 @@ pub(crate) async fn login(
     let credentials = Credentials::basic(Some(username), Some(password));
     match backend {
         AuthBackend::Keyring(provider) => {
-            provider.store(url, &credentials).await?;
+            provider.store(&url, &credentials).await?;
         }
         AuthBackend::TextStore(mut text_store) => {
             text_store.insert(service.clone(), credentials);

@@ -918,7 +918,7 @@ fn login_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -932,7 +932,7 @@ fn login_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for https://example.com/simple
+    Stored credentials for https://example.com/
     "
     );
 }
@@ -1013,7 +1013,7 @@ fn logout_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -1033,7 +1033,7 @@ fn logout_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://example.com/simple
+    Removed credentials for https://example.com/
     "
     );
 }
@@ -1056,7 +1056,7 @@ fn auth_disabled_provider_uses_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -1071,6 +1071,197 @@ fn auth_disabled_provider_uses_text_store() {
     exit_code: 0
     ----- stdout -----
     heron
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+fn login_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix - should strip it and store credentials for the root URL
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://example.com/
+    "
+    );
+
+    // Login with `/+simple` suffix (devpi format) - should also strip it
+    uv_snapshot!(context.auth_login()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser")
+        .arg("--password")
+        .arg("devpipass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for devpiuser@https://devpi.example.com/root
+    "
+    );
+
+    // Login with `/Simple` (case insensitive) - should strip it
+    uv_snapshot!(context.auth_login()
+        .arg("https://registry.example.com/Simple")
+        .arg("--username")
+        .arg("caseuser")
+        .arg("--password")
+        .arg("casepass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for caseuser@https://registry.example.com/
+    "
+    );
+
+    // Login without `/simple` suffix - should store as-is
+    uv_snapshot!(context.auth_login()
+        .arg("https://custom.example.com/api/v1")
+        .arg("--username")
+        .arg("apiuser")
+        .arg("--password")
+        .arg("apipass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for apiuser@https://custom.example.com/api/v1
+    "
+    );
+
+    // Login with trailing slash and `/simple` - should strip both
+    uv_snapshot!(context.auth_login()
+        .arg("https://trailing.example.com/simple/")
+        .arg("--username")
+        .arg("slashuser")
+        .arg("--password")
+        .arg("slashpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for slashuser@https://trailing.example.com/
+    "
+    );
+}
+
+#[test]
+fn logout_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix first
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Logout using the same URL with `/simple` - should work
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for testuser@https://example.com/
+    "
+    );
+
+    // Login with `/+simple` suffix
+    context
+        .auth_login()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser")
+        .arg("--password")
+        .arg("devpipass")
+        .assert()
+        .success();
+
+    // Logout using URL with `/+simple` - should work
+    uv_snapshot!(context.auth_logout()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for devpiuser@https://devpi.example.com/root
+    "
+    );
+}
+
+#[test]
+fn token_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Retrieve token using URL with `/simple` - should work
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    testpass
+
+    ----- stderr -----
+    "
+    );
+
+    // Login with token and `/simple` suffix
+    context
+        .auth_login()
+        .arg("https://token.example.com/simple")
+        .arg("--token")
+        .arg("secret-token")
+        .assert()
+        .success();
+
+    // Retrieve token using URL with `/simple` - should work
+    uv_snapshot!(context.auth_token()
+        .arg("https://token.example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    secret-token
 
     ----- stderr -----
     "
