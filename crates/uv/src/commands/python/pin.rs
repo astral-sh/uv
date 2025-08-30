@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
