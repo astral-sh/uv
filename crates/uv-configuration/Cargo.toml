@@ -26,7 +26,6 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
-uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }

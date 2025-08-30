@@ -8,10 +8,11 @@ use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::{Args, Parser, Subcommand};
 
+use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
-    Service, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
