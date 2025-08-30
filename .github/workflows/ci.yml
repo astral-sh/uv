@@ -1867,9 +1867,9 @@ jobs:
 
       - name: "Add password to uv text store"
         run: |
-          ./uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token ${UV_TEST_PUBLISH_KEYRING}
+          ./uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token ${UV_TEST_PUBLISH_TEXT_STORE}
         env:
-          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
+          UV_TEST_PUBLISH_TEXT_STORE: ${{ secrets.UV_TEST_PUBLISH_TEXT_STORE }}
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
