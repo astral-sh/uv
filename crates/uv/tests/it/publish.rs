@@ -541,6 +541,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .arg(format!("{}/upload", server.uri()))
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
         .env("PYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
     success: true
     exit_code: 0
@@ -595,6 +596,7 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
         .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
     success: true
     exit_code: 0
