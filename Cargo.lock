@@ -6139,6 +6139,7 @@ dependencies = [
  "uv-redacted",
  "uv-requirements-txt",
  "uv-resolver",
+ "uv-scripts",
  "uv-types",
  "uv-warnings",
  "uv-workspace",

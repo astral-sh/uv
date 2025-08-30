@@ -1816,7 +1816,7 @@ pub struct PipInstallArgs {
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
-    /// Install all packages listed in the given `requirements.txt` or `pylock.toml` files.
+    /// Install all packages listed in the given `requirements.txt`, PEP 723 scripts, or `pylock.toml` files.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
     /// requirements for the relevant project.
@@ -3173,7 +3173,8 @@ pub struct RunArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with all packages listed in the given `requirements.txt` files.
+    /// Run with all packages listed in the given `requirements.txt` files or PEP 723 Python
+    /// scripts.
     ///
     /// The same environment semantics as `--with` apply.
     ///
@@ -4504,7 +4505,8 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with all packages listed in the given `requirements.txt` files.
+    /// Run with all packages listed in the given `requirements.txt` files or PEP 723 Python
+    /// scripts.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
@@ -4628,7 +4630,8 @@ pub struct ToolInstallArgs {
     #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Include all requirements listed in the given `requirements.txt` files.
+    /// Run with all packages listed in the given `requirements.txt` files or PEP 723 Python
+    /// scripts.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
