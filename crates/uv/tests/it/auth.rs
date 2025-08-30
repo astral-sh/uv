@@ -372,8 +372,6 @@ fn token_subprocess_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
     error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -386,14 +384,12 @@ fn token_subprocess_keyring() {
         .arg("subprocess")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
-    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
