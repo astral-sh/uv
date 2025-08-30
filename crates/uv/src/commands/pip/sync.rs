@@ -33,7 +33,7 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
-use uv_torch::{TorchMode, TorchStrategy};
+use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
@@ -289,8 +289,16 @@ pub(crate) async fn pip_sync(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
             TorchStrategy::from_mode(
                 mode,
+                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
