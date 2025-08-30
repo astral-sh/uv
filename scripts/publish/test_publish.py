@@ -176,7 +176,7 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
 }
 
 
-def get_latest_version(target: str, client: httpx.Client) -> Version:
+def get_latest_version(target: str, client: httpx.Client) -> Version | None:
     """Return the latest version on all indexes of the package."""
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
@@ -207,6 +207,10 @@ def get_latest_version(target: str, client: httpx.Client) -> Version:
             time.sleep(1)
     else:
         raise RuntimeError(f"Failed to fetch {url}") from error
+
+    if not versions:
+        return None
+
     return max(versions)
 
 
@@ -374,7 +378,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         print(f"\nPublish {project_name} for {target}", file=sys.stderr)
 
         # The distributions are build to the dist directory of the project.
-        previous_version = get_latest_version(target, client)
+        previous_version = get_latest_version(target, client) or Version("0.0.0")
         version = get_new_version(previous_version)
         project_dir = build_project_at_version(target, version, uv)
 
