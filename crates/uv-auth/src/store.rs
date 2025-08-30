@@ -9,6 +9,9 @@ use tracing::debug;
 use url::Url;
 use uv_redacted::DisplaySafeUrl;
 
+use uv_state::{StateBucket, StateStore};
+use uv_static::EnvVars;
+
 use crate::Credentials;
 use crate::credentials::{Password, Username};
 use crate::realm::Realm;
@@ -182,12 +185,22 @@ pub struct TextCredentialStore {
 }
 
 impl TextCredentialStore {
-    /// Return the default credential file path.
+    /// Return the directory for storing credentials.
+    fn directory_path() -> Result<PathBuf, TomlCredentialError> {
+        if let Some(dir) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+        {
+            return Ok(dir);
+        }
+
+        Ok(StateStore::from_settings(None)?.bucket(StateBucket::Credentials))
+    }
+
+    /// Return the standard file path for storing credentials.
     pub fn default_file() -> Result<PathBuf, TomlCredentialError> {
-        let state_dir =
-            uv_dirs::user_state_dir().ok_or(TomlCredentialError::CredentialsDirError)?;
-        let credentials_dir = state_dir.join("credentials");
-        Ok(credentials_dir.join("credentials.toml"))
+        let dir = Self::directory_path()?;
+        Ok(dir.join("credentials.toml"))
     }
 
     /// Read credentials from a file.
