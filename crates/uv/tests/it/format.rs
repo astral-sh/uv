@@ -44,6 +44,108 @@ fn format_project() -> Result<()> {
 }
 
 #[test]
+fn format_missing_pyproject_toml() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @r"
+        x = 1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_missing_project_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create an empty pyproject.toml with no [project] section
+    context.temp_dir.child("pyproject.toml");
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @r"
+        x = 1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_unmanaged_project() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        managed = false
+    "#})?;
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @r"
+        x = 1
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn format_from_project_root() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
 
@@ -129,6 +231,50 @@ fn format_relative_project() -> Result<()> {
     // Check that the root file was not formatted
     let root_content = fs_err::read_to_string(&root_main_py)?;
     assert_snapshot!(root_content, @r"
+        x    = 1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_fails_malformed_pyproject() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str("malformed pyproject.toml")?;
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 1, column 11
+        |
+      1 | malformed pyproject.toml
+        |           ^
+      key with no value, expected `=`
+
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 11
+      |
+    1 | malformed pyproject.toml
+      |           ^
+    key with no value, expected `=`
+    ");
+
+    // Check that the file is not formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @r"
         x    = 1
     ");
 
