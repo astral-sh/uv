@@ -1,11 +1,15 @@
+#[cfg(feature = "keyring-tests")]
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(feature = "keyring-tests")]
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot, venv_bin_path};
+use crate::common::venv_bin_path;
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn add_package_native_keyring() -> Result<()> {
     let context = TestContext::new("3.12").with_real_home();
 
@@ -15,6 +19,8 @@ fn add_package_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Configure `pyproject.toml` with native keyring provider.
@@ -117,6 +123,7 @@ fn add_package_native_keyring() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn token_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -126,33 +133,9 @@ fn token_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
-
-    // Without a service name
-    uv_snapshot!(context.auth_token(), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: the following required arguments were not provided:
-      <SERVICE>
-
-    Usage: uv auth token --cache-dir [CACHE_DIR] <SERVICE>
-
-    For more information, try '--help'.
-    ");
-
-    // Without a keyring provider...
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Retrieving credentials requires setting a `keyring-provider`
-    ");
 
     // Without persisted credentials
     uv_snapshot!(context.auth_token()
@@ -364,8 +347,6 @@ fn token_subprocess_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
     error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
@@ -378,14 +359,12 @@ fn token_subprocess_keyring() {
         .arg("subprocess")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
-    Keyring request for public@https://public@pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     "
     );
 
@@ -409,6 +388,7 @@ fn token_subprocess_keyring() {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn login_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -418,6 +398,8 @@ fn login_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Without a service name
@@ -465,19 +447,6 @@ fn login_native_keyring() -> Result<()> {
     error: No password provided; did you mean to provide `--password` or `--token`?
     ");
 
-    // Without a keyring provider
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .arg("--token")
-        .arg("foo"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Logging in requires setting `keyring-provider = native` for credentials to be retrieved in subsequent commands
-    ");
-
     // Successful
     uv_snapshot!(context.auth_login()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
@@ -501,6 +470,7 @@ fn login_native_keyring() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn login_token_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -510,6 +480,8 @@ fn login_token_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("__token__")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Successful with token
@@ -533,6 +505,7 @@ fn login_token_native_keyring() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn logout_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -542,6 +515,8 @@ fn logout_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Without a service name
@@ -559,9 +534,11 @@ fn logout_native_keyring() -> Result<()> {
     For more information, try '--help'.
     ");
 
-    // Logout without a keyring provider
+    // Logout before logging in
     uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r"
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -569,21 +546,6 @@ fn logout_native_keyring() -> Result<()> {
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-    ");
-
-    // Logout before logging in (without a username)
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .arg("--keyring-provider")
-        .arg("native"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
-      Caused by: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
@@ -693,6 +655,7 @@ fn logout_native_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: Cannot specify a username both via the URL and CLI; found `--username foo` and `public`
     ");
 
@@ -716,6 +679,7 @@ fn logout_native_keyring() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn logout_token_native_keyring() -> Result<()> {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -723,6 +687,8 @@ fn logout_token_native_keyring() -> Result<()> {
     context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("native")
         .status()?;
 
     // Login with a token
@@ -760,6 +726,7 @@ fn logout_token_native_keyring() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "keyring-tests")]
 fn login_native_keyring_url() {
     let context = TestContext::new_with_versions(&[]).with_real_home();
 
@@ -933,4 +900,179 @@ fn login_native_keyring_url() {
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
     error: When using `--token`, a username cannot not be provided; found: test
     ");
+}
+
+#[test]
+fn login_text_store() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Successful login without keyring provider (uses text store)
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Token-based login
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/simple
+    "
+    );
+}
+
+#[test]
+fn token_text_store() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login first
+    context
+        .auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .assert()
+        .success();
+
+    // Retrieve the token
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    "
+    );
+
+    // Login with token
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .assert()
+        .success();
+
+    // Retrieve token without username
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-token
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+fn logout_text_store() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login first
+    context
+        .auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .assert()
+        .success();
+
+    // Logout
+    uv_snapshot!(context.auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Login with token then logout
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for https://example.com/simple
+    "
+    );
+}
+
+#[test]
+fn auth_disabled_provider_uses_text_store() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with disabled provider should use text store
+    uv_snapshot!(context.auth_login()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .arg("--keyring-provider")
+        .arg("disabled"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    "
+    );
+
+    // Token retrieval should work with disabled provider
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .arg("--keyring-provider")
+        .arg("disabled"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    "
+    );
 }
