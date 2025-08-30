@@ -140,9 +140,15 @@ async fn get_audience(
 ) -> Result<String, TrustedPublishingError> {
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
+    // Prefer HTTPS for OIDC discovery; allow HTTP only in test builds
+    let scheme: &str = if cfg!(test) {
+        registry.scheme()
+    } else {
+        "https"
+    };
     let audience_url = DisplaySafeUrl::parse(&format!(
         "{}://{}/_/oidc/audience",
-        registry.scheme(),
+        scheme,
         registry.authority()
     ))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
@@ -207,9 +213,15 @@ async fn get_publish_token(
     oidc_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
+    // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
+    let scheme: &str = if cfg!(test) {
+        registry.scheme()
+    } else {
+        "https"
+    };
     let mint_token_url = DisplaySafeUrl::parse(&format!(
         "{}://{}/_/oidc/mint-token",
-        registry.scheme(),
+        scheme,
         registry.authority()
     ))?;
     debug!("Querying the trusted publishing upload token from {mint_token_url}");
