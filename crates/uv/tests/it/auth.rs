@@ -66,25 +66,24 @@ fn add_package_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
     // Try to add the original package without credentials again. This should use
     // credentials storied in the system keyring.
     uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
@@ -99,7 +98,7 @@ fn add_package_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -182,7 +181,7 @@ fn token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -193,13 +192,13 @@ fn token_native_keyring() -> Result<()> {
         .arg("public")
         .arg("--keyring-provider")
         .arg("native"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Without the username
@@ -247,7 +246,7 @@ fn token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -256,13 +255,13 @@ fn token_native_keyring() -> Result<()> {
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--keyring-provider")
         .arg("native"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     context
@@ -462,7 +461,7 @@ fn login_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -497,7 +496,7 @@ fn login_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -545,7 +544,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
     ");
 
     // Logout before logging in (with a username)
@@ -561,7 +560,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    error: Unable to remove credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Unable to remove credentials for public@https://pypi-proxy.fly.dev/basic-auth
       Caused by: No matching entry found in secure storage
     ");
 
@@ -580,7 +579,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -596,7 +595,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth
       Caused by: No matching entry found in secure storage
     ");
 
@@ -613,7 +612,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
     ");
 
     // Login again
@@ -640,7 +639,7 @@ fn logout_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
     ");
 
     // Conflict between --username and a URL username is rejected
@@ -704,7 +703,7 @@ fn logout_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -719,7 +718,7 @@ fn logout_token_native_keyring() -> Result<()> {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
     ");
 
     Ok(())
@@ -799,7 +798,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for test@https://example.com/simple
+    Stored credentials for test@https://example.com/
     ");
 
     // An invalid URL is rejected
@@ -832,7 +831,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for test@https://example.com/simple
+    Stored credentials for test@https://example.com/
     ");
 
     // URL with embedded username and separate password works
@@ -848,7 +847,7 @@ fn login_native_keyring_url() {
 
     ----- stderr -----
     warning: The native keyring provider is experimental and may change without warning. Pass `--preview-features native-keyring` to disable this warning.
-    Stored credentials for test@https://example.com/simple
+    Stored credentials for test@https://example.com/
     ");
 
     // Conflict between --username and URL username is rejected
@@ -918,7 +917,7 @@ fn login_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -932,7 +931,7 @@ fn login_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for https://example.com/simple
+    Stored credentials for https://example.com/
     "
     );
 }
@@ -1013,7 +1012,7 @@ fn logout_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -1033,7 +1032,7 @@ fn logout_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://example.com/simple
+    Removed credentials for https://example.com/
     "
     );
 }
@@ -1056,7 +1055,7 @@ fn auth_disabled_provider_uses_text_store() {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
     "
     );
 
@@ -1071,6 +1070,197 @@ fn auth_disabled_provider_uses_text_store() {
     exit_code: 0
     ----- stdout -----
     heron
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+fn login_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix - should strip it and store credentials for the root URL
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://example.com/
+    "
+    );
+
+    // Login with `/+simple` suffix (devpi format) - should also strip it
+    uv_snapshot!(context.auth_login()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser")
+        .arg("--password")
+        .arg("devpipass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for devpiuser@https://devpi.example.com/root
+    "
+    );
+
+    // Login with `/Simple` (case insensitive) - should strip it
+    uv_snapshot!(context.auth_login()
+        .arg("https://registry.example.com/Simple")
+        .arg("--username")
+        .arg("caseuser")
+        .arg("--password")
+        .arg("casepass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for caseuser@https://registry.example.com/
+    "
+    );
+
+    // Login without `/simple` suffix - should store as-is
+    uv_snapshot!(context.auth_login()
+        .arg("https://custom.example.com/api/v1")
+        .arg("--username")
+        .arg("apiuser")
+        .arg("--password")
+        .arg("apipass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for apiuser@https://custom.example.com/api/v1
+    "
+    );
+
+    // Login with trailing slash and `/simple` - should strip both
+    uv_snapshot!(context.auth_login()
+        .arg("https://trailing.example.com/simple/")
+        .arg("--username")
+        .arg("slashuser")
+        .arg("--password")
+        .arg("slashpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for slashuser@https://trailing.example.com/
+    "
+    );
+}
+
+#[test]
+fn logout_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix first
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Logout using the same URL with `/simple` - should work
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for testuser@https://example.com/
+    "
+    );
+
+    // Login with `/+simple` suffix
+    context
+        .auth_login()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser")
+        .arg("--password")
+        .arg("devpipass")
+        .assert()
+        .success();
+
+    // Logout using URL with `/+simple` - should work
+    uv_snapshot!(context.auth_logout()
+        .arg("https://devpi.example.com/root/+simple")
+        .arg("--username")
+        .arg("devpiuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for devpiuser@https://devpi.example.com/root
+    "
+    );
+}
+
+#[test]
+fn token_text_store_strips_simple_suffix() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with `/simple` suffix
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Retrieve token using URL with `/simple` - should work
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    testpass
+
+    ----- stderr -----
+    "
+    );
+
+    // Login with token and `/simple` suffix
+    context
+        .auth_login()
+        .arg("https://token.example.com/simple")
+        .arg("--token")
+        .arg("secret-token")
+        .assert()
+        .success();
+
+    // Retrieve token using URL with `/simple` - should work
+    uv_snapshot!(context.auth_token()
+        .arg("https://token.example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    secret-token
 
     ----- stderr -----
     "
