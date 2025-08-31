@@ -46,6 +46,17 @@
         "type": "string"
       }
     },
+    "build-dependencies-metadata": {
+      "description": "Metadata for build dependencies.\n\nThis allows specifying metadata for build dependencies, such as runtime matching.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuildDependenciesMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and\n`%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
@@ -756,6 +767,23 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "BuildDependenciesMetadata": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/BuildDependencyMetadata"
+      }
+    },
+    "BuildDependencyMetadata": {
+      "type": "object",
+      "properties": {
+        "match_runtime": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },

@@ -404,6 +404,7 @@ impl SourceBuild {
             };
 
             let resolved_requirements = Self::get_resolved_requirements(
+                build_kind,
                 build_context,
                 source_build_context,
                 &DEFAULT_BACKEND,
@@ -528,10 +529,25 @@ impl SourceBuild {
     }
 
     fn apply_build_metadata<'a>(
+        build_kind: BuildKind,
         metadata: &BTreeMap<PackageName, BuildDependencyMetadata>,
         build_requires: impl Iterator<Item = &'a Requirement>,
-        top_level_resolution: &Resolution,
+        build_context: &impl BuildContext,
     ) -> Result<Vec<Requirement>, Box<Error>> {
+        let top_level_resolution = build_context.top_level_resolution();
+        if top_level_resolution.is_none() {
+            for (package, metadata) in metadata {
+                if let Some(true) = metadata.match_runtime {
+                    if !matches!(build_kind, BuildKind::Sdist) {
+                        return Err(Box::new(Error::UnmatchedRuntimeMetadata(package.clone())));
+                    }
+                }
+            }
+            // Nothing needs runtime matching, carry on
+            return Ok(Vec::new());
+        }
+        // SAFETY: check above guarantees that top_level_resolution is Some
+        let top_level_resolution = top_level_resolution.unwrap();
         let dists = top_level_resolution.distributions();
         let dists_by_name = dists
             .filter_map(|dist| metadata.get(dist.name()).map(|_| (dist.name(), dist)))
@@ -578,6 +594,7 @@ impl SourceBuild {
     }
 
     async fn get_resolved_requirements(
+        build_kind: BuildKind,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
@@ -622,16 +639,15 @@ impl SourceBuild {
                 };
 
                 if let Some(build_dep_metadata) = build_dep_metadata {
-                    if let Some(resolution) = build_context.top_level_resolution() {
-                        let mut reqs_with_metadata = Self::apply_build_metadata(
-                            &build_dep_metadata.0,
-                            requirements.iter(),
-                            resolution,
-                        )
-                        .map_err(|err| *err)?;
-                        reqs_with_metadata.extend(requirements.into_owned().into_iter());
-                        requirements = Cow::Owned(reqs_with_metadata);
-                    }
+                    let mut reqs_with_metadata = Self::apply_build_metadata(
+                        build_kind,
+                        &build_dep_metadata.0,
+                        requirements.iter(),
+                        build_context,
+                    )
+                    .map_err(|err| *err)?;
+                    reqs_with_metadata.extend(requirements.into_owned().into_iter());
+                    requirements = Cow::Owned(reqs_with_metadata);
                 }
 
                 build_context

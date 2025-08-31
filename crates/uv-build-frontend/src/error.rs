@@ -97,6 +97,10 @@ pub enum Error {
     UnmatchedRuntime(PackageName, PackageName),
     #[error("Build requires for `{0}` missing for metadata declared in `pyproject.toml`")]
     MissingBuildRequirementForMetadata(PackageName),
+    #[error(
+        "Build requirement `{0}` was declared with `match-runtime = true`, but there is no runtime environment to match against"
+    )]
+    UnmatchedRuntimeMetadata(PackageName),
 }
 
 impl IsBuildBackendError for Error {
@@ -114,6 +118,7 @@ impl IsBuildBackendError for Error {
             | Self::NoSourceDistBuilds
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(_, _)
+            | Self::UnmatchedRuntimeMetadata(_)
             | Self::MissingBuildRequirementForMetadata(_) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)

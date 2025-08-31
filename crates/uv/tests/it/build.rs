@@ -2084,3 +2084,56 @@ fn venv_included_in_sdist() -> Result<()> {
 
     Ok(())
 }
+
+/// Runtime matching causes building a wheel to fail
+#[test]
+fn runtime_matching() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-dependencies-metadata.hatchling]
+        match-runtime = true
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(&project), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ Build requirement `hatchling` was declared with `match-runtime = true`, but there is no runtime environment to match against
+    ");
+
+    // But building a sdist is fine
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").current_dir(&project), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    ");
+
+    Ok(())
+}
