@@ -21,6 +21,7 @@ use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+    default_on_request_error,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -38,10 +39,10 @@ use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
-use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
+use crate::{Connectivity, WrappedReqwestError};
 
 /// Do not use this value directly outside tests, use [`retries_from_env`] instead.
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -916,7 +917,7 @@ impl RetryableStrategy for UvRetryableStrategy {
             None | Some(Retryable::Fatal)
                 if res
                     .as_ref()
-                    .is_err_and(|err| is_extended_transient_error(err)) =>
+                    .is_err_and(|err| is_transient_network_error(err)) =>
             {
                 Some(Retryable::Transient)
             }
@@ -944,12 +945,15 @@ impl RetryableStrategy for UvRetryableStrategy {
     }
 }
 
-/// Check for additional transient error kinds not supported by the default retry strategy in `reqwest_retry`.
+/// Whether the error looks like a network error that should be retried.
 ///
-/// These cases should be safe to retry with [`Retryable::Transient`].
-pub fn is_extended_transient_error(err: &dyn Error) -> bool {
+/// There are two cases that the default retry strategy is missing:
+/// * Inside the reqwest middleware error is an `io::Error` such as a broken pipe
+/// * When streaming a response, a reqwest error may be hidden several layers behind errors
+///   of different crates processing the stream, including `io::Error` layers.
+pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     // First, try to show a nice trace log
-    if let Some((Some(status), Some(url))) = find_source::<crate::WrappedReqwestError>(&err)
+    if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
         trace!("Considering retry of response HTTP {status} for {url}");
@@ -957,36 +961,81 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
         trace!("Considering retry of error: {err:?}");
     }
 
-    // IO Errors may be nested through custom IO errors.
-    let mut has_io_error = false;
-    for io_err in find_sources::<io::Error>(&err) {
-        has_io_error = true;
-        let retryable_io_err_kinds = [
-            // https://github.com/astral-sh/uv/issues/12054
-            io::ErrorKind::BrokenPipe,
-            // From reqwest-middleware
-            io::ErrorKind::ConnectionAborted,
-            // https://github.com/astral-sh/uv/issues/3514
-            io::ErrorKind::ConnectionReset,
-            // https://github.com/astral-sh/uv/issues/14699
-            io::ErrorKind::InvalidData,
-            // https://github.com/astral-sh/uv/issues/9246
-            io::ErrorKind::UnexpectedEof,
-        ];
-        if retryable_io_err_kinds.contains(&io_err.kind()) {
-            trace!("Retrying error: `{}`", io_err.kind());
-            return true;
+    let mut has_known_error = false;
+    // IO Errors or reqwest errors may be nested through custom IO errors or stream processing
+    // crates
+    let mut current_source = err.source();
+    while let Some(source) = current_source {
+        if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
+            has_known_error = true;
+            if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
+                if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+                    trace!("Retrying nested reqwest middleware error");
+                    return true;
+                }
+                if is_retryable_status_error(reqwest_err) {
+                    trace!("Retrying nested reqwest middleware status code error");
+                    return true;
+                }
+            }
+
+            trace!("Cannot retry nested reqwest middleware error");
+        } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+            has_known_error = true;
+            if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+                trace!("Retrying nested reqwest error");
+                return true;
+            }
+            if is_retryable_status_error(reqwest_err) {
+                trace!("Retrying nested reqwest status code error");
+                return true;
+            }
+
+            trace!("Cannot retry nested reqwest error");
+        } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
+            has_known_error = true;
+            let retryable_io_err_kinds = [
+                // https://github.com/astral-sh/uv/issues/12054
+                io::ErrorKind::BrokenPipe,
+                // From reqwest-middleware
+                io::ErrorKind::ConnectionAborted,
+                // https://github.com/astral-sh/uv/issues/3514
+                io::ErrorKind::ConnectionReset,
+                // https://github.com/astral-sh/uv/issues/14699
+                io::ErrorKind::InvalidData,
+                // https://github.com/astral-sh/uv/issues/9246
+                io::ErrorKind::UnexpectedEof,
+            ];
+            if retryable_io_err_kinds.contains(&io_err.kind()) {
+                trace!("Retrying error: `{}`", io_err.kind());
+                return true;
+            }
+
+            trace!(
+                "Cannot retry IO error `{}`, not a retryable IO error kind",
+                io_err.kind()
+            );
         }
-        trace!(
-            "Cannot retry IO error `{}`, not a retryable IO error kind",
-            io_err.kind()
-        );
+
+        current_source = source.source();
     }
 
-    if !has_io_error {
-        trace!("Cannot retry error: not an extended IO error");
+    if !has_known_error {
+        trace!("Cannot retry error: Neither an IO error nor a reqwest error");
     }
     false
+}
+
+/// Whether the error is a status code error that is retryable.
+///
+/// Port of `reqwest_retry::default_on_request_success`.
+fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
+    let Some(status) = reqwest_err.status() else {
+        return false;
+    };
+    status.is_server_error()
+        || status == StatusCode::REQUEST_TIMEOUT
+        || status == StatusCode::TOO_MANY_REQUESTS
 }
 
 /// Find the first source error of a specific type.
@@ -1001,15 +1050,6 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
         cause = err.source();
     }
     None
-}
-
-/// Return all errors in the chain of a specific type.
-///
-/// This handles cases such as nested `io::Error`s.
-///
-/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
-fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
-    iter::successors(find_source::<E>(orig), |&err| find_source(err))
 }
 
 // TODO(konsti): Remove once we find a native home for `retries_from_env`
