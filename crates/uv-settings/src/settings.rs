@@ -156,6 +156,9 @@ pub struct Options {
     pub r#package: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub build_dependencies_metadata: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub build_backend: Option<serde::de::IgnoredAny>,
 }
 
@@ -2142,6 +2145,7 @@ pub struct OptionsWire {
     default_groups: Option<serde::de::IgnoredAny>,
     dependency_groups: Option<serde::de::IgnoredAny>,
     dev_dependencies: Option<serde::de::IgnoredAny>,
+    build_dependencies_metadata: Option<serde::de::IgnoredAny>,
 
     // Build backend
     build_backend: Option<serde::de::IgnoredAny>,
@@ -2208,6 +2212,7 @@ impl From<OptionsWire> for Options {
             sources,
             default_groups,
             dependency_groups,
+            build_dependencies_metadata,
             extra_build_dependencies,
             extra_build_variables,
             dev_dependencies,
@@ -2293,6 +2298,7 @@ impl From<OptionsWire> for Options {
             dependency_groups,
             managed,
             package,
+            build_dependencies_metadata,
         }
     }
 }

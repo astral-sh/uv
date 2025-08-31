@@ -211,6 +211,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         override_dependencies: _,
         constraint_dependencies: _,
         build_constraint_dependencies: _,
+        build_dependencies_metadata: _,
         environments,
         required_environments,
         conflicts,
@@ -362,6 +363,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         managed: _,
         package: _,
         build_backend: _,
+        build_dependencies_metadata: _,
     } = options;
 
     let mut masked_fields = vec![];

@@ -428,6 +428,19 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
+    /// Metadata for build dependencies.
+    ///
+    /// This allows specifying metadata for build dependencies, such as runtime matching.
+    #[option(
+        default = "None",
+        value_type = "dict",
+        example = r#"
+        [build-dependencies-metadata.package1]
+        match-runtime = true
+    "#
+    )]
+    pub build_dependencies_metadata: Option<BuildDependenciesMetadata>,
+
     /// Additional build dependencies for packages.
     ///
     /// This allows extending the PEP 517 build environment for the project's dependencies with
@@ -844,6 +857,16 @@ impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
             match_runtime: item.match_runtime,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct BuildDependenciesMetadata(BTreeMap<PackageName, BuildDependencyMetadata>);
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct BuildDependencyMetadata {
+    pub match_runtime: Option<bool>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
