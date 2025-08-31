@@ -9,6 +9,9 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+pub(crate) use auth::login::login as auth_login;
+pub(crate) use auth::logout::logout as auth_logout;
+pub(crate) use auth::token::token as auth_token;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -65,6 +68,7 @@ pub(crate) use venv::venv;
 
 use crate::printer::Printer;
 
+mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
 mod cache_clean;

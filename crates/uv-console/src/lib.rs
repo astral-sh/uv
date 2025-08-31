@@ -112,6 +112,19 @@ pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
     Ok(input)
 }
 
+/// Prompt the user for username in the given [`Term`].
+pub fn username(prompt: &str, term: &Term) -> std::io::Result<String> {
+    term.write_str(prompt)?;
+    term.show_cursor()?;
+    term.flush()?;
+
+    let input = term.read_line()?;
+
+    term.clear_line()?;
+
+    Ok(input)
+}
+
 /// Prompt the user for input text in the given [`Term`].
 ///
 /// This is a slimmed-down version of `dialoguer::Input`.

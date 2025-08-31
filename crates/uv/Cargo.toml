@@ -152,6 +152,7 @@ ignored = [
 
 [features]
 default = ["performance", "uv-distribution/static", "default-tests"]
+keyring-tests = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
