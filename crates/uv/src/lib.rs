@@ -489,6 +489,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Dir,
+        }) => {
+            commands::auth_dir()?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
