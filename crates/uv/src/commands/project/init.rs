@@ -36,7 +36,6 @@ use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -57,7 +56,7 @@ pub(crate) async fn init(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -75,7 +74,7 @@ pub(crate) async fn init(
                 path,
                 python,
                 install_mirrors,
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 cache,
@@ -145,7 +144,7 @@ pub(crate) async fn init(
                 python,
                 install_mirrors,
                 no_workspace,
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 no_config,
@@ -191,7 +190,7 @@ async fn init_script(
     script_path: &Path,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -216,11 +215,6 @@ async fn init_script(
     if package {
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -257,7 +251,7 @@ async fn init_script(
         python_preference,
         python_downloads,
         no_config,
-        &client_builder,
+        client_builder,
         cache,
         &reporter,
         preview,
@@ -291,7 +285,7 @@ async fn init_project(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -347,11 +341,6 @@ async fn init_project(
     };
 
     let reporter = PythonDownloadReporter::single(printer);
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {
@@ -432,7 +421,7 @@ async fn init_project(
                         EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
-                        &client_builder,
+                        client_builder,
                         cache,
                         Some(&reporter),
                         install_mirrors.python_install_mirror.as_deref(),
@@ -460,7 +449,7 @@ async fn init_project(
                     EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
-                    &client_builder,
+                    client_builder,
                     cache,
                     Some(&reporter),
                     install_mirrors.python_install_mirror.as_deref(),
@@ -527,7 +516,7 @@ async fn init_project(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
-                &client_builder,
+                client_builder,
                 cache,
                 Some(&reporter),
                 install_mirrors.python_install_mirror.as_deref(),
@@ -555,7 +544,7 @@ async fn init_project(
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),

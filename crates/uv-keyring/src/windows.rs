@@ -45,8 +45,8 @@ use std::collections::HashMap;
 use std::iter::once;
 use std::str;
 use windows_sys::Win32::Foundation::{
-    ERROR_BAD_USERNAME, ERROR_ENVVAR_NOT_FOUND, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER,
-    ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND, FILETIME, GetLastError,
+    ERROR_BAD_USERNAME, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER, ERROR_NO_SUCH_LOGON_SESSION,
+    ERROR_NOT_FOUND, FILETIME, GetLastError,
 };
 use windows_sys::Win32::Security::Credentials::{
     CRED_FLAGS, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_MAX_GENERIC_TARGET_NAME_LENGTH,
@@ -162,15 +162,16 @@ impl CredentialApi for WinCredential {
         self.validate_attributes(None, None)?;
         let target_name = to_wstr(&self.target_name);
         let cred_type = CRED_TYPE_GENERIC;
-        // SAFETY: Calling Windows API
-        match crate::blocking::spawn_blocking(move || unsafe {
-            Ok(CredDeleteW(target_name.as_ptr(), cred_type, 0))
+        crate::blocking::spawn_blocking(move || {
+            // SAFETY: Calling Windows API
+            if unsafe { CredDeleteW(target_name.as_ptr(), cred_type, 0) } != 0 {
+                Ok(())
+            } else {
+                // SAFETY: Calling Windows API
+                Err(Error::from_win32_code(unsafe { GetLastError() }).into())
+            }
         })
-        .await?
-        {
-            0 => Err(decode_error()),
-            _ => Ok(()),
-        }
+        .await
     }
 
     /// Return the underlying concrete object with an `Any` type so that it can
@@ -276,7 +277,7 @@ impl WinCredential {
             };
             // SAFETY: Calling Windows API
             let result = match unsafe { CredWriteW(&raw const credential, 0) } {
-                0 => Err(decode_error()),
+                0 => Err(Error::from_win32_code(unsafe { GetLastError() }).into()),
                 _ => Ok(()),
             };
             // erase the copy of the secret
@@ -310,7 +311,7 @@ impl WinCredential {
                 unsafe { CredReadW(target_name.as_ptr(), cred_type, 0, &raw mut p_credential) };
             if result == 0 {
                 // `CredReadW` failed, so no allocation has been done, so no free needs to be done
-                Err(decode_error())
+                Err(Error::from_win32_code(unsafe { GetLastError() }).into())
             } else {
                 // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
                 // the passed extractor function to it.
@@ -476,6 +477,23 @@ unsafe fn from_wstr(ws: *const u16) -> String {
 #[derive(Debug)]
 pub struct Error(pub u32);
 
+impl Error {
+    /// Create a Windows error from a Win32 error code.
+    pub fn from_win32_code(code: u32) -> Self {
+        Self(code)
+    }
+}
+
+impl From<Error> for ErrorCode {
+    fn from(err: Error) -> Self {
+        match err.0 {
+            ERROR_NOT_FOUND => Self::NoEntry,
+            ERROR_NO_SUCH_LOGON_SESSION => Self::NoStorageAccess(Box::new(err)),
+            _ => Self::PlatformFailure(Box::new(err)),
+        }
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.0 {
@@ -493,25 +511,6 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-}
-
-/// Map the last encountered Windows API error to a crate error with appropriate annotation.
-pub fn decode_error() -> ErrorCode {
-    // SAFETY: Calling Windows API
-    match unsafe { GetLastError() } {
-        ERROR_NOT_FOUND => ErrorCode::NoEntry,
-        // N.B. It's not clear why `ERROR_ENVVAR_NOT_FOUND` would be returned rather than
-        // `ERROR_NOT_FOUND`, but this was encountered on a Windows CI machine.
-        ERROR_ENVVAR_NOT_FOUND => ErrorCode::NoEntry,
-        ERROR_NO_SUCH_LOGON_SESSION => {
-            ErrorCode::NoStorageAccess(wrap(ERROR_NO_SUCH_LOGON_SESSION))
-        }
-        err => ErrorCode::PlatformFailure(wrap(err)),
-    }
-}
-
-fn wrap(code: u32) -> Box<dyn std::error::Error + Send + Sync> {
-    Box::new(Error(code))
 }
 
 #[cfg(feature = "keyring-tests")]

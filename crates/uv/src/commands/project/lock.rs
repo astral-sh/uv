@@ -48,7 +48,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -86,7 +86,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -99,11 +99,6 @@ pub(crate) async fn lock(
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
-            let client_builder = BaseClientBuilder::new()
-                .retries_from_env()?
-                .connectivity(network_settings.connectivity)
-                .native_tls(network_settings.native_tls)
-                .allow_insecure_host(network_settings.allow_insecure_host.clone());
             let reporter = PythonDownloadReporter::single(printer);
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
@@ -149,7 +144,7 @@ pub(crate) async fn lock(
                 // Don't enable any groups' requires-python for interpreter discovery
                 &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -165,7 +160,7 @@ pub(crate) async fn lock(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -196,7 +191,7 @@ pub(crate) async fn lock(
     match LockOperation::new(
         mode,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -240,7 +235,7 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -265,7 +260,7 @@ pub(super) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &'env ResolverSettings,
-    network_settings: &'env NetworkSettings,
+    client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -280,7 +275,7 @@ impl<'env> LockOperation<'env> {
     pub(super) fn new(
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
-        network_settings: &'env NetworkSettings,
+        client_builder: &'env BaseClientBuilder<'env>,
         state: &'env UniversalState,
         logger: Box<dyn ResolveLogger>,
         concurrency: Concurrency,
@@ -293,7 +288,7 @@ impl<'env> LockOperation<'env> {
             mode,
             constraints: vec![],
             settings,
-            network_settings,
+            client_builder,
             state,
             logger,
             concurrency,
@@ -339,7 +334,7 @@ impl<'env> LockOperation<'env> {
                     Some(existing),
                     self.constraints,
                     self.settings,
-                    self.network_settings,
+                    self.client_builder,
                     self.state,
                     self.logger,
                     self.concurrency,
@@ -381,7 +376,7 @@ impl<'env> LockOperation<'env> {
                     existing,
                     self.constraints,
                     self.settings,
-                    self.network_settings,
+                    self.client_builder,
                     self.state,
                     self.logger,
                     self.concurrency,
@@ -412,7 +407,7 @@ async fn do_lock(
     existing_lock: Option<Lock>,
     external: Vec<NameRequirementSpecification>,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -621,14 +616,7 @@ async fn do_lock(
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Initialize the client.
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
-    index_locations.cache_index_credentials();
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -641,9 +629,8 @@ async fn do_lock(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())

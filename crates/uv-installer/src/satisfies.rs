@@ -308,14 +308,6 @@ impl RequirementSatisfaction {
                         return Self::CacheInvalid;
                     }
                 }
-
-                // If the distribution isn't compatible with the current platform, it is a mismatch.
-                if let Ok(Some(wheel_tags)) = distribution.read_tags() {
-                    if !wheel_tags.is_compatible(tags) {
-                        debug!("Platform tags mismatch for {name}: {distribution}");
-                        return Self::Mismatch;
-                    }
-                }
             }
         }
 

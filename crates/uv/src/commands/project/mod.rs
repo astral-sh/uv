@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -57,9 +57,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
-use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
-};
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -652,7 +650,7 @@ impl ScriptInterpreter {
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -702,12 +700,6 @@ impl ScriptInterpreter {
             Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         let interpreter = PythonInstallation::find_or_download(
@@ -715,7 +707,7 @@ impl ScriptInterpreter {
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -892,7 +884,7 @@ impl ProjectInterpreter {
         project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -986,12 +978,6 @@ impl ProjectInterpreter {
             Err(err) => return Err(err.into()),
         }
 
-        let client_builder = BaseClientBuilder::default()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment.
@@ -1000,7 +986,7 @@ impl ProjectInterpreter {
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -1274,7 +1260,7 @@ impl ProjectEnvironment {
         groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         no_sync: bool,
@@ -1303,7 +1289,7 @@ impl ProjectEnvironment {
             workspace.install_path().as_ref(),
             groups,
             python,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1505,7 +1491,7 @@ impl ScriptEnvironment {
     pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -1532,7 +1518,7 @@ impl ScriptEnvironment {
         match ScriptInterpreter::discover(
             script,
             python_request,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1670,7 +1656,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: Concurrency,
     cache: &Cache,
@@ -1720,20 +1706,11 @@ pub(crate) async fn resolve_names(
         reinstall: _,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()
-        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
-    index_locations.cache_index_credentials();
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1849,9 +1826,10 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -1891,24 +1869,16 @@ pub(crate) async fn resolve_environment(
         ..
     } = spec.requirements;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
-    let marker_env = interpreter.resolver_marker_environment();
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1973,7 +1943,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     let workspace_cache = WorkspaceCache::default();
@@ -2024,7 +1994,7 @@ pub(crate) async fn resolve_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
         interpreter.markers(),
@@ -2048,7 +2018,7 @@ pub(crate) async fn sync_environment(
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -2075,12 +2045,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2088,12 +2053,9 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2207,10 +2169,11 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
@@ -2249,12 +2212,7 @@ pub(crate) async fn update_environment(
         reinstall,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {
@@ -2268,8 +2226,8 @@ pub(crate) async fn update_environment(
 
     // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = venv.interpreter().resolver_marker_environment();
-    let tags = venv.interpreter().tags()?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2283,7 +2241,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
-            tags,
+            &tags,
             config_setting,
             config_settings_package,
             &extra_build_requires,
@@ -2316,12 +2274,9 @@ pub(crate) async fn update_environment(
         }
     }
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -2354,7 +2309,6 @@ pub(crate) async fn update_environment(
     let preferences = Vec::default();
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
@@ -2363,7 +2317,7 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -2407,7 +2361,7 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         venv.interpreter().markers(),
@@ -2437,7 +2391,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         *compile_bytecode,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,

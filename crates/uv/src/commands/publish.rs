@@ -21,14 +21,13 @@ use uv_warnings::{warn_user_once, write_error_chain};
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
@@ -36,7 +35,7 @@ pub(crate) async fn publish(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if network_settings.connectivity.is_offline() {
+    if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
 
@@ -57,18 +56,18 @@ pub(crate) async fn publish(
     //   shouldn't try cloning the request to make an unauthenticated request first, but we want
     //   keyring integration. For trusted publishing, we use an OIDC auth routine without keyring
     //   or other auth integration.
-    let upload_client = BaseClientBuilder::new()
+    let upload_client = client_builder
+        .clone()
         .retries(0)
         .keyring(keyring_provider)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
         // download. 15 min is taken from the time a trusted publishing token is valid.
         .default_timeout(Duration::from_secs(15 * 60))
         .build();
-    let oidc_client = BaseClientBuilder::new()
+    let oidc_client = client_builder
+        .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -89,14 +88,10 @@ pub(crate) async fn publish(
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
-        index_locations.cache_index_credentials();
-        let registry_client_builder = RegistryClientBuilder::new(cache.clone())
-            .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .index_locations(&index_locations)
-            .keyring(keyring_provider);
+        let registry_client_builder =
+            RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                .index_locations(index_locations)
+                .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),
             registry_client_builder,
@@ -344,7 +339,7 @@ mod tests {
         username: Option<String>,
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
-        let client = BaseClientBuilder::new().build();
+        let client = BaseClientBuilder::default().build();
         gather_credentials(
             url,
             username,

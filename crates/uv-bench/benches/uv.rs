@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
@@ -63,7 +63,7 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
 
     move |universal| {
         runtime

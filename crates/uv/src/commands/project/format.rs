@@ -17,7 +17,6 @@ use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Run the formatter.
 pub(crate) async fn format(
@@ -26,7 +25,7 @@ pub(crate) async fn format(
     diff: bool,
     extra_args: Vec<String>,
     version: Option<String>,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     cache: Cache,
     printer: Printer,
     preview: Preview,
@@ -50,12 +49,7 @@ pub(crate) async fn format(
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
-    let client = BaseClientBuilder::new()
-        .retries(0)
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    let client = client_builder.retries(0).build();
 
     // Get the path to Ruff, downloading it if necessary
     let reporter = BinaryDownloadReporter::single(printer);
