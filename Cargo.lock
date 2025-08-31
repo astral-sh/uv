@@ -5089,9 +5089,11 @@ dependencies = [
  "serde",
  "tempfile",
  "test-log",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "url",
+ "uv-keyring",
  "uv-once-map",
  "uv-redacted",
  "uv-small-str",
@@ -5407,6 +5409,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-redacted",
  "uv-static",
 ]
 

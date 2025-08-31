@@ -10,6 +10,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-keyring = { workspace = true, features = ["apple-native", "secret-service", "windows-native"] }
 uv-once-map = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
@@ -28,6 +29,7 @@ rust-netrc = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
