@@ -1,5 +1,6 @@
 use uv_auth::{KeyringProvider, TextCredentialStore, TomlCredentialError};
 use uv_configuration::KeyringProviderType;
+use uv_fs::LockedFile;
 use uv_preview::Preview;
 
 pub(crate) mod dir;
@@ -10,7 +11,7 @@ pub(crate) mod token;
 /// The storage backend to use in `uv auth` commands.
 enum AuthBackend {
     Keyring(KeyringProvider),
-    TextStore(TextCredentialStore),
+    TextStore(TextCredentialStore, LockedFile),
 }
 
 impl AuthBackend {
@@ -27,10 +28,14 @@ impl AuthBackend {
         }
 
         // Otherwise, we'll use the plain text credential store
-        match TextCredentialStore::from_file(TextCredentialStore::default_file()?) {
-            Ok(store) => Ok(Self::TextStore(store)),
+        let path = TextCredentialStore::default_file()?;
+        match TextCredentialStore::read(&path) {
+            Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
             Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Self::TextStore(TextCredentialStore::default()))
+                Ok(Self::TextStore(
+                    TextCredentialStore::default(),
+                    TextCredentialStore::lock(&path)?,
+                ))
             }
             Err(err) => Err(err),
         }

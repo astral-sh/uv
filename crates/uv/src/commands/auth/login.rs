@@ -115,9 +115,9 @@ pub(crate) async fn login(
         AuthBackend::Keyring(provider) => {
             provider.store(&url, &credentials).await?;
         }
-        AuthBackend::TextStore(mut text_store) => {
-            text_store.insert(service.clone(), credentials);
-            text_store.write(TextCredentialStore::default_file()?)?;
+        AuthBackend::TextStore(mut store, _lock) => {
+            store.insert(service.clone(), credentials);
+            store.write(TextCredentialStore::default_file()?, _lock)?;
         }
     }
 

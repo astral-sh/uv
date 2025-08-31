@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,24 @@ pub use crate::path::*;
 pub mod cachedir;
 mod path;
 pub mod which;
+
+/// Append an extension to a [`PathBuf`].
+///
+/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
+///
+/// If there is no file name, the path is returned unchanged.
+///
+/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
+pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
+    let Some(name) = path.file_name() else {
+        // If there is no file name, we cannot add an extension.
+        return Cow::Borrowed(path);
+    };
+    let mut name = name.to_os_string();
+    name.push(".");
+    name.push(extension.trim_start_matches('.'));
+    Cow::Owned(path.with_file_name(name))
+}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -811,4 +830,46 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_with_added_extension() {
+        // Test with simple package name (no dots)
+        let path = PathBuf::from("python");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("python.exe"));
+
+        // Test with package name containing single dot
+        let path = PathBuf::from("awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
+
+        // Test with package name containing multiple dots
+        let path = PathBuf::from("org.example.tool");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
+
+        // Test with different extensions
+        let path = PathBuf::from("script");
+        let result = with_added_extension(&path, "ps1");
+        assert_eq!(result, PathBuf::from("script.ps1"));
+
+        // Test with path that has directory components
+        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(
+            result,
+            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
+        );
+
+        // Test with empty path (edge case)
+        let path = PathBuf::new();
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, path); // Should return unchanged
+    }
 }

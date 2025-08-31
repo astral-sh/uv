@@ -6,6 +6,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
+use uv_fs::{LockedFile, with_added_extension};
 use uv_redacted::DisplaySafeUrl;
 
 use uv_state::{StateBucket, StateStore};
@@ -199,8 +200,17 @@ impl TextCredentialStore {
         Ok(dir.join("credentials.toml"))
     }
 
+    /// Acquire a lock on the credentials file at the given path.
+    pub fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let lock = with_added_extension(path, ".lock");
+        Ok(LockedFile::acquire_blocking(lock, "credentials store")?)
+    }
+
     /// Read credentials from a file.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
+    fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
         let content = fs::read_to_string(path)?;
         let credentials: TomlCredentials = toml::from_str(&content)?;
 
@@ -213,8 +223,26 @@ impl TextCredentialStore {
         Ok(Self { credentials })
     }
 
+    /// Read credentials from a file.
+    ///
+    /// Returns [`TextCredentialStore`] and a [`LockedFile`] to hold if mutating the store.
+    ///
+    /// If the store will not be written to following the read, the lock can be dropped.
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
+        let lock = Self::lock(path.as_ref())?;
+        let store = Self::from_file(path)?;
+        Ok((store, lock))
+    }
+
     /// Persist credentials to a file.
-    pub fn write<P: AsRef<Path>>(self, path: P) -> Result<(), TomlCredentialError> {
+    ///
+    /// Requires a [`LockedFile`] from [`TextCredentialStore::lock`] or
+    /// [`TextCredentialStore::read`] to ensure exclusive access.
+    pub fn write<P: AsRef<Path>>(
+        self,
+        path: P,
+        _lock: LockedFile,
+    ) -> Result<(), TomlCredentialError> {
         let credentials = self
             .credentials
             .into_iter()
@@ -390,7 +418,12 @@ password = "pass2"
 
         // Test saving
         let temp_output = NamedTempFile::new().unwrap();
-        store.write(temp_output.path()).unwrap();
+        store
+            .write(
+                temp_output.path(),
+                TextCredentialStore::lock(temp_file.path()).unwrap(),
+            )
+            .unwrap();
 
         let content = fs::read_to_string(temp_output.path()).unwrap();
         assert!(content.contains("example.com"));

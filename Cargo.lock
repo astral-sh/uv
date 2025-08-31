@@ -5095,6 +5095,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uv-fs",
  "uv-keyring",
  "uv-once-map",
  "uv-redacted",
