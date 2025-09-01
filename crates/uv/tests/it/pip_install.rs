@@ -12783,7 +12783,8 @@ fn switch_platform() {
 
 /// Test remote pyproject.toml support - using real URL from GitHub issue #15508
 #[test]
-fn install_remote_pyproject() -> Result<()> {
+#[cfg(unix)]
+fn install_remote_pyproject_unix() {
     // Skip the default exclude-newer restriction to test with current packages
     let context = TestContext::new("3.12").with_exclude_newer("2025-12-31T00:00:00Z");
 
@@ -12819,12 +12820,50 @@ fn install_remote_pyproject() -> Result<()> {
      + urllib3==2.5.0
     "
     );
+}
 
-    Ok(())
+/// Test remote pyproject.toml support - using real URL from GitHub issue #15508
+#[test]
+#[cfg(windows)]
+fn install_remote_pyproject_windows() {
+    // Skip the default exclude-newer restriction to test with current packages
+    let context = TestContext::new("3.12").with_exclude_newer("2025-12-31T00:00:00Z");
+
+    // Use the exact URL from GitHub issue #15508
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("https://raw.githubusercontent.com/gboeing/osmnx/main/pyproject.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Would download 17 packages
+    Would install 17 packages
+     + certifi==2025.8.3
+     + charset-normalizer==3.4.3
+     + geopandas==1.1.1
+     + idna==3.10
+     + networkx==3.5
+     + numpy==2.3.2
+     + packaging==25.0
+     + pandas==2.3.2
+     + pyogrio==0.11.1
+     + pyproj==3.7.2
+     + python-dateutil==2.9.0.post0
+     + pytz==2025.2
+     + requests==2.32.5
+     + shapely==2.1.1
+     + six==1.17.0
+     + urllib3==2.5.0
+    "
+    );
 }
 
 #[test]
-fn install_remote_pyproject_and_reject_dynamic_metadata() -> Result<()> {
+fn install_remote_pyproject_and_reject_dynamic_metadata() {
     let context = TestContext::new("3.12");
 
     // Use a simple pyproject.toml with stable, common dependencies
@@ -12841,6 +12880,4 @@ fn install_remote_pyproject_and_reject_dynamic_metadata() -> Result<()> {
     error: Remote pyproject.toml files with dynamic metadata are not supported. Consider using a Git dependency instead: `https://raw.githubusercontent.com/openai/openai-python/refs/tags/v1.102.0/pyproject.toml`
     "
     );
-
-    Ok(())
 }
