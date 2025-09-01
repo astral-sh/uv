@@ -29,10 +29,13 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
+use serde::Deserialize;
 use tracing::instrument;
+use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -44,6 +47,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
@@ -160,25 +164,79 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => contents,
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
-                    }
-                    Err(err) => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to read `{}`: {}",
-                            path.user_display(),
-                            err
-                        ));
+                // Check if file exists or is a remote URL (similar to RequirementsTxt case)
+                if !(path == Path::new("-")
+                    || path.starts_with("http://")
+                    || path.starts_with("https://")
+                    || path.exists())
+                {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
+                // Fetch content from remote URL or read local file
+                let contents = if path.starts_with("http://") || path.starts_with("https://") {
+                    Self::fetch_remote_pyproject_content(path, client_builder).await?
+                } else {
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => contents,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            return Err(anyhow::anyhow!(
+                                "File not found: `{}`",
+                                path.user_display()
+                            ));
+                        }
+                        Err(err) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to read `{}`: {}",
+                                path.user_display(),
+                                err
+                            ));
+                        }
                     }
                 };
-                let _ = toml::from_str::<PyProjectToml>(&contents)
+
+                // Parse the pyproject.toml content
+                let pyproject = toml::from_str::<PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
-                Self {
-                    source_trees: vec![path.clone()],
-                    ..Self::default()
+                // For remote files, check for dynamic metadata and reject if found
+                if (path.starts_with("http://") || path.starts_with("https://"))
+                    && Self::has_dynamic_metadata(&contents)?
+                {
+                    return Err(anyhow::anyhow!(
+                        "Remote pyproject.toml files with dynamic metadata are not supported. \
+                         Consider using a Git dependency instead: `{}`",
+                        path.user_display()
+                    ));
+                }
+
+                // For remote files with static metadata, extract dependencies directly
+                // For local files, use source_trees approach (existing behavior)
+                if path.starts_with("http://") || path.starts_with("https://") {
+                    // Remote file: extract static dependencies and add as requirements
+                    let mut requirements = Vec::new();
+
+                    if let Some(project) = pyproject.project {
+                        if let Some(dependencies) = project.dependencies {
+                            for dep in dependencies {
+                                let requirement = RequirementsTxtRequirement::parse(&dep, &*CWD, false)
+                                    .with_context(|| format!("Failed to parse dependency `{}` from remote pyproject.toml", dep))?;
+                                requirements
+                                    .push(UnresolvedRequirementSpecification::from(requirement));
+                            }
+                        }
+                    }
+
+                    Self {
+                        requirements,
+                        ..Self::default()
+                    }
+                } else {
+                    // Local file: use existing source_trees approach
+                    Self {
+                        source_trees: vec![path.clone()],
+                        ..Self::default()
+                    }
                 }
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
@@ -524,6 +582,72 @@ impl RequirementsSpecification {
     /// Return true if the specification does not include any requirements to install.
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
+    }
+
+    /// Fetch the contents of a remote pyproject.toml file.
+    async fn fetch_remote_pyproject_content(
+        path: &Path,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> Result<String> {
+        // Check if network is disabled
+        if client_builder.is_offline() {
+            return Err(anyhow::anyhow!(
+                "Network connectivity is disabled, but a remote pyproject.toml file was requested: {}",
+                path.display()
+            ));
+        }
+
+        // Convert path to UTF-8 string for URL parsing
+        let path_utf8 = path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Non-Unicode URL: {}", path.display()))?;
+
+        // Parse URL and fetch content
+        let url = DisplaySafeUrl::from_str(path_utf8)
+            .with_context(|| format!("Invalid URL: {}", path_utf8))?;
+
+        let client = client_builder.build();
+        let response = client
+            .for_host(&url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch remote pyproject.toml: {}", url))?;
+
+        let text = response
+            .error_for_status()
+            .with_context(|| format!("Error while accessing remote pyproject.toml: {}", url))?
+            .text()
+            .await
+            .with_context(|| format!("Failed to read response body from: {}", url))?;
+
+        Ok(text)
+    }
+
+    /// Check if a pyproject.toml file contains dynamic metadata.
+    fn has_dynamic_metadata(contents: &str) -> Result<bool> {
+        // Simple struct to parse just the project.dynamic field
+        #[derive(Deserialize)]
+        struct ProjectToml {
+            project: Option<ProjectSection>,
+        }
+
+        #[derive(Deserialize)]
+        struct ProjectSection {
+            dynamic: Option<Vec<String>>,
+        }
+
+        // Parse the TOML content to check for dynamic metadata
+        let parsed: ProjectToml = toml::from_str(contents)
+            .with_context(|| "Failed to parse pyproject.toml content for dynamic metadata check")?;
+
+        // Check if [project.dynamic] exists and is non-empty
+        let has_dynamic = parsed
+            .project
+            .and_then(|project| project.dynamic)
+            .map_or(false, |dynamic_list| !dynamic_list.is_empty());
+
+        Ok(has_dynamic)
     }
 }
 

@@ -48,10 +48,17 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
         {
-            Err(anyhow::anyhow!(
-                "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
-                path.user_display(),
-            ))
+            // For URLs, be more permissive with TOML files (they might be pyproject.toml with different names)
+            // For local files, enforce PEP 751 naming
+            if path.starts_with("http://") || path.starts_with("https://") {
+                // For remote TOML files, assume they are pyproject.toml files
+                Ok(Self::PyprojectToml(path))
+            } else {
+                Err(anyhow::anyhow!(
+                    "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
+                    path.user_display(),
+                ))
+            }
         } else {
             Ok(Self::RequirementsTxt(path))
         }

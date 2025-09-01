@@ -12780,3 +12780,44 @@ fn switch_platform() {
     "
     );
 }
+
+/// Test remote pyproject.toml support - using real URL from GitHub issue #15508
+#[tokio::test]
+async fn install_remote_pyproject_toml_osmnx() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Use the exact URL from GitHub issue #15508
+    // This tests the real-world use case mentioned by @gboeing
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("https://raw.githubusercontent.com/gboeing/osmnx/refs/tags/v2.0.6/pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Would install 17 packages
+     + certifi==2025.8.3
+     + charset-normalizer==3.4.3
+     + geopandas==1.1.1
+     + idna==3.10
+     + networkx==3.5
+     + numpy==2.3.2
+     + packaging==25.0
+     + pandas==2.3.2
+     + pyogrio==0.11.1
+     + pyproj==3.7.2
+     + python-dateutil==2.9.0.post0
+     + pytz==2025.2
+     + requests==2.32.5
+     + shapely==2.1.1
+     + six==1.17.0
+     + tzdata==2025.2
+     + urllib3==2.5.0
+    "###
+    );
+
+    Ok(())
+}
