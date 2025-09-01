@@ -12783,7 +12783,7 @@ fn switch_platform() {
 
 /// Test remote pyproject.toml support - using real URL from GitHub issue #15508
 #[tokio::test]
-async fn install_remote_pyproject_toml_osmnx() -> Result<()> {
+async fn install_remote_pyproject() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Use the exact URL from GitHub issue #15508
