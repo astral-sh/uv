@@ -220,7 +220,7 @@ impl RequirementsSpecification {
                         if let Some(dependencies) = project.dependencies {
                             for dep in dependencies {
                                 let requirement = RequirementsTxtRequirement::parse(&dep, &*CWD, false)
-                                    .with_context(|| format!("Failed to parse dependency `{}` from remote pyproject.toml", dep))?;
+                                    .with_context(|| format!("Failed to parse dependency `{dep}` from remote pyproject.toml"))?;
                                 requirements
                                     .push(UnresolvedRequirementSpecification::from(requirement));
                             }
@@ -604,7 +604,7 @@ impl RequirementsSpecification {
 
         // Parse URL and fetch content
         let url = DisplaySafeUrl::from_str(path_utf8)
-            .with_context(|| format!("Invalid URL: {}", path_utf8))?;
+            .with_context(|| format!("Invalid URL: {path_utf8}"))?;
 
         let client = client_builder.build();
         let response = client
@@ -612,14 +612,14 @@ impl RequirementsSpecification {
             .get(Url::from(url.clone()))
             .send()
             .await
-            .with_context(|| format!("Failed to fetch remote pyproject.toml: {}", url))?;
+            .with_context(|| format!("Failed to fetch remote pyproject.toml: {url}"))?;
 
         let text = response
             .error_for_status()
-            .with_context(|| format!("Error while accessing remote pyproject.toml: {}", url))?
+            .with_context(|| format!("Error while accessing remote pyproject.toml: {url}"))?
             .text()
             .await
-            .with_context(|| format!("Failed to read response body from: {}", url))?;
+            .with_context(|| format!("Failed to read response body from: {url}"))?;
 
         Ok(text)
     }
@@ -645,7 +645,7 @@ impl RequirementsSpecification {
         let has_dynamic = parsed
             .project
             .and_then(|project| project.dynamic)
-            .map_or(false, |dynamic_list| !dynamic_list.is_empty());
+            .is_some_and(|dynamic_list| !dynamic_list.is_empty());
 
         Ok(has_dynamic)
     }
