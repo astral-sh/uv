@@ -22,6 +22,6 @@ impl DryRun {
 
     /// Returns `true` if dry run mode is enabled.
     pub const fn enabled(&self) -> bool {
-        matches!(self, Self::Enabled) || matches!(self, Self::Check)
+        matches!(self, Self::Enabled | Self::Check)
     }
 }

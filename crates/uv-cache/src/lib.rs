@@ -1203,9 +1203,9 @@ impl Refresh {
     /// Return the [`Timestamp`] associated with the refresh policy.
     pub fn timestamp(&self) -> Timestamp {
         match self {
-            Self::None(timestamp) => *timestamp,
-            Self::Packages(.., timestamp) => *timestamp,
-            Self::All(timestamp) => *timestamp,
+            Self::None(timestamp) | Self::Packages(.., timestamp) | Self::All(timestamp) => {
+                *timestamp
+            }
         }
     }
 
