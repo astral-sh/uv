@@ -9,3 +9,7 @@ serial = { max-threads = 1 }
 [[profile.default.overrides]]
 filter = 'test(native_auth)'
 test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = 'package(uv-keyring)'
+test-group = 'serial'
