@@ -1287,3 +1287,118 @@ fn logout_text_store_multiple_usernames() {
     "
     );
 }
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_prefix_match() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("https://example.com/api")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    // Login with credentials for a path
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/api")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://example.com/api
+    "
+    );
+
+    // A request for a child path does not match, the native store does not yet implement prefix
+    // matching
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/api/v1")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for testuser@https://example.com/api/v1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_host_fallback() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("example.com")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    // Login with credentials for the host
+    uv_snapshot!(context.auth_login()
+        .arg("example.com")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("hostpass")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://example.com/
+    "
+    );
+
+    // Should fallback to host-level matching
+    // TODO(zanieb): This is not working as intended
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/any/path")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for testuser@https://example.com/any/path
+    "
+    );
+
+    // A request to another host should not work
+    uv_snapshot!(context.auth_token()
+        .arg("https://another-example.com/any/path")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for testuser@https://another-example.com/any/path
+    "
+    );
+
+    Ok(())
+}
