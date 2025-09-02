@@ -964,7 +964,7 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     let mut has_known_error = false;
     // IO Errors or reqwest errors may be nested through custom IO errors or stream processing
     // crates
-    let mut current_source = err.source();
+    let mut current_source = Some(err);
     while let Some(source) = current_source {
         if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
             has_known_error = true;
@@ -1075,10 +1075,11 @@ pub fn retries_from_env() -> Result<u32, RetryParsingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
 
+    use anyhow::Result;
+    use insta::assert_debug_snapshot;
     use reqwest::{Client, Method};
-    use wiremock::matchers::method;
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::base_client::request_into_redirect;
@@ -1268,6 +1269,73 @@ mod tests {
 
             assert!(!redirect_request.headers().contains_key(REFERER));
         }
+
+        Ok(())
+    }
+
+    /// Enumerate which status codes we are retrying.
+    #[tokio::test]
+    async fn retried_status_codes() -> Result<()> {
+        let server = MockServer::start().await;
+        let client = Client::default();
+        let middleware_client = ClientWithMiddleware::default();
+        let mut retried = Vec::new();
+        for status in 100..599 {
+            // Test all standard status codes and and example for a non-RFC code used in the wild.
+            if StatusCode::from_u16(status)?.canonical_reason().is_none() && status != 420 {
+                continue;
+            }
+
+            Mock::given(path(format!("/{status}")))
+                .respond_with(ResponseTemplate::new(status))
+                .mount(&server)
+                .await;
+
+            let response = middleware_client
+                .get(format!("{}/{}", server.uri(), status))
+                .send()
+                .await;
+
+            let middleware_retry =
+                DefaultRetryableStrategy.handle(&response) == Some(Retryable::Transient);
+
+            let response = client
+                .get(format!("{}/{}", server.uri(), status))
+                .send()
+                .await?;
+
+            let uv_retry = match response.error_for_status() {
+                Ok(_) => false,
+                Err(err) => is_transient_network_error(&err),
+            };
+
+            // Ensure we're retrying the same status code as the reqwest_retry crate. We may choose
+            // to deviate from this later.
+            assert_eq!(middleware_retry, uv_retry);
+            if uv_retry {
+                retried.push(status);
+            }
+        }
+
+        assert_debug_snapshot!(retried, @r"
+        [
+            100,
+            102,
+            408,
+            429,
+            500,
+            501,
+            502,
+            503,
+            504,
+            505,
+            506,
+            507,
+            508,
+            510,
+            511,
+        ]
+        ");
 
         Ok(())
     }
