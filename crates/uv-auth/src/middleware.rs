@@ -596,7 +596,7 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store.get_credentials(&url::Url::from(url.clone())).cloned()
+            text_store.get_credentials(url, credentials.as_ref().and_then(|credentials| credentials.username())).cloned()
         }) {
             debug!("Found credentials in text store for {url}");
             Some(credentials)
@@ -2267,6 +2267,77 @@ mod tests {
             client.get(server.uri()).send().await?.status(),
             401,
             "Credentials should not be found when text store is disabled"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_text_store_by_username() -> Result<(), Error> {
+        let username = "testuser";
+        let password = "testpass";
+        let wrong_username = "wronguser";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        let mut store = TextCredentialStore::default();
+        let service = crate::Service::try_from(base_url.to_string()).unwrap();
+        let credentials =
+            crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
+        store.insert(service.clone(), credentials);
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(Some(store)),
+            )
+            .build();
+
+        // Request with matching username should succeed
+        let url_with_username = format!(
+            "{}://{}@{}",
+            base_url.scheme(),
+            username,
+            base_url.host_str().unwrap()
+        );
+        let url_with_port = if let Some(port) = base_url.port() {
+            format!("{}:{}{}", url_with_username, port, base_url.path())
+        } else {
+            format!("{}{}", url_with_username, base_url.path())
+        };
+
+        assert_eq!(
+            client.get(&url_with_port).send().await?.status(),
+            200,
+            "Request with matching username should succeed"
+        );
+
+        // Request with non-matching username should fail
+        let url_with_wrong_username = format!(
+            "{}://{}@{}",
+            base_url.scheme(),
+            wrong_username,
+            base_url.host_str().unwrap()
+        );
+        let url_with_port = if let Some(port) = base_url.port() {
+            format!("{}:{}{}", url_with_wrong_username, port, base_url.path())
+        } else {
+            format!("{}{}", url_with_wrong_username, base_url.path())
+        };
+
+        assert_eq!(
+            client.get(&url_with_port).send().await?.status(),
+            401,
+            "Request with non-matching username should fail"
+        );
+
+        // Request without username should succeed
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Request with no username should succeed"
         );
 
         Ok(())
