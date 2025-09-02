@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use uv_small_str::SmallString;
 
+use crate::tags::AndroidArch;
 use crate::{Arch, BinaryFormat};
 
 /// A tag to represent the platform compatibility of a Python distribution.
@@ -56,7 +57,7 @@ pub enum PlatformTag {
     /// Ex) `win_ia64`
     WinIa64,
     /// Ex) `android_21_x86_64`
-    Android { api_level: u16, arch: Arch },
+    Android { api_level: u16, arch: AndroidArch },
     /// Ex) `freebsd_12_x86_64`
     FreeBsd { release_arch: SmallString },
     /// Ex) `netbsd_9_x86_64`
@@ -179,7 +180,7 @@ impl PlatformTag {
                 ..
             } | Self::WinArm64
                 | Self::Android {
-                    arch: Arch::Aarch64,
+                    arch: AndroidArch::Arm64V8a,
                     ..
                 }
         )
@@ -489,7 +490,7 @@ impl FromStr for PlatformTag {
         }
 
         if let Some(rest) = s.strip_prefix("android_") {
-            // Ex) android_21_arm64
+            // Ex) android_21_arm64_v8a
             let underscore = memchr::memchr(b'_', rest.as_bytes()).ok_or_else(|| {
                 ParsePlatformTagError::InvalidFormat {
                     platform: "android",
@@ -684,6 +685,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::platform_tag::{ParsePlatformTagError, PlatformTag};
+    use crate::tags::AndroidArch;
     use crate::{Arch, BinaryFormat};
 
     #[test]
@@ -960,6 +962,35 @@ mod tests {
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "pyodide",
                 tag: "pyodide_2024_0_wasm64".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn android_platform() {
+        let tag = PlatformTag::Android {
+            api_level: 21,
+            arch: AndroidArch::Arm64V8a,
+        };
+        assert_eq!(
+            PlatformTag::from_str("android_21_arm64_v8a").as_ref(),
+            Ok(&tag)
+        );
+        assert_eq!(tag.to_string(), "android_21_arm64_v8a");
+
+        assert_eq!(
+            PlatformTag::from_str("android_X_arm64_v8a"),
+            Err(ParsePlatformTagError::InvalidApiLevel {
+                platform: "android",
+                tag: "android_X_arm64_v8a".to_string()
+            })
+        );
+
+        assert_eq!(
+            PlatformTag::from_str("android_21_aarch64"),
+            Err(ParsePlatformTagError::InvalidArch {
+                platform: "android",
+                tag: "android_21_aarch64".to_string()
             })
         );
     }

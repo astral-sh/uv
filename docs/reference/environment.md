@@ -561,6 +561,13 @@ Used for trusted publishing via `uv publish`. Contains the oidc token url.
 
 General proxy for all network requests.
 
+### `ANDROID_API_LEVEL`
+
+Used with `--python-platform aarch64-linux-android` and related variants to set the
+Android API level. (i.e., the minimum supported Android API level).
+
+Defaults to `21`.
+
 ### `APPDATA`
 
 Path to user-level configuration directory on Windows systems.

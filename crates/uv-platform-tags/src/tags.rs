@@ -614,7 +614,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         (Os::Android { api_level }, _) => {
             vec![PlatformTag::Android {
                 api_level: *api_level,
-                arch,
+                arch: AndroidArch::from_arch(arch),
             }]
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
@@ -754,6 +754,70 @@ impl BinaryFormat {
             Self::Ppc64 => "ppc64",
             Self::Universal => "universal",
             Self::Universal2 => "universal2",
+            Self::X86_64 => "x86_64",
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum AndroidArch {
+    ArmeabiV7a,
+    Arm64V8a,
+    X86,
+    X86_64,
+}
+
+impl std::fmt::Display for AndroidArch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for AndroidArch {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "armeabi_v7a" => Ok(Self::ArmeabiV7a),
+            "arm64_v8a" => Ok(Self::Arm64V8a),
+            "x86" => Ok(Self::X86),
+            "x86_64" => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {s}")),
+        }
+    }
+}
+
+impl AndroidArch {
+    /// Determine the appropriate multiarch for a iOS version.
+    pub fn from_arch(arch: Arch) -> Self {
+        match arch {
+            Arch::Aarch64 => Self::Arm64V8a,
+            Arch::Armv7L => Self::ArmeabiV7a,
+            Arch::X86 => Self::X86,
+            Arch::X86_64 => Self::X86_64,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ArmeabiV7a => "armeabi_v7a",
+            Self::Arm64V8a => "arm64_v8a",
+            Self::X86 => "x86",
             Self::X86_64 => "x86_64",
         }
     }

@@ -2422,6 +2422,16 @@
           "const": "aarch64-manylinux_2_40"
         },
         {
+          "description": "An ARM64 Android target.",
+          "type": "string",
+          "const": "aarch64-linux-android"
+        },
+        {
+          "description": "An `x86_64` Android target.",
+          "type": "string",
+          "const": "x86_64-linux-android"
+        },
+        {
           "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.",
           "type": "string",
           "const": "wasm32-pyodide2024"
