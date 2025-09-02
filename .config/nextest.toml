@@ -7,5 +7,5 @@ slow-timeout =  { period = "10s", terminate-after = 12 }
 serial = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'test(native_keyring)'
+filter = 'test(native_auth)'
 test-group = 'serial'

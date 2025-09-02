@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = ["apple-native", "secret-service", "windows-native"]
-keyring-tests = []
+native-auth = []
 
 ## Use the built-in Keychain Services on macOS
 apple-native = ["dep:security-framework"]

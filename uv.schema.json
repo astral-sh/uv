@@ -1145,11 +1145,6 @@
           "const": "disabled"
         },
         {
-          "description": "Use a native integration with the system keychain for credential lookup.",
-          "type": "string",
-          "const": "native"
-        },
-        {
           "description": "Use the `keyring` command for credential lookup.",
           "type": "string",
           "const": "subprocess"

@@ -513,7 +513,7 @@ impl std::error::Error for Error {
     }
 }
 
-#[cfg(feature = "keyring-tests")]
+#[cfg(feature = "native-auth")]
 #[cfg(test)]
 mod tests {
     use super::*;

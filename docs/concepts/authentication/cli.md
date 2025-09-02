@@ -52,9 +52,7 @@ $ uv auth token --username foo example.com
 
 ## Configuring the storage backend
 
-By default, credentials are persisted in plain text to the uv
-[credentials file](./http.md#the-uv-credentials-file).
+Credentials are persisted to the uv [credentials store](./http.md#the-uv-credentials-store).
 
-If the [native keyring provider](./http.md#the-native-keyring-provider) is enabled, it will be used
-instead, and the credentials will be stored in a secure system store. The native keyring is
-currently experimental, but will become the default in the future.
+By default, credentials are written to a plaintext file. An encrypted system-native storage backend
+can be enabled with `UV_PREVIEW_FEATURES=native-auth`.

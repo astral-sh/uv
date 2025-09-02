@@ -4,13 +4,12 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
 use uv_auth::Service;
+use uv_auth::store::AuthBackend;
 use uv_auth::{Credentials, TextCredentialStore};
-use uv_configuration::KeyringProviderType;
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 
-use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
@@ -19,11 +18,10 @@ use crate::{commands::ExitStatus, printer::Printer};
 pub(crate) async fn logout(
     service: Service,
     username: Option<String>,
-    keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
+    let backend = AuthBackend::from_settings(preview)?;
 
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
     let url = service.url().clone();
@@ -55,7 +53,7 @@ pub(crate) async fn logout(
 
     // TODO(zanieb): Consider exhaustively logging out from all backends
     match backend {
-        AuthBackend::Keyring(provider) => {
+        AuthBackend::System(provider) => {
             provider
                 .remove(&url, &username)
                 .await
