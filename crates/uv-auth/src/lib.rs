@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use tracing::trace;
 
 use cache::CredentialsCache;
-pub use credentials::Credentials;
+pub use credentials::{Credentials, Username};
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
