@@ -1266,3 +1266,103 @@ fn token_text_store_strips_simple_suffix() {
     "
     );
 }
+
+#[test]
+fn token_text_store_username() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with specific username
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Retrieve token with matching username
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    testpass
+
+    ----- stderr -----
+    "
+    );
+
+    // Retrieve token without username
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://example.com/simple
+    "
+    );
+
+    // Try to retrieve token with different username - should fail
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("wronguser"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for wronguser@https://example.com/simple
+    "
+    );
+
+    // Login with token (no username)
+    context
+        .auth_login()
+        .arg("https://token.example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .assert()
+        .success();
+
+    // Retrieve token without specifying username - should work
+    uv_snapshot!(context.auth_token()
+        .arg("https://token.example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-token
+
+    ----- stderr -----
+    "
+    );
+
+    // Login with username at different URL
+    context
+        .auth_login()
+        .arg("https://userexample.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    // Retrieve token without username should fail
+    uv_snapshot!(context.auth_token()
+        .arg("https://userexample.com/simple"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://userexample.com/simple
+    "
+    );
+}

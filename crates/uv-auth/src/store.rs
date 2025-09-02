@@ -265,10 +265,10 @@ impl TextCredentialStore {
         Ok(())
     }
 
-    /// Get credentials for a given URL.
-    /// Uses realm-based prefix matching following RFC 7235 and 7230 specifications.
-    /// Credentials are matched by finding the most specific prefix that matches the request URL.
-    pub fn get_credentials(&self, url: &Url) -> Option<&Credentials> {
+    /// Get credentials for a given URL and username.
+    ///
+    /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
+    pub fn get_credentials(&self, url: &Url, username: Option<&str>) -> Option<&Credentials> {
         let request_realm = Realm::from(url);
 
         // Perform an exact lookup first
@@ -276,7 +276,10 @@ impl TextCredentialStore {
         // TODO(zanieb): We could also return early here if we can't normalize to a `Service`
         if let Ok(url_service) = Service::try_from(DisplaySafeUrl::from(url.clone())) {
             if let Some(credential) = self.credentials.get(&url_service) {
-                return Some(credential);
+                // If a username is provided, it must match
+                if username.is_none() || username == credential.username() {
+                    return Some(credential);
+                }
             }
         }
 
@@ -293,6 +296,11 @@ impl TextCredentialStore {
 
             // Service path must be a prefix of request path
             if !url.path().starts_with(service.url().path()) {
+                continue;
+            }
+
+            // If a username is provided, it must match
+            if username.is_some() && username != credential.username() {
                 continue;
             }
 
@@ -372,16 +380,16 @@ mod tests {
         let service = Service::from_str("https://example.com").unwrap();
         store.insert(service.clone(), credentials.clone());
         let url = Url::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url).is_some());
+        assert!(store.get_credentials(&url, None).is_some());
 
         let url = Url::parse("https://example.com/path").unwrap();
-        let retrieved = store.get_credentials(&url).unwrap();
+        let retrieved = store.get_credentials(&url, None).unwrap();
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
 
         assert!(store.remove(&service).is_some());
         let url = Url::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url).is_none());
+        assert!(store.get_credentials(&url, None).is_none());
     }
 
     #[test]
@@ -407,12 +415,12 @@ password = "pass2"
         let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
 
         let url = Url::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url).is_some());
+        assert!(store.get_credentials(&url, None).is_some());
         let url = Url::parse("https://test.org/").unwrap();
-        assert!(store.get_credentials(&url).is_some());
+        assert!(store.get_credentials(&url, None).is_some());
 
         let url = Url::parse("https://example.com").unwrap();
-        let cred = store.get_credentials(&url).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("testuser"));
         assert_eq!(cred.password(), Some("testpass"));
 
@@ -448,7 +456,7 @@ password = "pass2"
 
         for url_str in matching_urls {
             let url = Url::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url);
+            let cred = store.get_credentials(&url, None);
             assert!(cred.is_some(), "Failed to match URL with prefix: {url_str}");
         }
 
@@ -461,7 +469,7 @@ password = "pass2"
 
         for url_str in non_matching_urls {
             let url = Url::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url);
+            let cred = store.get_credentials(&url, None);
             assert!(cred.is_none(), "Should not match non-prefix URL: {url_str}");
         }
     }
@@ -485,7 +493,7 @@ password = "pass2"
 
         for url_str in matching_urls {
             let url = Url::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url);
+            let cred = store.get_credentials(&url, None);
             assert!(
                 cred.is_some(),
                 "Failed to match URL in same realm: {url_str}"
@@ -501,7 +509,7 @@ password = "pass2"
 
         for url_str in non_matching_urls {
             let url = Url::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url);
+            let cred = store.get_credentials(&url, None);
             assert!(
                 cred.is_none(),
                 "Should not match URL in different realm: {url_str}"
@@ -525,12 +533,77 @@ password = "pass2"
 
         // Should match the most specific prefix
         let url = Url::parse("https://example.com/api/v1/users").unwrap();
-        let cred = store.get_credentials(&url).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("specific"));
 
         // Should match the general prefix for non-specific paths
         let url = Url::parse("https://example.com/api/v2").unwrap();
-        let cred = store.get_credentials(&url).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("general"));
+    }
+
+    #[test]
+    fn test_username_exact_url_match() {
+        let mut store = TextCredentialStore::default();
+        let url = Url::parse("https://example.com").unwrap();
+        let service = Service::from_str("https://example.com").unwrap();
+        let user1_creds = Credentials::basic(Some("user1".to_string()), Some("pass1".to_string()));
+        store.insert(service.clone(), user1_creds.clone());
+
+        // Should return credentials when username matches
+        let result = store.get_credentials(&url, Some("user1"));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("user1"));
+        assert_eq!(result.unwrap().password(), Some("pass1"));
+
+        // Should not return credentials when username doesn't match
+        let result = store.get_credentials(&url, Some("user2"));
+        assert!(result.is_none());
+
+        // Should return credentials when no username is specified
+        let result = store.get_credentials(&url, None);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("user1"));
+    }
+
+    #[test]
+    fn test_username_prefix_url_match() {
+        let mut store = TextCredentialStore::default();
+
+        // Add credentials with different usernames for overlapping URL prefixes
+        let general_service = Service::from_str("https://example.com/api").unwrap();
+        let specific_service = Service::from_str("https://example.com/api/v1").unwrap();
+
+        let general_creds = Credentials::basic(
+            Some("general_user".to_string()),
+            Some("general_pass".to_string()),
+        );
+        let specific_creds = Credentials::basic(
+            Some("specific_user".to_string()),
+            Some("specific_pass".to_string()),
+        );
+
+        store.insert(general_service, general_creds);
+        store.insert(specific_service, specific_creds);
+
+        let url = Url::parse("https://example.com/api/v1/users").unwrap();
+
+        // Should match specific credentials when username matches
+        let result = store.get_credentials(&url, Some("specific_user"));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("specific_user"));
+
+        // Should match the general credentials when requesting general_user (falls back to less specific prefix)
+        let result = store.get_credentials(&url, Some("general_user"));
+        assert!(
+            result.is_some(),
+            "Should match general_user from less specific prefix"
+        );
+        assert_eq!(result.unwrap().username(), Some("general_user"));
+
+        // Should match most specific when no username specified
+        let result = store.get_credentials(&url, None);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("specific_user"));
     }
 }
