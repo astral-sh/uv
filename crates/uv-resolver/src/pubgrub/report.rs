@@ -25,7 +25,8 @@ use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
@@ -1022,13 +1023,13 @@ pub(crate) enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -1344,21 +1345,21 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` could not be parsed.\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` was invalid:\n{}",
+                    "{}{} The structure of `{}` was invalid\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidVersionMetadata {
