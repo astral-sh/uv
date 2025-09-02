@@ -6,7 +6,7 @@ Authentication can come from the following sources, in order of precedence:
 
 - The URL, e.g., `https://<user>:<password>@<hostname>/...`
 - A [netrc](#netrc-files) configuration file
-- The uv credentials file
+- The uv credentials store
 - A [keyring provider](#keyring-providers) (off by default)
 
 Authentication may be used for hosts specified in the following contexts:
@@ -25,45 +25,39 @@ for storing credentials on a system.
 Reading credentials from `.netrc` files is always enabled. The target file path will be loaded from
 the `NETRC` environment variable if defined, falling back to `~/.netrc` if not.
 
-## The uv credentials file
+## The uv credentials store
 
-uv will read credentials from `~/.local/share/uv/credentials/credentials.toml`. This file is
-currently not intended to be edited manually.
+uv can read and write credentials from a store using the [`uv auth` commands](./cli.md).
 
-To add or remove credentials, use the [`uv auth` commands](./cli.md).
-
-## Keyring providers
-
-A keyring provider typically fetches credentials from an operating system store.
-
-The keyring providers are not used by default.
-
-### The 'subprocess' keyring provider
-
-The 'subprocess' keyring provider invokes the `keyring` command to fetch credentials.
-
-The expected interface for this is based on the popular [keyring](https://github.com/jaraco/keyring)
-Python package. Similar support is built-in to pip.
-
-Set `--keyring-provider subprocess`, `UV_KEYRING_PROVIDER=subprocess`, or
-`tool.uv.keyring-provider = "subprocess"` to use the provider.
-
-### The 'native' keyring provider
+Credentials are stored in a plaintext file in uv's state directory, e.g.,
+`~/.local/share/uv/credentials/credentials.toml` on Unix. This file is currently not intended to be
+edited manually.
 
 !!! note
 
-    The native keyring provider is in [preview](../preview.md) — it is still experimental and being
-    actively developed.
+    A secure, system native storage mechanism is in [preview](../preview.md) — it is still
+    experimental and being actively developed. In the future, this will become the default storage
+    mechanism.
 
-The native keyring provider uses the secret storage mechanism native to your operating system. On
-macOS, it uses the Keychain Services. On Windows, it uses the Windows Credential Manager. On Linux,
-it uses the DBus-based Secret Service API.
+    When enabled, uv will use the secret storage mechanism native to your operating system. On
+    macOS, it uses the Keychain Services. On Windows, it uses the Windows Credential Manager. On
+    Linux, it uses the DBus-based Secret Service API.
 
-Currently, uv only searches the native keyring provider for credentials it has added to the secret
-store. To add or remove credentials, use the [`uv auth` commands](./cli.md).
+    Currently, uv only searches the native store for credentials it has added to the secret store —
+    it will not retrieve credentials persisted by other applications.
 
-Set `--keyring-provider native`, `UV_KEYRING_PROVIDER=native`, or
-`tool.uv.keyring-provider = "native"` to use the provider.
+    Set `UV_PREVIEW_FEATURES=native-auth` to use this storage mechanism.
+
+## Keyring providers
+
+A keyring provider is a concept from `pip` allowing retrieval of credentials from an interface
+matching the popular [keyring](https://github.com/jaraco/keyring) Python package.
+
+The "subprocess" keyring provider invokes the `keyring` command to fetch credentials. uv does not
+support additional keyring provider types at this time.
+
+Set `--keyring-provider subprocess`, `UV_KEYRING_PROVIDER=subprocess`, or
+`tool.uv.keyring-provider = "subprocess"` to use the provider.
 
 ## Persistence of credentials
 

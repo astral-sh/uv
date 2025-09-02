@@ -3490,28 +3490,14 @@ impl PublishSettings {
 pub(crate) struct AuthLogoutSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLogoutArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let Options { top_level, .. } = filesystem
-            .map(FilesystemOptions::into_options)
-            .unwrap_or_default();
-
-        let ResolverInstallerSchema {
-            keyring_provider, ..
-        } = top_level;
-
-        let keyring_provider = args.keyring_provider.combine(keyring_provider);
-
+    pub(crate) fn resolve(args: AuthLogoutArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            keyring_provider,
         }
     }
 }
@@ -3521,28 +3507,14 @@ impl AuthLogoutSettings {
 pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
 impl AuthTokenSettings {
     /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthTokenArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let Options { top_level, .. } = filesystem
-            .map(FilesystemOptions::into_options)
-            .unwrap_or_default();
-
-        let ResolverInstallerSchema {
-            keyring_provider, ..
-        } = top_level;
-
-        let keyring_provider = args.keyring_provider.combine(keyring_provider);
-
+    pub(crate) fn resolve(args: AuthTokenArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            keyring_provider,
         }
     }
 }
@@ -3554,30 +3526,16 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLoginArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let Options { top_level, .. } = filesystem
-            .map(FilesystemOptions::into_options)
-            .unwrap_or_default();
-
-        let ResolverInstallerSchema {
-            keyring_provider, ..
-        } = top_level;
-
-        let keyring_provider = args.keyring_provider.combine(keyring_provider);
-
+    pub(crate) fn resolve(args: AuthLoginArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            keyring_provider,
         }
     }
 }

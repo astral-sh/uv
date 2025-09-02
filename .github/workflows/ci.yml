@@ -254,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch,keyring-tests,secret-service \
+            --features python-patch,native-auth,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -293,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
+            --features python,python-managed,pypi,git,performance,crates-io,native-auth,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -345,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed,keyring-tests,windows-native \
+            --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 

@@ -489,13 +489,15 @@ impl<'a> BaseClientBuilder<'a> {
                     AuthIntegration::Default => {
                         let auth_middleware = AuthMiddleware::new()
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider(&self.preview));
+                            .with_keyring(self.keyring.to_provider())
+                            .with_preview(self.preview);
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
                         let auth_middleware = AuthMiddleware::new()
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider(&self.preview))
+                            .with_keyring(self.keyring.to_provider())
+                            .with_preview(self.preview)
                             .with_only_authenticated(true);
 
                         client = client.with(auth_middleware);
