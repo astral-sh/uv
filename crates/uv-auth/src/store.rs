@@ -19,6 +19,7 @@ use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
 
 /// The storage backend to use in `uv auth` commands.
+#[derive(Debug)]
 pub enum AuthBackend {
     // TODO(zanieb): Right now, we're using a keyring provider for the system store but that's just
     // where the native implementation is living at the moment. We should consider refactoring these
@@ -104,11 +105,11 @@ pub enum BearerAuthError {
 /// A single credential entry in a TOML credentials file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "TomlCredentialWire", into = "TomlCredentialWire")]
-pub struct TomlCredential {
+struct TomlCredential {
     /// The service URL for this credential.
-    pub service: Service,
+    service: Service,
     /// The credentials for this entry.
-    pub credentials: Credentials,
+    credentials: Credentials,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,10 +381,12 @@ impl TextCredentialStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
     use std::str::FromStr;
+
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     #[test]
     fn test_toml_serialization() {
