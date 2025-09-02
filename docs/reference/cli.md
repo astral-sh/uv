@@ -110,7 +110,8 @@ uv auth login [OPTIONS] <SERVICE>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-auth-login--no-python-downloads"><a href="#uv-auth-login--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-auth-login--offline"><a href="#uv-auth-login--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-login--password"><a href="#uv-auth-login--password"><code>--password</code></a> <i>password</i></dt><dd><p>The password to use for the service</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-login--password"><a href="#uv-auth-login--password"><code>--password</code></a> <i>password</i></dt><dd><p>The password to use for the service.</p>
+<p>Use <code>-</code> to read the password from stdin.</p>
 </dd><dt id="uv-auth-login--project"><a href="#uv-auth-login--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -120,6 +121,7 @@ uv auth login [OPTIONS] <SERVICE>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-auth-login--token"><a href="#uv-auth-login--token"><code>--token</code></a>, <code>-t</code> <i>token</i></dt><dd><p>The token to use for the service.</p>
 <p>The username will be set to <code>__token__</code>.</p>
+<p>Use <code>-</code> to read the token from stdin.</p>
 </dd><dt id="uv-auth-login--username"><a href="#uv-auth-login--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username to use for the service</p>
 </dd><dt id="uv-auth-login--verbose"><a href="#uv-auth-login--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>

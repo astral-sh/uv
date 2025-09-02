@@ -15,6 +15,17 @@ This will prompt for the credentials.
 The credentials can also be provided using the `--username` and `--password` options, or the
 `--token` option for services which use a `__token__` or arbitrary username.
 
+!!! note
+
+    We recommend providing the secret via stdin. Use `-` to indicate the value should be read from
+    stdin, e.g., for `--password`:
+
+    ```console
+    $ echo 'my-password' | uv auth login example.com --password -
+    ```
+
+    The same pattern can be used with `--token`.
+
 Once credentials are added, uv will use them for packaging operations that require fetching content
 from the given service. At this time, only HTTPS Basic authentication is supported. The credentials
 will not yet be used for Git requests.
