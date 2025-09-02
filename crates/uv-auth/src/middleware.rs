@@ -7,6 +7,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace, warn};
 
+use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::providers::HuggingFaceProvider;
@@ -118,6 +119,7 @@ pub struct AuthMiddleware {
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
+    preview: Preview,
 }
 
 impl AuthMiddleware {
@@ -129,6 +131,7 @@ impl AuthMiddleware {
             cache: None,
             indexes: Indexes::new(),
             only_authenticated: false,
+            preview: Preview::default(),
         }
     }
 
@@ -162,6 +165,13 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_keyring(mut self, keyring: Option<KeyringProvider>) -> Self {
         self.keyring = keyring;
+        self
+    }
+
+    /// Configure the [`Preview`] features to use.
+    #[must_use]
+    pub fn with_preview(mut self, preview: Preview) -> Self {
+        self.preview = preview;
         self
     }
 
@@ -598,9 +608,30 @@ impl AuthMiddleware {
             debug!("Checking text store for credentials for {url}");
             text_store.get_credentials(&url::Url::from(url.clone())).cloned()
         }) {
-            debug!("Found credentials in text store for {url}");
+            debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
-
+        } else if let Some(credentials) = {
+            if self.preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+                let native_store = KeyringProvider::native();
+                let username = credentials.and_then(|credentials| credentials.username());
+                let display_username = if let Some(username) = username {
+                    format!("{username}@")
+                } else {
+                    String::new()
+                };
+                if let Some(index_url) = maybe_index_url {
+                    debug!("Checking native store for credentials for index URL {}{}", display_username, index_url);
+                    native_store.fetch(DisplaySafeUrl::ref_cast(index_url), username).await
+                } else {
+                    debug!("Checking native store for credentials for URL {}{}", display_username, url);
+                    native_store.fetch(url, username).await
+                }
+            } else {
+                None
+            }
+        } {
+            debug!("Found credentials in native store for {url}");
+            Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then falls back to the host.
         //      But, in the absence of an index URL, we cache the result per realm. So in that case,
         //      if a keyring implementation returns different credentials for different URLs in the

@@ -4,21 +4,19 @@ use anyhow::{Result, bail};
 
 use uv_auth::Credentials;
 use uv_auth::Service;
-use uv_configuration::KeyringProviderType;
+use uv_auth::store::AuthBackend;
 use uv_preview::Preview;
 
-use crate::commands::auth::AuthBackend;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(
     service: Service,
     username: Option<String>,
-    keyring_provider: Option<KeyringProviderType>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let backend = AuthBackend::from_settings(keyring_provider.as_ref(), preview)?;
+    let backend = AuthBackend::from_settings(preview)?;
     let url = service.url();
 
     // Extract credentials from URL if present
@@ -43,7 +41,7 @@ pub(crate) async fn token(
     };
 
     let credentials = match &backend {
-        AuthBackend::Keyring(provider) => provider
+        AuthBackend::System(provider) => provider
             .fetch(url, Some(&username))
             .await
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,

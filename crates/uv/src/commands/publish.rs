@@ -12,7 +12,6 @@ use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
-use uv_preview::Preview;
 use uv_publish::{
     CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
@@ -35,7 +34,6 @@ pub(crate) async fn publish(
     index_locations: IndexLocations,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
@@ -85,7 +83,6 @@ pub(crate) async fn publish(
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
-        preview,
     )
     .await?;
 
@@ -200,7 +197,6 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-    preview: Preview,
 ) -> Result<(DisplaySafeUrl, Credentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
@@ -284,7 +280,7 @@ async fn gather_credentials(
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
     // missing keyring entries later.
-    if let Some(provider) = keyring_provider.to_provider(&preview) {
+    if let Some(provider) = keyring_provider.to_provider() {
         if password.is_none() {
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
@@ -354,7 +350,6 @@ mod tests {
             None,
             Prompt::Disabled,
             Printer::Quiet,
-            Preview::default(),
         )
         .await
     }

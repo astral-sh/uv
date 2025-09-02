@@ -7,15 +7,47 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 use uv_fs::{LockedFile, with_added_extension};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
-use crate::Credentials;
 use crate::credentials::{Password, Username};
 use crate::realm::Realm;
 use crate::service::Service;
+use crate::{Credentials, KeyringProvider};
+
+/// The storage backend to use in `uv auth` commands.
+pub enum AuthBackend {
+    // TODO(zanieb): Right now, we're using a keyring provider for the system store but that's just
+    // where the native implementation is living at the moment. We should consider refactoring these
+    // into a shared API in the future.
+    System(KeyringProvider),
+    TextStore(TextCredentialStore, LockedFile),
+}
+
+impl AuthBackend {
+    pub fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
+        // If preview is enabled, we'll use the system-native store
+        if preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+            return Ok(Self::System(KeyringProvider::native()));
+        }
+
+        // Otherwise, we'll use the plaintext credential store
+        let path = TextCredentialStore::default_file()?;
+        match TextCredentialStore::read(&path) {
+            Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
+            Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                Ok(Self::TextStore(
+                    TextCredentialStore::default(),
+                    TextCredentialStore::lock(&path)?,
+                ))
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
 
 /// Authentication scheme to use.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
