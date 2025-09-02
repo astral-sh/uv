@@ -61,12 +61,12 @@ pub(crate) async fn logout(
                 .await
                 .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
         }
-        AuthBackend::TextStore(mut text_store) => {
-            if text_store.remove(&service).is_none() {
+        AuthBackend::TextStore(mut store, _lock) => {
+            if store.remove(&service).is_none() {
                 bail!("No matching entry found for {display_url}");
             }
-            text_store
-                .write(TextCredentialStore::default_file()?)
+            store
+                .write(TextCredentialStore::default_file()?, _lock)
                 .with_context(|| "Failed to persist changes to credentials after removal")?;
         }
     }

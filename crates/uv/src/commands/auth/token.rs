@@ -47,7 +47,7 @@ pub(crate) async fn token(
             .fetch(url, Some(&username))
             .await
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
-        AuthBackend::TextStore(text_store) => text_store
+        AuthBackend::TextStore(store, _lock) => store
             .get_credentials(url)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,

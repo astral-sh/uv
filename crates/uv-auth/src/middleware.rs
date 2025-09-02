@@ -71,8 +71,8 @@ impl Default for TextStoreMode {
                 })
                 .ok()?;
 
-            match TextCredentialStore::from_file(&path) {
-                Ok(store) => {
+            match TextCredentialStore::read(&path) {
+                Ok((store, _lock)) => {
                     debug!("Loaded credential file {}", path.display());
                     Some(store)
                 }
