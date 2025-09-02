@@ -12839,7 +12839,7 @@ fn install_remote_pyproject_windows() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 17 packages in [TIME]
+    Resolved 16 packages in [TIME]
     Would download 17 packages
     Would install 17 packages
      + certifi==2025.8.3
