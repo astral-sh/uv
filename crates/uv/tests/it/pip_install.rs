@@ -11688,11 +11688,14 @@ async fn bogus_redirect() -> Result<()> {
             .arg("sniffio"),
         @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
+      × No solution found when resolving dependencies:
+      ╰─▶ Because all versions of sniffio have the wrong package name in the index page (`anyio`) and you require sniffio, we can conclude that your requirements are unsatisfiable.
+
+          hint: Pre-releases are available for `sniffio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "
     );
 

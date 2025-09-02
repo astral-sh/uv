@@ -3,6 +3,7 @@ use std::iter;
 use std::sync::Arc;
 
 use uv_distribution_types::IncompatibleDist;
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 
@@ -41,6 +42,8 @@ pub enum UnavailableVersion {
     InconsistentMetadata,
     /// The wheel has an invalid structure.
     InvalidStructure,
+    /// A package with the wrong name is on an index page.
+    PackageNameMismatch { dist_name: PackageName },
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
@@ -55,6 +58,11 @@ impl UnavailableVersion {
             Self::InvalidMetadata => "invalid metadata".into(),
             Self::InconsistentMetadata => "inconsistent metadata".into(),
             Self::InvalidStructure => "an invalid package format".into(),
+            Self::PackageNameMismatch {
+                dist_name: wrong_name,
+            } => {
+                format!("the wrong package name in the index page (`{wrong_name}`)")
+            }
             Self::Offline => "to be downloaded from a registry".into(),
             Self::RequiresPython(requires_python) => {
                 format!("Python {requires_python}")
@@ -68,6 +76,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => format!("has {self}"),
             Self::InconsistentMetadata => format!("has {self}"),
             Self::InvalidStructure => format!("has {self}"),
+            Self::PackageNameMismatch { .. } => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
         }
@@ -79,6 +88,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => format!("have {self}"),
             Self::InconsistentMetadata => format!("have {self}"),
             Self::InvalidStructure => format!("have {self}"),
+            Self::PackageNameMismatch { .. } => format!("have {self}"),
             Self::Offline => format!("need {self}"),
             Self::RequiresPython(..) => format!("require {self}"),
         }
@@ -96,6 +106,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => None,
             Self::InconsistentMetadata => None,
             Self::InvalidStructure => None,
+            Self::PackageNameMismatch { .. } => None,
             Self::Offline => None,
             Self::RequiresPython(..) => None,
         }
