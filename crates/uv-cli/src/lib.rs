@@ -5567,12 +5567,16 @@ pub struct AuthLoginArgs {
     pub username: Option<String>,
 
     /// The password to use for the service.
+    ///
+    /// Use `-` to read the password from stdin.
     #[arg(long, conflicts_with = "token")]
     pub password: Option<String>,
 
     /// The token to use for the service.
     ///
     /// The username will be set to `__token__`.
+    ///
+    /// Use `-` to read the token from stdin.
     #[arg(long, short, conflicts_with = "username", conflicts_with = "password")]
     pub token: Option<String>,
 

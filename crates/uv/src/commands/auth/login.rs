@@ -87,6 +87,11 @@ pub(crate) async fn login(
         (None, Some(_), Some(_)) => {
             bail!("Cannot include a password in the URL when using `--token`")
         }
+        (None, None, Some(value)) | (Some(value), None, None) if value == "-" => {
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            input.trim().to_string()
+        }
         (Some(cli), None, None) => cli,
         (None, Some(url), None) => url.to_string(),
         (None, None, Some(token)) => token,

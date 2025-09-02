@@ -1,7 +1,5 @@
-#[cfg(feature = "native-auth")]
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-#[cfg(feature = "native-auth")]
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
 #[cfg(feature = "native-auth")]
 use uv_static::EnvVars;
@@ -776,6 +774,88 @@ fn login_text_store() {
     Stored credentials for https://example.com/
     "
     );
+}
+
+#[test]
+#[allow(clippy::disallowed_types)]
+fn login_password_stdin() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create a temporary file with the password
+    let password_file = context.temp_dir.child("password.txt");
+    password_file.write_str("secret-password")?;
+
+    // Login with password from stdin
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("-")
+        .stdin(std::fs::File::open(password_file)?), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://example.com/
+    "
+    );
+
+    // Verify the credentials work by retrieving the token
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    secret-password
+
+    ----- stderr -----
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::disallowed_types)]
+fn login_token_stdin() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create a temporary file with the token
+    let token_file = context.temp_dir.child("token.txt");
+    token_file.write_str("secret-token")?;
+
+    // Login with token from stdin
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("-")
+        .stdin(std::fs::File::open(token_file)?), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/
+    "
+    );
+
+    // Verify the credentials work by retrieving the token
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    secret-token
+
+    ----- stderr -----
+    "
+    );
+
+    Ok(())
 }
 
 #[test]
