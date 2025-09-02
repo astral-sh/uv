@@ -1208,3 +1208,82 @@ fn token_text_store_username() {
     "
     );
 }
+
+#[test]
+fn logout_text_store_multiple_usernames() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Login with two different usernames for the same service
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user1")
+        .arg("--password")
+        .arg("pass1")
+        .assert()
+        .success();
+
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user2")
+        .arg("--password")
+        .arg("pass2")
+        .assert()
+        .success();
+
+    // Logout one specific username
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for user1@https://example.com/
+    "
+    );
+
+    // Verify the first user is gone but second remains
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for user1@https://example.com/simple
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass2
+
+    ----- stderr -----
+    "
+    );
+
+    // Try to logout without specifying username (defaults to `__token__`)
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No matching entry found for https://example.com/
+    "
+    );
+}
