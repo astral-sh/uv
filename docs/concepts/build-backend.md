@@ -240,7 +240,7 @@ module root alongside the source code.
 !!! tip
 
     When using the uv build backend through a frontend that is not uv, such as pip or
-    `pythom -m build`, debug logging can be enabled through environment variables with
+    `python -m build`, debug logging can be enabled through environment variables with
     `RUST_LOG=uv=debug` or `RUST_LOG=uv=verbose`. When used through uv, the uv build backend shares
     the verbosity level of uv.
 
