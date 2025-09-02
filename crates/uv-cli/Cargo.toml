@@ -19,6 +19,7 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true, features = ["clap"] }
 uv-configuration = { workspace = true, features = ["clap"] }
+uv-cuda = { workspace = true, features = ["clap"] }
 uv-distribution-types = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["clap"], default-features = false }
 uv-normalize = { workspace = true }

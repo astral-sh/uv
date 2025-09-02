@@ -44,6 +44,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "android-tzdata"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
+
+[[package]]
+name = "android_system_properties"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "anes"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -628,6 +643,21 @@ checksum = "f1f927b07c74ba84c7e5fe4db2baeb3e996ab2688992e39ac68ce3220a677c7e"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
+]
+
+[[package]]
+name = "chrono"
+version = "0.4.41"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
+dependencies = [
+ "android-tzdata",
+ "iana-time-zone",
+ "js-sys",
+ "num-traits",
+ "serde",
+ "wasm-bindgen",
+ "windows-link",
 ]
 
 [[package]]
@@ -1861,6 +1891,30 @@ dependencies = [
  "tower-service",
  "tracing",
  "windows-registry",
+]
+
+[[package]]
+name = "iana-time-zone"
+version = "0.1.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c919e5debc312ad217002b8048a17b7d83f80703865bbfcfebb0458b0b27d8"
+dependencies = [
+ "android_system_properties",
+ "core-foundation-sys",
+ "iana-time-zone-haiku",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "windows-core 0.61.0",
+]
+
+[[package]]
+name = "iana-time-zone-haiku"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -5023,6 +5077,7 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-console",
+ "uv-cuda",
  "uv-dispatch",
  "uv-distribution",
  "uv-distribution-filename",
@@ -5307,6 +5362,7 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-configuration",
+ "uv-cuda",
  "uv-distribution-types",
  "uv-install-wheel",
  "uv-normalize",
@@ -5415,6 +5471,49 @@ name = "uv-console"
 version = "0.0.1"
 dependencies = [
  "console 0.16.0",
+]
+
+[[package]]
+name = "uv-cuda"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "clap",
+ "fs-err 3.1.1",
+ "futures",
+ "futures-util",
+ "indicatif",
+ "itertools 0.14.0",
+ "owo-colors",
+ "regex",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "rmp-serde",
+ "rustc-hash",
+ "same-file",
+ "schemars",
+ "serde",
+ "serde_json",
+ "target-lexicon",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "uv-cache",
+ "uv-cache-info",
+ "uv-cache-key",
+ "uv-client",
+ "uv-configuration",
+ "uv-dirs",
+ "uv-fs",
+ "uv-platform-tags",
+ "uv-redacted",
+ "uv-state",
+ "uv-static",
+ "uv-warnings",
 ]
 
 [[package]]

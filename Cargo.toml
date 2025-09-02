@@ -31,6 +31,7 @@ uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
 uv-console = { path = "crates/uv-console" }
+uv-cuda = { path = "crates/uv-cuda" }
 uv-dirs = { path = "crates/uv-dirs" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
@@ -78,6 +79,7 @@ uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
+chrono = { version = "0.4", features = ["serde"] }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
 astral-tokio-tar = { version = "0.5.3" }
@@ -89,6 +91,7 @@ async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "285e4874
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
+bytes = { version = "1.6.0" }
 bitflags = { version = "2.6.0" }
 blake2 = { version = "0.10.6" }
 boxcar = { version = "0.2.5" }
@@ -111,6 +114,7 @@ flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] 
 fs-err = { version = "3.0.0", features = ["tokio"] }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
+futures-util = { version = "0.3.31" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
