@@ -453,6 +453,7 @@ pub(crate) async fn pip_install(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        None,
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
@@ -588,6 +589,7 @@ pub(crate) async fn pip_install(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        Some(&resolution),
     );
 
     // Sync the environment.

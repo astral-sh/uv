@@ -382,6 +382,7 @@ pub(crate) async fn pip_sync(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        None,
     );
 
     // Determine the set of installed packages.
@@ -519,6 +520,7 @@ pub(crate) async fn pip_sync(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        Some(&resolution),
     );
 
     // Sync the environment.

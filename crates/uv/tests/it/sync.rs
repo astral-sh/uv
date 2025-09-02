@@ -13571,3 +13571,114 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_match_runtime() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a build backend that asserts that `EXPECTED_ANYIO_VERSION` matches the installed version of `anyio`.
+    let build_backend = context.temp_dir.child("child").child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = "1.4.0"
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+
+    // Create a project that wants runtime matching for `anyio`
+    let child_pyproject = context.temp_dir.child("child").child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.build-dependencies-metadata.anyio]
+        match-runtime = true
+    "#})?;
+    context
+        .temp_dir
+        .child("child/src/child/__init__.py")
+        .touch()?;
+
+    // A parent project that resolves to a non-latest version of `anyio`
+    let parent_pyproject = context.temp_dir.child("pyproject.toml");
+    parent_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "anyio==1.4.0"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==1.4.0
+     + async-generator==1.10
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Trying to ask for runtime matching for a dependency that doesn't exist
+    // should be an error
+    let child_pyproject = context.temp_dir.child("child").child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.build-dependencies-metadata.foo]
+        match-runtime = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build requires for `foo` missing for metadata declared in `pyproject.toml`
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    Ok(())
+}

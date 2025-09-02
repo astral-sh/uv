@@ -580,6 +580,7 @@ async fn build_package(
     // Initialize any shared state.
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
+    let top_level_resolution = None;
 
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -609,6 +610,7 @@ async fn build_package(
         workspace_cache,
         concurrency,
         preview,
+        top_level_resolution,
     );
 
     prepare_output_directory(&output_dir).await?;

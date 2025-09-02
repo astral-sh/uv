@@ -30,6 +30,26 @@ build-constraint-dependencies = ["setuptools==60.0.0"]
 
 ---
 
+### [`build-dependencies-metadata`](#build-dependencies-metadata) {: #build-dependencies-metadata }
+
+Metadata for build dependencies.
+
+This allows specifying metadata for build dependencies, such as runtime matching.
+
+**Default value**: `None`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+[build-dependencies-metadata.package1]
+match-runtime = true
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
 Declare collections of extras or dependency groups that are conflicting
