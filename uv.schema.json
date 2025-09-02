@@ -2422,12 +2422,12 @@
           "const": "aarch64-manylinux_2_40"
         },
         {
-          "description": "An ARM64 Android target.",
+          "description": "An ARM64 Android target.\n\nBy default uses Android API level 21, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
           "type": "string",
           "const": "aarch64-linux-android"
         },
         {
-          "description": "An `x86_64` Android target.",
+          "description": "An `x86_64` Android target.\n\nBy default uses Android API level 21, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
           "type": "string",
           "const": "x86_64-linux-android"
         },

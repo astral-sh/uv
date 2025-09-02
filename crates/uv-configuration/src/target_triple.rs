@@ -234,11 +234,17 @@ pub enum TargetTriple {
     Aarch64Manylinux240,
 
     /// An ARM64 Android target.
+    ///
+    /// By default uses Android API level 21, but respects
+    /// the `ANDROID_API_LEVEL` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "aarch64-linux-android"))]
     #[serde(rename = "aarch64-linux-android")]
     Aarch64LinuxAndroid,
 
     /// An `x86_64` Android target.
+    ///
+    /// By default uses Android API level 21, but respects
+    /// the `ANDROID_API_LEVEL` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "x86_64-linux-android"))]
     #[serde(rename = "x86_64-linux-android")]
     X8664LinuxAndroid,
