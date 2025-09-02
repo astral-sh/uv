@@ -78,6 +78,11 @@ pub enum TargetTriple {
     #[serde(alias = "x8664-unknown-linux-musl")]
     X8664UnknownLinuxMusl,
 
+    /// A RISCV64 Linux target.
+    #[cfg_attr(feature = "clap", value(name = "riscv64-unknown-linux"))]
+    #[serde(rename = "riscv64-unknown-linux")]
+    Riscv64UnknownLinuxGnu,
+
     /// An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux2014"))]
     #[serde(rename = "x86_64-manylinux2014")]
@@ -272,6 +277,13 @@ impl TargetTriple {
                     minor: 28,
                 },
                 Arch::Aarch64,
+            ),
+            Self::Riscv64UnknownLinuxGnu => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 39,
+                },
+                Arch::Riscv64,
             ),
             Self::Aarch64UnknownLinuxMusl => {
                 Platform::new(Os::Musllinux { major: 1, minor: 2 }, Arch::Aarch64)
@@ -483,6 +495,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "aarch64",
             Self::Aarch64UnknownLinuxMusl => "aarch64",
             Self::X8664UnknownLinuxMusl => "x86_64",
+            Self::Riscv64UnknownLinuxGnu => "riscv64",
             Self::X8664Manylinux2014 => "x86_64",
             Self::X8664Manylinux217 => "x86_64",
             Self::X8664Manylinux228 => "x86_64",
@@ -525,6 +538,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "Linux",
             Self::Aarch64UnknownLinuxMusl => "Linux",
             Self::X8664UnknownLinuxMusl => "Linux",
+            Self::Riscv64UnknownLinuxGnu => "Linux",
             Self::X8664Manylinux2014 => "Linux",
             Self::X8664Manylinux217 => "Linux",
             Self::X8664Manylinux228 => "Linux",
@@ -567,6 +581,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
             Self::X8664UnknownLinuxMusl => "",
+            Self::Riscv64UnknownLinuxGnu => "",
             Self::X8664Manylinux2014 => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
@@ -612,6 +627,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
             Self::X8664UnknownLinuxMusl => "",
+            Self::Riscv64UnknownLinuxGnu => "",
             Self::X8664Manylinux2014 => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
@@ -656,6 +672,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "posix",
             Self::Aarch64UnknownLinuxMusl => "posix",
             Self::X8664UnknownLinuxMusl => "posix",
+            Self::Riscv64UnknownLinuxGnu => "posix",
             Self::X8664Manylinux2014 => "posix",
             Self::X8664Manylinux217 => "posix",
             Self::X8664Manylinux228 => "posix",
@@ -698,6 +715,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "linux",
             Self::Aarch64UnknownLinuxMusl => "linux",
             Self::X8664UnknownLinuxMusl => "linux",
+            Self::Riscv64UnknownLinuxGnu => "linux",
             Self::X8664Manylinux2014 => "linux",
             Self::X8664Manylinux217 => "linux",
             Self::X8664Manylinux228 => "linux",
@@ -740,6 +758,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => true,
             Self::Aarch64UnknownLinuxMusl => true,
             Self::X8664UnknownLinuxMusl => true,
+            Self::Riscv64UnknownLinuxGnu => true,
             Self::X8664Manylinux2014 => true,
             Self::X8664Manylinux217 => true,
             Self::X8664Manylinux228 => true,

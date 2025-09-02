@@ -2292,6 +2292,11 @@
           "const": "x86_64-unknown-linux-musl"
         },
         {
+          "description": "A RISCV64 Linux target.",
+          "type": "string",
+          "const": "riscv64-unknown-linux"
+        },
+        {
           "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
           "type": "string",
           "const": "x86_64-manylinux2014"

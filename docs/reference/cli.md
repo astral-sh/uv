@@ -251,6 +251,7 @@ used.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -1243,6 +1244,7 @@ environment in the project.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -1843,6 +1845,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -2167,6 +2170,7 @@ uv tool run [OPTIONS] [COMMAND]
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -2386,6 +2390,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -2596,6 +2601,7 @@ Use with <code>--all</code> to apply to all tools.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -3834,6 +3840,7 @@ by <code>--python-version</code>.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -4105,6 +4112,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -4394,6 +4402,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -5023,6 +5032,7 @@ Python environment if no virtual environment is found.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
