@@ -210,7 +210,7 @@ struct TomlCredentials {
 /// A credential store with a plain text storage backend.
 #[derive(Debug, Default)]
 pub struct TextCredentialStore {
-    credentials: FxHashMap<Service, Credentials>,
+    credentials: FxHashMap<(Service, Username), Credentials>,
 }
 
 impl TextCredentialStore {
@@ -246,10 +246,19 @@ impl TextCredentialStore {
         let content = fs::read_to_string(path)?;
         let credentials: TomlCredentials = toml::from_str(&content)?;
 
-        let credentials: FxHashMap<Service, Credentials> = credentials
+        let credentials: FxHashMap<(Service, Username), Credentials> = credentials
             .credentials
             .into_iter()
-            .map(|credential| (credential.service.clone(), credential.credentials))
+            .map(|credential| {
+                let username = match &credential.credentials {
+                    Credentials::Basic { username, .. } => username.clone(),
+                    Credentials::Bearer { .. } => Username::none(),
+                };
+                (
+                    (credential.service.clone(), username),
+                    credential.credentials,
+                )
+            })
             .collect();
 
         Ok(Self { credentials })
@@ -278,7 +287,7 @@ impl TextCredentialStore {
         let credentials = self
             .credentials
             .into_iter()
-            .map(|(service, credentials)| TomlCredential {
+            .map(|((service, _username), credentials)| TomlCredential {
                 service,
                 credentials,
             })
@@ -307,18 +316,18 @@ impl TextCredentialStore {
         // TODO(zanieb): Consider adding `DisplaySafeUrlRef` so we can avoid this clone
         // TODO(zanieb): We could also return early here if we can't normalize to a `Service`
         if let Ok(url_service) = Service::try_from(DisplaySafeUrl::from(url.clone())) {
-            if let Some(credential) = self.credentials.get(&url_service) {
-                // If a username is provided, it must match
-                if username.is_none() || username == credential.username() {
-                    return Some(credential);
-                }
+            if let Some(credential) = self.credentials.get(&(
+                url_service.clone(),
+                Username::from(username.map(str::to_string)),
+            )) {
+                return Some(credential);
             }
         }
 
         // If that fails, iterate through to find a prefix match
         let mut best: Option<(usize, &Service, &Credentials)> = None;
 
-        for (service, credential) in &self.credentials {
+        for ((service, stored_username), credential) in &self.credentials {
             let service_realm = Realm::from(service.url().deref());
 
             // Only consider services in the same realm
@@ -332,8 +341,10 @@ impl TextCredentialStore {
             }
 
             // If a username is provided, it must match
-            if username.is_some() && username != credential.username() {
-                continue;
+            if let Some(request_username) = username {
+                if Some(request_username) != stored_username.as_deref() {
+                    continue;
+                }
             }
 
             // Update our best matching credential based on prefix length
@@ -353,12 +364,17 @@ impl TextCredentialStore {
 
     /// Store credentials for a given service.
     pub fn insert(&mut self, service: Service, credentials: Credentials) -> Option<Credentials> {
-        self.credentials.insert(service, credentials)
+        let username = match &credentials {
+            Credentials::Basic { username, .. } => username.clone(),
+            Credentials::Bearer { .. } => Username::none(),
+        };
+        self.credentials.insert((service, username), credentials)
     }
 
     /// Remove credentials for a given service.
-    pub fn remove(&mut self, service: &Service) -> Option<Credentials> {
-        self.credentials.remove(service)
+    pub fn remove(&mut self, service: &Service, username: Username) -> Option<Credentials> {
+        // Remove the specific credential for this service and username
+        self.credentials.remove(&(service.clone(), username))
     }
 }
 
@@ -419,7 +435,11 @@ mod tests {
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
 
-        assert!(store.remove(&service).is_some());
+        assert!(
+            store
+                .remove(&service, Username::from(Some("user".to_string())))
+                .is_some()
+        );
         let url = Url::parse("https://example.com/").unwrap();
         assert!(store.get_credentials(&url, None).is_none());
     }
