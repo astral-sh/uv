@@ -5743,6 +5743,8 @@ uv publish [OPTIONS] [FILES]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-publish--directory"><a href="#uv-publish--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
+</dd><dt id="uv-publish--dry-run"><a href="#uv-publish--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run without uploading files.</p>
+<p>When enabled, the command will check for existing files if <code>--check-url</code> is provided, and will perform validation against the index if supported, but will not upload any files.</p>
 </dd><dt id="uv-publish--help"><a href="#uv-publish--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-publish--index"><a href="#uv-publish--index"><code>--index</code></a> <i>index</i></dt><dd><p>The name of an index in the configuration to use for publishing.</p>
 <p>The index must have a <code>publish-url</code> setting, for example:</p>
