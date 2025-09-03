@@ -531,39 +531,60 @@ pub enum JwtError {
 
 fn is_known_url(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
     // Determine whether the URL matches the API realm.
-    if Realm::from(url) == Realm::from(&**api) {
+    let url_realm = Realm::from(url);
+    let api_realm = Realm::from(&**api);
+    if url_realm == api_realm {
         return true;
     }
 
-    // Determine whether the URL matches the CDN domain (or a subdomain of it).
+    // Allow matches on the CDN domain.
     //
-    // For example, if URL is on `files.astralhosted.com` and the CDN domain is
-    // `astralhosted.com`, consider it known.
-    if matches_domain(url, cdn) {
+    // We currently enforce that the scheme matches the API realm.
+    let cdn_realm = api_realm.clone().with_host(cdn);
+    if url_realm == cdn_realm {
         return true;
+    }
+    // But we allow it to be on the default port.
+    if url_realm == cdn_realm.clone().with_port(None) {
+        return true;
+    }
+    // And we allow arbitrary subdomains.
+    if let Some(host) = url.host_str() {
+        if host
+            .strip_suffix(cdn)
+            .is_some_and(|subdomain| subdomain.ends_with('.'))
+        {
+            let url_realm = url_realm.clone().with_host(cdn);
+            if url_realm == cdn_realm {
+                return true;
+            }
+            if url_realm == cdn_realm.clone().with_port(None) {
+                return true;
+            }
+        }
     }
 
     false
 }
 
 fn is_known_domain(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
-    // Determine whether the URL matches the API domain.
-    if let Some(domain) = url.domain() {
-        if matches_domain(api, domain) {
-            return true;
+    let url_realm = Realm::from(url);
+    let api_realm = Realm::from(&**api);
+
+    // Allow matches without the explicit API domain.
+    //
+    // For example, if the is URL is `https://pyx.dev` and the API URL is `https://api.pyx.dev`,
+    // consider it known.
+    if let Some(host) = api.host_str() {
+        if let Some(domain) = host.strip_prefix("api.") {
+            // Note `Realm` is used to ensure we're still checking the scheme and port
+            if url_realm == api_realm.with_host(domain) {
+                return true;
+            }
         }
     }
-    is_known_url(url, api, cdn)
-}
 
-/// Returns `true` if the target URL is on the given domain.
-fn matches_domain(url: &Url, domain: &str) -> bool {
-    url.domain().is_some_and(|subdomain| {
-        subdomain == domain
-            || subdomain
-                .strip_suffix(domain)
-                .is_some_and(|prefix| prefix.ends_with('.'))
-    })
+    is_known_url(url, api, cdn)
 }
 
 #[cfg(test)]
@@ -599,6 +620,41 @@ mod tests {
         // CDN subdomain.
         assert!(is_known_url(
             &Url::parse("https://files.astralhosted.com/packages/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // CDN on a different scheme
+        assert!(!is_known_url(
+            &Url::parse("http://astralhosted.com/packages/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // CDN on the default port, with the API on another
+        assert!(is_known_url(
+            &Url::parse("https://astralhosted.com/packages/").unwrap(),
+            &DisplaySafeUrl::from(Url::parse("https://api.pyx.dev:8080").unwrap()),
+            cdn_domain
+        ));
+
+        // CDN on the same port as the API
+        assert!(is_known_url(
+            &Url::parse("https://astralhosted.com:8080/packages/").unwrap(),
+            &DisplaySafeUrl::from(Url::parse("https://api.pyx.dev:8080").unwrap()),
+            cdn_domain
+        ));
+
+        // Different scheme
+        assert!(!is_known_url(
+            &Url::parse("http://api.pyx.dev/simple/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // Different port
+        assert!(!is_known_url(
+            &Url::parse("https://api.pyx.dev:8080/simple/").unwrap(),
             &api_url,
             cdn_domain
         ));
@@ -665,6 +721,34 @@ mod tests {
             cdn_domain
         ));
 
+        // CDN on a different scheme
+        assert!(!is_known_domain(
+            &Url::parse("http://astralhosted.com/packages/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // CDN on a different TLD
+        assert!(!is_known_domain(
+            &Url::parse("https://astralhosted.dev/packages/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // Different scheme
+        assert!(!is_known_domain(
+            &Url::parse("http://api.pyx.dev/simple/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // Different port
+        assert!(!is_known_domain(
+            &Url::parse("https://api.pyx.dev:8080/simple/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
         // Unknown domain.
         assert!(!is_known_domain(
             &Url::parse("https://pypi.org/simple/").unwrap(),
@@ -677,35 +761,6 @@ mod tests {
             &Url::parse("https://pyx.com/").unwrap(),
             &api_url,
             cdn_domain
-        ));
-    }
-
-    #[test]
-    fn test_matches_domain() {
-        assert!(matches_domain(
-            &Url::parse("https://example.com").unwrap(),
-            "example.com"
-        ));
-        assert!(matches_domain(
-            &Url::parse("https://foo.example.com").unwrap(),
-            "example.com"
-        ));
-        assert!(matches_domain(
-            &Url::parse("https://bar.foo.example.com").unwrap(),
-            "example.com"
-        ));
-
-        assert!(!matches_domain(
-            &Url::parse("https://example.com").unwrap(),
-            "other.com"
-        ));
-        assert!(!matches_domain(
-            &Url::parse("https://example.org").unwrap(),
-            "example.com"
-        ));
-        assert!(!matches_domain(
-            &Url::parse("https://badexample.com").unwrap(),
-            "example.com"
         ));
     }
 }

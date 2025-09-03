@@ -29,6 +29,20 @@ pub struct Realm {
     port: Option<u16>,
 }
 
+impl Realm {
+    #[must_use]
+    pub(crate) fn with_host(mut self, host: &str) -> Self {
+        self.host = Some(SmallString::from(host));
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn with_port(mut self, port: Option<u16>) -> Self {
+        self.port = port;
+        self
+    }
+}
+
 impl From<&Url> for Realm {
     fn from(url: &Url) -> Self {
         Self {
