@@ -633,6 +633,13 @@ Proxy for HTTP requests.
 
 Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
 
+### `IPHONEOS_DEPLOYMENT_TARGET`
+
+Used with `--python-platform arm64-apple-ios` and related variants to set the
+deployment target (i.e., the minimum supported iOS version).
+
+Defaults to `13.0`.
+
 ### `JPY_SESSION_NAME`
 
 Used to detect when running inside a Jupyter notebook.

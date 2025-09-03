@@ -531,6 +531,12 @@ impl EnvVars {
     /// Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
 
+    /// Used with `--python-platform arm64-apple-ios` and related variants to set the
+    /// deployment target (i.e., the minimum supported iOS version).
+    ///
+    /// Defaults to `13.0`.
+    pub const IPHONEOS_DEPLOYMENT_TARGET: &'static str = "IPHONEOS_DEPLOYMENT_TARGET";
+
     /// Used with `--python-platform aarch64-linux-android` and related variants to set the
     /// Android API level. (i.e., the minimum supported Android API level).
     ///
