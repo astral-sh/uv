@@ -2,6 +2,32 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.8.15
+
+### Python
+
+- Upgrade SQLite 3.50.4 in CPython builds for [CVE-2025-6965](https://github.com/advisories/GHSA-2m69-gcr7-jv3q) (see also [python/cpython#137134](https://github.com/python/cpython/issues/137134))
+
+### Enhancements
+
+- Add `uv auth` commands for credential management ([#15570](https://github.com/astral-sh/uv/pull/15570))
+- Add pyx support to `uv auth` commands ([#15636](https://github.com/astral-sh/uv/pull/15636))
+- Add `uv tree --show-sizes` to show package sizes ([#15531](https://github.com/astral-sh/uv/pull/15531))
+- Add `--python-platform riscv64-unknown-linux` ([#15630](https://github.com/astral-sh/uv/pull/15630))
+- Add `--python-platform` to `uv run` and `uv tool` ([#15515](https://github.com/astral-sh/uv/pull/15515))
+- Add `uv publish --dry-run` ([#15638](https://github.com/astral-sh/uv/pull/15638))
+- Add zstandard support for wheels ([#15645](https://github.com/astral-sh/uv/pull/15645))
+- Allow registries to pre-provide core metadata ([#15644](https://github.com/astral-sh/uv/pull/15644))
+- Retry streaming Python and binary download errors ([#15567](https://github.com/astral-sh/uv/pull/15567))
+
+### Bug fixes
+
+- Fix settings rendering for `extra-build-dependencies` ([#15622](https://github.com/astral-sh/uv/pull/15622))
+- Skip non-existent directories in bytecode compilation ([#15608](https://github.com/astral-sh/uv/pull/15608))
+
+### Error messages
+
+- Add error trace to invalid package format ([#15626](https://github.com/astral-sh/uv/pull/15626))
 
 ## 0.8.14
 
