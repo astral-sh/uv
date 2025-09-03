@@ -299,19 +299,17 @@ impl RequirementsTxt {
                         };
                     match visited {
                         VisitedFiles::Requirements { requirements, .. } => {
-                            if requirements.contains(&sub_file) {
+                            if !requirements.insert(sub_file.clone()) {
                                 continue;
                             }
-                            requirements.insert(sub_file.clone())
                         }
                         // Treat any nested requirements or constraints as constraints. This differs
                         // from `pip`, which seems to treat `-r` requirements in constraints files as
                         // _requirements_, but we don't want to support that.
                         VisitedFiles::Constraints { constraints } => {
-                            if constraints.contains(&sub_file) {
+                            if !constraints.insert(sub_file.clone()) {
                                 continue;
                             }
-                            constraints.insert(sub_file.clone())
                         }
                     };
                     let sub_requirements = Box::pin(Self::parse_impl(
@@ -377,16 +375,15 @@ impl RequirementsTxt {
                     // Switch to constraints mode, if we aren't in it already.
                     let mut visited = match visited {
                         VisitedFiles::Requirements { constraints, .. } => {
-                            if constraints.contains(&sub_file) {
+                            if !constraints.insert(sub_file.clone()) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
                         }
                         VisitedFiles::Constraints { constraints } => {
-                            if constraints.contains(&sub_file) {
+                            if !constraints.insert(sub_file.clone()) {
                                 continue;
                             }
-                            constraints.insert(sub_file.clone());
                             VisitedFiles::Constraints { constraints }
                         }
                     };
