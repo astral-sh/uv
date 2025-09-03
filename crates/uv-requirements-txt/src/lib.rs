@@ -311,7 +311,7 @@ impl RequirementsTxt {
                                 continue;
                             }
                         }
-                    };
+                    }
                     let sub_requirements = Box::pin(Self::parse_impl(
                         &sub_file,
                         working_dir,
