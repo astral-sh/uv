@@ -305,6 +305,7 @@ impl<'a> FlatIndexClient<'a> {
                 upload_time_utc_ms: None,
                 url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
+                zstd: None,
             };
 
             let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
