@@ -5594,7 +5594,7 @@ pub struct AuthLoginArgs {
 
 #[derive(Args)]
 pub struct AuthTokenArgs {
-    /// The service to lookup.
+    /// The URL of the service to lookup.
     pub service: Service,
 
     /// The username to lookup.
@@ -5612,7 +5612,7 @@ pub struct AuthTokenArgs {
 
 #[derive(Args)]
 pub struct AuthDirArgs {
-    /// The service to lookup.
+    /// The URL of the service to lookup.
     pub service: Option<Service>,
 }
 
