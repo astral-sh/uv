@@ -566,7 +566,7 @@ General proxy for all network requests.
 Used with `--python-platform aarch64-linux-android` and related variants to set the
 Android API level. (i.e., the minimum supported Android API level).
 
-Defaults to `21`.
+Defaults to `24`.
 
 ### `APPDATA`
 

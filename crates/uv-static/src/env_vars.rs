@@ -531,7 +531,7 @@ impl EnvVars {
     /// Used with `--python-platform aarch64-linux-android` and related variants to set the
     /// Android API level. (i.e., the minimum supported Android API level).
     ///
-    /// Defaults to `21`.
+    /// Defaults to `24`.
     pub const ANDROID_API_LEVEL: &'static str = "ANDROID_API_LEVEL";
 
     /// Disables colored output (takes precedence over `FORCE_COLOR`).

@@ -235,7 +235,7 @@ pub enum TargetTriple {
 
     /// An ARM64 Android target.
     ///
-    /// By default uses Android API level 21, but respects
+    /// By default uses Android API level 24, but respects
     /// the `ANDROID_API_LEVEL` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "aarch64-linux-android"))]
     #[serde(rename = "aarch64-linux-android")]
@@ -243,7 +243,7 @@ pub enum TargetTriple {
 
     /// An `x86_64` Android target.
     ///
-    /// By default uses Android API level 21, but respects
+    /// By default uses Android API level 24, but respects
     /// the `ANDROID_API_LEVEL` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "x86_64-linux-android"))]
     #[serde(rename = "x86_64-linux-android")]
@@ -485,14 +485,14 @@ impl TargetTriple {
                 Arch::Wasm32,
             ),
             Self::Aarch64LinuxAndroid => {
-                let api_level = android_api_level().map_or(21, |api_level| {
+                let api_level = android_api_level().map_or(24, |api_level| {
                     debug!("Found Android API level: {}", api_level);
                     api_level
                 });
                 Platform::new(Os::Android { api_level }, Arch::Aarch64)
             }
             Self::X8664LinuxAndroid => {
-                let api_level = android_api_level().map_or(21, |api_level| {
+                let api_level = android_api_level().map_or(24, |api_level| {
                     debug!("Found Android API level: {}", api_level);
                     api_level
                 });

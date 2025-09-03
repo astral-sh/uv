@@ -236,7 +236,7 @@ used.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-run--python-platform"><a href="#uv-run--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -1231,7 +1231,7 @@ environment in the project.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--python-platform"><a href="#uv-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -2160,7 +2160,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-run--python-platform"><a href="#uv-tool-run--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -2382,7 +2382,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-install--python-platform"><a href="#uv-tool-install--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -2595,7 +2595,7 @@ Use with <code>--all</code> to apply to all tools.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-upgrade--python-platform"><a href="#uv-tool-upgrade--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -3837,7 +3837,7 @@ by <code>--python-version</code>.</p>
 </dd><dt id="uv-pip-compile--python-platform"><a href="#uv-pip-compile--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
@@ -4110,7 +4110,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-sync--python-platform"><a href="#uv-pip-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -4402,7 +4402,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-install--python-platform"><a href="#uv-pip-install--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -5035,7 +5035,7 @@ Python environment if no virtual environment is found.</p>
 <p>By default, the installed packages are checked against the platform of the current interpreter.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 <p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
-<p>When targeting Android, the default minimum Android API level is <code>21</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
