@@ -279,8 +279,13 @@ Credentials are only stored in this directory when the plaintext backend is used
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv auth dir [OPTIONS]
+uv auth dir [OPTIONS] [SERVICE]
 ```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-dir--service"><a href="#uv-auth-dir--service"<code>SERVICE</code></a></dt><dd><p>The service to lookup</p>
+</dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 

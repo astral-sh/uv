@@ -1,5 +1,5 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use base64::Engine;
@@ -92,43 +92,59 @@ impl From<AccessToken> for Credentials {
 /// The default tolerance for the access token expiration.
 pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
 
-/// The root directory for the pyx token store.
-fn root_dir(api: &DisplaySafeUrl) -> Result<PathBuf, io::Error> {
-    // Store credentials in a subdirectory based on the API URL.
-    let digest = uv_cache_key::cache_digest(&CanonicalUrl::new(api));
+#[derive(Debug, Clone)]
+struct PyxDirectories {
+    /// The root directory for the token store (e.g., `/Users/ferris/.local/share/pyx/credentials`).
+    root: PathBuf,
+    /// The subdirectory for the token store (e.g., `/Users/ferris/.local/share/uv/credentials/3859a629b26fda96`).
+    subdirectory: PathBuf,
+}
 
-    // If the user explicitly set `PYX_CREDENTIALS_DIR`, use that.
-    if let Some(tool_dir) = std::env::var_os(EnvVars::PYX_CREDENTIALS_DIR) {
-        return std::path::absolute(tool_dir).map(|dir| dir.join(&digest));
+impl PyxDirectories {
+    /// Detect the [`PyxDirectories`] for a given API URL.
+    fn from_api(api: &DisplaySafeUrl) -> Result<Self, io::Error> {
+        // Store credentials in a subdirectory based on the API URL.
+        let digest = uv_cache_key::cache_digest(&CanonicalUrl::new(api));
+
+        // If the user explicitly set `PYX_CREDENTIALS_DIR`, use that.
+        if let Some(root) = std::env::var_os(EnvVars::PYX_CREDENTIALS_DIR) {
+            let root = std::path::absolute(root)?;
+            let subdirectory = root.join(&digest);
+            return Ok(Self { root, subdirectory });
+        }
+
+        // If the user has pyx credentials in their uv credentials directory, read them for
+        // backwards compatibility.
+        let root = if let Some(tool_dir) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR) {
+            std::path::absolute(tool_dir)?
+        } else {
+            StateStore::from_settings(None)?.bucket(StateBucket::Credentials)
+        };
+        let subdirectory = root.join(&digest);
+        if subdirectory.exists() {
+            return Ok(Self { root, subdirectory });
+        }
+
+        // Otherwise, use (e.g.) `~/.local/share/pyx`.
+        let Ok(xdg) = etcetera::base_strategy::choose_base_strategy() else {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Could not determine user data directory",
+            ));
+        };
+
+        let root = xdg.data_dir().join("pyx").join("credentials");
+        let subdirectory = root.join(&digest);
+        Ok(Self { root, subdirectory })
     }
-
-    // If the user has pyx credentials in their uv credentials directory, read them for
-    // backwards compatibility.
-    let credentials_dir = if let Some(tool_dir) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR) {
-        std::path::absolute(tool_dir)?
-    } else {
-        StateStore::from_settings(None)?.bucket(StateBucket::Credentials)
-    };
-    let credentials_dir = credentials_dir.join(&digest);
-    if credentials_dir.exists() {
-        return Ok(credentials_dir);
-    }
-
-    // Otherwise, use (e.g.) `~/.local/share/pyx`.
-    let Ok(xdg) = etcetera::base_strategy::choose_base_strategy() else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "Could not determine user data directory",
-        ));
-    };
-
-    Ok(xdg.data_dir().join("pyx").join("credentials").join(&digest))
 }
 
 #[derive(Debug, Clone)]
 pub struct PyxTokenStore {
-    /// The root directory for the token store (e.g., `/Users/ferris/.local/share/pyx/credentials/3859a629b26fda96`).
+    /// The root directory for the token store (e.g., `/Users/ferris/.local/share/pyx/credentials`).
     root: PathBuf,
+    /// The subdirectory for the token store (e.g., `/Users/ferris/.local/share/uv/credentials/3859a629b26fda96`).
+    subdirectory: PathBuf,
     /// The API URL for the token store (e.g., `https://api.pyx.dev`).
     api: DisplaySafeUrl,
     /// The CDN domain for the token store (e.g., `astralhosted.com`).
@@ -151,9 +167,19 @@ impl PyxTokenStore {
             .unwrap_or_else(|| SmallString::from(arcstr::literal!("astralhosted.com")));
 
         // Determine the root directory for the token store.
-        let root = root_dir(&api)?;
+        let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(&api)?;
 
-        Ok(Self { root, api, cdn })
+        Ok(Self {
+            root,
+            subdirectory,
+            api,
+            cdn,
+        })
+    }
+
+    /// Return the root directory for the token store.
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
     /// Return the API URL for the token store.
@@ -212,18 +238,21 @@ impl PyxTokenStore {
 
     /// Write the tokens to the store.
     pub async fn write(&self, tokens: &PyxTokens) -> Result<(), TokenStoreError> {
-        fs_err::tokio::create_dir_all(&self.root).await?;
+        fs_err::tokio::create_dir_all(&self.subdirectory).await?;
         match tokens {
             PyxTokens::OAuth(tokens) => {
                 // Write OAuth tokens to a generic `tokens.json` file.
-                fs_err::tokio::write(self.root.join("tokens.json"), serde_json::to_vec(tokens)?)
-                    .await?;
+                fs_err::tokio::write(
+                    self.subdirectory.join("tokens.json"),
+                    serde_json::to_vec(tokens)?,
+                )
+                .await?;
             }
             PyxTokens::ApiKey(tokens) => {
                 // Write API key tokens to a file based on the API key.
                 let digest = uv_cache_key::cache_digest(&tokens.api_key);
                 fs_err::tokio::write(
-                    self.root.join(format!("{digest}.json")),
+                    self.subdirectory.join(format!("{digest}.json")),
                     &tokens.access_token,
                 )
                 .await?;
@@ -236,7 +265,7 @@ impl PyxTokenStore {
     pub fn has_credentials(&self) -> bool {
         read_pyx_auth_token().is_some()
             || read_pyx_api_key().is_some()
-            || self.root.join("tokens.json").is_file()
+            || self.subdirectory.join("tokens.json").is_file()
     }
 
     /// Read the tokens from the store.
@@ -245,7 +274,7 @@ impl PyxTokenStore {
         if let Some(api_key) = read_pyx_api_key() {
             // Read the API key tokens from a file based on the API key.
             let digest = uv_cache_key::cache_digest(&api_key);
-            match fs_err::tokio::read(self.root.join(format!("{digest}.json"))).await {
+            match fs_err::tokio::read(self.subdirectory.join(format!("{digest}.json"))).await {
                 Ok(data) => {
                     let access_token =
                         AccessToken::from(String::from_utf8(data).expect("Invalid UTF-8"));
@@ -258,7 +287,7 @@ impl PyxTokenStore {
                 Err(err) => Err(err.into()),
             }
         } else {
-            match fs_err::tokio::read(self.root.join("tokens.json")).await {
+            match fs_err::tokio::read(self.subdirectory.join("tokens.json")).await {
                 Ok(data) => {
                     let tokens: PyxOAuthTokens = serde_json::from_slice(&data)?;
                     Ok(Some(PyxTokens::OAuth(tokens)))
@@ -271,7 +300,7 @@ impl PyxTokenStore {
 
     /// Remove the tokens from the store.
     pub async fn delete(&self) -> Result<(), io::Error> {
-        fs_err::tokio::remove_dir_all(&self.root).await?;
+        fs_err::tokio::remove_dir_all(&self.subdirectory).await?;
         Ok(())
     }
 
