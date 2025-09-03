@@ -844,7 +844,7 @@ fn macos_deployment_target() -> Option<(u16, u16)> {
     Some((major, minor))
 }
 
-/// Return the macOS deployment target as parsed from the environment.
+/// Return the Android API level as parsed from the environment.
 fn android_api_level() -> Option<u16> {
     let api_level_str = std::env::var(EnvVars::ANDROID_API_LEVEL).ok()?;
 
