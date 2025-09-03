@@ -5538,7 +5538,7 @@ pub struct PythonPinArgs {
 
 #[derive(Args)]
 pub struct AuthLogoutArgs {
-    /// The service to logout of.
+    /// The domain or URL of the service to logout from.
     pub service: Service,
 
     /// The username to logout.
@@ -5559,7 +5559,7 @@ pub struct AuthLogoutArgs {
 
 #[derive(Args)]
 pub struct AuthLoginArgs {
-    /// The service to log into.
+    /// The domain or URL of the service to log into.
     pub service: Service,
 
     /// The username to use for the service.
@@ -5594,7 +5594,7 @@ pub struct AuthLoginArgs {
 
 #[derive(Args)]
 pub struct AuthTokenArgs {
-    /// The service to lookup.
+    /// The domain or URL of the service to lookup.
     pub service: Service,
 
     /// The username to lookup.
@@ -5612,7 +5612,7 @@ pub struct AuthTokenArgs {
 
 #[derive(Args)]
 pub struct AuthDirArgs {
-    /// The service to lookup.
+    /// The domain or URL of the service to lookup.
     pub service: Option<Service>,
 }
 

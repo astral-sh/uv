@@ -64,7 +64,7 @@ uv auth login [OPTIONS] <SERVICE>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-auth-login--service"><a href="#uv-auth-login--service"<code>SERVICE</code></a></dt><dd><p>The service to log into</p>
+<dl class="cli-reference"><dt id="uv-auth-login--service"><a href="#uv-auth-login--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to log into</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -139,7 +139,7 @@ uv auth logout [OPTIONS] <SERVICE>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-auth-logout--service"><a href="#uv-auth-logout--service"<code>SERVICE</code></a></dt><dd><p>The service to logout of</p>
+<dl class="cli-reference"><dt id="uv-auth-logout--service"><a href="#uv-auth-logout--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to logout from</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -209,7 +209,7 @@ uv auth token [OPTIONS] <SERVICE>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-auth-token--service"><a href="#uv-auth-token--service"<code>SERVICE</code></a></dt><dd><p>The service to lookup</p>
+<dl class="cli-reference"><dt id="uv-auth-token--service"><a href="#uv-auth-token--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to lookup</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -284,7 +284,7 @@ uv auth dir [OPTIONS] [SERVICE]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-auth-dir--service"><a href="#uv-auth-dir--service"<code>SERVICE</code></a></dt><dd><p>The service to lookup</p>
+<dl class="cli-reference"><dt id="uv-auth-dir--service"><a href="#uv-auth-dir--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to lookup</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
