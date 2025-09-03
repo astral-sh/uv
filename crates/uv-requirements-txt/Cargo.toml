@@ -30,6 +30,7 @@ fs-err = { workspace = true }
 memchr = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
