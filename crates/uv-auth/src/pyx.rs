@@ -539,7 +539,7 @@ fn is_known_url(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
     //
     // For example, if URL is on `files.astralhosted.com` and the CDN domain is
     // `astralhosted.com`, consider it known.
-    if matches_domain(url, cdn) {
+    if matches!(url.scheme(), "https") && matches_domain(url, cdn) {
         return true;
     }
 
@@ -599,6 +599,13 @@ mod tests {
         // CDN subdomain.
         assert!(is_known_url(
             &Url::parse("https://files.astralhosted.com/packages/").unwrap(),
+            &api_url,
+            cdn_domain
+        ));
+
+        // CDN on HTTP.
+        assert!(!is_known_url(
+            &Url::parse("http://astralhosted.com/packages/").unwrap(),
             &api_url,
             cdn_domain
         ));
