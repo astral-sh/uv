@@ -1448,6 +1448,9 @@ pub struct PipCompileArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1775,6 +1778,9 @@ pub struct PipSyncArgs {
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
@@ -2077,6 +2083,9 @@ pub struct PipInstallArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -2400,6 +2409,9 @@ pub struct PipCheckArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 }
@@ -3326,6 +3338,9 @@ pub struct RunArgs {
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
@@ -3602,6 +3617,9 @@ pub struct SyncArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -4626,6 +4644,9 @@ pub struct ToolRunArgs {
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
@@ -4748,6 +4769,9 @@ pub struct ToolInstallArgs {
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
@@ -4844,6 +4868,9 @@ pub struct ToolUpgradeArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_

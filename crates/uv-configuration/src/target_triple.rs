@@ -238,6 +238,22 @@ pub enum TargetTriple {
     #[serde(alias = "aarch64-manylinux240")]
     Aarch64Manylinux240,
 
+    /// An ARM64 Android target.
+    ///
+    /// By default uses Android API level 24, but respects
+    /// the `ANDROID_API_LEVEL` environment variable if set.
+    #[cfg_attr(feature = "clap", value(name = "aarch64-linux-android"))]
+    #[serde(rename = "aarch64-linux-android")]
+    Aarch64LinuxAndroid,
+
+    /// An `x86_64` Android target.
+    ///
+    /// By default uses Android API level 24, but respects
+    /// the `ANDROID_API_LEVEL` environment variable if set.
+    #[cfg_attr(feature = "clap", value(name = "x86_64-linux-android"))]
+    #[serde(rename = "x86_64-linux-android")]
+    X8664LinuxAndroid,
+
     /// A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
     Wasm32Pyodide2024,
@@ -480,6 +496,20 @@ impl TargetTriple {
                 },
                 Arch::Wasm32,
             ),
+            Self::Aarch64LinuxAndroid => {
+                let api_level = android_api_level().map_or(24, |api_level| {
+                    debug!("Found Android API level: {}", api_level);
+                    api_level
+                });
+                Platform::new(Os::Android { api_level }, Arch::Aarch64)
+            }
+            Self::X8664LinuxAndroid => {
+                let api_level = android_api_level().map_or(24, |api_level| {
+                    debug!("Found Android API level: {}", api_level);
+                    api_level
+                });
+                Platform::new(Os::Android { api_level }, Arch::X86_64)
+            }
         }
     }
 
@@ -522,6 +552,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "aarch64",
             Self::Aarch64Manylinux239 => "aarch64",
             Self::Aarch64Manylinux240 => "aarch64",
+            Self::Aarch64LinuxAndroid => "aarch64",
+            Self::X8664LinuxAndroid => "x86_64",
             Self::Wasm32Pyodide2024 => "wasm32",
         }
     }
@@ -565,6 +597,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "Linux",
             Self::Aarch64Manylinux239 => "Linux",
             Self::Aarch64Manylinux240 => "Linux",
+            Self::Aarch64LinuxAndroid => "Android",
+            Self::X8664LinuxAndroid => "Android",
             Self::Wasm32Pyodide2024 => "Emscripten",
         }
     }
@@ -608,6 +642,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "",
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
+            Self::Aarch64LinuxAndroid => "",
+            Self::X8664LinuxAndroid => "",
             // This is the value Emscripten gives for its version:
             // https://github.com/emscripten-core/emscripten/blob/4.0.8/system/lib/libc/emscripten_syscall_stubs.c#L63
             // It doesn't really seem to mean anything? But for completeness we include it here.
@@ -654,6 +690,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "",
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
+            Self::Aarch64LinuxAndroid => "",
+            Self::X8664LinuxAndroid => "",
             // This is the Emscripten compiler version for Pyodide 2024.
             // See https://pyodide.org/en/stable/development/abi.html#pyodide-2024-0
             Self::Wasm32Pyodide2024 => "3.1.58",
@@ -699,6 +737,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "posix",
             Self::Aarch64Manylinux239 => "posix",
             Self::Aarch64Manylinux240 => "posix",
+            Self::Aarch64LinuxAndroid => "posix",
+            Self::X8664LinuxAndroid => "posix",
             Self::Wasm32Pyodide2024 => "posix",
         }
     }
@@ -742,6 +782,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "linux",
             Self::Aarch64Manylinux239 => "linux",
             Self::Aarch64Manylinux240 => "linux",
+            Self::Aarch64LinuxAndroid => "android",
+            Self::X8664LinuxAndroid => "android",
             Self::Wasm32Pyodide2024 => "emscripten",
         }
     }
@@ -785,6 +827,8 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => true,
             Self::Aarch64Manylinux239 => true,
             Self::Aarch64Manylinux240 => true,
+            Self::Aarch64LinuxAndroid => false,
+            Self::X8664LinuxAndroid => false,
             Self::Wasm32Pyodide2024 => false,
         }
     }
@@ -817,4 +861,14 @@ fn macos_deployment_target() -> Option<(u16, u16)> {
     let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
 
     Some((major, minor))
+}
+
+/// Return the Android API level as parsed from the environment.
+fn android_api_level() -> Option<u16> {
+    let api_level_str = std::env::var(EnvVars::ANDROID_API_LEVEL).ok()?;
+
+    // Parse the api level.
+    let api_level = api_level_str.parse::<u16>().ok()?;
+
+    Some(api_level)
 }

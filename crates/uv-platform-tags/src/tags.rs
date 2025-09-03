@@ -611,11 +611,21 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 release_arch: SmallString::from(release_arch),
             }]
         }
-        (Os::Android { api_level }, _) => {
-            vec![PlatformTag::Android {
-                api_level: *api_level,
-                arch,
-            }]
+        (Os::Android { api_level }, arch) => {
+            // Source: https://github.com/pypa/packaging/blob/e5470c1854e352f68fa3f83df9cbb0af59558c49/src/packaging/tags.py#L541
+            let mut platform_tags = vec![];
+
+            // 16 is the minimum API level known to have enough features to support CPython
+            // without major patching. Yield every API level from the maximum down to the
+            // minimum, inclusive.
+            for ver in (16..=*api_level).rev() {
+                platform_tags.push(PlatformTag::Android {
+                    api_level: ver,
+                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
+                });
+            }
+
+            platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
             vec![PlatformTag::Pyodide {
@@ -754,6 +764,71 @@ impl BinaryFormat {
             Self::Ppc64 => "ppc64",
             Self::Universal => "universal",
             Self::Universal2 => "universal2",
+            Self::X86_64 => "x86_64",
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum AndroidAbi {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+    ArmeabiV7a,
+    Arm64V8a,
+    X86,
+    X86_64,
+}
+
+impl std::fmt::Display for AndroidAbi {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for AndroidAbi {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "armeabi_v7a" => Ok(Self::ArmeabiV7a),
+            "arm64_v8a" => Ok(Self::Arm64V8a),
+            "x86" => Ok(Self::X86),
+            "x86_64" => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {s}")),
+        }
+    }
+}
+
+impl AndroidAbi {
+    /// Determine the appropriate Android arch.
+    pub fn from_arch(arch: Arch) -> Result<Self, String> {
+        match arch {
+            Arch::Aarch64 => Ok(Self::Arm64V8a),
+            Arch::Armv7L => Ok(Self::ArmeabiV7a),
+            Arch::X86 => Ok(Self::X86),
+            Arch::X86_64 => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {arch}")),
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ArmeabiV7a => "armeabi_v7a",
+            Self::Arm64V8a => "arm64_v8a",
+            Self::X86 => "x86",
             Self::X86_64 => "x86_64",
         }
     }
@@ -1125,6 +1200,35 @@ mod tests {
         "macosx_10_4_fat32",
         "macosx_10_4_universal2",
         "macosx_10_4_universal",
+    ]
+    "###
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_android() {
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 14 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    []
+    "###
+        );
+
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 20 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    [
+        "android_20_arm64_v8a",
+        "android_19_arm64_v8a",
+        "android_18_arm64_v8a",
+        "android_17_arm64_v8a",
+        "android_16_arm64_v8a",
     ]
     "###
         );

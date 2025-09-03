@@ -531,6 +531,12 @@ impl EnvVars {
     /// Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
 
+    /// Used with `--python-platform aarch64-linux-android` and related variants to set the
+    /// Android API level. (i.e., the minimum supported Android API level).
+    ///
+    /// Defaults to `24`.
+    pub const ANDROID_API_LEVEL: &'static str = "ANDROID_API_LEVEL";
+
     /// Disables colored output (takes precedence over `FORCE_COLOR`).
     ///
     /// See [no-color.org](https://no-color.org).
