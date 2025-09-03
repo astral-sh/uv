@@ -621,8 +621,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             for ver in (16..=*api_level).rev() {
                 platform_tags.push(PlatformTag::Android {
                     api_level: ver,
-                    arch: AndroidArch::from_arch(arch)
-                        .map_err(PlatformError::ArchDetectionError)?,
+                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
                 });
             }
 
@@ -784,21 +783,21 @@ impl BinaryFormat {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-pub enum AndroidArch {
-    // Source: https://peps.python.org/pep-0738/#architectures
+pub enum AndroidAbi {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
     ArmeabiV7a,
     Arm64V8a,
     X86,
     X86_64,
 }
 
-impl std::fmt::Display for AndroidArch {
+impl std::fmt::Display for AndroidAbi {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl FromStr for AndroidArch {
+impl FromStr for AndroidAbi {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -812,7 +811,7 @@ impl FromStr for AndroidArch {
     }
 }
 
-impl AndroidArch {
+impl AndroidAbi {
     /// Determine the appropriate Android arch.
     pub fn from_arch(arch: Arch) -> Result<Self, String> {
         match arch {

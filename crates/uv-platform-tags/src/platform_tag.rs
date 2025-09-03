@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use uv_small_str::SmallString;
 
-use crate::tags::AndroidArch;
+use crate::tags::AndroidAbi;
 use crate::{Arch, BinaryFormat};
 
 /// A tag to represent the platform compatibility of a Python distribution.
@@ -57,7 +57,7 @@ pub enum PlatformTag {
     /// Ex) `win_ia64`
     WinIa64,
     /// Ex) `android_21_x86_64`
-    Android { api_level: u16, arch: AndroidArch },
+    Android { api_level: u16, abi: AndroidAbi },
     /// Ex) `freebsd_12_x86_64`
     FreeBsd { release_arch: SmallString },
     /// Ex) `netbsd_9_x86_64`
@@ -180,7 +180,7 @@ impl PlatformTag {
                 ..
             } | Self::WinArm64
                 | Self::Android {
-                    arch: AndroidArch::Arm64V8a,
+                    abi: AndroidAbi::Arm64V8a,
                     ..
                 }
         )
@@ -268,7 +268,7 @@ impl std::fmt::Display for PlatformTag {
             Self::WinAmd64 => write!(f, "win_amd64"),
             Self::WinArm64 => write!(f, "win_arm64"),
             Self::WinIa64 => write!(f, "win_ia64"),
-            Self::Android { api_level, arch } => write!(f, "android_{api_level}_{arch}"),
+            Self::Android { api_level, abi } => write!(f, "android_{api_level}_{abi}"),
             Self::FreeBsd { release_arch } => write!(f, "freebsd_{release_arch}"),
             Self::NetBsd { release_arch } => write!(f, "netbsd_{release_arch}"),
             Self::OpenBsd { release_arch } => write!(f, "openbsd_{release_arch}"),
@@ -506,22 +506,22 @@ impl FromStr for PlatformTag {
                         tag: s.to_string(),
                     })?;
 
-            let arch_str = &rest[underscore + 1..];
-            if arch_str.is_empty() {
+            let abi_str = &rest[underscore + 1..];
+            if abi_str.is_empty() {
                 return Err(ParsePlatformTagError::InvalidFormat {
                     platform: "android",
                     tag: s.to_string(),
                 });
             }
 
-            let arch = arch_str
+            let abi = abi_str
                 .parse()
                 .map_err(|_| ParsePlatformTagError::InvalidArch {
                     platform: "android",
                     tag: s.to_string(),
                 })?;
 
-            return Ok(Self::Android { api_level, arch });
+            return Ok(Self::Android { api_level, abi });
         }
 
         if let Some(rest) = s.strip_prefix("freebsd_") {
@@ -685,7 +685,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::platform_tag::{ParsePlatformTagError, PlatformTag};
-    use crate::tags::AndroidArch;
+    use crate::tags::AndroidAbi;
     use crate::{Arch, BinaryFormat};
 
     #[test]
@@ -970,7 +970,7 @@ mod tests {
     fn android_platform() {
         let tag = PlatformTag::Android {
             api_level: 21,
-            arch: AndroidArch::Arm64V8a,
+            abi: AndroidAbi::Arm64V8a,
         };
         assert_eq!(
             PlatformTag::from_str("android_21_arm64_v8a").as_ref(),
