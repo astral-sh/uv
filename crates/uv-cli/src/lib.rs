@@ -1448,7 +1448,7 @@ pub struct PipCompileArgs {
     ///
     /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_TARGET_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
@@ -1780,7 +1780,7 @@ pub struct PipSyncArgs {
     /// platform. Conversely, any distributions that are built from source may be incompatible with
     /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_TARGET_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// Validate the Python environment after completing the installation, to detect packages with
@@ -2083,7 +2083,7 @@ pub struct PipInstallArgs {
     /// platform. Conversely, any distributions that are built from source may be incompatible with
     /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_TARGET_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3608,7 +3608,7 @@ pub struct SyncArgs {
     /// platform. Conversely, any distributions that are built from source may be incompatible with
     /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_TARGET_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// Check if the Python environment is synchronized with the project.
@@ -4125,7 +4125,7 @@ pub struct TreeArgs {
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
-    #[arg(long, conflicts_with = "universal")]
+    #[arg(long, conflicts_with = "universal", env = EnvVars::UV_TARGET_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// The Python interpreter to use for locking and filtering.

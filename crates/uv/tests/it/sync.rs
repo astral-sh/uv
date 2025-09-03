@@ -12247,6 +12247,17 @@ fn sync_python_platform() -> Result<()> {
      + platformdirs==4.2.0
     ");
 
+    // Use UV_PYTHON_PLATFORM should work, too
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_TARGET_PYTHON_PLATFORM, "linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 6 packages in [TIME]
+    ");
+
     Ok(())
 }
 
