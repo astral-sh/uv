@@ -621,7 +621,8 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             for ver in (16..=*api_level).rev() {
                 platform_tags.push(PlatformTag::Android {
                     api_level: ver,
-                    arch: AndroidArch::from_arch(arch),
+                    arch: AndroidArch::from_arch(arch)
+                        .map_err(PlatformError::ArchDetectionError)?,
                 });
             }
 
@@ -784,6 +785,7 @@ impl BinaryFormat {
 )]
 #[rkyv(derive(Debug))]
 pub enum AndroidArch {
+    // Source: https://peps.python.org/pep-0738/#architectures
     ArmeabiV7a,
     Arm64V8a,
     X86,
@@ -811,14 +813,14 @@ impl FromStr for AndroidArch {
 }
 
 impl AndroidArch {
-    /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch) -> Self {
+    /// Determine the appropriate Android arch.
+    pub fn from_arch(arch: Arch) -> Result<Self, String> {
         match arch {
-            Arch::Aarch64 => Self::Arm64V8a,
-            Arch::Armv7L => Self::ArmeabiV7a,
-            Arch::X86 => Self::X86,
-            Arch::X86_64 => Self::X86_64,
-            _ => unreachable!(),
+            Arch::Aarch64 => Ok(Self::Arm64V8a),
+            Arch::Armv7L => Ok(Self::ArmeabiV7a),
+            Arch::X86 => Ok(Self::X86),
+            Arch::X86_64 => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {arch}")),
         }
     }
 

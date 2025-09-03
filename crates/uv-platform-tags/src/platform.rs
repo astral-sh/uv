@@ -11,6 +11,8 @@ pub enum PlatformError {
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
+    #[error("Failed to detect the arch: {0}")]
+    ArchDetectionError(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
