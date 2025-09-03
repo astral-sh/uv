@@ -1446,8 +1446,11 @@ pub struct PipCompileArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -1775,8 +1778,11 @@ pub struct PipSyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -2081,8 +2087,11 @@ pub struct PipInstallArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -2407,8 +2416,11 @@ pub struct PipCheckArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -3335,8 +3347,11 @@ pub struct RunArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -3615,8 +3630,11 @@ pub struct SyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -4641,8 +4659,11 @@ pub struct ToolRunArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -4766,8 +4787,11 @@ pub struct ToolInstallArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
@@ -4866,8 +4890,11 @@ pub struct ToolUpgradeArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
