@@ -83,6 +83,8 @@ impl ExtraBuildRequires {
     /// Apply runtime constraints from a resolution to the extra build requirements.
     pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .filter(|(name, _)| resolution.distributions().any(|dist| dist.name() == name))
             .map(|(name, requirements)| {
                 let requirements = requirements
                     .into_iter()
