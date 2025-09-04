@@ -367,6 +367,16 @@ not being able to use hard links since the cache and sync target are on separate
 If you're not mounting the cache, image size can be reduced by using the `--no-cache` flag or
 setting `UV_NO_CACHE`.
 
+By default, managed Python installations are not cached before being installed. Setting
+`UV_PYTHON_CACHE_DIR` can be used in combination with a cache mount:
+
+```dockerfile title="Dockerfile"
+ENV UV_PYTHON_CACHE_DIR=/root/.cache/uv/python
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv python install
+```
+
 !!! note
 
     The cache directory's location can be determined by running the `uv cache dir` command in the
