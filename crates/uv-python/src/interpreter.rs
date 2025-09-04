@@ -797,6 +797,12 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("Failed to query Python interpreter at `{path}`")]
+    PermissionDenied {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -911,8 +917,15 @@ impl InterpreterInfo {
             .arg(script)
             .output()
             .map_err(|err| {
-                if err.kind() == io::ErrorKind::NotFound {
-                    return Error::NotFound(interpreter.to_path_buf());
+                match err.kind() {
+                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::PermissionDenied => {
+                        return Error::PermissionDenied {
+                            path: interpreter.to_path_buf(),
+                            err,
+                        };
+                    }
+                    _ => {}
                 }
                 #[cfg(windows)]
                 if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
