@@ -494,11 +494,14 @@ impl EnvVars {
     /// Used to detect an activated virtual environment.
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
 
-    /// Used to detect an activated Conda environment.
+    /// Used to detect the path of an active Conda environment.
     pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
 
-    /// Used to determine if an active Conda environment is the base environment or not.
+    /// Used to determine the name of the active Conda environment.
     pub const CONDA_DEFAULT_ENV: &'static str = "CONDA_DEFAULT_ENV";
+
+    /// Used to determine the root install path of Conda.
+    pub const CONDA_ROOT: &'static str = "_CONDA_ROOT";
 
     /// If set to `1` before a virtual environment is activated, then the
     /// virtual environment name will not be prepended to the terminal prompt.
