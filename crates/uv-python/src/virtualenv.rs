@@ -98,6 +98,12 @@ impl CondaEnvironmentKind {
             return Self::Child;
         };
 
+        // If the `CONDA_PREFIX` equals the `CONDA_DEFAULT_ENV`, we're in an unnamed environment
+        // which is typical for environments created with `conda create -p /path/to/env`.
+        if path == Path::new(&current_env) {
+            return Self::Child;
+        }
+
         // These are the expected names for the base environment; we may want to remove this
         // restriction in the future as it's not strictly necessary.
         if current_env != "base" && current_env != "root" {
