@@ -13361,6 +13361,44 @@ fn reject_unmatched_runtime() -> Result<()> {
 }
 
 #[test]
+fn match_runtime_optional() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        bar = ["iniconfig", "typing-extensions"]
+
+        [tool.uv.sources]
+        typing-extensions = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz" }
+
+        [tool.uv.extra-build-dependencies]
+        typing-extensions = [{ requirement = "iniconfig", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_extra_build_dependencies_cache() -> Result<()> {
     let context = TestContext::new("3.12");
 
