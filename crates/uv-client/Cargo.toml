@@ -38,6 +38,7 @@ async_zip = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+h2 = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }

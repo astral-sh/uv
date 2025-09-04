@@ -5380,6 +5380,7 @@ dependencies = [
  "bytecheck",
  "fs-err",
  "futures",
+ "h2",
  "html-escape",
  "http",
  "http-body-util",

@@ -983,7 +983,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// Whether the error looks like a network error that should be retried.
 ///
 /// There are two cases that the default retry strategy is missing:
-/// * Inside the reqwest middleware error is an `io::Error` such as a broken pipe
+/// * Inside the reqwest or reqwest-middleware error is an `io::Error` such as a broken pipe
 /// * When streaming a response, a reqwest error may be hidden several layers behind errors
 ///   of different crates processing the stream, including `io::Error` layers.
 pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
@@ -1027,7 +1027,12 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             }
 
             trace!("Cannot retry nested reqwest error");
-        } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
+        } else if let Some(io_err) = source.downcast_ref::<io::Error>().or_else(|| {
+            // h2 may hide an IO error inside.
+            source
+                .downcast_ref::<h2::Error>()
+                .and_then(|err| err.get_io())
+        }) {
             has_known_error = true;
             let retryable_io_err_kinds = [
                 // https://github.com/astral-sh/uv/issues/12054
