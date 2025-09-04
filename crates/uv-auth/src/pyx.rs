@@ -90,7 +90,7 @@ impl From<AccessToken> for Credentials {
 }
 
 /// The default tolerance for the access token expiration.
-pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
+pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 30;
 
 #[derive(Debug, Clone)]
 struct PyxDirectories {
