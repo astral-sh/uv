@@ -77,30 +77,19 @@ pub(crate) enum CondaEnvironmentKind {
 }
 
 impl CondaEnvironmentKind {
-    /// Whether the given `CONDA_PREFIX` path is the base Conda environment.
+    /// Determine whether the given `CONDA_PREFIX` path points to the base Conda environment.
     ///
-    /// When the base environment is used, `CONDA_DEFAULT_ENV` will be set to a name, i.e., `base` or
-    /// `root` which does not match the prefix, e.g. `/usr/local` instead of
-    /// `/usr/local/conda/envs/<name>`.
+    /// Logic:
+    /// - If the path contains the directory `envs`, it is considered a child environment.
+    /// - Otherwise, it is considered the base environment.
     fn from_prefix_path(path: &Path) -> Self {
-        // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
-        let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
-            return Self::Child;
-        };
-
-        // These are the expected names for the base environment
-        if default_env != "base" && default_env != "root" {
-            return Self::Child;
-        }
-
-        let Some(name) = path.file_name() else {
-            return Self::Child;
-        };
-
-        if name.to_str().is_some_and(|name| name == default_env) {
-            Self::Base
-        } else {
+        // Check if any component in the path is named "envs"
+        if path.components().any(|comp| comp.as_os_str() == "envs") {
+            // Path contains "envs", so this is a child environment
             Self::Child
+        } else {
+            // Path does not contain "envs", so this is the base environment
+            Self::Base
         }
     }
 }
