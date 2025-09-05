@@ -11,7 +11,7 @@ use uv_client::{BaseClientBuilder, retries_from_env};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -39,9 +39,21 @@ pub(crate) async fn format(
     }
 
     let workspace_cache = WorkspaceCache::default();
-    let project =
-        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await?;
+    let target_dir =
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
+            // If we found a project, we use the project root
+            Ok(proj) => proj.root().to_owned(),
+            // If there is a problem finding a project, we just use the provided directory,
+            // e.g., for unmanaged projects
+            Err(
+                WorkspaceError::MissingPyprojectToml
+                | WorkspaceError::MissingProject(_)
+                | WorkspaceError::NonWorkspace(_),
+            ) => project_dir.to_owned(),
+            Err(err) => return Err(err.into()),
+        };
 
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
@@ -67,8 +79,7 @@ pub(crate) async fn format(
     .with_context(|| format!("Failed to install ruff {version}"))?;
 
     let mut command = Command::new(&ruff_path);
-    // Run ruff in the project root
-    command.current_dir(project.root());
+    command.current_dir(target_dir);
     command.arg("format");
 
     if check {
