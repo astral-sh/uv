@@ -1908,6 +1908,7 @@ pub(crate) struct FormatSettings {
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
     pub(crate) version: Option<String>,
+    pub(crate) no_project: bool,
 }
 
 impl FormatSettings {
@@ -1918,6 +1919,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            no_project,
         } = args;
 
         Self {
@@ -1925,6 +1927,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            no_project,
         }
     }
 }
