@@ -1013,6 +1013,13 @@ impl Error {
                     );
                     false
                 }
+                InterpreterError::PermissionDenied { path, err } => {
+                    debug!(
+                        "Skipping unexecutable interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
                 InterpreterError::NotFound(path)
                 | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
