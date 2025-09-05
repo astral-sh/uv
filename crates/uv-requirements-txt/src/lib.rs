@@ -40,6 +40,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use rustc_hash::FxHashSet;
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
@@ -170,6 +171,24 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self, RequirementsTxtFileError> {
+        let mut visited = VisitedFiles::Requirements {
+            requirements: &mut FxHashSet::default(),
+            constraints: &mut FxHashSet::default(),
+        };
+        Self::parse_impl(requirements_txt, working_dir, client_builder, &mut visited).await
+    }
+
+    /// See module level documentation
+    #[instrument(
+        skip_all,
+        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
+    )]
+    async fn parse_impl(
+        requirements_txt: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        client_builder: &BaseClientBuilder<'_>,
+        visited: &mut VisitedFiles<'_>,
+    ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
@@ -220,6 +239,7 @@ impl RequirementsTxt {
             requirements_dir,
             client_builder,
             requirements_txt,
+            visited,
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
@@ -236,12 +256,13 @@ impl RequirementsTxt {
     /// the current working directory. However, relative paths to sub-files (e.g., `-r ../requirements.txt`)
     /// are resolved against the directory of the containing `requirements.txt` file, to match
     /// `pip`'s behavior.
-    pub async fn parse_inner(
+    async fn parse_inner(
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
         client_builder: &BaseClientBuilder<'_>,
         requirements_txt: &Path,
+        visited: &mut VisitedFiles<'_>,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -276,14 +297,33 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_requirements =
-                        Box::pin(Self::parse(&sub_file, working_dir, client_builder))
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+                    match visited {
+                        VisitedFiles::Requirements { requirements, .. } => {
+                            if !requirements.insert(sub_file.clone()) {
+                                continue;
+                            }
+                        }
+                        // Treat any nested requirements or constraints as constraints. This differs
+                        // from `pip`, which seems to treat `-r` requirements in constraints files as
+                        // _requirements_, but we don't want to support that.
+                        VisitedFiles::Constraints { constraints } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                        }
+                    }
+                    let sub_requirements = Box::pin(Self::parse_impl(
+                        &sub_file,
+                        working_dir,
+                        client_builder,
+                        visited,
+                    ))
+                    .await
+                    .map_err(|err| RequirementsTxtParserError::Subfile {
+                        source: Box::new(err),
+                        start,
+                        end,
+                    })?;
 
                     // Disallow conflicting `--index-url` in nested `requirements` files.
                     if sub_requirements.index_url.is_some()
@@ -331,14 +371,35 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_constraints =
-                        Box::pin(Self::parse(&sub_file, working_dir, client_builder))
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+
+                    // Switch to constraints mode, if we aren't in it already.
+                    let mut visited = match visited {
+                        VisitedFiles::Requirements { constraints, .. } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                            VisitedFiles::Constraints { constraints }
+                        }
+                        VisitedFiles::Constraints { constraints } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                            VisitedFiles::Constraints { constraints }
+                        }
+                    };
+
+                    let sub_constraints = Box::pin(Self::parse_impl(
+                        &sub_file,
+                        working_dir,
+                        client_builder,
+                        &mut visited,
+                    ))
+                    .await
+                    .map_err(|err| RequirementsTxtParserError::Subfile {
+                        source: Box::new(err),
+                        start,
+                        end,
+                    })?;
 
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
@@ -1312,6 +1373,23 @@ impl RequirementsTxtParserError {
     }
 }
 
+/// Avoid infinite recursion through recursive inclusions, while also being mindful of nested
+/// requirements and constraint inclusions.
+#[derive(Debug)]
+enum VisitedFiles<'a> {
+    /// The requirements are included as regular requirements, and can recursively include both
+    /// requirements and constraints.
+    Requirements {
+        requirements: &'a mut FxHashSet<PathBuf>,
+        constraints: &'a mut FxHashSet<PathBuf>,
+    },
+    /// The requirements are included as constraints, all recursive inclusions are considered
+    /// constraints.
+    Constraints {
+        constraints: &'a mut FxHashSet<PathBuf>,
+    },
+}
+
 /// Calculates the column and line offset of a given cursor based on the
 /// number of Unicode codepoints.
 fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
@@ -1354,12 +1432,14 @@ fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
     use anyhow::Result;
     use assert_fs::prelude::*;
     use fs_err as fs;
     use indoc::indoc;
+    use insta::assert_debug_snapshot;
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
@@ -2791,5 +2871,99 @@ mod test {
 
         // Assert line and columns are expected
         assert_eq!(line_column, expected, "Issues with input: {input}");
+    }
+
+    /// Test different kinds of recursive inclusions with requirements and constraints
+    #[tokio::test]
+    async fn recursive_circular_inclusion() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let both = temp_dir.child("both.txt");
+        both.write_str(indoc! {"
+            pkg-both
+        "})?;
+        let both = temp_dir.child("both-recursive.txt");
+        both.write_str(indoc! {"
+            pkg-both-recursive
+            -r both-recursive.txt
+            -c both-recursive.txt
+        "})?;
+        let requirements_only = temp_dir.child("requirements-only.txt");
+        requirements_only.write_str(indoc! {"
+            pkg-requirements-only
+            -r requirements-only.txt
+        "})?;
+        let requirements_only = temp_dir.child("requirements-only-recursive.txt");
+        requirements_only.write_str(indoc! {"
+            pkg-requirements-only-recursive
+            -r requirements-only-recursive.txt
+        "})?;
+        let constraints_only = temp_dir.child("requirements-in-constraints.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-requirements-in-constraints
+            # Some nested recursion for good measure
+            -c constraints-only.txt
+        "})?;
+        let constraints_only = temp_dir.child("constraints-only.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-constraints-only
+            -c constraints-only.txt
+            # Using `-r` inside `-c`
+            -r requirements-in-constraints.txt
+        "})?;
+        let constraints_only = temp_dir.child("constraints-only-recursive.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-constraints-only-recursive
+            -r constraints-only-recursive.txt
+        "})?;
+
+        let requirements = temp_dir.child("requirements.txt");
+        requirements.write_str(indoc! {"
+            # Even if a package was already included as a constraint, it is also included as
+            # requirement
+            -c both.txt
+            -r both.txt
+            -c both-recursive.txt
+            -r both-recursive.txt
+
+            -r requirements-only.txt
+            -r requirements-only-recursive.txt
+            -c constraints-only.txt
+            -c constraints-only-recursive.txt
+        "})?;
+
+        let parsed = RequirementsTxt::parse(
+            &requirements,
+            temp_dir.path(),
+            &BaseClientBuilder::default(),
+        )
+        .await?;
+
+        let requirements: BTreeSet<String> = parsed
+            .requirements
+            .iter()
+            .map(|entry| entry.requirement.to_string())
+            .collect();
+        let constraints: BTreeSet<String> =
+            parsed.constraints.iter().map(ToString::to_string).collect();
+
+        assert_debug_snapshot!(requirements, @r#"
+        {
+            "pkg-both",
+            "pkg-both-recursive",
+            "pkg-requirements-only",
+            "pkg-requirements-only-recursive",
+        }
+        "#);
+        assert_debug_snapshot!(constraints, @r#"
+        {
+            "pkg-both",
+            "pkg-both-recursive",
+            "pkg-constraints-only",
+            "pkg-constraints-only-recursive",
+            "pkg-requirements-in-constraints",
+        }
+        "#);
+
+        Ok(())
     }
 }

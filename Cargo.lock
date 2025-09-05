@@ -6208,6 +6208,7 @@ dependencies = [
  "regex",
  "reqwest",
  "reqwest-middleware",
+ "rustc-hash",
  "tempfile",
  "test-case",
  "thiserror 2.0.16",
