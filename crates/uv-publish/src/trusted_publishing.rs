@@ -1,4 +1,4 @@
-//! Trusted publishing (via OIDC) with GitHub actions.
+//! Trusted publishing (via OIDC) with GitHub Actions and GitLab CI.
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -98,30 +98,40 @@ pub(crate) async fn get_token(
     registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    // If this fails, we can skip the audience request.
-    let oidc_token_request_token =
-        env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
-            TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
-        })?;
-
-    // Request 1: Get the audience
-    let audience = get_audience(registry, client).await?;
-
-    // Request 2: Get the OIDC token from GitHub.
-    let oidc_token = get_oidc_token(&audience, &oidc_token_request_token, client).await?;
-
-    // Request 3: Get the publishing token from PyPI.
-    let publish_token = get_publish_token(registry, &oidc_token, client).await?;
-
-    debug!("Received token, using trusted publishing");
-
-    // Tell GitHub Actions to mask the token in any console logs.
-    #[allow(clippy::print_stdout)]
+    // GitHub Actions flow
     if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
+        let oidc_token_request_token =
+            env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|e| {
+                TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, e)
+            })?;
+        // Request 1: Get the audience
+        let audience = get_audience(registry, client).await?;
+        // Request 2: Get the OIDC token from GitHub.
+        let oidc_token = get_oidc_token(&audience, &oidc_token_request_token, client).await?;
+        // Request 3: Get the publishing token from PyPI.
+        let publish_token = get_publish_token(registry, &oidc_token, client).await?;
+        debug!("Received token, using trusted publishing via GitHub Actions");
+        // Tell GitHub Actions to mask the token in any console logs.
+        #[allow(clippy::print_stdout)]
         println!("::add-mask::{}", &publish_token);
+        return Ok(publish_token);
     }
 
-    Ok(publish_token)
+    // GitLab CI flow: discover OIDC token via {AUD}_ID_TOKEN
+    if env::var(EnvVars::GITLAB_CI).is_ok() {
+        let audience = get_audience(registry, client).await?;
+        let env_key = format!("{}_ID_TOKEN", normalize_env_key_audience(&audience));
+        let jwt = env::var(&env_key)
+            .map_err(|_| TrustedPublishingError::MissingEnvVar("{AUD}_ID_TOKEN"))?;
+        let publish_token = get_publish_token(registry, &jwt, client).await?;
+        debug!("Received token, using trusted publishing via GitLab (audience: {audience})");
+        return Ok(publish_token);
+    }
+
+    // Not in a supported CI environment for trusted publishing
+    Err(TrustedPublishingError::MissingEnvVar(
+        "ACTIONS_ID_TOKEN_REQUEST_TOKEN or {AUD}_ID_TOKEN",
+    ))
 }
 
 async fn get_audience(
@@ -130,8 +140,17 @@ async fn get_audience(
 ) -> Result<String, TrustedPublishingError> {
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
-    let audience_url =
-        DisplaySafeUrl::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
+    // Prefer HTTPS for OIDC discovery; allow HTTP only in test builds
+    let scheme: &str = if cfg!(test) {
+        registry.scheme()
+    } else {
+        "https"
+    };
+    let audience_url = DisplaySafeUrl::parse(&format!(
+        "{}://{}/_/oidc/audience",
+        scheme,
+        registry.authority()
+    ))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
     let response = client
         .get(Url::from(audience_url.clone()))
@@ -194,8 +213,15 @@ async fn get_publish_token(
     oidc_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
+    // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
+    let scheme: &str = if cfg!(test) {
+        registry.scheme()
+    } else {
+        "https"
+    };
     let mint_token_url = DisplaySafeUrl::parse(&format!(
-        "https://{}/_/oidc/mint-token",
+        "{}://{}/_/oidc/mint-token",
+        scheme,
         registry.authority()
     ))?;
     debug!("Querying the trusted publishing upload token from {mint_token_url}");
@@ -242,4 +268,32 @@ async fn get_publish_token(
             }
         }
     }
+}
+
+/// Normalize an audience string into an environment key component.
+///
+/// Rules:
+/// - Uppercase ASCII
+/// - Replace any sequence of non-alphanumeric characters with a single underscore
+/// - Trim leading/trailing underscores
+fn normalize_env_key_audience(aud: &str) -> String {
+    let mut out = String::with_capacity(aud.len());
+    let mut last_was_sep = false;
+    for ch in aud.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_uppercase());
+            last_was_sep = false;
+        } else if !last_was_sep {
+            out.push('_');
+            last_was_sep = true;
+        }
+    }
+    // Trim leading/trailing underscores
+    while out.starts_with('_') {
+        out.remove(0);
+    }
+    while out.ends_with('_') {
+        out.pop();
+    }
+    out
 }
