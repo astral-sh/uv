@@ -611,7 +611,7 @@ used.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 </dd><dt id="uv-run--with-editable"><a href="#uv-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
-</dd><dt id="uv-run--with-requirements"><a href="#uv-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files.</p>
+</dd><dt id="uv-run--with-requirements"><a href="#uv-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files or PEP 723 Python scripts.</p>
 <p>The same environment semantics as <code>--with</code> apply.</p>
 <p>Using <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> files is not allowed.</p>
 </dd></dl>
@@ -2546,7 +2546,7 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 <p>When used in a project, these dependencies will be layered on top of the uv tool's environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
-</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files or PEP 723 Python scripts</p>
 </dd></dl>
 
 ### uv tool install
@@ -2773,7 +2773,7 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 </dd><dt id="uv-tool-install--with-executables-from"><a href="#uv-tool-install--with-executables-from"><code>--with-executables-from</code></a> <i>with-executables-from</i></dt><dd><p>Install executables from the following packages</p>
-</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files or PEP 723 Python scripts</p>
 </dd></dl>
 
 ### uv tool upgrade
@@ -4808,7 +4808,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <ul>
 <li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
-<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or <code>pylock.toml</code> files.</p>
+<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code>, PEP 723 scripts, or <code>pylock.toml</code> files.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 <p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
 </dd><dt id="uv-pip-install--resolution"><a href="#uv-pip-install--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
