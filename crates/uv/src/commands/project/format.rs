@@ -45,8 +45,8 @@ pub(crate) async fn format(
         {
             // If we found a project, we use the project root
             Ok(proj) => proj.root().to_owned(),
-            // If there is a problem finding a project, we just use the provided directory
-            // e.g. unmanaged projects
+            // If there is a problem finding a project, we just use the provided directory,
+            // e.g., for unmanaged projects
             Err(
                 WorkspaceError::MissingPyprojectToml
                 | WorkspaceError::MissingProject(_)
