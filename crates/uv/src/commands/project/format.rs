@@ -11,7 +11,7 @@ use uv_client::{BaseClientBuilder, retries_from_env};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
