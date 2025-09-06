@@ -306,22 +306,22 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member
-                                .pyproject_toml()
-                                .is_package(!workspace.is_required_member(&requirement.name))
-                            {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(true),
-                                    r#virtual: Some(false),
-                                }
                             } else {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(false),
-                                    r#virtual: Some(true),
+                                let status = workspace.required_members().get(&requirement.name);
+                                if member.pyproject_toml().is_package(status.is_none()) {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(status.copied().flatten().unwrap_or(true)),
+                                        r#virtual: Some(false),
+                                    }
+                                } else {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(false),
+                                        r#virtual: Some(true),
+                                    }
                                 }
                             };
                             (source, marker)

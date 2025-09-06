@@ -1161,6 +1161,8 @@ pub enum Source {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        /// Whether the package should be installed as editable. Defaults to `true`.
+        editable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1498,11 +1500,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `workspace` and `branch`",
                 ));
             }
-            if editable.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `workspace` and `editable`",
-                ));
-            }
             if package.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `workspace` and `package`",
@@ -1511,6 +1508,7 @@ impl<'de> Deserialize<'de> for Source {
 
             return Ok(Self::Workspace {
                 workspace,
+                editable,
                 marker,
                 extra,
                 group,
@@ -1643,6 +1641,7 @@ impl Source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
                         workspace: true,
+                        editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,
