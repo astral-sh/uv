@@ -833,6 +833,23 @@ impl Workspace {
             &workspace_pyproject_toml,
         );
 
+        for (package_name, member) in workspace_members.iter() {
+            if member
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.dev_dependencies.as_ref())
+                .is_some()
+            {
+                warn_user_once!(
+                    "In project `{}`: `[tool.uv.dev-dependencies]` is deprecated.\n\
+                    Instead use `[dependency-groups] dev = []`.",
+                    package_name.green(),
+                );
+            }
+        }
+
         Ok(Self {
             install_path: workspace_root,
             packages: workspace_members,
