@@ -817,6 +817,7 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_version_specifiers: bool,
     pub(crate) show_with: bool,
     pub(crate) show_extras: bool,
+    pub(crate) show_python: bool,
 }
 
 impl ToolListSettings {
@@ -828,6 +829,7 @@ impl ToolListSettings {
             show_version_specifiers,
             show_with,
             show_extras,
+            show_python,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -837,6 +839,7 @@ impl ToolListSettings {
             show_version_specifiers,
             show_with,
             show_extras,
+            show_python,
         }
     }
 }
