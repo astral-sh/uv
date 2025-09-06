@@ -82,14 +82,17 @@ impl CondaEnvironmentKind {
     /// When the base environment is used, `CONDA_DEFAULT_ENV` will be set to a name, i.e., `base` or
     /// `root` which does not match the prefix, e.g. `/usr/local` instead of
     /// `/usr/local/conda/envs/<name>`.
+    ///
+    /// Note the name `CONDA_DEFAULT_ENV` is misleading, it's the current environment, not the base
+    /// environment name.
     fn from_prefix_path(path: &Path) -> Self {
         // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
-        let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
+        let Ok(current_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
             return Self::Child;
         };
 
         // These are the expected names for the base environment
-        if default_env != "base" && default_env != "root" {
+        if current_env != "base" && current_env != "root" {
             return Self::Child;
         }
 
@@ -97,10 +100,12 @@ impl CondaEnvironmentKind {
             return Self::Child;
         };
 
-        if name.to_str().is_some_and(|name| name == default_env) {
-            Self::Base
-        } else {
+        // If the environment is in a directory matching the name of the environment, it's not
+        // usually a base environment.
+        if name.to_str().is_some_and(|name| name == current_env) {
             Self::Child
+        } else {
+            Self::Base
         }
     }
 }
