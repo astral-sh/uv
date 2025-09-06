@@ -252,6 +252,9 @@ pub(crate) enum ProjectError {
     Lowering(#[from] uv_distribution::LoweringError),
 
     #[error(transparent)]
+    Workspace(#[from] uv_workspace::WorkspaceError),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]

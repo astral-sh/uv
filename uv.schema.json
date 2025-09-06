@@ -2133,6 +2133,13 @@
           "description": "A dependency on another package in the workspace.",
           "type": "object",
           "properties": {
+            "editable": {
+              "description": "Whether the package should be installed as editable. Defaults to `true`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "extra": {
               "anyOf": [
                 {

@@ -943,7 +943,7 @@ impl ValidatedLock {
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Option<bool>>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -1187,6 +1187,18 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedEditable(name, expected) => {
+                if expected {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
@@ -1194,7 +1206,7 @@ impl ValidatedLock {
                     );
                 } else {
                     debug!(
-                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
                     );
                 }
                 Ok(Self::Preferable(lock))
