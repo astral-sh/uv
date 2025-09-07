@@ -93,7 +93,7 @@ pub(crate) async fn run(
     no_config: bool,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     modifications: Modifications,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
