@@ -1630,7 +1630,7 @@ fn reformat_array_multiline(deps: &mut Array) {
 /// Ensure that only inline comments for the i-th dependency are removed,
 /// while preserving the other comments.
 ///
-/// toml_edit attaches comments after the comma to the next item in the array, even if they are
+/// toml-edit attaches comments after the comma to the next item in the array, even if they are
 /// end-of-line comments.
 fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
     /// Remove comments on the same line as the dependency to be removed,
