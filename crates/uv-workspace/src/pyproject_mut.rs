@@ -1629,6 +1629,9 @@ fn reformat_array_multiline(deps: &mut Array) {
 
 /// Ensure that only inline comments for the i-th dependency are removed,
 /// while preserving the other comments.
+///
+/// toml_edit attaches comments after the comma to the next item in the array, even if they are
+/// end-of-line comments.
 fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
     /// Remove comments on the same line as the dependency to be removed,
     /// while preserving the comments in lines following it.
@@ -1656,8 +1659,13 @@ fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
         .prefix()
         .and_then(|s| s.as_str())
         .map(ToOwned::to_owned)
-        .expect("The prefix should not be `None`, even when there are no characters")
-        .clone();
+        .unwrap_or_else(|| {
+            if cfg!(debug_assertions) {
+                panic!("The prefix should not be `None`, even when there are no characters");
+            } else {
+                String::new()
+            }
+        });
 
     // Replace inline comment associated with `dep_to_remove` with preceding comments.
     if i == n_deps - 1 {
@@ -1671,7 +1679,7 @@ fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
             // The trailing comment is part of the Array's `.trailing` field.
             None => deps.trailing().as_str().unwrap().to_owned(),
             // The dependency to be removed has no trailing comma and an inline comment under `.suffix`.
-            Some(suffix) => suffix,
+            Some(suffix) => format!("{}{}", suffix, deps.trailing().as_str().unwrap().to_owned()),
         };
         let updated_comment = format!("{}{}", prefix, remove_inline_comment(&trailing_comment));
         deps.set_trailing(updated_comment);
@@ -1690,7 +1698,13 @@ fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
             .prefix()
             .and_then(|s| s.as_str())
             .map(ToOwned::to_owned)
-            .expect("The prefix should not be `None`, even when there are no characters");
+            .unwrap_or_else(|| {
+                if cfg!(debug_assertions) {
+                    panic!("The prefix should not be `None`, even when there are no characters");
+                } else {
+                    String::new()
+                }
+            });
         let updated_comment = format!("{}{}", prefix, remove_inline_comment(&trailing_comment));
         following_decor.set_prefix(updated_comment);
     }
