@@ -64,7 +64,7 @@ pub(crate) async fn export(
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     locked: bool,
     frozen: bool,
     include_annotations: bool,

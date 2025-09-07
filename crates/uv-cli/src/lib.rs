@@ -3155,9 +3155,14 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
+    /// Install any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3463,9 +3468,14 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
+    /// Install any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -4307,9 +4317,14 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("no_header"), hide = true)]
     pub header: bool,
 
+    /// Export any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.

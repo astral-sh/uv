@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -355,7 +355,7 @@ pub(crate) async fn remove(
         venv,
         &extras,
         &groups,
-        EditableMode::Editable,
+        None,
         InstallOptions::default(),
         Modifications::Exact,
         None,

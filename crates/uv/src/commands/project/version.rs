@@ -11,8 +11,8 @@ use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
@@ -640,7 +640,7 @@ async fn lock_and_sync(
         venv,
         &extras,
         &groups,
-        EditableMode::Editable,
+        None,
         install_options,
         Modifications::Sufficient,
         None,

@@ -13743,7 +13743,7 @@ fn toggle_workspace_editable() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // The child should be editable by default.
+    // Setting `--no-editable` should make the child non-editable.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -13795,6 +13795,25 @@ fn toggle_workspace_editable() -> Result<()> {
         "#
         );
     });
+
+    // Verify that `_child.pth` does not exist in the site-packages directory.
+    assert!(!context.site_packages().join("_child.pth").exists());
+
+    // But `--editable` on the command line should override the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Verify that `_child.pth` exists in the site-packages directory.
+    assert!(context.site_packages().join("_child.pth").exists());
 
     Ok(())
 }
