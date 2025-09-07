@@ -1391,7 +1391,7 @@ impl AddTarget {
                 let project = project
                     .with_pyproject_toml(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
-                    )
+                    )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
             }

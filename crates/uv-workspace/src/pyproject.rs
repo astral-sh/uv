@@ -1161,6 +1161,8 @@ pub enum Source {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        /// Whether the package should be installed as editable. Defaults to `true`.
+        editable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1498,11 +1500,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `workspace` and `branch`",
                 ));
             }
-            if editable.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `workspace` and `editable`",
-                ));
-            }
             if package.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `workspace` and `package`",
@@ -1511,6 +1508,7 @@ impl<'de> Deserialize<'de> for Source {
 
             return Ok(Self::Workspace {
                 workspace,
+                editable,
                 marker,
                 extra,
                 group,
@@ -1550,10 +1548,6 @@ pub enum SourceError {
         "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
     )]
     UnusedEditable(String),
-    #[error(
-        "Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode."
-    )]
-    UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1623,13 +1617,8 @@ impl Source {
             }
         }
 
-        if workspace {
-            // If a workspace source is added with `--no-editable`, error.
-            if editable == Some(false) {
-                return Err(SourceError::UnusedNoEditable(name.to_string()));
-            }
-        } else {
-            // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        if !workspace {
             if !matches!(source, RequirementSource::Directory { .. }) {
                 if editable == Some(true) {
                     return Err(SourceError::UnusedEditable(name.to_string()));
@@ -1643,6 +1632,7 @@ impl Source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
                         workspace: true,
+                        editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,

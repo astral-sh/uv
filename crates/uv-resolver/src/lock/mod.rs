@@ -47,7 +47,7 @@ use uv_pypi_types::{
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
-use uv_workspace::WorkspaceMember;
+use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
@@ -1443,7 +1443,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1471,17 +1471,37 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            // We don't require a build system, if the workspace member is a dependency
-            let expected = !member
-                .pyproject_toml()
-                .is_package(!required_members.contains(name));
-            let actual = self
-                .find_by_name(name)
-                .ok()
-                .flatten()
-                .map(|package| matches!(package.id.source, Source::Virtual(_)));
-            if actual != Some(expected) {
-                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
+            let source = self.find_by_name(name).ok().flatten();
+
+            // Determine whether the member was required by any other member.
+            let value = required_members.get(name);
+            let is_required_member = value.is_some();
+            let editability = value.copied().flatten();
+
+            // Verify that the member is virtual (or not).
+            let expected_virtual = !member.pyproject_toml().is_package(!is_required_member);
+            let actual_virtual =
+                source.map(|package| matches!(package.id.source, Source::Virtual(..)));
+            if actual_virtual != Some(expected_virtual) {
+                return Ok(SatisfiesResult::MismatchedVirtual(
+                    name.clone(),
+                    expected_virtual,
+                ));
+            }
+
+            // Verify that the member is editable (or not).
+            let expected_editable = if expected_virtual {
+                false
+            } else {
+                editability.unwrap_or(true)
+            };
+            let actual_editable =
+                source.map(|package| matches!(package.id.source, Source::Editable(..)));
+            if actual_editable != Some(expected_editable) {
+                return Ok(SatisfiesResult::MismatchedEditable(
+                    name.clone(),
+                    expected_editable,
+                ));
             }
         }
 
@@ -1995,6 +2015,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from editable to non-editable or vice versa.
+    MismatchedEditable(PackageName, bool),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.

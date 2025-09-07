@@ -37,7 +37,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -943,7 +943,7 @@ impl ValidatedLock {
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -1187,6 +1187,18 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedEditable(name, expected) => {
+                if expected {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
@@ -1194,7 +1206,7 @@ impl ValidatedLock {
                     );
                 } else {
                     debug!(
-                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
                     );
                 }
                 Ok(Self::Preferable(lock))
