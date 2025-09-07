@@ -47,7 +47,7 @@ use uv_pypi_types::{
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
-use uv_workspace::WorkspaceMember;
+use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
@@ -1443,7 +1443,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeMap<PackageName, Option<bool>>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1473,10 +1473,13 @@ impl Lock {
         for (name, member) in packages {
             let source = self.find_by_name(name).ok().flatten();
 
-            let status = required_members.get(name);
+            // Determine whether the member was required by any other member.
+            let value = required_members.get(name);
+            let is_required_member = value.is_some();
+            let editability = value.copied().flatten();
 
             // Verify that the member is virtual (or not).
-            let expected_virtual = !member.pyproject_toml().is_package(status.is_none());
+            let expected_virtual = !member.pyproject_toml().is_package(!is_required_member);
             let actual_virtual =
                 source.map(|package| matches!(package.id.source, Source::Virtual(..)));
             if actual_virtual != Some(expected_virtual) {
@@ -1490,7 +1493,7 @@ impl Lock {
             let expected_editable = if expected_virtual {
                 false
             } else {
-                status.copied().flatten().unwrap_or(true)
+                editability.unwrap_or(true)
             };
             let actual_editable =
                 source.map(|package| matches!(package.id.source, Source::Editable(..)));

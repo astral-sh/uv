@@ -12,7 +12,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
-use uv_workspace::{Workspace, WorkspaceMember};
+use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
 
@@ -156,11 +156,11 @@ impl<'lock> LockTarget<'lock> {
 
     /// Return the set of required workspace members, i.e., those that are required by other
     /// members.
-    pub(crate) fn required_members(self) -> &'lock BTreeMap<PackageName, Option<bool>> {
+    pub(crate) fn required_members(self) -> &'lock BTreeMap<PackageName, Editability> {
         match self {
             Self::Workspace(workspace) => workspace.required_members(),
             Self::Script(_) => {
-                static EMPTY: BTreeMap<PackageName, Option<bool>> = BTreeMap::new();
+                static EMPTY: BTreeMap<PackageName, Editability> = BTreeMap::new();
                 &EMPTY
             }
         }

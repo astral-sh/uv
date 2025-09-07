@@ -1,6 +1,5 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -104,6 +103,8 @@ pub struct DiscoveryOptions {
 
 pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
 
+pub type Editability = Option<bool>;
+
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(serde::Serialize))]
@@ -117,7 +118,7 @@ pub struct Workspace {
     packages: WorkspaceMembers,
     /// The workspace members that are required by other members, and whether they were requested
     /// as editable.
-    required_members: BTreeMap<PackageName, Option<bool>>,
+    required_members: BTreeMap<PackageName, Editability>,
     /// The sources table from the workspace `pyproject.toml`.
     ///
     /// This table is overridden by the project sources.
@@ -369,7 +370,7 @@ impl Workspace {
     }
 
     /// The workspace members that are required my another member of the workspace.
-    pub fn required_members(&self) -> &BTreeMap<PackageName, Option<bool>> {
+    pub fn required_members(&self) -> &BTreeMap<PackageName, Editability> {
         &self.required_members
     }
 
@@ -383,7 +384,7 @@ impl Workspace {
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         sources: &BTreeMap<PackageName, Sources>,
         pyproject_toml: &PyProjectToml,
-    ) -> Result<BTreeMap<PackageName, Option<bool>>, WorkspaceError> {
+    ) -> Result<BTreeMap<PackageName, Editability>, WorkspaceError> {
         let mut required_members = BTreeMap::new();
 
         for (package, sources) in sources
@@ -418,20 +419,12 @@ impl Workspace {
                 let Source::Workspace { editable, .. } = &source else {
                     continue;
                 };
-                match required_members.entry(package.clone()) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(*editable);
-                    }
-                    Entry::Occupied(mut entry) => {
-                        if let Some(existing) = entry.get() {
-                            if let Some(editable) = editable {
-                                // If there are conflicting `editable` values, raise an error.
-                                if existing != editable {
-                                    return Err(WorkspaceError::EditableConflict(package.clone()));
-                                }
-                            }
-                        } else {
-                            entry.insert(*editable);
+                let existing = required_members.insert(package.clone(), *editable);
+                if let Some(Some(existing)) = existing {
+                    if let Some(editable) = editable {
+                        // If there are conflicting `editable` values, raise an error.
+                        if existing != *editable {
+                            return Err(WorkspaceError::EditableConflict(package.clone()));
                         }
                     }
                 }
@@ -477,16 +470,19 @@ impl Workspace {
                 return None;
             }
 
-            let status = self.required_members.get(name);
+            let value = self.required_members.get(name);
+            let is_required_member = value.is_some();
+            let editability = value.copied().flatten();
+
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: Box::new([]),
                 groups: groups.into_boxed_slice(),
                 marker: MarkerTree::TRUE,
-                source: if member.pyproject_toml().is_package(status.is_none()) {
+                source: if member.pyproject_toml().is_package(!is_required_member) {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
-                        editable: Some(status.copied().flatten().unwrap_or(true)),
+                        editable: Some(editability.unwrap_or(true)),
                         r#virtual: Some(false),
                         url,
                     }

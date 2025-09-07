@@ -307,12 +307,14 @@ impl LoweredRequirement {
                                     url,
                                 }
                             } else {
-                                let status = workspace.required_members().get(&requirement.name);
-                                if member.pyproject_toml().is_package(status.is_none()) {
+                                let value = workspace.required_members().get(&requirement.name);
+                                let is_required_member = value.is_some();
+                                let editability = value.copied().flatten();
+                                if member.pyproject_toml().is_package(!is_required_member) {
                                     RequirementSource::Directory {
                                         install_path: install_path.into_boxed_path(),
                                         url,
-                                        editable: Some(status.copied().flatten().unwrap_or(true)),
+                                        editable: Some(editability.unwrap_or(true)),
                                         r#virtual: Some(false),
                                     }
                                 } else {
