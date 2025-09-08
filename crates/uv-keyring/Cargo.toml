@@ -18,7 +18,7 @@ apple-native = ["dep:security-framework"]
 ## Use the secret-service on *nix.
 secret-service = ["dep:secret-service"]
 ## Use the built-in credential store on Windows
-windows-native = ["dep:windows-sys", "dep:byteorder"]
+windows-native = ["dep:windows", "dep:byteorder"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -33,7 +33,7 @@ secret-service = { workspace = true, features = ["rt-tokio-crypto-rust"], option
 
 [target.'cfg(target_os = "windows")'.dependencies]
 byteorder = { workspace = true, optional = true }
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]

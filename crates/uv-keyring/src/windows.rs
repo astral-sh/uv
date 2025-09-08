@@ -44,15 +44,16 @@ use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 use std::iter::once;
 use std::str;
-use windows_sys::Win32::Foundation::{
+use windows::Win32::Foundation::{
     ERROR_BAD_USERNAME, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER, ERROR_NO_SUCH_LOGON_SESSION,
-    ERROR_NOT_FOUND, FILETIME, GetLastError,
+    ERROR_NOT_FOUND, FILETIME, WIN32_ERROR,
 };
-use windows_sys::Win32::Security::Credentials::{
+use windows::Win32::Security::Credentials::{
     CRED_FLAGS, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_MAX_GENERIC_TARGET_NAME_LENGTH,
     CRED_MAX_STRING_LENGTH, CRED_MAX_USERNAME_LENGTH, CRED_PERSIST_ENTERPRISE, CRED_TYPE_GENERIC,
     CREDENTIAL_ATTRIBUTEW, CREDENTIALW, CredDeleteW, CredFree, CredReadW, CredWriteW,
 };
+use windows::core::PWSTR;
 use zeroize::Zeroize;
 
 /// The representation of a Windows Generic credential.
@@ -160,15 +161,13 @@ impl CredentialApi for WinCredential {
     /// credential in the store.
     async fn delete_credential(&self) -> Result<()> {
         self.validate_attributes(None, None)?;
-        let target_name = to_wstr(&self.target_name);
+        let mut target_name = to_wstr(&self.target_name);
         let cred_type = CRED_TYPE_GENERIC;
         crate::blocking::spawn_blocking(move || {
             // SAFETY: Calling Windows API
-            if unsafe { CredDeleteW(target_name.as_ptr(), cred_type, 0) } != 0 {
-                Ok(())
-            } else {
-                // SAFETY: Calling Windows API
-                Err(Error::from_win32_code(unsafe { GetLastError() }).into())
+            unsafe {
+                CredDeleteW(PWSTR(target_name.as_mut_ptr()), cred_type, None)
+                    .map_err(|err| Error(err).into())
             }
         })
         .await
@@ -264,22 +263,20 @@ impl WinCredential {
             let credential = CREDENTIALW {
                 Flags: flags,
                 Type: cred_type,
-                TargetName: target_name.as_mut_ptr(),
-                Comment: comment.as_mut_ptr(),
+                TargetName: PWSTR(target_name.as_mut_ptr()),
+                Comment: PWSTR(comment.as_mut_ptr()),
                 LastWritten: last_written,
                 CredentialBlobSize: blob_len,
                 CredentialBlob: blob.as_mut_ptr(),
                 Persist: persist,
                 AttributeCount: attribute_count,
                 Attributes: attributes,
-                TargetAlias: target_alias.as_mut_ptr(),
-                UserName: username.as_mut_ptr(),
+                TargetAlias: PWSTR(target_alias.as_mut_ptr()),
+                UserName: PWSTR(username.as_mut_ptr()),
             };
             // SAFETY: Calling Windows API
-            let result = match unsafe { CredWriteW(&raw const credential, 0) } {
-                0 => Err(Error::from_win32_code(unsafe { GetLastError() }).into()),
-                _ => Ok(()),
-            };
+            let result =
+                unsafe { CredWriteW(&raw const credential, 0) }.map_err(|err| Error(err).into());
             // erase the copy of the secret
             blob.zeroize();
             result
@@ -300,31 +297,33 @@ impl WinCredential {
         T: Send + 'static,
     {
         self.validate_attributes(None, None)?;
-        let target_name = to_wstr(&self.target_name);
+        let mut target_name = to_wstr(&self.target_name);
         crate::blocking::spawn_blocking(move || {
             let mut p_credential = std::ptr::null_mut();
             // at this point, p_credential is just a pointer to nowhere.
             // The allocation happens in the `CredReadW` call below.
             let cred_type = CRED_TYPE_GENERIC;
             // SAFETY: Calling windows API
-            let result =
-                unsafe { CredReadW(target_name.as_ptr(), cred_type, 0, &raw mut p_credential) };
-            if result == 0 {
-                // `CredReadW` failed, so no allocation has been done, so no free needs to be done
-                Err(Error::from_win32_code(unsafe { GetLastError() }).into())
-            } else {
-                // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
-                // the passed extractor function to it.
-                let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
-                let result = f(ref_cred);
-                // Finally, we erase the secret and free the allocated credential.
-                erase_secret(ref_cred);
-                let p_credential = p_credential;
-                // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential.
-                // Free the allocation.
-                unsafe { CredFree(p_credential.cast()) }
-                result
+            unsafe {
+                CredReadW(
+                    PWSTR(target_name.as_mut_ptr()),
+                    cred_type,
+                    None,
+                    &raw mut p_credential,
+                )
             }
+            .map_err(Error)?;
+            // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
+            // the passed extractor function to it.
+            let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
+            let result = f(ref_cred);
+            // Finally, we erase the secret and free the allocated credential.
+            erase_secret(ref_cred);
+            let p_credential = p_credential;
+            // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential.
+            // Free the allocation.
+            unsafe { CredFree(p_credential.cast()) }
+            result
         })
         .await
     }
@@ -332,10 +331,10 @@ impl WinCredential {
     #[allow(clippy::unnecessary_wraps)]
     fn extract_credential(w_credential: &CREDENTIALW) -> Result<Self> {
         Ok(Self {
-            username: unsafe { from_wstr(w_credential.UserName) },
-            target_name: unsafe { from_wstr(w_credential.TargetName) },
-            target_alias: unsafe { from_wstr(w_credential.TargetAlias) },
-            comment: unsafe { from_wstr(w_credential.Comment) },
+            username: unsafe { from_wstr(w_credential.UserName.as_ptr()) },
+            target_name: unsafe { from_wstr(w_credential.TargetName.as_ptr()) },
+            target_alias: unsafe { from_wstr(w_credential.TargetAlias.as_ptr()) },
+            comment: unsafe { from_wstr(w_credential.Comment.as_ptr()) },
         })
     }
 
@@ -475,34 +474,40 @@ unsafe fn from_wstr(ws: *const u16) -> String {
 
 /// Windows error codes are `DWORDS` which are 32-bit unsigned ints.
 #[derive(Debug)]
-pub struct Error(pub u32);
+pub struct Error(windows::core::Error);
 
-impl Error {
-    /// Create a Windows error from a Win32 error code.
-    pub fn from_win32_code(code: u32) -> Self {
-        Self(code)
+impl From<WIN32_ERROR> for Error {
+    fn from(error: WIN32_ERROR) -> Self {
+        Self(windows::core::Error::from(error))
     }
 }
 
 impl From<Error> for ErrorCode {
     fn from(err: Error) -> Self {
-        match err.0 {
-            ERROR_NOT_FOUND => Self::NoEntry,
-            ERROR_NO_SUCH_LOGON_SESSION => Self::NoStorageAccess(Box::new(err)),
-            _ => Self::PlatformFailure(Box::new(err)),
+        if err.0 == ERROR_NOT_FOUND.into() {
+            Self::NoEntry
+        } else if err.0 == ERROR_NO_SUCH_LOGON_SESSION.into() {
+            Self::NoStorageAccess(Box::new(err))
+        } else {
+            Self::PlatformFailure(Box::new(err))
         }
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.0 {
-            ERROR_NO_SUCH_LOGON_SESSION => write!(f, "Windows ERROR_NO_SUCH_LOGON_SESSION"),
-            ERROR_NOT_FOUND => write!(f, "Windows ERROR_NOT_FOUND"),
-            ERROR_BAD_USERNAME => write!(f, "Windows ERROR_BAD_USERNAME"),
-            ERROR_INVALID_FLAGS => write!(f, "Windows ERROR_INVALID_FLAGS"),
-            ERROR_INVALID_PARAMETER => write!(f, "Windows ERROR_INVALID_PARAMETER"),
-            err => write!(f, "Windows error code {err}"),
+        if self.0 == ERROR_NO_SUCH_LOGON_SESSION.into() {
+            write!(f, "Windows ERROR_NO_SUCH_LOGON_SESSION")
+        } else if self.0 == ERROR_NOT_FOUND.into() {
+            write!(f, "Windows ERROR_NOT_FOUND")
+        } else if self.0 == ERROR_BAD_USERNAME.into() {
+            write!(f, "Windows ERROR_BAD_USERNAME")
+        } else if self.0 == ERROR_INVALID_FLAGS.into() {
+            write!(f, "Windows ERROR_INVALID_FLAGS")
+        } else if self.0 == ERROR_INVALID_PARAMETER.into() {
+            write!(f, "Windows ERROR_INVALID_PARAMETER")
+        } else {
+            write!(f, "Windows error code {}", self.0)
         }
     }
 }
@@ -545,18 +550,18 @@ mod tests {
             let attribute_count = 0;
             let attributes: *mut CREDENTIAL_ATTRIBUTEW = std::ptr::null_mut();
             CREDENTIALW {
-                Flags: 0,
+                Flags: CRED_FLAGS(0),
                 Type: CRED_TYPE_GENERIC,
-                TargetName: std::ptr::null_mut(),
-                Comment: std::ptr::null_mut(),
+                TargetName: PWSTR::null(),
+                Comment: PWSTR::null(),
                 LastWritten: last_written,
                 CredentialBlobSize: password.len() as u32,
                 CredentialBlob: password.as_mut_ptr(),
                 Persist: CRED_PERSIST_ENTERPRISE,
                 AttributeCount: attribute_count,
                 Attributes: attributes,
-                TargetAlias: std::ptr::null_mut(),
-                UserName: std::ptr::null_mut(),
+                TargetAlias: PWSTR::null(),
+                UserName: PWSTR::null(),
             }
         }
         // the first malformed sequence can't be UTF-16 because it has an odd number of bytes.

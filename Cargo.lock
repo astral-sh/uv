@@ -5856,7 +5856,7 @@ dependencies = [
  "security-framework",
  "thiserror 2.0.16",
  "tokio",
- "windows-sys 0.59.0",
+ "windows 0.59.0",
  "zeroize",
 ]
 
@@ -6144,7 +6144,6 @@ dependencies = [
  "which",
  "windows 0.59.0",
  "windows-registry",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
