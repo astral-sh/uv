@@ -2267,7 +2267,8 @@ fn python_install_no_cache() {
         .with_managed_python_dirs();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install(), @r"
+    uv_snapshot!(context.filters(), context.python_install()
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2285,7 +2286,8 @@ fn python_install_no_cache() {
     bin_python.assert(predicate::path::exists());
 
     // Should be a no-op when already installed
-    uv_snapshot!(context.filters(), context.python_install(), @r###"
+    uv_snapshot!(context.filters(), context.python_install()
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2295,7 +2297,8 @@ fn python_install_no_cache() {
     "###);
 
     // Similarly, when a requested version is already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13")
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2304,7 +2307,8 @@ fn python_install_no_cache() {
     "###);
 
     // You can opt-in to a reinstall
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall")
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2315,7 +2319,8 @@ fn python_install_no_cache() {
     ");
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall()
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2329,7 +2334,8 @@ fn python_install_no_cache() {
     For more information, try '--help'.
     "###);
 
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13")
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2350,7 +2356,8 @@ fn python_install_no_cache() {
     uv_snapshot!(filters, context
         .python_install()
         .arg("3.12")
-        .arg("--offline"), @r"
+        .arg("--offline")
+        .env_remove(EnvVars::UV_PYTHON_CACHE_DIR), @r"
     success: false
     exit_code: 1
     ----- stdout -----
