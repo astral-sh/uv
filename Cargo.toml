@@ -161,6 +161,8 @@ rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"]
 same-file = { version = "1.0.6" }
 schemars = { version = "1.0.0", features = ["url2"] }
 seahash = { version = "4.1.0" }
+secret-service = { version = "5.0.0", features = ["rt-tokio-crypto-rust"] }
+security-framework = { version = "3" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
@@ -200,6 +202,7 @@ windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_Registry"] }
 wiremock = { version = "0.6.4" }
 xz2 = { version = "0.1.7" }
+zeroize = { version = "1.8.1" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 zstd = { version = "0.13.3" }
 
