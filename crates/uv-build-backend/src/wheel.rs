@@ -5,7 +5,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -207,7 +207,20 @@ fn write_wheel(
 
     // Add the data files
     for (name, directory) in settings.data.iter() {
-        debug!("Adding {name} data files from: `{directory}`");
+        debug!(
+            "Adding {name} data files from: `{}`",
+            directory.user_display()
+        );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let data_dir = format!(
             "{}-{}.data/{}/",
             pyproject_toml.name().as_dist_info_name(),
