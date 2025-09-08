@@ -108,6 +108,9 @@ pub(crate) async fn login(
             bail!("No username provided; did you mean to provide `--username` or `--token`?");
         }
     };
+    if username.is_empty() {
+        bail!("Username cannot be empty");
+    }
 
     let password = match (password, url_password, token) {
         (Some(_), Some(_), _) => {
@@ -137,6 +140,10 @@ pub(crate) async fn login(
             }
         }
     };
+
+    if password.is_empty() {
+        bail!("Password cannot be empty");
+    }
 
     let display_url = if username == "__token__" {
         url.without_credentials().to_string()

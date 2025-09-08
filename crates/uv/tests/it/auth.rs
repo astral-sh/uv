@@ -774,6 +774,38 @@ fn login_text_store() {
     Stored credentials for https://example.com/
     "
     );
+
+    // Empty username should fail
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Username cannot be empty
+    "
+    );
+
+    // Empty password should fail
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg(""), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Password cannot be empty
+    "
+    );
 }
 
 #[test]
@@ -907,6 +939,20 @@ fn token_text_store() {
     ----- stderr -----
     "
     );
+
+    // Empty username should fail
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg(""), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Username cannot be empty
+    "
+    );
 }
 
 #[test]
@@ -955,6 +1001,20 @@ fn logout_text_store() {
 
     ----- stderr -----
     Removed credentials for https://example.com/
+    "
+    );
+
+    // Empty username should fail
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg(""), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Username cannot be empty
     "
     );
 }
