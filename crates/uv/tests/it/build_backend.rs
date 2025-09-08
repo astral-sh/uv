@@ -453,7 +453,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/Django_plugin/__init__.py`
+    error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
@@ -467,7 +467,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/Django_plugin/__init__.py`
+    error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
 
     // Use `Django_plugin` instead of `django_plugin`
@@ -603,7 +603,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/foo/__init__.py`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     fs_err::create_dir(context.temp_dir.join("src"))?;
@@ -617,7 +617,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/foo/__init__.py`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     Ok(())
@@ -916,7 +916,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Module root must be inside the project: `..`
+      ╰─▶ Module root must be inside the project: ..
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
@@ -927,7 +927,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Module root must be inside the project: `..`
+      ╰─▶ Module root must be inside the project: ..
     ");
 
     Ok(())
@@ -971,7 +971,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
       × Failed to build `[TEMP_DIR]/project`
-      ╰─▶ The path for the data directory headers must be inside the project: `../header`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @r"
@@ -982,7 +982,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
       × Failed to build `[TEMP_DIR]/project`
-      ╰─▶ The path for the data directory headers must be inside the project: `../header`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
     ");
 
     Ok(())

@@ -35,14 +35,14 @@ pub enum Error {
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
-    #[error("Unsupported glob expression in: `{field}`")]
+    #[error("Unsupported glob expression in: {field}")]
     PortableGlob {
         field: String,
         #[source]
         source: PortableGlobError,
     },
     /// <https://github.com/BurntSushi/ripgrep/discussions/2927>
-    #[error("Glob expressions caused to large regex in: `{field}`")]
+    #[error("Glob expressions caused to large regex in: {field}")]
     GlobSetTooLarge {
         field: String,
         #[source]
@@ -50,7 +50,7 @@ pub enum Error {
     },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
-    #[error("Failed to walk source tree: `{}`", root.user_display())]
+    #[error("Failed to walk source tree: {}", root.user_display())]
     WalkDir {
         root: PathBuf,
         #[source]
@@ -60,19 +60,19 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error("Expected a Python module at: `{}`", _0.user_display())]
+    #[error("Expected a Python module at: {}", _0.user_display())]
     MissingInitPy(PathBuf),
-    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: `{}`", _0.user_display())]
+    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: {}", _0.user_display())]
     NotANamespace(PathBuf),
     /// Either an absolute path or a parent path through `..`.
-    #[error("Module root must be inside the project: `{}`", _0.user_display())]
+    #[error("Module root must be inside the project: {}", _0.user_display())]
     InvalidModuleRoot(PathBuf),
     /// Either an absolute path or a parent path through `..`.
-    #[error("The path for the data directory {} must be inside the project: `{}`", name, path.user_display())]
+    #[error("The path for the data directory {} must be inside the project: {}", name, path.user_display())]
     InvalidDataRoot { name: String, path: PathBuf },
     #[error("Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: {}", _0.user_display())]
     VenvInSourceTree(PathBuf),
-    #[error("Inconsistent metadata between prepare and build step: `{0}`")]
+    #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
@@ -969,7 +969,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Expected a Python module at: `[TEMP_PATH]/src/camel_case/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/camel_case/__init__.py"
         );
     }
 
@@ -1034,7 +1034,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Expected a Python module at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+            @"Expected a Python module at: [TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi"
         );
 
         // Create the correct file
@@ -1100,7 +1100,7 @@ mod tests {
 
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part/__init__.py"
         );
 
         // Create the correct file
@@ -1122,7 +1122,7 @@ mod tests {
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
             build_err(src.path()),
-            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
@@ -1342,7 +1342,7 @@ mod tests {
         // The first module is missing an `__init__.py`.
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/foo/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/foo/__init__.py"
         );
 
         // Create the first correct `__init__.py` file
@@ -1351,7 +1351,7 @@ mod tests {
         // The second module, a namespace, is missing an `__init__.py`.
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part_a/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part_a/__init__.py"
         );
 
         // Create the other two correct `__init__.py` files
@@ -1381,7 +1381,7 @@ mod tests {
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
             build_err(src.path()),
-            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
