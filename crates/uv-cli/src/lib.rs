@@ -4461,6 +4461,14 @@ pub struct FormatArgs {
     /// `uv format -- src/module/foo.py` to format a specific file.
     #[arg(last = true)]
     pub extra_args: Vec<String>,
+
+    /// Avoid discovering a project or workspace.
+    ///
+    /// Instead of running the formatter in the context of the current project, run it in the
+    /// context of the current directory. This is useful when the current directory is not a
+    /// project.
+    #[arg(long)]
+    pub no_project: bool,
 }
 
 #[derive(Args)]
