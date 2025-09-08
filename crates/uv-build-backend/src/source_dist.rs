@@ -9,7 +9,7 @@ use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
@@ -123,12 +123,22 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let directory = uv_fs::normalize_path(Path::new(directory));
+        let directory = uv_fs::normalize_path(directory);
         trace!(
             "Including data ({}) at: `{}`",
             name,
             directory.user_display()
         );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(&directory)))

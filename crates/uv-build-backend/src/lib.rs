@@ -66,6 +66,9 @@ pub enum Error {
     /// Either an absolute path or a parent path through `..`.
     #[error("Module root must be inside the project: `{}`", _0.user_display())]
     InvalidModuleRoot(PathBuf),
+    /// Either an absolute path or a parent path through `..`.
+    #[error("The path for the data directory {} must be inside the project: `{}`", name, path.user_display())]
+    InvalidDataRoot { name: String, path: PathBuf },
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -209,8 +212,10 @@ fn find_roots(
     namespace: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
-    let src_root = source_tree.join(&relative_module_root);
-    if !src_root.starts_with(source_tree) {
+    // Check that even if a path contains `..`, we only include files below the module root.
+    if !uv_fs::normalize_path(&source_tree.join(&relative_module_root))
+        .starts_with(uv_fs::normalize_path(source_tree))
+    {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
     let src_root = source_tree.join(&relative_module_root);

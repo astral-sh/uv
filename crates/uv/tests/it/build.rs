@@ -1442,7 +1442,7 @@ fn build_fast_path() -> Result<()> {
     uv_snapshot!(context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
-        .arg(context.temp_dir.join("output1")), @r###"
+        .arg(context.temp_dir.join("output1")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1452,7 +1452,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel from source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1487,7 +1487,7 @@ fn build_fast_path() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1495,7 +1495,7 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
     Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output3")
@@ -1507,7 +1507,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1517,7 +1517,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel (uv build backend)...
     Successfully built output4/built_by_uv-0.1.0.tar.gz
     Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output4")
