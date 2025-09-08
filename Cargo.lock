@@ -5097,7 +5097,6 @@ dependencies = [
  "which",
  "whoami",
  "windows 0.59.0",
- "windows-result",
  "wiremock",
  "zip",
 ]
@@ -5711,7 +5710,6 @@ dependencies = [
  "tokio",
  "tracing",
  "windows 0.59.0",
- "windows-core 0.59.0",
 ]
 
 [[package]]
@@ -6144,8 +6142,8 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-warnings",
  "which",
+ "windows 0.59.0",
  "windows-registry",
- "windows-result",
  "windows-sys 0.59.0",
 ]
 
@@ -6357,9 +6355,8 @@ dependencies = [
  "tracing",
  "uv-fs",
  "uv-static",
+ "windows 0.59.0",
  "windows-registry",
- "windows-result",
- "windows-sys 0.59.0",
 ]
 
 [[package]]

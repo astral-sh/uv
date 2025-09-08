@@ -8,9 +8,6 @@ use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
-use uv_preview::Preview;
-use which::{which, which_all};
-
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
@@ -18,8 +15,10 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_preview::Preview;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+use which::{which, which_all};
 
 use crate::downloads::{PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
@@ -251,7 +250,7 @@ pub enum Error {
 
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
-    RegistryError(#[from] windows_result::Error),
+    RegistryError(#[from] windows::core::Error),
 
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
@@ -1502,13 +1501,15 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
 pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::prelude::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
-        FILE_FLAG_OPEN_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_MODE, MAXIMUM_REPARSE_DATA_BUFFER_SIZE,
+        OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
+    use windows::core::PCWSTR;
 
     // The path must be absolute.
     if !path.is_absolute() {
@@ -1553,7 +1554,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     let Ok(md) = fs_err::symlink_metadata(path) else {
         return false;
     };
-    if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+    if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 == 0 {
         return false;
     }
 
@@ -1567,19 +1568,19 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     #[allow(unsafe_code)]
     let reparse_handle = unsafe {
         CreateFileW(
-            path_encoded.as_mut_ptr(),
+            PCWSTR(path_encoded.as_mut_ptr()),
             0,
-            0,
-            std::ptr::null_mut(),
+            FILE_SHARE_MODE(0),
+            None,
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            std::ptr::null_mut(),
+            None,
         )
     };
 
-    if reparse_handle == INVALID_HANDLE_VALUE {
+    let Ok(reparse_handle) = reparse_handle else {
         return false;
-    }
+    };
 
     let mut buf = [0u16; MAXIMUM_REPARSE_DATA_BUFFER_SIZE as usize];
     let mut bytes_returned = 0;
@@ -1590,19 +1591,20 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
         DeviceIoControl(
             reparse_handle,
             FSCTL_GET_REPARSE_POINT,
-            std::ptr::null_mut(),
+            None,
             0,
-            buf.as_mut_ptr().cast(),
+            Some(buf.as_mut_ptr().cast()),
             buf.len() as u32 * 2,
-            &raw mut bytes_returned,
-            std::ptr::null_mut(),
-        ) != 0
+            Some(&raw mut bytes_returned),
+            None,
+        )
+        .is_ok()
     };
 
     // SAFETY: The handle is valid.
     #[allow(unsafe_code)]
     unsafe {
-        CloseHandle(reparse_handle);
+        let _ = CloseHandle(reparse_handle);
     }
 
     // If the operation failed, assume it's not a reparse point.

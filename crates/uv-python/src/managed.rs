@@ -15,7 +15,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_platform::{Error as PlatformError, Os};
@@ -857,7 +857,7 @@ impl PythonMinorVersionLink {
                 .is_ok_and(|metadata| {
                     // Check that this is a reparse point, which indicates this
                     // is a symlink or junction.
-                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
         }
     }
