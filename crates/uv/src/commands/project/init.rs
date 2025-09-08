@@ -990,7 +990,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 python-source = "src"
 
                 [tool.uv]
-                cache-keys = [{{ file = "pyproject.toml" }}, {{ file = "requirements.txt" }}, {{ file = "src/lib.rs" }}, {{ file = "Cargo.toml" }}]
+                cache-keys = [{{ file = "pyproject.toml" }}, {{ file = "requirements.txt" }}, {{ file = "src/**/*.rs" }}, {{ file = "Cargo.toml" }}, {{ file = "Cargo.lock" }}]
 
                 [build-system]
                 requires = ["maturin>=1.0,<2.0"]
@@ -1002,7 +1002,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 build-dir = "build/{wheel_tag}"
 
                 [tool.uv]
-                cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { file = "src/main.cpp" }, { file = "CMakeLists.txt" }]
+                cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { file = "src/**/*.cpp" }, { file = "src/**/*.h" }, { file = "CMakeLists.txt" }]
 
                 [build-system]
                 requires = ["scikit-build-core>=0.10", "pybind11"]
