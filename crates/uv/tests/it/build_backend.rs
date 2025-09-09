@@ -1445,3 +1445,120 @@ fn build_with_all_metadata() -> Result<()> {
 
     Ok(())
 }
+
+/// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
+/// entry.
+#[test]
+fn tool_uv_build_backend_without_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        package = true
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Ensure that the warning isn't shown for registry dependencies.
+    uv_snapshot!(context.filters(), context.pip_install().arg("--find-links").arg("dist").arg("--reinstall").arg("project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0
+    ");
+
+    Ok(())
+}
+
+/// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
+/// entry.
+#[test]
+fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        package = true
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").arg(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py2.py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    ");
+
+    Ok(())
+}
