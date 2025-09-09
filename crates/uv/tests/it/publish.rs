@@ -111,7 +111,7 @@ fn missing_trusted_publishing_permission() {
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
       Caused by: Failed to discover OIDC token
-      Caused by: GitHub Actions detection error: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     "
     );
@@ -138,7 +138,7 @@ fn no_credentials() {
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
       Caused by: Failed to discover OIDC token
-      Caused by: GitHub Actions detection error: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
