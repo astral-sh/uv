@@ -616,9 +616,25 @@ fn login_native_auth_url() {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'http://example.com' for '<SERVICE>': only HTTPS is supported
+    error: invalid value 'http://example.com' for '<SERVICE>': only HTTPS (or HTTP on localhost) is supported
 
     For more information, try '--help'.
+    ");
+
+    // HTTP URLs are fine for localhost
+    uv_snapshot!(context.auth_login()
+        .arg("http://localhost:1324")
+        .arg("--username")
+        .arg("test")
+        .arg("--password")
+        .arg("test")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for test@http://localhost:1324/
     ");
 
     uv_snapshot!(context.auth_login()

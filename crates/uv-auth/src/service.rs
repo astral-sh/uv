@@ -8,7 +8,7 @@ use uv_redacted::DisplaySafeUrl;
 pub enum ServiceParseError {
     #[error(transparent)]
     InvalidUrl(#[from] url::ParseError),
-    #[error("only HTTPS is supported")]
+    #[error("only HTTPS (or HTTP on localhost) is supported")]
     UnsupportedScheme,
 }
 
@@ -35,6 +35,7 @@ impl Service {
     fn check_scheme(url: &Url) -> Result<(), ServiceParseError> {
         match url.scheme() {
             "https" => Ok(()),
+            "http" if matches!(url.host_str(), Some("localhost" | "127.0.0.1")) => Ok(()),
             #[cfg(test)]
             "http" => Ok(()),
             _ => Err(ServiceParseError::UnsupportedScheme),
