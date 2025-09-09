@@ -7,7 +7,7 @@ use console::Term;
 use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
@@ -84,8 +84,12 @@ pub(crate) async fn publish(
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
+
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
+
+    // Load credentials from the token store.
+    let token_store = PyxTokenStore::from_settings()?;
 
     let (publish_url, credentials) = gather_credentials(
         publish_url,
@@ -93,7 +97,9 @@ pub(crate) async fn publish(
         password,
         trusted_publishing,
         keyring_provider,
+        &token_store,
         &oidc_client,
+        &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
@@ -151,13 +157,12 @@ pub(crate) async fn publish(
             .map_err(|err| PublishError::PublishPrepare(file.clone(), Box::new(err)))?;
 
         // Run validation checks on the file, but don't upload it (if possible).
-        let store = PyxTokenStore::from_settings()?;
         uv_publish::validate(
             &file,
             &form_metadata,
             &raw_filename,
             &publish_url,
-            &store,
+            &token_store,
             &upload_client,
             &credentials,
         )
@@ -241,7 +246,9 @@ async fn gather_credentials(
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
+    base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
@@ -265,6 +272,22 @@ async fn gather_credentials(
         publish_url
             .set_username("")
             .expect("Failed to clear publish URL username");
+    }
+
+    // If the user is publishing to pyx, load the credentials from the store.
+    if username.is_none() && password.is_none() {
+        if token_store.is_known_url(&publish_url) {
+            if let Some(token) = token_store
+                .access_token(
+                    base_client.for_host(token_store.api()).raw_client(),
+                    DEFAULT_TOLERANCE_SECS,
+                )
+                .await?
+            {
+                debug!("Using authentication token from the store");
+                return Ok((publish_url, Credentials::from(token)));
+            }
+        }
     }
 
     // If applicable, attempt obtaining a token for trusted publishing.
@@ -388,12 +411,15 @@ mod tests {
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
         let client = BaseClientBuilder::default().build();
+        let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,
             username,
             password,
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
+            &token_store,
+            &client,
             &client,
             None,
             Prompt::Disabled,
