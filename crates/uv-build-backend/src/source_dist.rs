@@ -1,7 +1,8 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -265,6 +266,8 @@ fn write_source_dist(
             trace!("Excluding from sdist: `{}`", relative.user_display());
             continue;
         }
+
+        error_on_venv(entry.file_name(), entry.path())?;
 
         let entry_path = Path::new(&top_level)
             .join(relative)

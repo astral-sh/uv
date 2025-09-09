@@ -987,3 +987,45 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
 
     Ok(())
 }
+
+/// Show an explicit error when there is a venv in source tree.
+#[test]
+fn venv_in_source_tree() {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("--name")
+        .arg("foo")
+        .assert()
+        .success();
+
+    context
+        .venv()
+        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
+}

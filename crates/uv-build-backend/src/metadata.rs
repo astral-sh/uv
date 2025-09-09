@@ -21,7 +21,7 @@ use uv_pep508::{
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
-use crate::{BuildBackendSettings, Error};
+use crate::{BuildBackendSettings, Error, error_on_venv};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
@@ -447,6 +447,8 @@ impl PyProjectToml {
                         );
                         continue;
                     }
+
+                    error_on_venv(entry.file_name(), entry.path())?;
 
                     debug!("License files match: `{}`", relative.user_display());
                     license_files.push(relative.portable_display().to_string());

@@ -19,7 +19,8 @@ use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -179,6 +180,8 @@ fn write_wheel(
                 trace!("Excluding from module: `{}`", match_path.user_display());
                 continue;
             }
+
+            error_on_venv(entry.file_name(), entry.path())?;
 
             let entry_path = entry_path.portable_display().to_string();
             debug!("Adding to wheel: {entry_path}");
@@ -528,6 +531,8 @@ fn wheel_subdir_from_globs(
             trace!("Excluding {}: `{}`", globs_field, relative.user_display());
             continue;
         }
+
+        error_on_venv(entry.file_name(), entry.path())?;
 
         let license_path = Path::new(target)
             .join(relative)
