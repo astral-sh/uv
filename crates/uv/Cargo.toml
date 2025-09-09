@@ -121,6 +121,8 @@ self-replace = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
+uv-publish = { workspace = true, features = ["test"] }
+
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 backon = { workspace = true }

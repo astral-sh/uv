@@ -50,5 +50,10 @@ url = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 
+[features]
+# Test only feature to enable non-HTTPS URL handling
+# in unit tests.
+test = []
+
 [lints]
 workspace = true

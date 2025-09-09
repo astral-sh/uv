@@ -121,7 +121,7 @@ async fn get_audience(
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
     // Prefer HTTPS for OIDC discovery; allow HTTP only in test builds
-    let scheme: &str = if cfg!(test) {
+    let scheme: &str = if cfg!(feature = "test") {
         registry.scheme()
     } else {
         "https"
@@ -175,7 +175,7 @@ async fn get_publish_token(
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
-    let scheme: &str = if cfg!(test) {
+    let scheme: &str = if cfg!(feature = "test") {
         registry.scheme()
     } else {
         "https"
