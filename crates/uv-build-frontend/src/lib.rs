@@ -109,6 +109,8 @@ struct Tool {
 #[serde(rename_all = "kebab-case")]
 struct ToolUv {
     workspace: Option<de::IgnoredAny>,
+    /// To warn users about ignored build backend settings.
+    build_backend: Option<de::IgnoredAny>,
 }
 
 impl BackendPath {
@@ -561,9 +563,8 @@ impl SourceBuild {
             Ok(toml) => {
                 let pyproject_toml = toml_edit::Document::from_str(&toml)
                     .map_err(Error::InvalidPyprojectTomlSyntax)?;
-                let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
-                    .map_err(Error::InvalidPyprojectTomlSchema)?;
-                pyproject_toml
+                PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                    .map_err(Error::InvalidPyprojectTomlSchema)?
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
@@ -581,6 +582,26 @@ impl SourceBuild {
             }
             Err(err) => return Err(Box::new(err.into())),
         };
+
+        if source_strategy == SourceStrategy::Enabled
+            && pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .map(|uv| uv.build_backend.is_some())
+                .unwrap_or(false)
+            && pyproject_toml
+                .build_system
+                .as_ref()
+                .and_then(|build_backend| build_backend.build_backend.as_deref())
+                != Some("uv_build")
+        {
+            warn_user_once!(
+                "There are settings for the `uv_build` build backend defined in \
+                `tool.uv.build-backend`, but the project does not use the `uv_build` backend: {}",
+                source_tree.join("pyproject.toml").simplified_display()
+            );
+        }
 
         let backend = if let Some(build_system) = pyproject_toml.build_system {
             // If necessary, lower the requirements.
