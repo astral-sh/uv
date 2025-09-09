@@ -357,7 +357,6 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
 
 /// Error if we're adding a venv to a distribution.
 pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error> {
-    //dbg!(path);
     // On 64-bit Unix, `lib64` is a (compatibility) symlink to lib. If we traverse `lib64` before
     // `pyvenv.cfg`, we show a generic error for symlink directories instead.
     if !(file_name == "pyvenv.cfg" || file_name == "lib64") {
