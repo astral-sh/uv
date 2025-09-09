@@ -50,6 +50,9 @@ pub(crate) async fn logout(
         (None, Some(url)) => url.to_string(),
         (None, None) => "__token__".to_string(),
     };
+    if username.is_empty() {
+        bail!("Username cannot be empty");
+    }
 
     let display_url = if username == "__token__" {
         url.without_credentials().to_string()
