@@ -34,7 +34,7 @@ use crate::{
 };
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
+use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -928,8 +928,10 @@ impl InterpreterInfo {
                     _ => {}
                 }
                 #[cfg(windows)]
-                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
-                    err.raw_os_error().and_then(|code| u32::try_from(code).ok())
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                    .raw_os_error()
+                    .and_then(|code| u32::try_from(code).ok())
+                    .map(WIN32_ERROR)
                 {
                     // These error codes are returned if the Python interpreter is a corrupt MSIX
                     // package, which we want to differentiate from a typical spawn failure.
