@@ -12035,7 +12035,7 @@ fn install_python_preference() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");

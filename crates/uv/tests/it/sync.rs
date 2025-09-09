@@ -12644,7 +12644,7 @@ fn sync_python_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -12698,7 +12698,7 @@ fn sync_python_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
