@@ -131,7 +131,7 @@ pub(crate) async fn tree(
         // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
         LockMode::DryRun(interpreter.as_ref().unwrap())
     } else {
-        LockMode::Write(interpreter.as_ref().unwrap())
+        LockMode::Write(interpreter.as_ref().unwrap(), false)
     };
 
     // Initialize any shared state.
