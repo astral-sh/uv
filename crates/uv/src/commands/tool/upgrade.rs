@@ -34,7 +34,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -44,7 +44,7 @@ pub(crate) async fn upgrade(
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -83,11 +83,6 @@ pub(crate) async fn upgrade(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
@@ -130,7 +125,7 @@ pub(crate) async fn upgrade(
             printer,
             &installed_tools,
             &args,
-            &network_settings,
+            &client_builder,
             cache,
             &filesystem,
             installer_metadata,
@@ -216,7 +211,7 @@ async fn upgrade_tool(
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
@@ -302,7 +297,7 @@ async fn upgrade_tool(
             python_platform,
             build_constraints.clone(),
             &settings.resolver,
-            network_settings,
+            client_builder,
             &state,
             Box::new(SummaryResolveLogger),
             concurrency,
@@ -320,7 +315,7 @@ async fn upgrade_tool(
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
-            network_settings,
+            client_builder,
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
@@ -347,7 +342,7 @@ async fn upgrade_tool(
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,
-            network_settings,
+            client_builder,
             &state,
             Box::new(SummaryResolveLogger),
             Box::new(UpgradeInstallLogger::new(name.clone())),

@@ -28,6 +28,8 @@ jobs:
           pattern: wheels_uv-*
           path: wheels_uv
           merge-multiple: true
+      - name: Remove wheels unsupported by PyPI
+        run: rm wheels_uv/*loong*
       - name: Publish to PyPI
         run: uv publish -v wheels_uv/*
 
@@ -47,5 +49,7 @@ jobs:
           pattern: wheels_uv_build-*
           path: wheels_uv_build
           merge-multiple: true
+      - name: Remove wheels unsupported by PyPI
+        run: rm wheels_uv/*loong*
       - name: Publish to PyPI
         run: uv publish -v wheels_uv_build/*

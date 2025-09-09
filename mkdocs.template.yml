@@ -212,6 +212,7 @@ nav:
       - Build backend: concepts/build-backend.md
       - Authentication:
           - concepts/authentication/index.md
+          - The auth CLI: concepts/authentication/cli.md
           - HTTP credentials: concepts/authentication/http.md
           - Git credentials: concepts/authentication/git.md
           - TLS certificates: concepts/authentication/certificates.md

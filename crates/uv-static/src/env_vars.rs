@@ -45,6 +45,9 @@ impl EnvVars {
     /// directory for caching instead of the default cache directory.
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
 
+    /// The directory for storage of credentials when using a plain text backend.
+    pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";
+
     /// Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
     /// cache for any operations.
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
@@ -528,6 +531,18 @@ impl EnvVars {
     /// Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
 
+    /// Used with `--python-platform arm64-apple-ios` and related variants to set the
+    /// deployment target (i.e., the minimum supported iOS version).
+    ///
+    /// Defaults to `13.0`.
+    pub const IPHONEOS_DEPLOYMENT_TARGET: &'static str = "IPHONEOS_DEPLOYMENT_TARGET";
+
+    /// Used with `--python-platform aarch64-linux-android` and related variants to set the
+    /// Android API level. (i.e., the minimum supported Android API level).
+    ///
+    /// Defaults to `24`.
+    pub const ANDROID_API_LEVEL: &'static str = "ANDROID_API_LEVEL";
+
     /// Disables colored output (takes precedence over `FORCE_COLOR`).
     ///
     /// See [no-color.org](https://no-color.org).
@@ -860,4 +875,27 @@ impl EnvVars {
 
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
+
+    /// The URL of the pyx Simple API server.
+    pub const PYX_API_URL: &'static str = "PYX_API_URL";
+
+    /// The domain of the pyx CDN.
+    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
+
+    /// The pyx API key (e.g., `sk-pyx-...`).
+    pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
+
+    /// The pyx API key, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_API_KEY: &'static str = "UV_API_KEY";
+
+    /// The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
+    pub const PYX_AUTH_TOKEN: &'static str = "PYX_AUTH_TOKEN";
+
+    /// The pyx authentication token, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
+
+    /// Specifies the directory where uv stores pyx credentials.
+    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 }

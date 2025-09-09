@@ -1,6 +1,7 @@
 use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
 use uv_redacted::DisplaySafeUrl;
@@ -28,7 +29,8 @@ pub enum Credentials {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Username(Option<String>);
 
 impl Username {
@@ -69,7 +71,8 @@ impl From<Option<String>> for Username {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Password(String);
 
 impl Password {
@@ -77,8 +80,14 @@ impl Password {
         Self(password)
     }
 
+    /// Return the [`Password`] as a string slice.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+
+    /// Convert the [`Password`] into its underlying [`String`].
+    pub fn into_string(self) -> String {
+        self.0
     }
 }
 

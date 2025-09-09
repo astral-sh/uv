@@ -16,6 +16,12 @@ On Ubuntu and other Debian-based distributions, you can install a C compiler wit
 sudo apt install build-essential
 ```
 
+On Fedora-based distributions, you can install a C compiler with:
+
+```shell
+sudo dnf install gcc
+```
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).

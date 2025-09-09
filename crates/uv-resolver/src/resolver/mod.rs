@@ -21,7 +21,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
@@ -56,7 +56,8 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
-    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
@@ -2371,6 +2372,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => {
+                if let Some(version) = dist.version() {
+                    if let Some(index) = dist.index() {
+                        // Check the implicit indexes for pre-provided metadata.
+                        let versions_response = self.index.implicit().get(dist.name());
+                        if let Some(VersionsResponse::Found(version_maps)) =
+                            versions_response.as_deref()
+                        {
+                            for version_map in version_maps {
+                                if version_map.index() == Some(index) {
+                                    let Some(metadata) = version_map.get_metadata(version) else {
+                                        continue;
+                                    };
+                                    debug!("Found registry-provided metadata for: {dist}");
+                                    return Ok(Some(Response::Dist {
+                                        dist,
+                                        metadata: MetadataResponse::Found(
+                                            ArchiveMetadata::from_metadata23(metadata.clone()),
+                                        ),
+                                    }));
+                                }
+                            }
+                        }
+
+                        // Check the explicit indexes for pre-provided metadata.
+                        let versions_response = self
+                            .index
+                            .explicit()
+                            .get(&(dist.name().clone(), index.clone()));
+                        if let Some(VersionsResponse::Found(version_maps)) =
+                            versions_response.as_deref()
+                        {
+                            for version_map in version_maps {
+                                let Some(metadata) = version_map.get_metadata(version) else {
+                                    continue;
+                                };
+                                debug!("Found registry-provided metadata for: {dist}");
+                                return Ok(Some(Response::Dist {
+                                    dist,
+                                    metadata: MetadataResponse::Found(
+                                        ArchiveMetadata::from_metadata23(metadata.clone()),
+                                    ),
+                                }));
+                            }
+                        }
+                    }
+                }
+
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
                     .boxed_local()
@@ -2462,6 +2510,42 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let Some(dist) = candidate.compatible() else {
                     return Ok(None);
                 };
+
+                // If the registry provided metadata for this distribution, use it.
+                for version_map in version_map {
+                    if let Some(metadata) = version_map.get_metadata(candidate.version()) {
+                        let dist = dist.for_resolution();
+                        if version_map.index() == dist.index() {
+                            debug!("Found registry-provided metadata for: {dist}");
+
+                            let metadata = MetadataResponse::Found(
+                                ArchiveMetadata::from_metadata23(metadata.clone()),
+                            );
+
+                            let dist = dist.to_owned();
+                            if &package_name != dist.name() {
+                                return Err(ResolveError::MismatchedPackageName {
+                                    request: "distribution",
+                                    expected: package_name,
+                                    actual: dist.name().clone(),
+                                });
+                            }
+
+                            let response = match dist {
+                                ResolvedDist::Installable { dist, .. } => Response::Dist {
+                                    dist: (*dist).clone(),
+                                    metadata,
+                                },
+                                ResolvedDist::Installed { dist } => Response::Installed {
+                                    dist: (*dist).clone(),
+                                    metadata,
+                                },
+                            };
+
+                            return Ok(Some(response));
+                        }
+                    }
+                }
 
                 // Avoid prefetching source distributions with unbounded lower-bound ranges. This
                 // often leads to failed attempts to build legacy versions of packages that are

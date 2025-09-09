@@ -8,10 +8,11 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
@@ -113,7 +114,7 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         python_platform: Option<&TargetTriple>,
         settings: &ResolverInstallerSettings,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
@@ -133,7 +134,7 @@ impl CachedEnvironment {
                 python_platform,
                 build_constraints.clone(),
                 &settings.resolver,
-                network_settings,
+                client_builder,
                 state,
                 resolve,
                 concurrency,
@@ -201,7 +202,7 @@ impl CachedEnvironment {
             Modifications::Exact,
             build_constraints,
             settings.into(),
-            network_settings,
+            client_builder,
             state,
             install,
             installer_metadata,

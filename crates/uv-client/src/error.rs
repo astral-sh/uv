@@ -75,6 +75,11 @@ impl Error {
         ErrorKind::BadHtml { source: err, url }.into()
     }
 
+    /// Create a new error from a `MessagePack` parsing error.
+    pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
+        ErrorKind::BadMessagePack { source: err, url }.into()
+    }
+
     /// Returns `true` if this error corresponds to an offline error.
     pub(crate) fn is_offline(&self) -> bool {
         matches!(&*self.kind, ErrorKind::Offline(_))
@@ -248,6 +253,12 @@ pub enum ErrorKind {
     #[error("Received some unexpected HTML from {}", url)]
     BadHtml {
         source: html::Error,
+        url: DisplaySafeUrl,
+    },
+
+    #[error("Received some unexpected MessagePack from {}", url)]
+    BadMessagePack {
+        source: rmp_serde::decode::Error,
         url: DisplaySafeUrl,
     },
 

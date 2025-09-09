@@ -854,6 +854,10 @@ impl TestContext {
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
+            .env(
+                EnvVars::XDG_DATA_HOME,
+                self.home_dir.join("data").as_os_str(),
+            )
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
@@ -868,7 +872,6 @@ impl TestContext {
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
-            .env_remove(EnvVars::XDG_DATA_HOME)
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
@@ -1272,6 +1275,42 @@ impl TestContext {
         self.add_shared_env(&mut command, false);
 
         command
+    }
+
+    /// Create a `uv auth login` command.
+    pub fn auth_login(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("login");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth logout` command.
+    pub fn auth_logout(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("logout");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth token` command.
+    pub fn auth_token(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("token");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Set `HOME` to the real home directory.
+    ///
+    /// We need this for testing commands which use the macOS keychain.
+    #[must_use]
+    pub fn with_real_home(mut self) -> Self {
+        if let Some(home) = env::var_os(EnvVars::HOME) {
+            self.extra_env
+                .push((EnvVars::HOME.to_string().into(), home));
+        }
+        self
     }
 
     /// Run the given python code and check whether it succeeds.
@@ -1819,7 +1858,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
         .collect();
 
-    let client = uv_client::BaseClientBuilder::new()
+    let client = uv_client::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
         .build();
     let url = url.parse().unwrap();

@@ -1,12 +1,18 @@
-use anstream::AutoStream;
-use anyhow::Context;
-use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
+use anstream::AutoStream;
+use anyhow::Context;
+use owo_colors::OwoColorize;
+use tracing::debug;
+
+pub(crate) use auth::dir::dir as auth_dir;
+pub(crate) use auth::login::login as auth_login;
+pub(crate) use auth::logout::logout as auth_logout;
+pub(crate) use auth::token::token as auth_token;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -63,6 +69,7 @@ pub(crate) use venv::venv;
 
 use crate::printer::Printer;
 
+mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
 mod cache_clean;
@@ -159,6 +166,13 @@ pub(super) async fn compile_bytecode(
     let mut files = 0;
     for site_packages in venv.site_packages() {
         let site_packages = CWD.join(site_packages);
+        if !site_packages.exists() {
+            debug!(
+                "Skipping non-existent site-packages directory: {}",
+                site_packages.display()
+            );
+            continue;
+        }
         files += compile_tree(
             &site_packages,
             venv.python_executable(),

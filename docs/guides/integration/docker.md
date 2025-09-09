@@ -31,7 +31,7 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.8.14`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.8.15`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.8` (the latest patch
   version)
 
@@ -95,7 +95,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.8.14-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.8.15-alpine`.
 
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
@@ -136,7 +136,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.8.14 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.8.15 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -154,7 +154,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.14 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.8.14/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.8.15/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -366,6 +366,16 @@ not being able to use hard links since the cache and sync target are on separate
 
 If you're not mounting the cache, image size can be reduced by using the `--no-cache` flag or
 setting `UV_NO_CACHE`.
+
+By default, managed Python installations are not cached before being installed. Setting
+`UV_PYTHON_CACHE_DIR` can be used in combination with a cache mount:
+
+```dockerfile title="Dockerfile"
+ENV UV_PYTHON_CACHE_DIR=/root/.cache/uv/python
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv python install
+```
 
 !!! note
 
@@ -580,5 +590,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.8.14`, or (even better) the specific image digest,
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.8.15`, or (even better) the specific image digest,
     such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

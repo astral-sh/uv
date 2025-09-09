@@ -226,7 +226,7 @@
       ]
     },
     "extra-build-dependencies": {
-      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages, like,\n`pip`, and do not declare them as build dependencies.",
+      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages like\n`pip`, and do not declare them as build dependencies.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExtraBuildDependencies"
@@ -2133,6 +2133,13 @@
           "description": "A dependency on another package in the workspace.",
           "type": "object",
           "properties": {
+            "editable": {
+              "description": "Whether the package should be installed as editable. Defaults to `true`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "extra": {
               "anyOf": [
                 {
@@ -2292,6 +2299,11 @@
           "const": "x86_64-unknown-linux-musl"
         },
         {
+          "description": "A RISCV64 Linux target.",
+          "type": "string",
+          "const": "riscv64-unknown-linux"
+        },
+        {
           "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
           "type": "string",
           "const": "x86_64-manylinux2014"
@@ -2422,9 +2434,34 @@
           "const": "aarch64-manylinux_2_40"
         },
         {
+          "description": "An ARM64 Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
+          "type": "string",
+          "const": "aarch64-linux-android"
+        },
+        {
+          "description": "An `x86_64` Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
+          "type": "string",
+          "const": "x86_64-linux-android"
+        },
+        {
           "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.",
           "type": "string",
           "const": "wasm32-pyodide2024"
+        },
+        {
+          "description": "An ARM64 target for iOS device\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "arm64-apple-ios"
+        },
+        {
+          "description": "An ARM64 target for iOS simulator\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "arm64-apple-ios-simulator"
+        },
+        {
+          "description": "An `x86_64` target for iOS simulator\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "x86_64-apple-ios-simulator"
         }
       ]
     },

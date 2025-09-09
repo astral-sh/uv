@@ -757,6 +757,71 @@ werkzeug==3.0.1
     Ok(())
 }
 
+#[test]
+fn install_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    // Update the script file.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a `pyproject.toml` file with a `poetry` section.
 #[test]
 fn install_pyproject_toml_poetry() -> Result<()> {

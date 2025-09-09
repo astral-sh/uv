@@ -2658,6 +2658,80 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tool_run_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .arg("script.py")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    ");
+
+    // Error when the script is not a valid PEP723 script.
+    let script = context.temp_dir.child("not_pep723_script.py");
+    script.write_str("import anyio")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("not_pep723_script.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `not_pep723_script.py` does not contain inline script metadata
+    ");
+
+    // Error when the script doesn't exist.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("missing_file.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `missing_file.py` (not found)
+    ");
+
+    Ok(())
+}
+
 /// Test windows runnable types, namely console scripts and legacy setuptools scripts.
 /// Console Scripts <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#console-scripts>
 /// Legacy Scripts <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts>.

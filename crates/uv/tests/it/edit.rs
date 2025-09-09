@@ -2248,25 +2248,12 @@ fn add_workspace_editable() -> Result<()> {
 
     let child1 = context.temp_dir.join("child1");
 
-    // `--no-editable` should error.
+    // `--no-editable` should add `editable = false`.
     let mut add_cmd = context.add();
     add_cmd
         .arg("child2")
         .arg("--no-editable")
         .current_dir(&child1);
-
-    uv_snapshot!(context.filters(), add_cmd, @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
-    "###);
-
-    // `--editable` should not.
-    let mut add_cmd = context.add();
-    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r"
     success: true
@@ -2301,7 +2288,50 @@ fn add_workspace_editable() -> Result<()> {
         build-backend = "hatchling.build"
 
         [tool.uv.sources]
-        child2 = { workspace = true }
+        child2 = { workspace = true, editable = false }
+        "#
+        );
+    });
+
+    // `--editable` should not.
+    let mut add_cmd = context.add();
+    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     ~ child2==0.1.0 (from file://[TEMP_DIR]/child2)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child2",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        child2 = { workspace = true, editable = true }
         "#
         );
     });

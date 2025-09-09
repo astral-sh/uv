@@ -13175,26 +13175,16 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         child = [{ requirement = "anyio>4", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r#"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 11, column 9
-         |
-      11 | child = [{ requirement = "anyio>4", match-runtime = true }]
-         |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      Dependencies marked with `match-runtime = true` cannot include version specifiers
-
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 11, column 9
-       |
-    11 | child = [{ requirement = "anyio>4", match-runtime = true }]
-       |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    Dependencies marked with `match-runtime = true` cannot include version specifiers
-    "#);
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `anyio>4`
+    ");
 
     Ok(())
 }
@@ -13365,6 +13355,44 @@ fn reject_unmatched_runtime() -> Result<()> {
       × Failed to download and build `source-distribution==0.0.3`
       ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
       help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn match_runtime_optional() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        bar = ["iniconfig", "typing-extensions"]
+
+        [tool.uv.sources]
+        typing-extensions = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz" }
+
+        [tool.uv.extra-build-dependencies]
+        typing-extensions = [{ requirement = "iniconfig", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
     ");
 
     Ok(())
@@ -13567,6 +13595,500 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn toggle_workspace_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("child");
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // The child should be editable by default.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=1" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", editable = "child" }]
+        "#
+        );
+    });
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = false }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // Setting `--no-editable` should make the child non-editable.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { directory = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=1" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", directory = "child" }]
+        "#
+        );
+    });
+
+    // Verify that `_child.pth` does not exist in the site-packages directory.
+    assert!(!context.site_packages().join("_child.pth").exists());
+
+    // But `--editable` on the command line should override the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Verify that `_child.pth` exists in the site-packages directory.
+    assert!(context.site_packages().join("_child.pth").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn workspace_editable_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child1 = context.temp_dir.child("child1");
+    let pyproject_toml = child1.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child1
+        .child("src")
+        .child("child1")
+        .child("__init__.py")
+        .touch()?;
+
+    let child2 = context.temp_dir.child("child2");
+    let pyproject_toml = child2.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child2
+        .child("src")
+        .child("child2")
+        .child("__init__.py")
+        .touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true, editable = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + iniconfig==2.0.0
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // If one member declares `editable = true`, and the other omits `editable`, use editable.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+            "project",
+        ]
+
+        [[package]]
+        name = "child1"
+        version = "0.1.0"
+        source = { editable = "child1" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=1" }]
+
+        [[package]]
+        name = "child2"
+        version = "0.1.0"
+        source = { editable = "child2" }
+        dependencies = [
+            { name = "child1" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child1", editable = "child1" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child1" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child1", editable = "child1" }]
+        "#
+        );
+    });
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true, editable = false }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // If one member declares `editable = false`, and the other omits `editable`, use non-editable.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+            "project",
+        ]
+
+        [[package]]
+        name = "child1"
+        version = "0.1.0"
+        source = { directory = "child1" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=1" }]
+
+        [[package]]
+        name = "child2"
+        version = "0.1.0"
+        source = { editable = "child2" }
+        dependencies = [
+            { name = "child1" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child1", directory = "child1" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child1" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child1", directory = "child1" }]
+        "#
+        );
+    });
+
+    let child2 = context.temp_dir.child("child2");
+    let pyproject_toml = child2.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true, editable = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // If the `editable` declarations are conflicting, raise an error.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace member `child1` was requested as both `editable = true` and `editable = false`
     ");
 
     Ok(())

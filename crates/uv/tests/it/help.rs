@@ -16,6 +16,7 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -97,6 +98,7 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -176,6 +178,7 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -874,6 +877,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -902,6 +906,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -959,6 +964,7 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -1081,6 +1087,7 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project

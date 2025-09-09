@@ -50,9 +50,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
-};
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -66,7 +64,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -75,7 +73,7 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -154,7 +152,7 @@ pub(crate) async fn sync(
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 false,
@@ -171,7 +169,7 @@ pub(crate) async fn sync(
             ScriptEnvironment::get_or_init(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -257,7 +255,7 @@ pub(crate) async fn sync(
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
-                &network_settings,
+                &client_builder,
                 &PlatformState::default(),
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
@@ -290,7 +288,7 @@ pub(crate) async fn sync(
                 // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -322,7 +320,7 @@ pub(crate) async fn sync(
     let outcome = match LockOperation::new(
         mode,
         &settings.resolver,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -336,7 +334,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -393,7 +391,7 @@ pub(crate) async fn sync(
         modifications,
         python_platform.as_ref(),
         (&settings).into(),
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -408,7 +406,7 @@ pub(crate) async fn sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -561,12 +559,12 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -643,12 +641,7 @@ pub(super) async fn do_sync(
     }
     .into_inner();
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -722,8 +715,7 @@ pub(super) async fn do_sync(
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
@@ -834,20 +826,48 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 }
 
 /// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolution {
+fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
-        EditableMode::Editable => resolution,
+        None => resolution,
 
-        // Filter out any editable distributions.
-        EditableMode::NonEditable => resolution.map(|dist| {
+        // Filter out any non-editable distributions.
+        Some(EditableMode::Editable) => resolution.map(|dist| {
             let ResolvedDist::Installable { dist, version } = dist else {
                 return None;
             };
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
                 install_path,
-                editable: Some(true),
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(true),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+
+        // Filter out any editable distributions.
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
                 r#virtual,
                 url,
             })) = dist.as_ref()

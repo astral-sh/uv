@@ -339,7 +339,8 @@ impl TorchStrategy {
                     | Os::Illumos { .. }
                     | Os::Haiku { .. }
                     | Os::Android { .. }
-                    | Os::Pyodide { .. } => {
+                    | Os::Pyodide { .. }
+                    | Os::Ios { .. } => {
                         Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
                     }
                 }
@@ -369,7 +370,8 @@ impl TorchStrategy {
                 | Os::Illumos { .. }
                 | Os::Haiku { .. }
                 | Os::Android { .. }
-                | Os::Pyodide { .. } => {
+                | Os::Pyodide { .. }
+                | Os::Ios { .. } => {
                     Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
                 }
             },
@@ -387,7 +389,8 @@ impl TorchStrategy {
                 | Os::Illumos { .. }
                 | Os::Haiku { .. }
                 | Os::Android { .. }
-                | Os::Pyodide { .. } => {
+                | Os::Pyodide { .. }
+                | Os::Ios { .. } => {
                     Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
                 }
             },

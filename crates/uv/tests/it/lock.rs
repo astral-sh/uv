@@ -21067,7 +21067,7 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
     ----- stdout -----
 
     ----- stderr -----
-    warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` for support or provide a username
+    warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
     error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
       Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
     ");
