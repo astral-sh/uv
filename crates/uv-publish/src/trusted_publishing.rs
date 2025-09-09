@@ -17,7 +17,7 @@ use uv_static::EnvVars;
 pub enum TrustedPublishingError {
     #[error(transparent)]
     Url(#[from] url::ParseError),
-    #[error("Failed to discover OIDC token: {0}")]
+    #[error("Failed to discover OIDC token")]
     Discovery(#[from] ambient_id::Error),
     #[error("Failed to fetch: `{0}`")]
     Reqwest(DisplaySafeUrl, #[source] reqwest::Error),

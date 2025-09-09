@@ -78,9 +78,7 @@ fn mixed_credentials() {
         .arg("always")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -104,9 +102,7 @@ fn missing_trusted_publishing_permission() {
         .arg("always")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -114,8 +110,10 @@ fn missing_trusted_publishing_permission() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
-      Caused by: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
-    "###
+      Caused by: Failed to discover OIDC token
+      Caused by: GitHub Actions detection error: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+    "
     );
 }
 
@@ -130,9 +128,7 @@ fn no_credentials() {
         .arg("https://test.pypi.org/legacy/")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -141,7 +137,9 @@ fn no_credentials() {
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
-      Caused by: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
+      Caused by: Failed to discover OIDC token
+      Caused by: GitHub Actions detection error: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Failed to send POST request

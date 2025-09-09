@@ -624,18 +624,10 @@ impl EnvVars {
     /// Used for trusted publishing via `uv publish`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
-    /// Used for trusted publishing via `uv publish`. Contains the oidc token url.
-    pub const ACTIONS_ID_TOKEN_REQUEST_URL: &'static str = "ACTIONS_ID_TOKEN_REQUEST_URL";
-
-    /// Used for trusted publishing via `uv publish`. Contains the oidc request token.
-    pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &'static str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
-
     /// Indicates that the current process is running in GitLab CI.
     ///
     /// When set (typically to `true`), uv may attempt GitLab-specific trusted publishing flows.
     pub const GITLAB_CI: &'static str = "GITLAB_CI";
-    // For GitLab CI trusted publishing, uv discovers the OIDC token via `{AUD}_ID_TOKEN`,
-    // `PYPI_ID_TOKEN` for PyPI and `TESTPYPI_ID_TOKEN` for TestPyPI
 
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
