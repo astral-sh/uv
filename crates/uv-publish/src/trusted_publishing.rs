@@ -2,12 +2,10 @@
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
-use reqwest::{StatusCode, header};
+use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::env::VarError;
-use std::ffi::OsString;
 use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -17,12 +15,10 @@ use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
-    #[error("Environment variable {0} not set, is the `id-token: write` permission missing?")]
-    MissingEnvVar(&'static str),
-    #[error("Environment variable {0} is not valid UTF-8: `{1:?}`")]
-    InvalidEnvVar(&'static str, OsString),
     #[error(transparent)]
     Url(#[from] url::ParseError),
+    #[error("Failed to discover OIDC token: {0}")]
+    Discovery(#[from] ambient_id::Error),
     #[error("Failed to fetch: `{0}`")]
     Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: `{0}`")]
@@ -36,15 +32,10 @@ pub enum TrustedPublishingError {
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
     #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
     InvalidOidcToken(StatusCode, String),
-}
-
-impl TrustedPublishingError {
-    fn from_var_err(env_var: &'static str, err: VarError) -> Self {
-        match err {
-            VarError::NotPresent => Self::MissingEnvVar(env_var),
-            VarError::NotUnicode(os_string) => Self::InvalidEnvVar(env_var, os_string),
-        }
-    }
+    /// This error can only occur when the user forces the use of trusted publishing
+    /// in an unsupported environment.
+    #[error("No OIDC token available from the environment")]
+    NoToken,
 }
 
 #[derive(Deserialize)]
@@ -61,12 +52,6 @@ impl Display for TrustedPublishingToken {
 #[derive(Deserialize)]
 struct Audience {
     audience: String,
-}
-
-/// The response from querying `$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pypi`.
-#[derive(Deserialize)]
-struct OidcToken {
-    value: String,
 }
 
 /// The body for querying `$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pypi`.
@@ -94,44 +79,39 @@ pub struct OidcTokenClaims {
 }
 
 /// Returns the short-lived token to use for uploading.
+///
+/// Return states:
+/// - `Ok(Some(token))`: Successfully obtained a trusted publishing token.
+/// - `Ok(None)`: Not in a supported CI environment for trusted publishing.
+/// - `Err(...)`: An error occurred while trying to obtain the token.
 pub(crate) async fn get_token(
     registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
-) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    // GitHub Actions flow
-    if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
-        let oidc_token_request_token =
-            env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|e| {
-                TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, e)
-            })?;
-        // Request 1: Get the audience
-        let audience = get_audience(registry, client).await?;
-        // Request 2: Get the OIDC token from GitHub.
-        let oidc_token = get_oidc_token(&audience, &oidc_token_request_token, client).await?;
-        // Request 3: Get the publishing token from PyPI.
-        let publish_token = get_publish_token(registry, &oidc_token, client).await?;
-        debug!("Received token, using trusted publishing via GitHub Actions");
-        // Tell GitHub Actions to mask the token in any console logs.
-        #[allow(clippy::print_stdout)]
-        println!("::add-mask::{}", &publish_token);
-        return Ok(publish_token);
-    }
+) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
+    // Get the OIDC token's audience from the registry.
+    let audience = get_audience(registry, client).await?;
 
-    // GitLab CI flow: discover OIDC token via {AUD}_ID_TOKEN
-    if env::var(EnvVars::GITLAB_CI).is_ok() {
-        let audience = get_audience(registry, client).await?;
-        let env_key = format!("{}_ID_TOKEN", normalize_env_key_audience(&audience));
-        let jwt = env::var(&env_key)
-            .map_err(|_| TrustedPublishingError::MissingEnvVar("{AUD}_ID_TOKEN"))?;
-        let publish_token = get_publish_token(registry, &jwt, client).await?;
-        debug!("Received token, using trusted publishing via GitLab (audience: {audience})");
-        return Ok(publish_token);
-    }
+    // Perform ambient OIDC token discovery.
+    // Depending on the host (GitHub Actions, GitLab CI, etc.)
+    // this may perform additional network requests.
+    let oidc_token = get_oidc_token(&audience, client).await?;
 
-    // Not in a supported CI environment for trusted publishing
-    Err(TrustedPublishingError::MissingEnvVar(
-        "ACTIONS_ID_TOKEN_REQUEST_TOKEN or {AUD}_ID_TOKEN",
-    ))
+    // Exchange the OIDC token for a short-lived upload token,
+    // if OIDC token discovery succeeded.
+    if let Some(oidc_token) = &oidc_token {
+        let publish_token = get_publish_token(registry, &oidc_token.reveal(), client).await?;
+
+        // If we're on GitHub Actions, mask the exchanged token in logs.
+        if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
+            #[allow(clippy::print_stdout)]
+            println!("::add-mask::{}", publish_token);
+        }
+
+        Ok(Some(publish_token))
+    } else {
+        // Not in a supported CI environment for trusted publishing.
+        Ok(None)
+    }
 }
 
 async fn get_audience(
@@ -167,33 +147,14 @@ async fn get_audience(
     Ok(audience.audience)
 }
 
+/// Perform ambient OIDC token discovery.
 async fn get_oidc_token(
     audience: &str,
-    oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
-    let oidc_token_url = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
-        TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL, err)
-    })?;
-    let mut oidc_token_url = DisplaySafeUrl::parse(&oidc_token_url)?;
-    oidc_token_url
-        .query_pairs_mut()
-        .append_pair("audience", audience);
-    debug!("Querying the trusted publishing OIDC token from {oidc_token_url}");
-    let authorization = format!("bearer {oidc_token_request_token}");
-    let response = client
-        .get(Url::from(oidc_token_url.clone()))
-        .header(header::AUTHORIZATION, authorization)
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;
-    let oidc_token: OidcToken = response
-        .error_for_status()
-        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?
-        .json()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?;
-    Ok(oidc_token.value)
+) -> Result<Option<ambient_id::IdToken>, TrustedPublishingError> {
+    let detector = ambient_id::Detector::new_with_client(client.clone());
+
+    Ok(detector.detect(audience).await?)
 }
 
 /// Parse the JSON Web Token that the OIDC token is.
@@ -268,32 +229,4 @@ async fn get_publish_token(
             }
         }
     }
-}
-
-/// Normalize an audience string into an environment key component.
-///
-/// Rules:
-/// - Uppercase ASCII
-/// - Replace any sequence of non-alphanumeric characters with a single underscore
-/// - Trim leading/trailing underscores
-fn normalize_env_key_audience(aud: &str) -> String {
-    let mut out = String::with_capacity(aud.len());
-    let mut last_was_sep = false;
-    for ch in aud.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_uppercase());
-            last_was_sep = false;
-        } else if !last_was_sep {
-            out.push('_');
-            last_was_sep = true;
-        }
-    }
-    // Trim leading/trailing underscores
-    while out.starts_with('_') {
-        out.remove(0);
-    }
-    while out.ends_with('_') {
-        out.pop();
-    }
-    out
 }

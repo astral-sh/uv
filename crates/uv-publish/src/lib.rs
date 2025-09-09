@@ -3,7 +3,7 @@ mod trusted_publishing;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use std::{env, fmt, io};
+use std::{fmt, io};
 
 use fs_err::tokio::File;
 use futures::TryStreamExt;
@@ -21,7 +21,6 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
-use trusted_publishing::TrustedPublishingToken;
 use url::Url;
 
 use uv_auth::Credentials;
@@ -38,10 +37,9 @@ use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::DisplaySafeUrl;
-use uv_static::EnvVars;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 
-use crate::trusted_publishing::TrustedPublishingError;
+use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -322,27 +320,20 @@ pub async fn check_trusted_publishing(
             {
                 return Ok(TrustedPublishResult::Skipped);
             }
-            // If we aren't in a supported CI, we can't use trusted publishing automatically.
-            // Support GitHub Actions and GitLab CI autodetection.
-            let in_github = env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string());
-            let in_gitlab = env::var(EnvVars::GITLAB_CI).is_ok();
-            if !(in_github || in_gitlab) {
-                return Ok(TrustedPublishResult::Skipped);
-            }
-            // We could check for credentials from the keyring or netrc the auth middleware first, but
-            // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!("Running on CI without explicit credentials, checking for trusted publishing");
+
+            debug!("Attempting to get a token for trusted publishing");
+            // Attempt to get a token for trusted publishing.
             match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
                 .await
             {
-                Ok(token) => Ok(TrustedPublishResult::Configured(token)),
-                Err(err) => {
-                    // TODO(konsti): It would be useful if we could differentiate between actual errors
-                    // such as connection errors and warn for them while ignoring errors from trusted
-                    // publishing not being configured.
-                    debug!("Could not obtain trusted publishing credentials, skipping: {err}");
-                    Ok(TrustedPublishResult::Ignored(err))
-                }
+                // Success: we have a token for trusted publishing.
+                Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
+                // Failed to discover an ambient OIDC token.
+                Ok(None) => Ok(TrustedPublishResult::Ignored(
+                    TrustedPublishingError::NoToken,
+                )),
+                // Hard failure during OIDC discovery or token exchange.
+                Err(err) => Ok(TrustedPublishResult::Ignored(err)),
             }
         }
         TrustedPublishing::Always => {
@@ -362,17 +353,15 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            let in_github = env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string());
-            let in_gitlab = env::var(EnvVars::GITLAB_CI).is_ok();
-            if !(in_github || in_gitlab) {
-                warn_user_once!(
-                    "Trusted publishing was requested, but you're not in a supported CI (GitHub Actions or GitLab CI)."
-                );
-            }
-
-            let token =
+            let Some(token) =
                 trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await?;
+                    .await?
+            else {
+                return Err(PublishError::TrustedPublishing(
+                    TrustedPublishingError::NoToken,
+                ));
+            };
+
             Ok(TrustedPublishResult::Configured(token))
         }
         TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
