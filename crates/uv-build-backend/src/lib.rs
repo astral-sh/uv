@@ -7,6 +7,7 @@ mod wheel;
 pub use metadata::{PyProjectToml, check_direct_build};
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
+use std::ffi::OsStr;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
 use std::io;
@@ -69,6 +70,8 @@ pub enum Error {
     /// Either an absolute path or a parent path through `..`.
     #[error("The path for the data directory {} must be inside the project: `{}`", name, path.user_display())]
     InvalidDataRoot { name: String, path: PathBuf },
+    #[error("Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: {}", _0.user_display())]
+    VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -350,6 +353,28 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     }
 
     Ok(module_relative)
+}
+
+/// Error if we're adding a venv to a distribution.
+pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error> {
+    //dbg!(path);
+    // On 64-bit Unix, `lib64` is a (compatibility) symlink to lib. If we traverse `lib64` before
+    // `pyvenv.cfg`, we show a generic error for symlink directories instead.
+    if !(file_name == "pyvenv.cfg" || file_name == "lib64") {
+        return Ok(());
+    }
+
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+
+    if parent.join("bin").join("python").is_symlink()
+        || parent.join("Scripts").join("python.exe").is_file()
+    {
+        return Err(Error::VenvInSourceTree(parent.to_path_buf()));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
