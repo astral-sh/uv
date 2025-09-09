@@ -2006,7 +2006,7 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
+      ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
