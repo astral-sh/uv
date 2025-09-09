@@ -309,7 +309,7 @@ pub(crate) async fn sync(
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
-        LockMode::Write(environment.interpreter())
+        LockMode::Write(environment.interpreter(), false)
     };
 
     let lock_target = match &target {
@@ -1272,7 +1272,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                         LockResult::Unchanged(..) => match mode {
                             // When `--frozen` is used, we don't check the lockfile
                             LockMode::Frozen => LockAction::Use,
-                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_, ..) => {
                                 LockAction::Check
                             }
                         },

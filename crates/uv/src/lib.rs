@@ -1934,6 +1934,7 @@ async fn run_project(
                 args.frozen,
                 args.dry_run,
                 args.refresh,
+                args.force,
                 args.python,
                 args.install_mirrors,
                 args.settings,

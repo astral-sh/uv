@@ -1669,7 +1669,8 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-lock--find-links"><a href="#uv-lock--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 <p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
-<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p></dd><dt id="uv-lock--fork-strategy"><a href="#uv-lock--fork-strategy"><code>--fork-strategy</code></a> <i>fork-strategy</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p></dd><dt id="uv-lock--force"><a href="#uv-lock--force"><code>--force</code></a></dt><dd><p>Force rewrite</p>
+</dd><dt id="uv-lock--fork-strategy"><a href="#uv-lock--fork-strategy"><code>--fork-strategy</code></a> <i>fork-strategy</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
 <p>By default, uv will optimize for selecting the latest version of each package for each supported Python version (<code>requires-python</code>), while minimizing the number of selected versions across platforms.</p>
 <p>Under <code>fewest</code>, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.</p>
 <p>May also be set with the <code>UV_FORK_STRATEGY</code> environment variable.</p><p>Possible values:</p>

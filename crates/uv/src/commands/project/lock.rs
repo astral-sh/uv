@@ -85,6 +85,7 @@ pub(crate) async fn lock(
     frozen: bool,
     dry_run: DryRun,
     refresh: Refresh,
+    force: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -182,7 +183,7 @@ pub(crate) async fn lock(
         } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {
-            LockMode::Write(&interpreter)
+            LockMode::Write(&interpreter, force)
         }
     };
 
@@ -253,7 +254,7 @@ pub(crate) async fn lock(
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LockMode<'env> {
     /// Write the lockfile to disk.
-    Write(&'env Interpreter),
+    Write(&'env Interpreter, bool),
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
@@ -359,6 +360,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    false,
                 )
                 .await?;
 
@@ -372,7 +374,7 @@ impl<'env> LockOperation<'env> {
 
                 Ok(result)
             }
-            LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+            LockMode::Write(interpreter, force) => {
                 // Read the existing lockfile.
                 let existing = match target.read().await {
                     Ok(Some(existing)) => Some(existing),
@@ -402,15 +404,48 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    force,
                 )
                 .await?;
 
-                // If the lockfile changed, write it to disk.
-                if !matches!(self.mode, LockMode::DryRun(_)) {
-                    if let LockResult::Changed(_, lock) = &result {
-                        target.commit(lock).await?;
-                    }
+                if let LockResult::Changed(_, lock) = &result {
+                    target.commit(lock).await?;
                 }
+
+                Ok(result)
+            }
+            LockMode::DryRun(interpreter) => {
+                // Read the existing lockfile.
+                let existing = match target.read().await {
+                    Ok(Some(existing)) => Some(existing),
+                    Ok(None) => None,
+                    Err(ProjectError::Lock(err)) => {
+                        warn_user!(
+                            "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                        );
+                        None
+                    }
+                    Err(err) => return Err(err),
+                };
+
+                // Perform the lock operation, but don't write the lockfile to disk.
+                let result = do_lock(
+                    target,
+                    interpreter,
+                    existing,
+                    self.constraints,
+                    self.settings,
+                    self.client_builder,
+                    self.state,
+                    self.logger,
+                    self.concurrency,
+                    self.cache,
+                    self.workspace_cache,
+                    self.printer,
+                    self.preview,
+                    false,
+                )
+                .await?;
 
                 Ok(result)
             }
@@ -434,6 +469,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    force: bool,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -741,7 +777,9 @@ async fn do_lock(
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = if let Some(existing_lock) = existing_lock {
+    let existing_lock = if force {
+        None
+    } else if let Some(existing_lock) = existing_lock {
         match ValidatedLock::validate(
             existing_lock,
             target.install_path(),

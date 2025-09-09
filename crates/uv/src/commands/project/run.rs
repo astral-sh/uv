@@ -266,7 +266,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             } else if locked {
                 LockMode::Locked(environment.interpreter())
             } else {
-                LockMode::Write(environment.interpreter())
+                LockMode::Write(environment.interpreter(), false)
             };
 
             // Generate a lockfile.
@@ -744,7 +744,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {
-                    LockMode::Write(venv.interpreter())
+                    LockMode::Write(venv.interpreter(), false)
                 };
 
                 let result = match project::lock::LockOperation::new(
