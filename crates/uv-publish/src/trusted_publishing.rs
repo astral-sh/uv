@@ -99,12 +99,12 @@ pub(crate) async fn get_token(
     // Exchange the OIDC token for a short-lived upload token,
     // if OIDC token discovery succeeded.
     if let Some(oidc_token) = &oidc_token {
-        let publish_token = get_publish_token(registry, &oidc_token.reveal(), client).await?;
+        let publish_token = get_publish_token(registry, oidc_token.reveal(), client).await?;
 
         // If we're on GitHub Actions, mask the exchanged token in logs.
+        #[allow(clippy::print_stdout)]
         if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
-            #[allow(clippy::print_stdout)]
-            println!("::add-mask::{}", publish_token);
+            println!("::add-mask::{publish_token}");
         }
 
         Ok(Some(publish_token))
