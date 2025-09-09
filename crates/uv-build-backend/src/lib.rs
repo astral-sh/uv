@@ -7,9 +7,9 @@ mod wheel;
 pub use metadata::{PyProjectToml, check_direct_build};
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
-use std::ffi::OsStr;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
+use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
