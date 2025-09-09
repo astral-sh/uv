@@ -342,3 +342,73 @@ steps:
   https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 [repository secret]:
   https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
+
+## Publishing to PyPI
+
+uv can be used to build and publish your package to PyPI from GitHub Actions. We provide a
+standalone example alongside this guide in
+[astral-sh/trusted-publishing-examples](https://github.com/astral-sh/trusted-publishing-examples).
+The workflow uses [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no credentials
+need to be configured.
+
+In the example workflow, we use a script to test that the source distribution and the wheel are both
+functional and we didn't miss any files. This step is recommended, but optional.
+
+First, add a release workflow to your project:
+
+```yaml title=".github/workflows/publish.yml"
+name: "Publish"
+
+on:
+  push:
+    tags:
+      # Publish on any tag starting with a `v`, e.g., v0.1.0
+      - v*
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install Python 3.13
+        run: uv python install 3.13
+      - name: Build
+        run: uv build
+      # Check that basic features work and we didn't miss to include crucial files
+      - name: Smoke test (wheel)
+        run: uv run --isolated --no-project --with dist/*.whl tests/smoke_test.py
+      - name: Smoke test (source distribution)
+        run: uv run --isolated --no-project --with dist/*.tar.gz tests/smoke_test.py
+      - name: Publish
+        run: uv publish
+```
+
+Then, create the environment defined in the workflow in the GitHub repository under "Settings" ->
+"Environments".
+
+![GitHub settings dialog showing how to add the "pypi" environment under "Settings" -> "Environments"](../../assets/github-add-environment.png)
+
+Add a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) to your PyPI
+project in the project settings under "Publishing". Ensure that all fields match with your GitHub
+configuration.
+
+![PyPI project publishing settings dialog showing how to set all fields for a trusted publisher configuration](../../assets/pypi-add-trusted-publisher.png)
+
+After saving:
+
+![PyPI project publishing settings dialog showing the configured trusted publishing settings](../../assets/pypi-with-trusted-publisher.png)
+
+Finally, tag a release and push it:
+
+```console
+$ git tag -a v0.1.0 -m v0.1.0
+$ git push --tags
+```
