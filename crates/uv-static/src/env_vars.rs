@@ -621,12 +621,16 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
-    /// Used for trusted publishing via `uv publish`.
+    /// Indicates that the current process is running in GitHub Actions.
+    ///
+    /// `uv publish` may attempt trusted publishing flows when set
+    /// to `true`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
     /// Indicates that the current process is running in GitLab CI.
     ///
-    /// When set (typically to `true`), uv may attempt GitLab-specific trusted publishing flows.
+    /// `uv publish` may attempt trusted publishing flows when set
+    /// to `true`.
     pub const GITLAB_CI: &'static str = "GITLAB_CI";
 
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).

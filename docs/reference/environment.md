@@ -553,14 +553,6 @@ Note that `setuptools` and `wheel` are not included in Python 3.12+ environments
 
 uv also reads the following externally defined environment variables:
 
-### `ACTIONS_ID_TOKEN_REQUEST_TOKEN`
-
-Used for trusted publishing via `uv publish`. Contains the oidc request token.
-
-### `ACTIONS_ID_TOKEN_REQUEST_URL`
-
-Used for trusted publishing via `uv publish`. Contains the oidc token url.
-
 ### `ALL_PROXY`
 
 General proxy for all network requests.
@@ -610,7 +602,17 @@ See [force-color.org](https://force-color.org).
 
 ### `GITHUB_ACTIONS`
 
-Used for trusted publishing via `uv publish`.
+Indicates that the current process is running in GitHub Actions.
+
+`uv publish` may attempt trusted publishing flows when set
+to `true`.
+
+### `GITLAB_CI`
+
+Indicates that the current process is running in GitLab CI.
+
+`uv publish` may attempt trusted publishing flows when set
+to `true`.
 
 ### `HF_TOKEN`
 

@@ -499,7 +499,7 @@ async fn read_index_credential_env_vars_for_check_url() {
     );
 }
 
-/// Native GitLab CI trusted publishing using PYPI_ID_TOKEN
+/// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_pypi_id_token() {
     let context = TestContext::new("3.12");
@@ -552,7 +552,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
     );
 }
 
-/// Native GitLab CI trusted publishing using TESTPYPI_ID_TOKEN
+/// Native GitLab CI trusted publishing using `TESTPYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_testpypi_id_token() {
     let context = TestContext::new("3.12");
