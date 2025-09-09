@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fs2::FileExt;
+use fs4::fs_std::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
 
@@ -646,32 +646,37 @@ impl LockedFile {
             file.path().user_display()
         );
         match file.file().try_lock_exclusive() {
-            Ok(()) => {
+            Ok(acquired) if acquired => {
                 debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
+            Ok(_) => Self::lock_exclusive(file, resource),
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
                 if err.kind() != std::io::ErrorKind::WouldBlock {
                     debug!("Try lock error: {err:?}");
                 }
-                info!(
-                    "Waiting to acquire lock for `{resource}` at `{}`",
-                    file.path().user_display(),
-                );
-                file.file().lock_exclusive().map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire lock for `{resource}` at `{}`: {}",
-                        file.path().user_display(),
-                        err
-                    ))
-                })?;
-
-                debug!("Acquired lock for `{resource}`");
-                Ok(Self(file))
+                Self::lock_exclusive(file, resource)
             }
         }
+    }
+
+    fn lock_exclusive(file: fs_err::File, resource: &str) -> Result<LockedFile, io::Error> {
+        info!(
+            "Waiting to acquire lock for `{resource}` at `{}`",
+            file.path().user_display(),
+        );
+        file.file().lock_exclusive().map_err(|err| {
+            // Not an fs_err method, we need to build our own path context
+            std::io::Error::other(format!(
+                "Could not acquire lock for `{resource}` at `{}`: {}",
+                file.path().user_display(),
+                err
+            ))
+        })?;
+
+        debug!("Acquired lock for `{resource}`");
+        Ok(Self(file))
     }
 
     /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
@@ -752,7 +757,7 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = fs2::FileExt::unlock(self.0.file()) {
+        if let Err(err) = fs4::fs_std::FileExt::unlock(self.0.file()) {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),

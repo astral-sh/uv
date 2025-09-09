@@ -106,7 +106,7 @@ encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.10.0" }
 flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }
 fs-err = { version = "3.0.0", features = ["tokio"] }
-fs2 = { version = "0.4.3" }
+fs4 = { version = "0.13.1" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
