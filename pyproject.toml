@@ -62,6 +62,7 @@ minor-labels = ["breaking"]
 ignore-labels = ["internal", "ci", "testing"]
 version_files = [
   "README.md",
+  "pyproject.toml",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
