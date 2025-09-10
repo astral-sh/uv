@@ -19,8 +19,15 @@ pub enum TrustedPublishingError {
     Url(#[from] url::ParseError),
     #[error("Failed to obtain OIDC token: is the `id-token: write` permission missing?")]
     GitHubPermissions(#[source] ambient_id::Error),
+    /// A hard failure during OIDC token discovery.
     #[error("Failed to discover OIDC token")]
     Discovery(#[source] ambient_id::Error),
+    /// A soft failure during OIDC token discovery.
+    ///
+    /// In practice, this usually means the user attempted to force trusted
+    /// publishing outside of something like GitHub Actions or GitLab CI.
+    #[error("No OIDC token discovered: are you in a supported trusted publishing environment?")]
+    NoToken,
     #[error("Failed to fetch: `{0}`")]
     Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: `{0}`")]
@@ -34,10 +41,6 @@ pub enum TrustedPublishingError {
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
     #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
     InvalidOidcToken(StatusCode, String),
-    /// This error can only occur when the user forces the use of trusted publishing
-    /// in an unsupported environment.
-    #[error("No OIDC token available from the environment")]
-    NoToken,
 }
 
 #[derive(Deserialize)]
