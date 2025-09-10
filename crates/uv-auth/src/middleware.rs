@@ -328,7 +328,7 @@ impl Middleware for AuthMiddleware {
                 request = credentials.authenticate(request);
 
                 // If it's fully authenticated, finish the request
-                if credentials.password().is_some() {
+                if credentials.is_authenticated() {
                     trace!("Request for {url} is fully authenticated");
                     return self
                         .complete_request(None, request, extensions, next, auth_policy)
@@ -420,7 +420,7 @@ impl Middleware for AuthMiddleware {
         .or(credentials);
 
         if let Some(credentials) = credentials.as_ref() {
-            if credentials.password().is_some() {
+            if credentials.is_authenticated() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
@@ -529,7 +529,7 @@ impl AuthMiddleware {
         let credentials = Arc::new(credentials);
 
         // If there's a password, send the request and cache
-        if credentials.password().is_some() {
+        if credentials.is_authenticated() {
             trace!("Request for {url} already contains username and password");
             return self
                 .complete_request(Some(credentials), request, extensions, next, auth_policy)
