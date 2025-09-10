@@ -8,7 +8,7 @@
 
 - Allow `--editable` to override `editable = false` annotations ([#15712](https://github.com/astral-sh/uv/pull/15712))
 - Allow `editable = false` for workspace sources ([#15708](https://github.com/astral-sh/uv/pull/15708))
-- Show a dedicated error for virtual environments in source trees ([#15748](https://github.com/astral-sh/uv/pull/15748))
+- Show a dedicated error for virtual environments in source trees on build ([#15748](https://github.com/astral-sh/uv/pull/15748))
 - Support Android platform tags ([#15646](https://github.com/astral-sh/uv/pull/15646))
 - Support iOS platform tags ([#15640](https://github.com/astral-sh/uv/pull/15640))
 - Support scripts with inline metadata in `--with-requirements` and `--requirements` ([#12763](https://github.com/astral-sh/uv/pull/12763))
