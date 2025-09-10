@@ -141,6 +141,16 @@ impl Credentials {
         }
     }
 
+    pub fn is_authenticated(&self) -> bool {
+        match self {
+            Self::Basic {
+                username: _,
+                password,
+            } => password.is_some(),
+            Self::Bearer { token } => !token.is_empty(),
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
