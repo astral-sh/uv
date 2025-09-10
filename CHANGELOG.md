@@ -23,7 +23,7 @@
 - Avoid erroring when `match-runtime` target is optional ([#15671](https://github.com/astral-sh/uv/pull/15671))
 - Ban empty usernames and passwords in `uv auth` ([#15743](https://github.com/astral-sh/uv/pull/15743))
 - Error early for parent path in build backend ([#15733](https://github.com/astral-sh/uv/pull/15733))
-- Extract IO errors from h2 for streaming retries of Connection Reset ([#15675](https://github.com/astral-sh/uv/pull/15675))
+- Retry on IO errors during HTTP/2 streaming ([#15675](https://github.com/astral-sh/uv/pull/15675))
 - Support recursive requirements and constraints inclusion ([#15657](https://github.com/astral-sh/uv/pull/15657))
 - Use token store credentials for `uv publish` ([#15759](https://github.com/astral-sh/uv/pull/15759))
 - fix: refresh activation scripts from upstream virtualenv ([#15272](https://github.com/astral-sh/uv/pull/15272))
