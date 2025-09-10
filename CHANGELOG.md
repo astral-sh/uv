@@ -33,7 +33,7 @@
 
 - Clarify that `uv auth` commands take a URL ([#15664](https://github.com/astral-sh/uv/pull/15664))
 - Improve the CLI help for options that accept requirements files ([#15706](https://github.com/astral-sh/uv/pull/15706))
-- Adds docs for docker caching for managed Python ([#15689](https://github.com/astral-sh/uv/pull/15689))
+- Adds example for caching for managed Python downloads in Docker builds ([#15689](https://github.com/astral-sh/uv/pull/15689))
 
 ## 0.8.15
 
