@@ -26,7 +26,7 @@
 - Retry on IO errors during HTTP/2 streaming ([#15675](https://github.com/astral-sh/uv/pull/15675))
 - Support recursive requirements and constraints inclusion ([#15657](https://github.com/astral-sh/uv/pull/15657))
 - Use token store credentials for `uv publish` ([#15759](https://github.com/astral-sh/uv/pull/15759))
-- fix: refresh activation scripts from upstream virtualenv ([#15272](https://github.com/astral-sh/uv/pull/15272))
+- Fix virtual environment activation script compatibility with latest nushell ([#15272](https://github.com/astral-sh/uv/pull/15272))
 - Skip Python interpreters that cannot be queried with permission errors ([#15685](https://github.com/astral-sh/uv/pull/15685))
 
 ### Documentation
