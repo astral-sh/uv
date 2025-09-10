@@ -50,6 +50,6 @@ jobs:
           path: wheels_uv_build
           merge-multiple: true
       - name: Remove wheels unsupported by PyPI
-        run: rm wheels_uv/*loong*
+        run: rm wheels_uv_build/*loong*
       - name: Publish to PyPI
         run: uv publish -v wheels_uv_build/*
