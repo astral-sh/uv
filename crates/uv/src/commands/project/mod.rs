@@ -2434,7 +2434,7 @@ pub(crate) async fn init_script_python_requirement(
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        PythonRequest::parse(request)
+        Some(PythonRequest::parse(request))
     } else if let (false, Some(request)) = (
         no_pin_python,
         PythonVersionFile::discover(
@@ -2445,14 +2445,14 @@ pub(crate) async fn init_script_python_requirement(
         .and_then(PythonVersionFile::into_version),
     ) {
         // (2) Request from `.python-version`
-        request
+        Some(request)
     } else {
-        // (3) Assume any Python version
-        PythonRequest::Any
+        // (3) No explicit request
+        None
     };
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        python_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

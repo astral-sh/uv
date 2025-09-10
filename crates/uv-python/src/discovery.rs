@@ -726,7 +726,7 @@ fn python_interpreters<'a>(
     cache: &'a Cache,
     preview: Preview,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    python_interpreters_from_executables(
+    let interpreters = python_interpreters_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
@@ -760,7 +760,21 @@ fn python_interpreters<'a>(
     })
     .filter_ok(move |(source, interpreter)| {
         satisfies_python_preference(*source, interpreter, preference)
-    })
+    });
+
+    if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok() {
+        Either::Left(interpreters.map_ok(|(source, interpreter)| {
+            // In test mode, change the source to `Managed` if a version was marked as such via
+            // `TestContext::with_versions_as_managed`.
+            if interpreter.is_managed() {
+                (PythonSource::Managed, interpreter)
+            } else {
+                (source, interpreter)
+            }
+        }))
+    } else {
+        Either::Right(interpreters)
+    }
 }
 
 /// Lazily convert Python executables into interpreters.
