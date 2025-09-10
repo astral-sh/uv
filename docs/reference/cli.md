@@ -5876,11 +5876,12 @@ uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pyp
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-publish--token"><a href="#uv-publish--token"><code>--token</code></a>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
 <p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code> password.</p>
-<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p></dd><dt id="uv-publish--trusted-publishing"><a href="#uv-publish--trusted-publishing"><code>--trusted-publishing</code></a> <i>trusted-publishing</i></dt><dd><p>Configure using trusted publishing through GitHub Actions.</p>
-<p>By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request from a fork).</p>
+<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p></dd><dt id="uv-publish--trusted-publishing"><a href="#uv-publish--trusted-publishing"><code>--trusted-publishing</code></a> <i>trusted-publishing</i></dt><dd><p>Configure trusted publishing.</p>
+<p>By default, uv checks for trusted publishing when running in a supported environment, but ignores it if it isn't configured.</p>
+<p>uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.</p>
 <p>Possible values:</p>
 <ul>
-<li><code>automatic</code>:  Try trusted publishing when we're already in GitHub Actions, continue if that fails</li>
+<li><code>automatic</code>:  Attempt trusted publishing when we're in a supported environment, continue if that fails</li>
 <li><code>always</code></li>
 <li><code>never</code></li>
 </ul></dd><dt id="uv-publish--username"><a href="#uv-publish--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>
