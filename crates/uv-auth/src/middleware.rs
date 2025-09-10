@@ -465,17 +465,23 @@ impl Middleware for AuthMiddleware {
 
         if let Some(response) = response {
             Ok(response)
+        } else if let Some(store) = is_known_url
+            .then_some(self.pyx_token_store.as_ref())
+            .flatten()
+        {
+            let domain = store
+                .api()
+                .domain()
+                .unwrap_or("pyx.dev")
+                .trim_start_matches("api.");
+            Err(Error::Middleware(format_err!(
+                "Run `{}` to authenticate uv with pyx",
+                format!("uv auth login {domain}").green()
+            )))
         } else {
-            if is_known_url {
-                Err(Error::Middleware(format_err!(
-                    "Run `{}` to authenticate the uv CLI",
-                    "uv auth login pyx.dev".green()
-                )))
-            } else {
-                Err(Error::Middleware(format_err!(
-                    "Missing credentials for {url}"
-                )))
-            }
+            Err(Error::Middleware(format_err!(
+                "Missing credentials for {url}"
+            )))
         }
     }
 }
