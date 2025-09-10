@@ -261,11 +261,24 @@ impl PyxTokenStore {
         Ok(())
     }
 
+    /// Returns `true` if the user appears to have an authentication token set.
+    pub fn has_auth_token(&self) -> bool {
+        read_pyx_auth_token().is_some()
+    }
+
+    /// Returns `true` if the user appears to have an API key set.
+    pub fn has_api_key(&self) -> bool {
+        read_pyx_api_key().is_some()
+    }
+
+    /// Returns `true` if the user appears to have OAuth tokens stored on disk.
+    pub fn has_oauth_tokens(&self) -> bool {
+        self.subdirectory.join("tokens.json").is_file()
+    }
+
     /// Returns `true` if the user appears to have credentials (which may be invalid).
     pub fn has_credentials(&self) -> bool {
-        read_pyx_auth_token().is_some()
-            || read_pyx_api_key().is_some()
-            || self.subdirectory.join("tokens.json").is_file()
+        self.has_auth_token() || self.has_api_key() || self.has_oauth_tokens()
     }
 
     /// Read the tokens from the store.

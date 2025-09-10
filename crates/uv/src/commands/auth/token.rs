@@ -110,6 +110,13 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
 
         // Similarly, if the refresh token expired, prompt for login.
         Err(err) if err.is_unauthorized() => {
+            if store.has_auth_token() {
+                return Err(
+                    anyhow::Error::from(err).context("Failed to authenticate with access token")
+                );
+            } else if store.has_api_key() {
+                return Err(anyhow::Error::from(err).context("Failed to authenticate with API key"));
+            }
             debug!(
                 "Received 401 (Unauthorized) response from refresh endpoint; prompting for login..."
             );
