@@ -100,8 +100,8 @@ pub(crate) async fn get_token(
 
     // Exchange the OIDC token for a short-lived upload token,
     // if OIDC token discovery succeeded.
-    if let Some(oidc_token) = &oidc_token {
-        let publish_token = get_publish_token(registry, oidc_token.reveal(), client).await?;
+    if let Some(oidc_token) = oidc_token {
+        let publish_token = get_publish_token(registry, oidc_token, client).await?;
 
         // If we're on GitHub Actions, mask the exchanged token in logs.
         #[allow(clippy::print_stdout)]
@@ -183,7 +183,7 @@ fn decode_oidc_token(oidc_token: &str) -> Option<OidcTokenClaims> {
 
 async fn get_publish_token(
     registry: &DisplaySafeUrl,
-    oidc_token: &str,
+    oidc_token: ambient_id::IdToken,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
@@ -199,7 +199,7 @@ async fn get_publish_token(
     ))?;
     debug!("Querying the trusted publishing upload token from {mint_token_url}");
     let mint_token_payload = MintTokenRequest {
-        token: oidc_token.to_string(),
+        token: oidc_token.reveal().to_string(),
     };
     let response = client
         .post(Url::from(mint_token_url.clone()))
@@ -219,7 +219,7 @@ async fn get_publish_token(
         let publish_token: PublishToken = serde_json::from_slice(&body)?;
         Ok(publish_token.token)
     } else {
-        match decode_oidc_token(oidc_token) {
+        match decode_oidc_token(oidc_token.reveal()) {
             Some(claims) => {
                 // An error here means that something is misconfigured, e.g. a typo in the PyPI
                 // configuration, so we're showing the body and the JWT claims for more context, see
