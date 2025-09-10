@@ -11,7 +11,7 @@
 - Show a dedicated error for virtual environments in source trees ([#15748](https://github.com/astral-sh/uv/pull/15748))
 - Support Android platform tags ([#15646](https://github.com/astral-sh/uv/pull/15646))
 - Support iOS platform tags ([#15640](https://github.com/astral-sh/uv/pull/15640))
-- Support `--with-requirements script.py` and `-r script.py` to include inline dependency metadata from another script ([#12763](https://github.com/astral-sh/uv/pull/12763))
+- Support scripts with inline metadata in `--with-requirements` and `--requirements` ([#12763](https://github.com/astral-sh/uv/pull/12763))
 
 ### Preview features
 
