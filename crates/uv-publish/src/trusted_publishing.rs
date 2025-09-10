@@ -17,8 +17,10 @@ use uv_static::EnvVars;
 pub enum TrustedPublishingError {
     #[error(transparent)]
     Url(#[from] url::ParseError),
+    #[error("Failed to obtain OIDC token: is the `id-token: write` permission missing?")]
+    GitHubPermissions(#[source] ambient_id::Error),
     #[error("Failed to discover OIDC token")]
-    Discovery(#[from] ambient_id::Error),
+    Discovery(#[source] ambient_id::Error),
     #[error("Failed to fetch: `{0}`")]
     Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: `{0}`")]
@@ -154,7 +156,17 @@ async fn get_oidc_token(
 ) -> Result<Option<ambient_id::IdToken>, TrustedPublishingError> {
     let detector = ambient_id::Detector::new_with_client(client.clone());
 
-    Ok(detector.detect(audience).await?)
+    match detector.detect(audience).await {
+        Ok(token) => Ok(token),
+        // Specialize the error case insufficient permissions error case,
+        // since we can offer the user a hint about fixing their permissions.
+        Err(
+            err @ ambient_id::Error::GitHubActions(
+                ambient_id::GitHubError::InsufficientPermissions(_),
+            ),
+        ) => Err(TrustedPublishingError::GitHubPermissions(err)),
+        Err(err) => Err(TrustedPublishingError::Discovery(err)),
+    }
 }
 
 /// Parse the JSON Web Token that the OIDC token is.

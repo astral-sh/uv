@@ -45,9 +45,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "ambient-id"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115dfb809d54964c545f783d9af474de10c6e19215af14296ac7f800d8da0ada"
+checksum = "a55e62faa820045efacb144fd9bcb16e62a5960ffc4bc270aaff7b78f0fcdcaa"
 dependencies = [
  "reqwest",
  "reqwest-middleware",

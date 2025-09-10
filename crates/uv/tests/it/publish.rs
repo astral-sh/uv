@@ -110,7 +110,7 @@ fn missing_trusted_publishing_permission() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
-      Caused by: Failed to discover OIDC token
+      Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     "
