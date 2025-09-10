@@ -137,7 +137,7 @@ fn no_credentials() {
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
-      Caused by: Failed to discover OIDC token
+      Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
