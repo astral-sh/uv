@@ -616,7 +616,7 @@ fn login_native_auth_url() {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'http://example.com' for '<SERVICE>': only HTTPS (or HTTP on localhost) is supported
+    error: invalid value 'http://example.com' for '<SERVICE>': HTTPS is required for non-local hosts
 
     For more information, try '--help'.
     ");
@@ -761,7 +761,7 @@ fn login_native_auth_url() {
 fn login_text_store() {
     let context = TestContext::new_with_versions(&[]);
 
-    // Successful login without keyring provider (uses text store)
+    // Login with a username and password
     uv_snapshot!(context.auth_login()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
@@ -777,7 +777,7 @@ fn login_text_store() {
     "
     );
 
-    // Token-based login
+    // Login with a token
     uv_snapshot!(context.auth_login()
         .arg("https://example.com/simple")
         .arg("--token")
@@ -822,6 +822,70 @@ fn login_text_store() {
     error: Password cannot be empty
     "
     );
+
+    // HTTP should fail
+    uv_snapshot!(context.auth_login()
+        .arg("http://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'http://example.com/simple' for '<SERVICE>': HTTPS is required for non-local hosts
+
+    For more information, try '--help'.
+    ");
+
+    // Other protocol should fail
+    uv_snapshot!(context.auth_login()
+        .arg("ftp://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'ftp://example.com/simple' for '<SERVICE>': Unsupported scheme: ftp
+
+    For more information, try '--help'.
+    ");
+
+    // HTTP should be allowed on localhost
+    uv_snapshot!(context.auth_login()
+        .arg("http://127.0.0.1/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@http://127.0.0.1/
+    ");
+
+    // HTTP should be allowed on localhost
+    uv_snapshot!(context.auth_login()
+        .arg("http://localhost/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@http://localhost/
+    ");
 }
 
 #[test]
