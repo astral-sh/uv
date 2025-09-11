@@ -14129,5 +14129,19 @@ fn only_group_and_extra_conflict() -> Result<()> {
     For more information, try '--help'.
     "###);
 
+    // Using --only-group and --all-extras together should also error.
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev").arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
     Ok(())
 }
