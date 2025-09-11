@@ -3857,6 +3857,7 @@ version = "1.0.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d401abef1d108fbd9cbaebc3e46611f4b1021f714a0597a71f41ee463f5f4a5a"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -5422,6 +5423,7 @@ dependencies = [
  "uv-small-str",
  "uv-static",
  "uv-torch",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "wiremock",
@@ -5552,6 +5554,8 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -5566,6 +5570,7 @@ dependencies = [
  "futures",
  "indoc",
  "insta",
+ "itertools 0.14.0",
  "nanoid",
  "owo-colors",
  "reqwest",
@@ -5592,12 +5597,14 @@ dependencies = [
  "uv-git-types",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
  "zip",
@@ -5656,6 +5663,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-variants",
  "uv-warnings",
  "version-ranges",
 ]
@@ -6058,6 +6066,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.5",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -6280,6 +6289,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -6462,10 +6472,56 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
+ "uv-pep508",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.1.0"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "indoc",
+ "insta",
+ "itertools 0.14.0",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-once-map",
+ "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -5,12 +6,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -18,17 +20,22 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, SourceDist, ToUrlError,
+    Name, RegistryVariantsJson, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildStack};
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::VariantProviderOutput;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variants_json::{Provider, VariantPropertyType, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -555,6 +562,117 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.builder
             .source_tree_requires_dist(source_tree.as_ref())
             .await
+    }
+
+    #[instrument(skip_all, fields(variants_json = %variants_json.filename))]
+    pub async fn fetch_and_query_variants(
+        &self,
+        variants_json: &RegistryVariantsJson,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<ResolvedVariants, Error> {
+        let variants_json = self.fetch_variants_json(variants_json).await?;
+        let resolved_variants = self
+            .query_variant_providers(variants_json, marker_env)
+            .await?;
+        Ok(resolved_variants)
+    }
+
+    /// Fetch the variants.json contents from a URL (cached) or from a path.
+    async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        Ok(self
+            .client
+            .managed(|client| client.fetch_variants_json(variants_json))
+            .await?)
+    }
+
+    async fn query_variant_providers(
+        &self,
+        variants_json: VariantsJsonContent,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<ResolvedVariants, Error> {
+        // Collect all known properties for dynamic providers.
+        // TODO(konsti): We shouldn't need to do this conversion.
+        let mut known_properties = BTreeSet::default();
+        for variant in variants_json.variants.values() {
+            for (namespace, features) in &**variant {
+                for (feature, value) in features {
+                    for value in value {
+                        // TODO(charlie): At minimum, we can probably avoid these clones.
+                        known_properties.insert(VariantPropertyType {
+                            namespace: namespace.clone(),
+                            feature: feature.clone(),
+                            value: value.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        let known_properties: Vec<_> = known_properties.into_iter().collect();
+
+        // Compute the set of available variants.
+        let provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
+            futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
+                provider
+                    .enable_if
+                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+            }))
+            .map(|(name, provider)| self.query_variant_provider(name, provider, &known_properties))
+            // TODO(konsti): Buffer size
+            .buffered(8)
+            .map_ok(|config| (config.namespace.clone(), config))
+            .try_collect()
+            .await?;
+
+        Ok(ResolvedVariants {
+            variants_json,
+            target_variants: provider_outputs,
+        })
+    }
+
+    async fn query_variant_provider(
+        &self,
+        name: &VariantNamespace,
+        provider: &Provider,
+        known_properties: &[VariantPropertyType],
+    ) -> Result<Arc<VariantProviderOutput>, Error> {
+        let config = if self.build_context.variants().register(provider.clone()) {
+            debug!("Querying provider `{name}` for variants");
+
+            // TODO(konsti): That's not spec compliant
+            let backend_name = provider.plugin_api.clone().unwrap_or(name.to_string());
+            let builder = self
+                .build_context
+                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                .await?;
+            let config = builder.query(known_properties).await?;
+            trace!(
+                "Found namespace {} with configs {:?}",
+                config.namespace, config
+            );
+
+            let config = Arc::new(config);
+            self.build_context
+                .variants()
+                .done(provider.clone(), config.clone());
+            config
+        } else {
+            debug!("Reading provider `{name}` from in-memory cache");
+            self.build_context
+                .variants()
+                .wait(provider)
+                .await
+                .expect("missing value for registered task")
+        };
+        if &config.namespace != name {
+            return Err(Error::WheelVariantNamespaceMismatch {
+                declared: name.clone(),
+                actual: config.namespace.clone(),
+            });
+        }
+        Ok(config)
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

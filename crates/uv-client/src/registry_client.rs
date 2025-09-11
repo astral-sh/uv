@@ -21,8 +21,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    RegistryVariantsJson, VariantsJson,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -33,6 +34,7 @@ use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
+use uv_variants::variants_json::VariantsJsonContent;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
@@ -695,6 +697,85 @@ impl RegistryClient {
         OwnedArchive::from_unarchived(&metadata)
     }
 
+    /// Fetch the variants.json contents from a remote index (cached) a local index.
+    pub async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        let url = variants_json
+            .file
+            .url
+            .to_url()
+            .map_err(ErrorKind::InvalidUrl)?;
+
+        // If the URL is a file URL, load the variants directly from the file system.
+        let variants_json = if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+            let bytes = match fs_err::tokio::read(&path).await {
+                Ok(text) => text,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(Error::from(ErrorKind::FileNotFound(
+                        variants_json.filename.to_string(),
+                    )));
+                }
+                Err(err) => {
+                    return Err(Error::from(ErrorKind::Io(err)));
+                }
+            };
+            info_span!("parse_variants_json")
+                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                .map_err(|err| ErrorKind::VariantsJsonFormat(url, err))?
+        } else {
+            let cache_entry = self.cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::Index(&variants_json.index)
+                    .wheel_dir(variants_json.filename.name.as_ref()),
+                format!("variants-{}.msgpack", variants_json.filename.cache_key()),
+            );
+
+            let cache_control = match self.connectivity {
+                Connectivity::Online => {
+                    if let Some(header) = self
+                        .index_urls
+                        .artifact_cache_control_for(&variants_json.index)
+                    {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&variants_json.filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
+
+            let response_callback = async |response: Response| {
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+
+                info_span!("parse_variants_json")
+                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                    .map_err(|err| Error::from(ErrorKind::VariantsJsonFormat(url.clone(), err)))
+            };
+
+            let req = self
+                .uncached_client(&url)
+                .get(Url::from(url.clone()))
+                .build()
+                .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            self.cached_client()
+                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
+                .await?
+        };
+        Ok(variants_json)
+    }
+
     /// Fetch the metadata for a remote wheel file.
     ///
     /// For a remote wheel, we try the following ways to fetch the metadata:
@@ -1091,19 +1172,28 @@ impl FlatIndexCache {
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
     pub source_dists: Vec<VersionSourceDist>,
+    pub variant_jsons: Vec<VersionVariantJson>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: DistFilename, file: File) {
+    fn push(&mut self, filename: IndexEntryFilename, file: File) {
         match filename {
-            DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
-            DistFilename::SourceDistFilename(name) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)) => {
+                self.wheels.push(VersionWheel { name, file });
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)) => {
                 self.source_dists.push(VersionSourceDist { name, file });
+            }
+            IndexEntryFilename::VariantJson(variants_json) => {
+                self.variant_jsons.push(VersionVariantJson {
+                    name: variants_json,
+                    file,
+                });
             }
         }
     }
 
-    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn dists(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
             .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
@@ -1111,6 +1201,30 @@ impl VersionFiles {
                 self.wheels
                     .into_iter()
                     .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
+            )
+    }
+
+    pub fn all(self) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .map(|VersionSourceDist { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)),
+                    file,
+                )
+            })
+            .chain(self.wheels.into_iter().map(|VersionWheel { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)),
+                    file,
+                )
+            }))
+            .chain(
+                self.variant_jsons
+                    .into_iter()
+                    .map(|VersionVariantJson { name, file }| {
+                        (IndexEntryFilename::VariantJson(name), file)
+                    }),
             )
     }
 }
@@ -1126,6 +1240,13 @@ pub struct VersionWheel {
 #[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
+    pub file: File,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct VersionVariantJson {
+    pub name: VariantsJson,
     pub file: File,
 }
 
@@ -1158,7 +1279,8 @@ impl SimpleMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
@@ -1216,7 +1338,8 @@ impl SimpleMetadata {
                     continue;
                 }
             };
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;

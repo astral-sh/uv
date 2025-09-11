@@ -23,6 +23,13 @@ scripts = "scripts"
 data = "assets"
 headers = "header"
 
+[variant.default-priorities]
+namespace = ["cpu_level"]
+
+[variant.providers.cpu_level]
+requires = ["cpu_level_provider >= 0.1, <0.2"]
+enable-if = "platform_machine == 'x86_64' or platform_machine == 'AMD64'"
+
 [build-system]
 requires = ["uv_build>=0.8.0,<0.9.0"]
 build-backend = "uv_build"

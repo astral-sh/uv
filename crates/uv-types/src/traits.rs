@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
-
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
 use uv_distribution_filename::DistFilename;
@@ -17,6 +16,9 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_variants::VariantProviderOutput;
+use uv_variants::cache::VariantProviderCache;
+use uv_variants::variants_json::VariantPropertyType;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation};
@@ -60,6 +62,7 @@ use crate::{BuildArena, BuildIsolation};
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+    type VariantsBuilder: VariantsTrait;
 
     // Note: this function is async deliberately, because downstream code may need to
     // run async code to get the interpreter, to resolve the Python version.
@@ -71,6 +74,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the variant cache.
+    fn variants(&self) -> &VariantProviderCache;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
@@ -161,6 +167,14 @@ pub trait BuildContext {
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
+
+    /// Set up the variants for the given provider.
+    fn setup_variants<'a>(
+        &'a self,
+        backend_name: String,
+        provider: &'a uv_variants::variants_json::Provider,
+        build_output: BuildOutput,
+    ) -> impl Future<Output = Result<Self::VariantsBuilder, anyhow::Error>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -187,6 +201,13 @@ pub trait SourceBuildTrait {
         &'a self,
         wheel_dir: &'a Path,
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
+}
+
+pub trait VariantsTrait {
+    fn query(
+        &self,
+        known_properties: &[VariantPropertyType],
+    ) -> impl Future<Output = Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

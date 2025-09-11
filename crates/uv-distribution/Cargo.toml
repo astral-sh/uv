@@ -28,18 +28,21 @@ uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-types = { workspace = true }
+uv-variants = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+itertools = { workspace = true }
 nanoid = { workspace = true }
 owo-colors = { workspace = true }
 reqwest = { workspace = true }

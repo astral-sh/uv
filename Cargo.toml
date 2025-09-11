@@ -72,6 +72,8 @@ uv-tool = { path = "crates/uv-tool" }
 uv-torch = { path = "crates/uv-torch" }
 uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
+uv-variant-frontend = { path = "crates/uv-variant-frontend" }
+uv-variants = { path = "crates/uv-variants" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
@@ -166,7 +168,7 @@ security-framework = { version = "3" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
-serde_json = { version = "1.0.128" }
+serde_json = { version = "1.0.128", features = ["preserve_order"] }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.10.6" }
