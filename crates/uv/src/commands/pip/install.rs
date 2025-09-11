@@ -35,7 +35,7 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
-use uv_torch::{TorchMode, TorchStrategy};
+use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
@@ -47,7 +47,6 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -70,7 +69,7 @@ pub(crate) async fn pip_install(
     torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -111,12 +110,7 @@ pub(crate) async fn pip_install(
         );
     }
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -265,13 +259,18 @@ pub(crate) async fn pip_install(
         })
         .ok();
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let interpreter = environment.interpreter();
     let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
     );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -291,6 +290,7 @@ pub(crate) async fn pip_install(
             &constraints,
             &overrides,
             &marker_env,
+            &tags,
             config_settings,
             config_settings_package,
             &extra_build_requires,
@@ -329,13 +329,6 @@ pub(crate) async fn pip_install(
         PythonRequirement::from_interpreter(interpreter)
     };
 
-    // Determine the tags to use for the resolution.
-    let tags = resolution_tags(
-        python_version.as_ref(),
-        python_platform.as_ref(),
-        interpreter,
-    )?;
-
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_requirements(
@@ -369,13 +362,19 @@ pub(crate) async fn pip_install(
         no_index,
     );
 
-    index_locations.cache_index_credentials();
-
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
             TorchStrategy::from_mode(
                 mode,
+                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -386,9 +385,8 @@ pub(crate) async fn pip_install(
         .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(&index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
@@ -560,9 +558,11 @@ pub(crate) async fn pip_install(
         {
             Ok(graph) => Resolution::from(graph),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -625,7 +625,7 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -636,7 +636,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
     }
 
     Ok(ExitStatus::Success)

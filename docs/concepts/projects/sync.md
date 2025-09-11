@@ -32,7 +32,7 @@ option:
 $ uv run --no-sync ...
 ```
 
-## Checking if the lockfile is up-to-date
+## Checking the lockfile
 
 When considering if the lockfile is up-to-date, uv will check if it matches the project metadata.
 For example, if you add a dependency to your `pyproject.toml`, the lockfile will be considered

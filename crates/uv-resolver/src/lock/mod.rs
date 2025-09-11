@@ -47,7 +47,7 @@ use uv_pypi_types::{
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
-use uv_workspace::WorkspaceMember;
+use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
@@ -314,7 +314,7 @@ impl Lock {
                     )?;
                 }
             }
-            if let Some(group) = dist.dev.as_ref() {
+            if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
@@ -1443,7 +1443,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1471,17 +1471,37 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            // We don't require a build system, if the workspace member is a dependency
-            let expected = !member
-                .pyproject_toml()
-                .is_package(!required_members.contains(name));
-            let actual = self
-                .find_by_name(name)
-                .ok()
-                .flatten()
-                .map(|package| matches!(package.id.source, Source::Virtual(_)));
-            if actual != Some(expected) {
-                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
+            let source = self.find_by_name(name).ok().flatten();
+
+            // Determine whether the member was required by any other member.
+            let value = required_members.get(name);
+            let is_required_member = value.is_some();
+            let editability = value.copied().flatten();
+
+            // Verify that the member is virtual (or not).
+            let expected_virtual = !member.pyproject_toml().is_package(!is_required_member);
+            let actual_virtual =
+                source.map(|package| matches!(package.id.source, Source::Virtual(..)));
+            if actual_virtual != Some(expected_virtual) {
+                return Ok(SatisfiesResult::MismatchedVirtual(
+                    name.clone(),
+                    expected_virtual,
+                ));
+            }
+
+            // Verify that the member is editable (or not).
+            let expected_editable = if expected_virtual {
+                false
+            } else {
+                editability.unwrap_or(true)
+            };
+            let actual_editable =
+                source.map(|package| matches!(package.id.source, Source::Editable(..)));
+            if actual_editable != Some(expected_editable) {
+                return Ok(SatisfiesResult::MismatchedEditable(
+                    name.clone(),
+                    expected_editable,
+                ));
             }
         }
 
@@ -1995,6 +2015,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from editable to non-editable or vice versa.
+    MismatchedEditable(PackageName, bool),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
@@ -2754,6 +2776,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -2828,6 +2851,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: file_url,
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(
@@ -3076,6 +3100,9 @@ impl Package {
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
+            if let Some(zstd) = wheel.zstd.as_ref() {
+                hashes.extend(zstd.hash.as_ref().map(|h| h.0.clone()));
+            }
         }
         HashDigests::from(hashes)
     }
@@ -3648,6 +3675,14 @@ impl Source {
         }
         table.insert("source", value(source_table));
     }
+
+    /// Check if a package is local by examining its source.
+    pub(crate) fn is_local(&self) -> bool {
+        matches!(
+            self,
+            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
+        )
+    }
 }
 
 impl Display for Source {
@@ -3695,14 +3730,6 @@ impl Source {
                 Some(false)
             }
         }
-    }
-
-    /// Check if a package is local by examining its source.
-    pub(crate) fn is_local(&self) -> bool {
-        matches!(
-            self,
-            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
-        )
     }
 }
 
@@ -4315,6 +4342,12 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     url
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+struct ZstdWheel {
+    hash: Option<Hash>,
+    size: Option<u64>,
+}
+
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -4345,6 +4378,8 @@ struct Wheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
+    /// The zstandard-compressed wheel metadata, if any.
+    zstd: Option<ZstdWheel>,
 }
 
 impl Wheel {
@@ -4453,12 +4488,17 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
+        let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
+            hash: zstd.hashes.iter().max().cloned().map(Hash::from),
+            size: zstd.size,
+        });
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
             filename,
+            zstd,
         })
     }
 
@@ -4471,6 +4511,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4483,6 +4524,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4516,6 +4558,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -4558,6 +4608,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
@@ -4593,6 +4651,9 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
+    /// The zstandard-compressed wheel metadata, if any.
+    #[serde(alias = "zstd")]
+    zstd: Option<ZstdWheel>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -4648,6 +4709,19 @@ impl Wheel {
         if let Some(upload_time) = self.upload_time {
             table.insert("upload-time", Value::from(upload_time.to_string()));
         }
+        if let Some(zstd) = &self.zstd {
+            let mut inner = InlineTable::new();
+            if let Some(ref hash) = zstd.hash {
+                inner.insert("hash", Value::from(hash.to_string()));
+            }
+            if let Some(size) = zstd.size {
+                inner.insert(
+                    "size",
+                    toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+                );
+            }
+            table.insert("zstd", Value::from(inner));
+        }
         Ok(table)
     }
 }
@@ -4682,6 +4756,7 @@ impl TryFrom<WheelWire> for Wheel {
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
+            zstd: wire.zstd,
             filename,
         })
     }
@@ -5270,18 +5345,14 @@ impl WheelTagHint {
     fn python_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = LanguageTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::python_tags).copied()
     }
 
     /// Returns an iterator over the compatible Python tags of the available wheels.
     fn abi_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = AbiTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::abi_tags).copied()
     }
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given

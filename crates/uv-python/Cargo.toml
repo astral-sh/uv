@@ -70,8 +70,7 @@ once_cell = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
-windows-result = { workspace = true }
-windows-sys = { workspace = true }
+windows = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

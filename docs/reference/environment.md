@@ -55,6 +55,10 @@ local `uv.toml` file to use as the configuration file.
 Equivalent to the `--constraint` command-line argument. If set, uv will use this
 file as the constraints file. Uses space-separated list of files.
 
+### `UV_CREDENTIALS_DIR`
+
+The directory for storage of credentials when using a plain text backend.
+
 ### `UV_CUSTOM_COMPILE_COMMAND`
 
 Equivalent to the `--custom-compile-command` command-line argument.
@@ -410,6 +414,12 @@ Specifies the directory to place links to installed, managed Python executables.
 Specifies the directory for caching the archives of managed Python installations before
 installation.
 
+### `UV_PYTHON_CPYTHON_BUILD`
+
+Pin managed CPython versions to a specific build version.
+
+For CPython, this should be the build date (e.g., "20250814").
+
 ### `UV_PYTHON_DOWNLOADS`
 
 Equivalent to the
@@ -424,6 +434,12 @@ This variable can be set to a URL pointing to JSON to use as a list for Python i
 This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
 
 Note that currently, only local paths are supported.
+
+### `UV_PYTHON_GRAALPY_BUILD`
+
+Pin managed GraalPy versions to a specific build version.
+
+For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
 
 ### `UV_PYTHON_INSTALL_BIN`
 
@@ -450,6 +466,18 @@ Whether to install the Python executable into the Windows registry.
 ### `UV_PYTHON_PREFERENCE`
 
 Whether uv should prefer system or managed Python versions.
+
+### `UV_PYTHON_PYODIDE_BUILD`
+
+Pin managed Pyodide versions to a specific build version.
+
+For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
+
+### `UV_PYTHON_PYPY_BUILD`
+
+Pin managed PyPy versions to a specific build version.
+
+For PyPy, this should be the PyPy version (e.g., "7.3.20").
 
 ### `UV_REQUEST_TIMEOUT`
 
@@ -525,17 +553,16 @@ Note that `setuptools` and `wheel` are not included in Python 3.12+ environments
 
 uv also reads the following externally defined environment variables:
 
-### `ACTIONS_ID_TOKEN_REQUEST_TOKEN`
-
-Used for trusted publishing via `uv publish`. Contains the oidc request token.
-
-### `ACTIONS_ID_TOKEN_REQUEST_URL`
-
-Used for trusted publishing via `uv publish`. Contains the oidc token url.
-
 ### `ALL_PROXY`
 
 General proxy for all network requests.
+
+### `ANDROID_API_LEVEL`
+
+Used with `--python-platform aarch64-linux-android` and related variants to set the
+Android API level. (i.e., the minimum supported Android API level).
+
+Defaults to `24`.
 
 ### `APPDATA`
 
@@ -575,7 +602,17 @@ See [force-color.org](https://force-color.org).
 
 ### `GITHUB_ACTIONS`
 
-Used for trusted publishing via `uv publish`.
+Indicates that the current process is running in GitHub Actions.
+
+`uv publish` may attempt trusted publishing flows when set
+to `true`.
+
+### `GITLAB_CI`
+
+Indicates that the current process is running in GitLab CI.
+
+`uv publish` may attempt trusted publishing flows when set
+to `true`.
 
 ### `HF_TOKEN`
 
@@ -597,6 +634,13 @@ Proxy for HTTP requests.
 ### `HTTP_TIMEOUT`
 
 Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
+
+### `IPHONEOS_DEPLOYMENT_TARGET`
+
+Used with `--python-platform arm64-apple-ios` and related variants to set the
+deployment target (i.e., the minimum supported iOS version).
+
+Defaults to `13.0`.
 
 ### `JPY_SESSION_NAME`
 
@@ -656,6 +700,26 @@ See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py
 ### `PYTHONPATH`
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
+
+### `PYX_API_KEY`
+
+The pyx API key (e.g., `sk-pyx-...`).
+
+### `PYX_API_URL`
+
+The URL of the pyx Simple API server.
+
+### `PYX_AUTH_TOKEN`
+
+The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
+
+### `PYX_CDN_DOMAIN`
+
+The domain of the pyx CDN.
+
+### `PYX_CREDENTIALS_DIR`
+
+Specifies the directory where uv stores pyx credentials.
 
 ### `RUST_BACKTRACE`
 

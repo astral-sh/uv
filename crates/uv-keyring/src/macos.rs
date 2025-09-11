@@ -331,6 +331,7 @@ pub fn decode_error(err: Error) -> ErrorCode {
     }
 }
 
+#[cfg(feature = "native-auth")]
 #[cfg(not(miri))]
 #[cfg(test)]
 mod tests {

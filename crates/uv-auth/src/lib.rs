@@ -2,21 +2,30 @@ use std::sync::{Arc, LazyLock};
 
 use tracing::trace;
 
+use uv_redacted::DisplaySafeUrl;
+
+pub use access_token::AccessToken;
 use cache::CredentialsCache;
-pub use credentials::Credentials;
+pub use credentials::{Credentials, Username};
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-use realm::Realm;
-use uv_redacted::DisplaySafeUrl;
+pub use pyx::{DEFAULT_TOLERANCE_SECS, PyxOAuthTokens, PyxTokenStore, PyxTokens, TokenStoreError};
+pub use realm::Realm;
+pub use service::{Service, ServiceParseError};
+pub use store::{AuthBackend, AuthScheme, TextCredentialStore, TomlCredentialError};
 
+mod access_token;
 mod cache;
 mod credentials;
 mod index;
 mod keyring;
 mod middleware;
 mod providers;
+mod pyx;
 mod realm;
+mod service;
+mod store;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
 

@@ -4467,3 +4467,55 @@ fn no_editable_env_var() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn export_only_group_and_extra_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = ["pytest"]
+
+        [dependency-groups]
+        dev = ["ruff"]
+        "#,
+    )?;
+
+    // Using --only-group and --extra together should error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--extra").arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    // Using --only-group and --all-extras together should also error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    Ok(())
+}

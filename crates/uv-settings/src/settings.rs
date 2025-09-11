@@ -785,9 +785,8 @@ pub struct ResolverInstallerSchema {
         default = "[]",
         value_type = "dict",
         example = r#"
-        [extra-build-dependencies]
-        pytest = ["setuptools"]
-    "#
+            extra-build-dependencies = { pytest = ["setuptools"] }
+        "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Extra environment variables to set when building certain packages.
@@ -798,8 +797,7 @@ pub struct ResolverInstallerSchema {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [tool.uv.extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -1284,8 +1282,7 @@ pub struct PipOptions {
         default = "[]",
         value_type = "dict",
         example = r#"
-            [extra-build-dependencies]
-            pytest = ["setuptools"]
+            extra-build-dependencies = { pytest = ["setuptools"] }
         "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
@@ -1297,8 +1294,7 @@ pub struct PipOptions {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -2312,11 +2308,12 @@ pub struct PublishOptions {
     )]
     pub publish_url: Option<DisplaySafeUrl>,
 
-    /// Configure trusted publishing via GitHub Actions.
+    /// Configure trusted publishing.
     ///
-    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-    /// from a fork).
+    /// By default, uv checks for trusted publishing when running in a supported environment, but
+    /// ignores it if it isn't configured.
+    ///
+    /// uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
     #[option(
         default = "automatic",
         value_type = "str",

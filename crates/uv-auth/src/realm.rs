@@ -23,7 +23,7 @@ use uv_small_str::SmallString;
 // However, `url` (and therefore `reqwest`) sets the `port` to `None` if it matches the default port
 // so we do not need any special handling here.
 #[derive(Debug, Clone)]
-pub(crate) struct Realm {
+pub struct Realm {
     scheme: SmallString,
     host: Option<SmallString>,
     port: Option<u16>,

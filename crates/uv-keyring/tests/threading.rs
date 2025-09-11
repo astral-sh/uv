@@ -1,4 +1,4 @@
-#![cfg(feature = "keyring-tests")]
+#![cfg(feature = "native-auth")]
 
 use common::{generate_random_string, init_logger};
 use uv_keyring::{Entry, Error};

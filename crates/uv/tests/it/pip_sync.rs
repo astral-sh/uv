@@ -56,14 +56,14 @@ fn missing_venv() -> Result<()> {
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
-    "###);
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
@@ -1269,7 +1269,7 @@ fn mismatched_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1278,9 +1278,9 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    "
     );
 
     Ok(())
@@ -2613,7 +2613,7 @@ fn incompatible_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2622,9 +2622,10 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            Failed to read from zip file
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: Failed to read from zip file
+            Caused by: unable to locate the end of central directory record
+    "
     );
 
     Ok(())
@@ -5342,7 +5343,7 @@ fn target_no_build_isolation() -> Result<()> {
     requirements_in.write_str("flit_core")?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5352,7 +5353,7 @@ fn target_no_build_isolation() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flit-core==3.9.0
-    "###);
+    ");
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");

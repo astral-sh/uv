@@ -16,7 +16,7 @@
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    fileMatch: ["^crates/.*Cargo\\.toml$"],
+    managerFilePatterns: ["/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
@@ -88,7 +88,7 @@
     },
     {
       commitMessageTopic: "MSRV",
-      matchManagers: ["regex"],
+      matchManagers: ["custom.regex"],
       matchDepNames: ["msrv"],
       // We have a rolling support policy for the MSRV
       // 2 releases back * 6 weeks per release * 7 days per week + 1
@@ -97,7 +97,7 @@
       groupName: "MSRV",
     },
     {
-      matchManagers: ["regex"],
+      matchManagers: ["custom.regex"],
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
@@ -106,7 +106,7 @@
     // Update major GitHub actions references in documentation.
     {
       customType: "regex",
-      fileMatch: ["^docs/.*\\.md$"],
+      managerFilePatterns: ["/^docs/.*\\.md$/"],
       matchStrings: [
         "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
       ],
@@ -116,22 +116,23 @@
     // Minimum supported Rust toolchain version
     {
       customType: "regex",
-      fileMatch: ["(^|/)Cargo\\.toml?$"],
+      managerFilePatterns: ["/(^|/)Cargo\\.toml?$/"],
       matchStrings: [
         'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
       depNameTemplate: "msrv",
-      lookupNameTemplate: "rust-lang/rust",
+      packageNameTemplate: "rust-lang/rust",
       datasourceTemplate: "github-releases",
     },
     // Rust toolchain version
     {
-      fileMatch: ["(^|/)rust-toolchain\\.toml?$"],
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml?$/"],
       matchStrings: [
         'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
       depNameTemplate: "rust",
-      lookupNameTemplate: "rust-lang/rust",
+      packageNameTemplate: "rust-lang/rust",
       datasourceTemplate: "github-releases",
     },
   ],

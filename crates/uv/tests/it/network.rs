@@ -293,8 +293,8 @@ async fn python_install_io_error() {
 
     ----- stderr -----
     error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: Request failed after 3 retries
+      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: error sending request for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed

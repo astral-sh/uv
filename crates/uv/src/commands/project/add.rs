@@ -18,8 +18,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
-    SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -60,7 +59,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -90,7 +89,7 @@ pub(crate) async fn add(
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -124,6 +123,9 @@ pub(crate) async fn add(
             }
             RequirementsSource::SetupPy(_) => {
                 bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
+            }
+            RequirementsSource::Pep723Script(_) => {
+                bail!("Adding requirements from a PEP 723 script is not supported in `uv add`");
             }
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
@@ -191,12 +193,6 @@ pub(crate) async fn add(
             );
         }
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
         let script = match script {
@@ -227,7 +223,7 @@ pub(crate) async fn add(
         let interpreter = ScriptInterpreter::discover(
             (&script).into(),
             python.as_deref().map(PythonRequest::parse),
-            &network_settings,
+            &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
@@ -297,7 +293,7 @@ pub(crate) async fn add(
                 project_dir,
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -319,7 +315,7 @@ pub(crate) async fn add(
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 no_sync,
@@ -345,12 +341,9 @@ pub(crate) async fn add(
         })
         .ok();
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(settings.resolver.keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder
+        .clone()
+        .keyring(settings.resolver.keyring_provider);
 
     // Read the requirements.
     let RequirementsSpecification {
@@ -399,11 +392,9 @@ pub(crate) async fn add(
             let hasher = HashStrategy::default();
             let sources = SourceStrategy::Enabled;
 
-            settings.resolver.index_locations.cache_index_credentials();
-
             // Initialize the registry client.
-            let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_locations(&settings.resolver.index_locations)
+            let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
@@ -747,7 +738,7 @@ pub(crate) async fn add(
         bounds,
         constraints,
         &settings,
-        &network_settings,
+        &client_builder,
         installer_metadata,
         concurrency,
         cache,
@@ -762,7 +753,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -978,7 +969,7 @@ async fn lock_and_sync(
     bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
@@ -992,7 +983,7 @@ async fn lock_and_sync(
             LockMode::Write(target.interpreter())
         },
         &settings.resolver,
-        network_settings,
+        client_builder,
         &lock_state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -1114,7 +1105,7 @@ async fn lock_and_sync(
                     LockMode::Write(target.interpreter())
                 },
                 &settings.resolver,
-                network_settings,
+                client_builder,
                 &lock_state,
                 Box::new(SummaryResolveLogger),
                 concurrency,
@@ -1157,7 +1148,7 @@ async fn lock_and_sync(
         venv,
         extras,
         groups,
-        EditableMode::Editable,
+        None,
         InstallOptions::new(
             no_install_project,
             no_install_workspace,
@@ -1167,7 +1158,7 @@ async fn lock_and_sync(
         Modifications::Sufficient,
         None,
         settings.into(),
-        network_settings,
+        client_builder,
         &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -1399,7 +1390,7 @@ impl AddTarget {
                 let project = project
                     .with_pyproject_toml(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
-                    )
+                    )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
             }

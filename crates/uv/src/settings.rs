@@ -4,15 +4,17 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
+use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
+    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
+    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
+    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
+    VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -324,7 +326,7 @@ pub(crate) struct RunSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
-    pub(crate) editable: EditableMode,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
@@ -337,6 +339,7 @@ pub(crate) struct RunSettings {
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -369,6 +372,7 @@ impl RunSettings {
             all_groups,
             module: _,
             only_dev,
+            editable,
             no_editable,
             inexact,
             exact,
@@ -391,6 +395,7 @@ impl RunSettings {
             package,
             no_project,
             python,
+            python_platform,
             show_resolution,
             env_file,
             no_env_file,
@@ -424,7 +429,7 @@ impl RunSettings {
                 only_group,
                 all_groups,
             ),
-            editable: EditableMode::from_args(no_editable),
+            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -450,6 +455,7 @@ impl RunSettings {
             no_sync,
             active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -477,6 +483,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -510,6 +517,7 @@ impl ToolRunSettings {
             build,
             refresh,
             python,
+            python_platform,
             generate_shell_completion: _,
         } = args;
 
@@ -585,6 +593,7 @@ impl ToolRunSettings {
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings,
             options,
@@ -608,6 +617,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
@@ -636,6 +646,7 @@ impl ToolInstallSettings {
             build,
             refresh,
             python,
+            python_platform,
         } = args;
 
         let options =
@@ -686,6 +697,7 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             python: python.and_then(Maybe::into_option),
+            python_platform,
             force,
             editable,
             refresh: Refresh::from(refresh),
@@ -701,6 +713,7 @@ impl ToolInstallSettings {
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) names: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
@@ -712,6 +725,7 @@ impl ToolUpgradeSettings {
         let ToolUpgradeArgs {
             name,
             python,
+            python_platform,
             upgrade,
             upgrade_package,
             index_args,
@@ -789,6 +803,7 @@ impl ToolUpgradeSettings {
         Self {
             names: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
+            python_platform,
             args,
             filesystem: top_level,
             install_mirrors,
@@ -1186,7 +1201,7 @@ pub(crate) struct SyncSettings {
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
-    pub(crate) editable: EditableMode,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) all_packages: bool,
@@ -1216,6 +1231,7 @@ impl SyncSettings {
             no_default_groups,
             only_group,
             all_groups,
+            editable,
             no_editable,
             inexact,
             exact,
@@ -1283,7 +1299,7 @@ impl SyncSettings {
                 only_group,
                 all_groups,
             ),
-            editable: EditableMode::from_args(no_editable),
+            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
@@ -1701,6 +1717,7 @@ pub(crate) struct TreeSettings {
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
+    pub(crate) show_sizes: bool,
     #[allow(dead_code)]
     pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
@@ -1758,6 +1775,7 @@ impl TreeSettings {
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
             outdated: tree.outdated,
+            show_sizes: tree.show_sizes,
             script,
             python_version,
             python_platform,
@@ -1778,7 +1796,7 @@ pub(crate) struct ExportSettings {
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
-    pub(crate) editable: EditableMode,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
@@ -1818,6 +1836,7 @@ impl ExportSettings {
             no_annotate,
             header,
             no_header,
+            editable,
             no_editable,
             hashes,
             no_hashes,
@@ -1863,7 +1882,7 @@ impl ExportSettings {
                 only_group,
                 all_groups,
             ),
-            editable: EditableMode::from_args(no_editable),
+            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
@@ -1892,6 +1911,7 @@ pub(crate) struct FormatSettings {
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
     pub(crate) version: Option<String>,
+    pub(crate) no_project: bool,
 }
 
 impl FormatSettings {
@@ -1902,6 +1922,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            no_project,
         } = args;
 
         Self {
@@ -1909,6 +1930,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            no_project,
         }
     }
 }
@@ -2598,6 +2620,8 @@ impl PipCheckSettings {
             python,
             system,
             no_system,
+            python_version,
+            python_platform,
         } = args;
 
         Self {
@@ -2605,6 +2629,8 @@ impl PipCheckSettings {
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
+                    python_version,
+                    python_platform,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -3397,6 +3423,7 @@ pub(crate) struct PublishSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
+    pub(crate) dry_run: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -3441,6 +3468,7 @@ impl PublishSettings {
             files: args.files,
             username,
             password,
+            dry_run: args.dry_run,
             publish_url: args
                 .publish_url
                 .combine(publish_url)
@@ -3464,6 +3492,85 @@ impl PublishSettings {
                 Vec::new(),
                 false,
             ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth logout` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthLogoutSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) network_settings: NetworkSettings,
+}
+
+impl AuthLogoutSettings {
+    /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuthLogoutArgs,
+        global_args: &GlobalArgs,
+        filesystem: Option<&FilesystemOptions>,
+    ) -> Self {
+        Self {
+            service: args.service,
+            username: args.username,
+            network_settings: NetworkSettings::resolve(global_args, filesystem),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth token` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthTokenSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) network_settings: NetworkSettings,
+}
+
+impl AuthTokenSettings {
+    /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuthTokenArgs,
+        global_args: &GlobalArgs,
+        filesystem: Option<&FilesystemOptions>,
+    ) -> Self {
+        Self {
+            service: args.service,
+            username: args.username,
+            network_settings: NetworkSettings::resolve(global_args, filesystem),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth set` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthLoginSettings {
+    pub(crate) service: Service,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
+    pub(crate) token: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) network_settings: NetworkSettings,
+}
+
+impl AuthLoginSettings {
+    /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuthLoginArgs,
+        global_args: &GlobalArgs,
+        filesystem: Option<&FilesystemOptions>,
+    ) -> Self {
+        Self {
+            service: args.service,
+            username: args.username,
+            password: args.password,
+            token: args.token,
+            network_settings: NetworkSettings::resolve(global_args, filesystem),
         }
     }
 }

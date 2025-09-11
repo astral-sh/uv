@@ -38,7 +38,7 @@ pub trait Installable<'lock> {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecificationWithDefaults,
-        dev: &DependencyGroupsWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
@@ -74,7 +74,7 @@ pub trait Installable<'lock> {
                     })?;
 
                 // Track the activated extras.
-                if dev.prod() {
+                if groups.prod() {
                     activated_projects.push(&dist.id.name);
                     for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                         activated_extras.push((&dist.id.name, extra));
@@ -85,7 +85,7 @@ pub trait Installable<'lock> {
                 for group in dist
                     .dependency_groups
                     .keys()
-                    .filter(|group| dev.contains(group))
+                    .filter(|group| groups.contains(group))
                 {
                     activated_groups.push((&dist.id.name, group));
                 }
@@ -106,7 +106,7 @@ pub trait Installable<'lock> {
                 })?;
 
             // Add the workspace package to the graph.
-            let index = petgraph.add_node(if dev.prod() {
+            let index = petgraph.add_node(if groups.prod() {
                 self.package_to_node(dist, tags, build_options, install_options)?
             } else {
                 self.non_installable_node(dist, tags)?
@@ -122,7 +122,7 @@ pub trait Installable<'lock> {
 
         // Add the workspace dependencies to the queue.
         for (dist, index) in roots {
-            if dev.prod() {
+            if groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
@@ -135,7 +135,7 @@ pub trait Installable<'lock> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
+                    if groups.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -172,7 +172,7 @@ pub trait Installable<'lock> {
                         // referenced as a development dependency, then we need to re-enable it.
                         let index = *entry.get();
                         let node = &mut petgraph[index];
-                        if !dev.prod() {
+                        if !groups.prod() {
                             *node = self.package_to_node(
                                 dep_dist,
                                 tags,
@@ -225,7 +225,7 @@ pub trait Installable<'lock> {
                 })?;
 
             // Add the package to the graph.
-            let index = petgraph.add_node(if dev.prod() {
+            let index = petgraph.add_node(if groups.prod() {
                 self.package_to_node(dist, tags, build_options, install_options)?
             } else {
                 self.non_installable_node(dist, tags)?
@@ -253,7 +253,7 @@ pub trait Installable<'lock> {
             .dependency_groups()
             .iter()
             .filter_map(|(group, deps)| {
-                if dev.contains(group) {
+                if groups.contains(group) {
                     Some(deps.iter().map(move |dep| (group, dep)))
                 } else {
                     None
@@ -294,7 +294,7 @@ pub trait Installable<'lock> {
                     // referenced as a development dependency, then we need to re-enable it.
                     let index = *entry.get();
                     let node = &mut petgraph[index];
-                    if !dev.prod() {
+                    if !groups.prod() {
                         *node = self.package_to_node(dist, tags, build_options, install_options)?;
                     }
                     index

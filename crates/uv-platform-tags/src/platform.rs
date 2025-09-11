@@ -11,6 +11,8 @@ pub enum PlatformError {
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
+    #[error("Failed to detect the arch: {0}")]
+    ArchDetectionError(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -40,18 +42,50 @@ impl Platform {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "name", rename_all = "lowercase")]
 pub enum Os {
-    Manylinux { major: u16, minor: u16 },
-    Musllinux { major: u16, minor: u16 },
+    Manylinux {
+        major: u16,
+        minor: u16,
+    },
+    Musllinux {
+        major: u16,
+        minor: u16,
+    },
     Windows,
-    Pyodide { major: u16, minor: u16 },
-    Macos { major: u16, minor: u16 },
-    FreeBsd { release: String },
-    NetBsd { release: String },
-    OpenBsd { release: String },
-    Dragonfly { release: String },
-    Illumos { release: String, arch: String },
-    Haiku { release: String },
-    Android { api_level: u16 },
+    Pyodide {
+        major: u16,
+        minor: u16,
+    },
+    Macos {
+        major: u16,
+        minor: u16,
+    },
+    FreeBsd {
+        release: String,
+    },
+    NetBsd {
+        release: String,
+    },
+    OpenBsd {
+        release: String,
+    },
+    Dragonfly {
+        release: String,
+    },
+    Illumos {
+        release: String,
+        arch: String,
+    },
+    Haiku {
+        release: String,
+    },
+    Android {
+        api_level: u16,
+    },
+    Ios {
+        major: u16,
+        minor: u16,
+        simulator: bool,
+    },
 }
 
 impl fmt::Display for Os {
@@ -69,6 +103,7 @@ impl fmt::Display for Os {
             Self::Haiku { .. } => write!(f, "haiku"),
             Self::Android { .. } => write!(f, "android"),
             Self::Pyodide { .. } => write!(f, "pyodide"),
+            Self::Ios { .. } => write!(f, "ios"),
         }
     }
 }

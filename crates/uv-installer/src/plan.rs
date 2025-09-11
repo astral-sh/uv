@@ -125,6 +125,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
+                            tags,
                             config_settings,
                             config_settings_package,
                             extra_build_requires,

@@ -70,6 +70,8 @@ The following preview features are available:
 - `python-upgrade`: Allows
   [transparent Python version upgrades](./python-versions.md#upgrading-python-versions).
 - `format`: Allows using `uv format`.
+- `native-auth`: Enables storage of credentials in a
+  [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
 
 ## Disabling preview features
 

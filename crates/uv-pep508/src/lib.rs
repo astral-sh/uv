@@ -1045,6 +1045,41 @@ fn parse_pep508_requirement<T: Pep508Url>(
     })
 }
 
+#[cfg(feature = "rkyv")]
+/// An [`rkyv`] implementation for [`Requirement`].
+impl<T: Pep508Url + Display> rkyv::Archive for Requirement<T> {
+    type Archived = rkyv::string::ArchivedString;
+    type Resolver = rkyv::string::StringResolver;
+
+    #[inline]
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        let as_str = self.to_string();
+        rkyv::string::ArchivedString::resolve_from_str(&as_str, resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<T: Pep508Url + Display, S> rkyv::Serialize<S> for Requirement<T>
+where
+    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
+    S::Error: rkyv::rancor::Source,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        let as_str = self.to_string();
+        rkyv::string::ArchivedString::serialize_from_str(&as_str, serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
+    rkyv::Deserialize<Requirement<T>, D> for rkyv::string::ArchivedString
+{
+    fn deserialize(&self, _deserializer: &mut D) -> Result<Requirement<T>, D::Error> {
+        // SAFETY: We only serialize valid requirements.
+        Ok(Requirement::<T>::from_str(self.as_str()).unwrap())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
