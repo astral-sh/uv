@@ -584,14 +584,14 @@ pub async fn check_url(
     if let Some(remote_hash) = archived_file.hashes.first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
-        let local_hash = hash_file(file, Hasher::from(remote_hash.algorithm))
+        let local_hash = &hash_file(file, vec![Hasher::from(remote_hash.algorithm)])
             .await
             .map_err(|err| {
                 PublishError::PublishPrepare(
                     file.to_path_buf(),
                     Box::new(PublishPrepareError::Io(err)),
                 )
-            })?;
+            })?[0];
         if local_hash.digest == remote_hash.digest {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
@@ -611,13 +611,20 @@ pub async fn check_url(
     }
 }
 
-/// Calculate the SHA256 of a file.
-async fn hash_file(path: impl AsRef<Path>, hasher: Hasher) -> Result<HashDigest, io::Error> {
+/// Calculate the requested hashes of a file.
+async fn hash_file(
+    path: impl AsRef<Path>,
+    hashers: Vec<Hasher>,
+) -> Result<Vec<HashDigest>, io::Error> {
     debug!("Hashing {}", path.as_ref().display());
     let file = BufReader::new(File::open(path.as_ref()).await?);
-    let mut hashers = vec![hasher];
+    let mut hashers = hashers;
     HashReader::new(file, &mut hashers).finish().await?;
-    Ok(HashDigest::from(hashers.remove(0)))
+
+    Ok(hashers
+        .into_iter()
+        .map(HashDigest::from)
+        .collect::<Vec<_>>())
 }
 
 // Not in `uv-metadata` because we only support tar files here.
@@ -693,7 +700,24 @@ impl FormMetadata {
         file: &Path,
         filename: &DistFilename,
     ) -> Result<Self, PublishPrepareError> {
-        let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
+        let hashes = hash_file(
+            file,
+            vec![
+                Hasher::from(HashAlgorithm::Sha256),
+                Hasher::from(HashAlgorithm::Blake2b),
+            ],
+        )
+        .await?;
+
+        let sha256_hash = hashes
+            .iter()
+            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
+            .unwrap();
+
+        let blake2b_hash = hashes
+            .iter()
+            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
+            .unwrap();
 
         let Metadata23 {
             metadata_version,
@@ -728,7 +752,8 @@ impl FormMetadata {
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", hash_hex.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest.to_string()),
+            ("blake2_256_digest", blake2b_hash.digest.to_string()),
             ("protocol_version", "1".to_string()),
             ("metadata_version", metadata_version.clone()),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
