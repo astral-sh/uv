@@ -713,7 +713,8 @@ impl TorchBackend {
                 return None;
             }
             path_segments.next()?
-        } else if index.host_str() == API_BASE_URL.strip_prefix("https://") {
+        // TODO(zanieb): We should consolidate this with `is_known_url` somehow
+        } else if index.host_str() == PYX_API_BASE_URL.strip_prefix("https://") {
             // E.g., `https://api.pyx.dev/simple/astral-sh/cu124`
             let mut path_segments = index.path_segments()?;
             if path_segments.next() != Some("simple") {
@@ -1110,180 +1111,180 @@ static PYTORCH_ROCM401_INDEX_URL: LazyLock<IndexUrl> =
 static PYTORCH_XPU_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/xpu").unwrap());
 
-static API_BASE_URL: LazyLock<Cow<'static, str>> = LazyLock::new(|| {
+static PYX_API_BASE_URL: LazyLock<Cow<'static, str>> = LazyLock::new(|| {
     std::env::var(EnvVars::PYX_API_URL)
         .map(Cow::Owned)
         .unwrap_or(Cow::Borrowed("https://api.pyx.dev"))
 });
 static PYX_CPU_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cpu")).unwrap()
 });
 static PYX_CU129_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu129")).unwrap()
 });
 static PYX_CU128_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu128")).unwrap()
 });
 static PYX_CU126_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu126")).unwrap()
 });
 static PYX_CU125_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu125")).unwrap()
 });
 static PYX_CU124_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu124")).unwrap()
 });
 static PYX_CU123_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu123")).unwrap()
 });
 static PYX_CU122_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu122")).unwrap()
 });
 static PYX_CU121_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu121")).unwrap()
 });
 static PYX_CU120_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu120")).unwrap()
 });
 static PYX_CU118_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu118")).unwrap()
 });
 static PYX_CU117_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu117")).unwrap()
 });
 static PYX_CU116_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu116")).unwrap()
 });
 static PYX_CU115_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu115")).unwrap()
 });
 static PYX_CU114_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu114")).unwrap()
 });
 static PYX_CU113_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu113")).unwrap()
 });
 static PYX_CU112_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu112")).unwrap()
 });
 static PYX_CU111_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu111")).unwrap()
 });
 static PYX_CU110_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu110")).unwrap()
 });
 static PYX_CU102_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu102")).unwrap()
 });
 static PYX_CU101_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu101")).unwrap()
 });
 static PYX_CU100_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu100")).unwrap()
 });
 static PYX_CU92_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu92")).unwrap()
 });
 static PYX_CU91_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu91")).unwrap()
 });
 static PYX_CU90_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu90")).unwrap()
 });
 static PYX_CU80_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu80")).unwrap()
 });
 static PYX_ROCM63_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.3")).unwrap()
 });
 static PYX_ROCM624_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.2.4")).unwrap()
 });
 static PYX_ROCM62_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.2")).unwrap()
 });
 static PYX_ROCM61_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.1")).unwrap()
 });
 static PYX_ROCM60_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.0")).unwrap()
 });
 static PYX_ROCM57_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.7")).unwrap()
 });
 static PYX_ROCM56_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.6")).unwrap()
 });
 static PYX_ROCM55_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.5")).unwrap()
 });
 static PYX_ROCM542_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.4.2")).unwrap()
 });
 static PYX_ROCM54_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.4")).unwrap()
 });
 static PYX_ROCM53_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.3")).unwrap()
 });
 static PYX_ROCM52_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.2")).unwrap()
 });
 static PYX_ROCM511_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm5.1.1")).unwrap()
 });
 static PYX_ROCM42_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm4.2")).unwrap()
 });
 static PYX_ROCM41_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm4.1")).unwrap()
 });
 static PYX_ROCM401_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm4.0.1")).unwrap()
 });
 static PYX_XPU_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
-    let api_base_url = &*API_BASE_URL;
+    let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/xpu")).unwrap()
 });
