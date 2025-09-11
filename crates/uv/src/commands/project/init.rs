@@ -96,10 +96,17 @@ pub(crate) async fn init(
             )?;
         }
         InitKind::Project(project_kind) => {
-            // Default to the current directory if a path was not provided.
+            // Default to the current "project" directory if a path was not provided.
             let path = match explicit_path {
                 None => project_dir.to_path_buf(),
-                Some(ref path) => std::path::absolute(path)?,
+                Some(ref path) => {
+                    // Otherwise, resolve paths relative to the `--project` option
+                    if path.is_relative() {
+                        project_dir.join(path)
+                    } else {
+                        std::path::absolute(path)?
+                    }
+                }
             };
 
             // Make sure a project does not already exist in the given directory.
