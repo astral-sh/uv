@@ -491,7 +491,7 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.variant),
+            _ => format!("+{}", self.variant),
         };
         write!(
             f,
@@ -632,7 +632,7 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         // and prerelease (with special formatting for the variant).
         let variant = match self.0.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+            _ => format!("+{}", self.0.variant),
         };
         write!(
             f,

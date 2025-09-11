@@ -233,10 +233,10 @@ impl TestContext {
                 // On Unix, we'll strip version numbers
                 if name == "python" {
                     // We can't require them in this case since `/python` is common
-                    r"(\d\.\d+|\d)?".to_string()
+                    r"(\d\.\d+|\d)?(t|d|td)?".to_string()
                 } else {
                     // However, for other names we'll require them to avoid over-matching
-                    r"(\d\.\d+|\d)".to_string()
+                    r"(\d\.\d+|\d)(t|d|td)?".to_string()
                 }
             };
 
@@ -412,7 +412,7 @@ impl TestContext {
     )?                      # (we allow the patch version to be missing entirely, e.g., in a request)
     (?:(?:a|b|rc)[0-9]+)?   # Pre-release version component, e.g., `a6` or `rc2`
     (?:[td])?               # A short variant, such as `t` (for freethreaded) or `d` (for debug)
-    (?:\+[a-z]+)?           # A long variant, such as `+free-threaded`
+    (?:(\+[a-z]+)+)?        # A long variant, such as `+freethreaded` or `+freethreaded+debug`
   )
   -
   [a-z0-9]+                 # Operating system (e.g., 'macos')

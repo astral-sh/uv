@@ -42,6 +42,16 @@ fn python_find() {
     ----- stderr -----
     "###);
 
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.12.*"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
     // Request Python 3.11
     uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r###"
     success: true

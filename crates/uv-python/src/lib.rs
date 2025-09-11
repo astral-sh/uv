@@ -294,7 +294,8 @@ mod tests {
                         "scripts": "bin"
                     },
                     "pointer_size": "64",
-                    "gil_disabled": {FREE_THREADED}
+                    "gil_disabled": {FREE_THREADED},
+                    "debug_enabled": false
                 }
             "##};
 
@@ -385,7 +386,8 @@ mod tests {
                         "data": ""
                     },
                     "pointer_size": "32",
-                    "gil_disabled": false
+                    "gil_disabled": false,
+                    "debug_enabled": false
                 }
             "##};
 

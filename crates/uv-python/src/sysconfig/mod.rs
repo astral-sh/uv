@@ -106,7 +106,7 @@ fn find_sysconfigdata(
         .join("lib")
         .join(format!("python{major}.{minor}{suffix}"));
     if !lib.exists() {
-        return Err(Error::MissingLib);
+        return Err(Error::MissingLib(lib));
     }
 
     // Probe the `lib` directory for `_sysconfigdata_`.
@@ -270,8 +270,8 @@ fn patch_pkgconfig(contents: &str) -> Option<String> {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Python installation is missing a `lib` directory")]
-    MissingLib,
+    #[error("Python installation is missing a `lib` directory at: {0}")]
+    MissingLib(PathBuf),
     #[error("Python installation is missing a `_sysconfigdata_` file")]
     MissingSysconfigdata,
     #[error(transparent)]
