@@ -1065,9 +1065,10 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
+        assert_snapshot!(&formatted_metadata, @r"
         :action: file_upload
         sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+        blake2_256_digest: 40ab79b48c4e289e4990f7e689177adae4096c07a634034eb1d10c0b6700e4d2
         protocol_version: 1
         metadata_version: 2.3
         name: tqdm
@@ -1113,7 +1114,7 @@ mod tests {
         project_urls: Documentation, https://github.com/unknown/tqdm#readme
         project_urls: Issues, https://github.com/unknown/tqdm/issues
         project_urls: Source, https://github.com/unknown/tqdm
-        "###);
+        ");
 
         let client = BaseClientBuilder::default().build();
         let (request, _) = build_upload_request(
@@ -1153,7 +1154,7 @@ mod tests {
                     },
                     headers: {
                         "content-type": "multipart/form-data; boundary=[...]",
-                        "content-length": "6803",
+                        "content-length": "7000",
                         "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                         "authorization": Sensitive,
                     },
@@ -1179,9 +1180,10 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
+        assert_snapshot!(&formatted_metadata, @r#"
         :action: file_upload
         sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
+        blake2_256_digest: 33d4e92517a16e3fa0c0893de0c7e4d46a2c38adab148dd2ff66eb47481d19cd
         protocol_version: 1
         metadata_version: 2.1
         name: tqdm
@@ -1265,7 +1267,7 @@ mod tests {
         requires_dist: ipywidgets >=6 ; extra == 'notebook'
         requires_dist: slack-sdk ; extra == 'slack'
         requires_dist: requests ; extra == 'telegram'
-        "###);
+        "#);
 
         let client = BaseClientBuilder::default().build();
         let (request, _) = build_upload_request(
@@ -1305,7 +1307,7 @@ mod tests {
                     },
                     headers: {
                         "content-type": "multipart/form-data; boundary=[...]",
-                        "content-length": "19330",
+                        "content-length": "19527",
                         "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                         "authorization": Sensitive,
                     },
