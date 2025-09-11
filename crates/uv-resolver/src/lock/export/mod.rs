@@ -34,6 +34,8 @@ struct ExportableRequirement<'lock> {
     marker: MarkerTree,
     /// The list of packages that depend on this package.
     dependents: Vec<&'lock Package>,
+    // List of dependencies of this package, with marker
+    dependencies: Vec<(&'lock Package, MarkerTree)>,
 }
 
 /// A set of flattened, exportable requirements, generated from a lockfile.
@@ -288,7 +290,7 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Determine the reachability of each node in the graph.
-        let mut reachability = if let Some(conflicts) = conflicts.as_ref() {
+        let reachability = if let Some(conflicts) = conflicts.as_ref() {
             conflict_marker_reachability(&graph, &[], conflicts)
         } else {
             marker_reachability(&graph, &[])
@@ -310,7 +312,7 @@ impl<'lock> ExportableRequirements<'lock> {
             })
             .map(|(index, package)| ExportableRequirement {
                 package,
-                marker: reachability.remove(&index).unwrap_or_default(),
+                marker: reachability.get(&index).copied().unwrap_or_default(),
                 dependents: if annotate {
                     let mut dependents = graph
                         .edges_directed(index, Direction::Incoming)
@@ -325,6 +327,24 @@ impl<'lock> ExportableRequirements<'lock> {
                     dependents
                 } else {
                     Vec::new()
+                },
+                dependencies: {
+                    let mut dependencies = graph
+                        .edges_directed(index, Direction::Outgoing)
+                        .filter_map(|edge| match &graph[edge.target()] {
+                            Node::Package(package) => Some((
+                                *package,
+                                reachability
+                                    .get(&edge.target())
+                                    .copied()
+                                    .unwrap_or_default(),
+                            )),
+                            Node::Root => None,
+                        })
+                        .collect::<Vec<_>>();
+                    dependencies
+                        .sort_unstable_by_key(|(package, marker)| (package.name(), *marker));
+                    dependencies
                 },
             })
             .filter(|requirement| !requirement.marker.is_false())

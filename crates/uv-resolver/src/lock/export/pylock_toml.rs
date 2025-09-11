@@ -232,7 +232,17 @@ pub struct PylockTomlPackage {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
-struct PylockTomlDependency {}
+struct PylockTomlDependency {
+    pub name: PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<Version>,
+    #[serde(
+        skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+        serialize_with = "uv_pep508::marker::ser::serialize",
+        default
+    )]
+    pub marker: MarkerTree,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -867,12 +877,22 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
+            let dependencies = node
+                .dependencies
+                .iter()
+                .map(|(package, marker)| PylockTomlDependency {
+                    name: package.id.name.clone(),
+                    version: package.id.version.clone(),
+                    marker: *marker,
+                })
+                .collect();
+
             let package = PylockTomlPackage {
                 name,
                 version,
                 marker: node.marker,
                 requires_python: None,
-                dependencies: vec![],
+                dependencies,
                 index,
                 vcs,
                 directory,
