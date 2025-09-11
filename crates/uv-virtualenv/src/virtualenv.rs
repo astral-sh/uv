@@ -119,60 +119,60 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail(allow_prompt) => {
-                    if allow_prompt {
-                        match confirm_clear(location, name)? {
-                            Some(true) => {
-                                debug!("Removing existing {name} due to confirmation");
-                                // Before removing the virtual environment, we need to canonicalize the
-                                // path because `Path::metadata` will follow the symlink but we're still
-                                // operating on the unresolved path and will remove the symlink itself.
-                                let location = location
-                                    .canonicalize()
-                                    .unwrap_or_else(|_| location.to_path_buf());
-                                remove_virtualenv(&location)?;
-                                fs::create_dir_all(&location)?;
-                            }
-                            Some(false) => {
-                                let hint = format!(
-                                    "Use the `{}` flag or set `{}` to replace the existing {name}",
-                                    "--clear".green(),
-                                    "UV_VENV_CLEAR=1".green()
-                                );
-                                return Err(Error::Io(io::Error::new(
-                                    io::ErrorKind::AlreadyExists,
-                                    format!(
-                                        "A {name} already exists at: {}\n\n{}{} {hint}",
-                                        location.user_display(),
-                                        "hint".bold().cyan(),
-                                        ":".bold(),
-                                    ),
-                                )));
-                            }
-                            // When we don't have a TTY, warn that the behavior will change in the future
-                            None => {
+                    match allow_prompt.then(|| confirm_clear(location, name)).transpose()?.flatten() {
+                        Some(true) => {
+                            debug!("Removing existing {name} due to confirmation");
+                            // Before removing the virtual environment, we need to canonicalize the
+                            // path because `Path::metadata` will follow the symlink but we're still
+                            // operating on the unresolved path and will remove the symlink itself.
+                            let location = location
+                                .canonicalize()
+                                .unwrap_or_else(|_| location.to_path_buf());
+                            remove_virtualenv(&location)?;
+                            fs::create_dir_all(&location)?;
+                        }
+                        Some(false) => {
+                            let hint = format!(
+                                "Use the `{}` flag or set `{}` to replace the existing {name}",
+                                "--clear".green(),
+                                "UV_VENV_CLEAR=1".green()
+                            );
+                            return Err(Error::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                                    location.user_display(),
+                                    "hint".bold().cyan(),
+                                    ":".bold(),
+                                ),
+                            )));
+                        }
+                        // When we don't have a TTY, warn that the behavior will change in the future
+                        // Or when --no-clear was specified, fail without prompting
+                        None => {
+                            if allow_prompt {
                                 warn_user_once!(
                                     "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
                                     location.user_display(),
                                     "--clear".green(),
                                 );
+                            } else {
+                                let hint = format!(
+                                    "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
+                                    "--clear".green(),
+                                    "--allow-existing".green()
+                                );
+                                return Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "A {name} already exists at {}\n\n{}{} {hint}",
+                                        location.user_display(),
+                                        "error".bold().red(),
+                                        ":".bold(),
+                                    ),
+                                )));
                             }
                         }
-                    } else {
-                        // --no-clear was specified, fail without prompting
-                        let hint = format!(
-                            "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
-                            "--clear".green(),
-                            "--allow-existing".green()
-                        );
-                        return Err(Error::Io(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            format!(
-                                "A {name} already exists at {}\n\n{}{} {hint}",
-                                location.user_display(),
-                                "error".bold().red(),
-                                ":".bold(),
-                            ),
-                        )));
                     }
                 }
             }
