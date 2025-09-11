@@ -77,6 +77,7 @@ uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
 uv-workspace = { path = "crates/uv-workspace" }
 
+ambient-id = { version = "0.0.5" }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }

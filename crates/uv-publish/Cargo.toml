@@ -27,6 +27,7 @@ uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
+ambient-id = { workspace = true }
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true }
 base64 = { workspace = true }
@@ -42,12 +43,17 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true , features = ["io"] }
+tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+
+[features]
+# Test only feature to enable non-HTTPS URL handling
+# in unit tests.
+test = []
 
 [lints]
 workspace = true

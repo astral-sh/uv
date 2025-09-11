@@ -2095,11 +2095,12 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ### [`trusted-publishing`](#trusted-publishing) {: #trusted-publishing }
 
-Configure trusted publishing via GitHub Actions.
+Configure trusted publishing.
 
-By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-from a fork).
+By default, uv checks for trusted publishing when running in a supported environment, but
+ignores it if it isn't configured.
+
+uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
 
 **Default value**: `automatic`
 

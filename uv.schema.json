@@ -586,7 +586,7 @@
       ]
     },
     "trusted-publishing": {
-      "description": "Configure trusted publishing via GitHub Actions.\n\nBy default, uv checks for trusted publishing when running in GitHub Actions, but ignores it\nif it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request\nfrom a fork).",
+      "description": "Configure trusted publishing.\n\nBy default, uv checks for trusted publishing when running in a supported environment, but\nignores it if it isn't configured.\n\nuv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.",
       "anyOf": [
         {
           "$ref": "#/definitions/TrustedPublishing"
@@ -2742,7 +2742,7 @@
           ]
         },
         {
-          "description": "Try trusted publishing when we're already in GitHub Actions, continue if that fails.",
+          "description": "Attempt trusted publishing when we're in a supported environment, continue if that fails.\n\nSupported environments include GitHub Actions and GitLab CI/CD.",
           "type": "string",
           "const": "automatic"
         }
