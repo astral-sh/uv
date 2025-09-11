@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -26,6 +26,8 @@ pub struct SourceTreeResolution {
     pub requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
     pub project: PackageName,
+    /// The directory containing the package, usable as requirement source.
+    pub directory: Box<Path>,
     /// The extras used when resolving the requirements.
     pub extras: Box<[ExtraName]>,
 }
@@ -85,7 +87,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
-        let metadata = self.resolve_requires_dist(path).await?;
+        let (directory, metadata) = self.resolve_requires_dist(path).await?;
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
@@ -115,6 +117,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         Ok(SourceTreeResolution {
             requirements,
+            directory: directory.into_boxed_path(),
             project,
             extras,
         })
@@ -124,7 +127,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// requirements without building the distribution, even if the project contains (e.g.) a
     /// dynamic version since, critically, we don't need to install the package itself; only its
     /// dependencies.
-    async fn resolve_requires_dist(&self, path: &Path) -> Result<RequiresDist> {
+    async fn resolve_requires_dist(&self, path: &Path) -> Result<(PathBuf, RequiresDist)> {
         // Convert to a buildable source.
         let source_tree = fs_err::canonicalize(path).with_context(|| {
             format!(
@@ -144,8 +147,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // _only_ need the requirements. So, for example, even if the version is dynamic, we can
         // still extract the requirements without performing a build, unlike in the database where
         // we typically construct a "complete" metadata object.
-        if let Some(metadata) = self.database.requires_dist(source_tree).await? {
-            return Ok(metadata);
+        if let Some(metadata) = self.database.requires_dist(&source_tree).await? {
+            return Ok((source_tree.to_path_buf(), metadata));
         }
 
         let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
@@ -201,6 +204,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
-        Ok(RequiresDist::from(metadata))
+        Ok((source_tree.to_path_buf(), RequiresDist::from(metadata)))
     }
 }

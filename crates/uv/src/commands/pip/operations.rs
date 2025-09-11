@@ -20,14 +20,15 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    RequirementSource, ResolutionDiagnostic, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
-use uv_pep508::{MarkerEnvironment, RequirementOrigin};
+use uv_pep508::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
@@ -130,6 +131,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
+    let mut source_tree_requirements = Vec::new();
     let requirements = {
         // Partition the requirements into named and unnamed requirements.
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
@@ -169,6 +171,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
+
+            source_tree_requirements.clone_from(&resolutions);
 
             // If we resolved a single project, use it for the project name.
             project = project.or_else(|| {
@@ -287,7 +291,24 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         constraints
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .chain(upgrade.constraints().cloned()),
+            .chain(upgrade.constraints().cloned())
+            .chain(source_tree_requirements.into_iter().map(|source_tree| {
+                let url = VerbatimUrl::from_normalized_path(&source_tree.directory)
+                    .expect("Invalid source tree resolution");
+                Requirement {
+                    name: source_tree.project,
+                    extras: Box::new([]),
+                    groups: Box::new([]),
+                    marker: MarkerTree::default(),
+                    source: RequirementSource::Directory {
+                        install_path: source_tree.directory,
+                        editable: None,
+                        r#virtual: None,
+                        url,
+                    },
+                    origin: None,
+                }
+            })),
     );
     let overrides = Overrides::from_requirements(overrides);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
