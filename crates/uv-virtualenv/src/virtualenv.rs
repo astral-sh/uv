@@ -132,7 +132,11 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail(allow_prompt) => {
-                    match allow_prompt.then(|| confirm_clear(location, name)).transpose()?.flatten() {
+                    match allow_prompt
+                        .then(|| confirm_clear(location, name))
+                        .transpose()?
+                        .flatten()
+                    {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the

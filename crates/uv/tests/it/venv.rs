@@ -958,8 +958,7 @@ fn empty_dir_exists() -> Result<()> {
 fn non_empty_dir_exists() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
-    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail,
-    // unless `--clear` is specified.
+    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should succeed with a warning.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
@@ -967,17 +966,15 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    error: Failed to create virtual environment
-      Caused by: A directory already exists at: .venv
-
-    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -1005,7 +1002,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should
-    // succeed when `--allow-existing` is specified, but fail when it is not.
+    // succeed with a warning, both with and without `--allow-existing`.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
@@ -1013,17 +1010,15 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    error: Failed to create virtual environment
-      Caused by: A directory already exists at: .venv
-
-    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
