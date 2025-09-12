@@ -4,8 +4,8 @@ members = ["cargo:."]
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.7"
-# make a package being included in our releases opt-in instead of opt-out
+cargo-dist-version = "0.30.0"
+# Whether to consider the binaries in a package for distribution (defaults true)
 dist = false
 # CI backends to support
 ci = "github"
