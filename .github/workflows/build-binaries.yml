@@ -851,7 +851,7 @@ jobs:
         platform:
           - target: loongarch64-unknown-linux-gnu
             arch: loong64
-            base_image: --platform=linux/loong64 ghcr.io/loong64/debian:trixie
+            base_image: --platform=linux/loong64 ghcr.io/loong64/debian:trixie@sha256:71a1f5a556f142729662ef4ccc7c86b47f3260ffa69ea40f890809442aced342
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
