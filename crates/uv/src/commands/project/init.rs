@@ -989,6 +989,9 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 python-packages = ["{module_name}"]
                 python-source = "src"
 
+                [tool.uv]
+                cache-keys = [{{ file = "pyproject.toml" }}, {{ file = "src/**/*.rs" }}, {{ file = "Cargo.toml" }}, {{ file = "Cargo.lock" }}]
+
                 [build-system]
                 requires = ["maturin>=1.0,<2.0"]
                 build-backend = "maturin"
@@ -997,6 +1000,9 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 [tool.scikit-build]
                 minimum-version = "build-system.requires"
                 build-dir = "build/{wheel_tag}"
+
+                [tool.uv]
+                cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
                 [build-system]
                 requires = ["scikit-build-core>=0.10", "pybind11"]

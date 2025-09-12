@@ -3322,6 +3322,9 @@ fn init_app_build_backend_maturin() -> Result<()> {
         python-packages = ["foo"]
         python-source = "src"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
         build-backend = "maturin"
@@ -3451,6 +3454,9 @@ fn init_app_build_backend_scikit() -> Result<()> {
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]
         build-backend = "scikit_build_core.build"
@@ -3572,6 +3578,9 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         module-name = "foo._core"
         python-packages = ["foo"]
         python-source = "src"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
 
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
@@ -3698,6 +3707,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         [tool.scikit-build]
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]
