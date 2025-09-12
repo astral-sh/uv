@@ -43,8 +43,9 @@ impl ToolEnvironment {
 
     /// Return the [`Version`] of the tool package in this environment.
     pub fn version(&self) -> Result<Version, Error> {
-        let site_packages = SitePackages::from_environment(&self.environment)
-            .map_err(|err| Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string()))?;
+        let site_packages = SitePackages::from_environment(&self.environment).map_err(|err| {
+            Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string())
+        })?;
         let packages = site_packages.get_packages(&self.name);
         let package = packages
             .first()
@@ -339,7 +340,8 @@ impl InstalledTools {
 
     /// Return the [`Version`] of an installed tool.
     pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let tool_env = self.get_environment(name, cache)?
+        let tool_env = self
+            .get_environment(name, cache)?
             .ok_or_else(|| Error::ToolEnvironmentNotFound(name.clone(), self.tool_dir(name)))?;
         tool_env.version()
     }
