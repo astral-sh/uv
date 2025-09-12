@@ -671,6 +671,10 @@ Disables colored output (takes precedence over `FORCE_COLOR`).
 
 See [no-color.org](https://no-color.org).
 
+### `NO_PROXY`
+
+Comma-separated list of hostnames (e.g., `example.com`) and/or patterns (e.g., `192.168.1.0/24`) that should bypass the proxy.
+
 ### `NU_VERSION`
 
 Used to detect `NuShell` usage.
