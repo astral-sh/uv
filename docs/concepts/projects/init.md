@@ -301,8 +301,9 @@ Hello from example-ext!
 
 !!! important
 
-    Changes to the extension code in `lib.rs` or `main.cpp` will require running `--reinstall` to
-    rebuild them.
+    uv will only rebuild the package if the source files are listed in [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys).
+    Without `tool.uv.cache-keys`, changes to the extension code in `lib.rs` or `main.cpp` require
+    running `--reinstall` to rebuild them.
 
 ## Creating a minimal project
 
