@@ -474,6 +474,9 @@ impl EnvVars {
     /// General proxy for all network requests.
     pub const ALL_PROXY: &'static str = "ALL_PROXY";
 
+    /// Comma-separated list of hostnames (e.g., `example.com`) and/or patterns (e.g., `192.168.1.0/24`) that should bypass the proxy.
+    pub const NO_PROXY: &'static str = "NO_PROXY";
+
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
 
