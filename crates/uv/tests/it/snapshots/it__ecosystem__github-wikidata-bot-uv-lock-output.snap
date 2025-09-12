@@ -7,6 +7,5 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-warning: In project `github-wikidata-bot`: `[tool.uv.dev-dependencies]` is deprecated.
-Instead use `[dependency-groups] dev = []`.
+warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
 Resolved 31 packages in [TIME]

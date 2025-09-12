@@ -833,7 +833,7 @@ impl Workspace {
             &workspace_pyproject_toml,
         );
 
-        for (package_name, member) in workspace_members.iter() {
+        for (_, member) in workspace_members.iter() {
             if member
                 .pyproject_toml
                 .tool
@@ -843,9 +843,8 @@ impl Workspace {
                 .is_some()
             {
                 warn_user_once!(
-                    "In project `{}`: `[tool.uv.dev-dependencies]` is deprecated.\n\
-                    Instead use `[dependency-groups] dev = []`.",
-                    package_name.green(),
+                    "The `tool.uv.dev-dependencies` field (used in `{}`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead",
+                    member.root().join("pyproject.toml").user_display(),
                 );
             }
         }

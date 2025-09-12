@@ -1838,8 +1838,7 @@ fn update_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1899,8 +1898,7 @@ fn add_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1957,8 +1955,7 @@ fn update_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2014,8 +2011,7 @@ fn add_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2077,8 +2073,7 @@ fn remove_both_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -2170,8 +2165,7 @@ fn remove_both_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -6482,8 +6476,7 @@ fn remove_repeated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -6521,8 +6514,7 @@ fn remove_repeated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     ");
@@ -6558,8 +6550,7 @@ fn remove_repeated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)

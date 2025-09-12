@@ -7,6 +7,5 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-warning: In project `warehouse`: `[tool.uv.dev-dependencies]` is deprecated.
-Instead use `[dependency-groups] dev = []`.
+warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
 Resolved 323 packages in [TIME]

@@ -1828,8 +1828,7 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     ");
 
@@ -1846,8 +1845,7 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     ");
 
@@ -1870,8 +1868,7 @@ fn devrequirements_txt_() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     ");
 

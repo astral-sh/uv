@@ -543,8 +543,7 @@ fn dev_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     "
     );
@@ -557,8 +556,7 @@ fn dev_dependencies() -> Result<()> {
     └── iniconfig v2.0.0
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     "
     );
@@ -602,8 +600,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     "
     );
@@ -616,8 +613,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     └── project v0.1.0
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     "
     );
