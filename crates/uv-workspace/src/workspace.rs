@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use glob::{GlobError, PatternError, glob};
+use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
@@ -833,20 +834,23 @@ impl Workspace {
             &workspace_pyproject_toml,
         );
 
-        for (_, member) in workspace_members.iter() {
-            if member
-                .pyproject_toml
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref())
-                .is_some()
-            {
-                warn_user_once!(
-                    "The `tool.uv.dev-dependencies` field (used in `{}`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead",
-                    member.root().join("pyproject.toml").user_display(),
-                );
-            }
+        let dev_dependencies_members = workspace_members
+            .iter()
+            .filter_map(|(_, member)| {
+                member
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .map(|_| format!("`{}`", member.root().join("pyproject.toml").user_display()))
+            })
+            .join(", ");
+        if !dev_dependencies_members.is_empty() {
+            warn_user_once!(
+                "The `tool.uv.dev-dependencies` field (used in {}) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead",
+                dev_dependencies_members
+            );
         }
 
         Ok(Self {

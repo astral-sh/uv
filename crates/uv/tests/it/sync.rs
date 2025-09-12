@@ -7587,8 +7587,7 @@ fn transitive_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `tool.uv.dev-dependencies` field (used in `child/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    warning: The `tool.uv.dev-dependencies` field (used in `child/pyproject.toml`, `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]

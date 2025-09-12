@@ -10141,8 +10141,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     ");
 
@@ -10218,8 +10217,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     ");
 
@@ -10230,8 +10228,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     Updated anyio v0.1.0 -> v4.3.0
     Added idna v3.6
@@ -10322,8 +10319,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     ");
 
@@ -18577,8 +18573,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18733,8 +18728,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18746,8 +18740,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18758,8 +18751,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
@@ -18803,8 +18795,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18959,8 +18950,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18972,8 +18962,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 11 packages in [TIME]
     ");
 
@@ -18984,8 +18973,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `project`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
