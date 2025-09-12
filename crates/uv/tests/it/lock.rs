@@ -407,14 +407,15 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    Updated uv-public-pypackage v0.1.0 (0dacfd66) -> v0.1.0 (b270df1a)
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -738,14 +739,15 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    Updated uv-public-pypackage v0.1.0 (0dacfd66) -> v0.1.0 (b270df1a)
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4942,6 +4944,7 @@ fn lock_git_sha() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Updated uv-public-pypackage v0.1.0 (0dacfd66) -> v0.1.0 (b270df1a)
     ");
 
     let lock = context.read("uv.lock");
@@ -12937,14 +12940,15 @@ fn lock_mismatched_sources() -> Result<()> {
     });
 
     // If we run with `--no-sources`, we should use the URL provided in `project.dependencies`.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    Updated uv-public-pypackage v0.1.0 (0dacfd66) -> v0.1.0 (b270df1a)
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -31515,6 +31519,111 @@ fn lock_android() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/9832#issuecomment-2539121761>
+#[test]
+fn lock_git_change_log() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = [
+            "typing-extensions",
+        ]
+
+        [tool.uv.sources]
+        typing-extensions = { git = "https://github.com/python/typing_extensions" }
+        "#,
+    )?;
+
+    // Write a stale commit.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12.0"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "typing-extensions" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "typing-extensions", git = "https://github.com/python/typing_extensions?rev=4f42e6bf0052129bc6dae5e71699a409652d2091" }]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.15.0"
+        source = { git = "https://github.com/python/typing_extensions?rev=4f42e6bf0052129bc6dae5e71699a409652d2091#4f42e6bf0052129bc6dae5e71699a409652d2091" }
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Update typing-extensions v4.15.0 (4f42e6bf) -> v4.15.0 (9215c953)
+    ");
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated typing-extensions v4.15.0 (4f42e6bf) -> v4.15.0 (9215c953)
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12.[X]"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "typing-extensions" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "typing-extensions", git = "https://github.com/python/typing_extensions" }]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.15.0"
+        source = { git = "https://github.com/python/typing_extensions#9215c953610ca4e4ce7ae840a0a804505da70a05" }
+        "#
+        );
+    });
 
     Ok(())
 }
