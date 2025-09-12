@@ -131,9 +131,14 @@ pub(crate) fn create(
                     remove_virtualenv(&location)?;
                     fs::create_dir_all(&location)?;
                 }
-                OnExisting::Fail => {
+                OnExisting::Fail(allow_prompt) => {
                     let confirmation = if is_virtualenv {
-                        confirm_clear(location, name)?
+                        if allow_prompt {
+                            confirm_clear(location, name)?
+                        } else {
+                            // When --no-clear is specified, don't prompt, just fail
+                            Some(false)
+                        }
                     } else {
                         // Refuse to remove a non-virtual environment; don't even prompt.
                         Some(false)
@@ -637,11 +642,11 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OnExisting {
     /// Fail if the directory already exists and is non-empty.
-    #[default]
-    Fail,
+    /// The bool parameter controls whether prompting is allowed.
+    Fail(bool),
     /// Allow an existing directory, overwriting virtual environment files while retaining other
     /// files in the directory.
     Allow,
@@ -649,14 +654,21 @@ pub enum OnExisting {
     Remove,
 }
 
+impl Default for OnExisting {
+    fn default() -> Self {
+        Self::Fail(true) // Allow prompting by default
+    }
+}
+
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool) -> Self {
+    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
         if allow_existing {
             Self::Allow
         } else if clear {
             Self::Remove
         } else {
-            Self::default()
+            // If no_clear is true, don't allow prompting
+            Self::Fail(!no_clear)
         }
     }
 }
