@@ -719,6 +719,26 @@ default-groups = "all"
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
     To exclude a specific default group, use `--no-group <name>`.
 
+### Group `requires-python`
+
+By default, dependency groups must be compatible with your project's `requires-python` range.
+
+If a dependency group requires a different range of Python versions than your project, you can
+specify a `requires-python` for the group in `[tool.uv.dependency-groups]`, e.g.:
+
+```toml title="pyproject.toml" hl_lines="9-10"
+[project]
+name = "example"
+version = "0.0.0"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.12"}
+```
+
 ### Legacy `dev-dependencies`
 
 Before `[dependency-groups]` was standardized, uv used the `tool.uv.dev-dependencies` field to
