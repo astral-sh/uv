@@ -1865,7 +1865,6 @@ async fn run_project(
                 &cache,
                 printer,
                 args.env_file,
-                args.no_env_file,
                 globals.preview,
                 args.max_recursion_depth,
             ))
