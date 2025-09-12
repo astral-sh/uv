@@ -2903,6 +2903,7 @@ fn sync_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2917,6 +2918,7 @@ fn sync_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -2933,6 +2935,7 @@ fn sync_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
@@ -2947,6 +2950,7 @@ fn sync_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
     Uninstalled 3 packages in [TIME]
      - anyio==4.3.0
@@ -3439,6 +3443,7 @@ fn sync_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -7582,6 +7587,7 @@ fn transitive_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `child/pyproject.toml`, `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]

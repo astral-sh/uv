@@ -1804,7 +1804,7 @@ fn devrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1828,10 +1828,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1844,10 +1845,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1866,8 +1868,9 @@ fn devrequirements_txt_() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }

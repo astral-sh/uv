@@ -8,14 +8,15 @@ fn packse_add_remove_one_package() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -215,14 +216,15 @@ fn packse_add_remove_existing_package_noop() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -250,14 +252,15 @@ fn packse_promote_transitive_to_direct_then_remove() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
