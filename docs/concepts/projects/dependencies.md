@@ -703,10 +703,17 @@ default-groups = "all"
 
 ### Group `requires-python`
 
-If your dependency groups require a higher version of python than your project does, you can specify
-a `requires-python` for the group in `[tool.uv.dependency-groups]` as follows:
+By default, dependency groups must be compatible with your project's `requires-python` range.
 
-```toml title="pyproject.toml"
+If a dependency group requires a different range of Python versions than your project, you can
+specify a `requires-python` for the group in `[tool.uv.dependency-groups]`, e.g.:
+
+```toml title="pyproject.toml" hl_lines="9-10"
+[project]
+name = "example"
+version = "0.0.0"
+requires-python = ">=3.10"
+
 [dependency-groups]
 dev = ["pytest"]
 
