@@ -23,7 +23,7 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
     SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
@@ -343,8 +343,7 @@ pub(crate) struct RunSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) env_file: Vec<PathBuf>,
-    pub(crate) no_env_file: bool,
+    pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
 }
 
@@ -461,8 +460,7 @@ impl RunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            env_file,
-            no_env_file,
+            env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors,
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }

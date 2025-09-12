@@ -3192,8 +3192,8 @@ pub struct RunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
-    pub env_file: Vec<PathBuf>,
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<String>,
 
     /// Avoid reading environment variables from a `.env` file.
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
