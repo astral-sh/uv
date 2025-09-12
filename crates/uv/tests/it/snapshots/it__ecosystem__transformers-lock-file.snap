@@ -1035,7 +1035,6 @@ dependencies = [
     { name = "numpy" },
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5e/a3/7213833216238e7dd7ef9f9a3a66bfb1ae24235e7fd32aad75afa3e78f3f/faiss_cpu-1.8.0.post1.tar.gz", hash = "sha256:5686af34414678c3d49c4fa8d774df7156e9cb48d7029071e56230e74b01cc13", size = 63668, upload-time = "2024-06-24T05:58:28.155Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/6c/025d4b55e81c23b63ce093880afa5944f7f5cdc1a93e7a10b0f67fcc26b5/faiss_cpu-1.8.0.post1-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:fd84721eb599aa1da19b1b36345bb8705a60bb1d2887bbbc395a29e3d36a1a62", size = 7345861, upload-time = "2024-06-26T04:27:50.127Z" },
     { url = "https://files.pythonhosted.org/packages/1f/22/231e1b30cf7d90da6a59bf6169c509ae62d3c3b1e9a88b702c267cd25e41/faiss_cpu-1.8.0.post1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:b78ff9079d15fd0f156bf5dd8a2975a8abffac1854a86ece263eec1500a2e836", size = 5979513, upload-time = "2024-06-24T05:57:40.993Z" },

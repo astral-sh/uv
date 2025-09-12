@@ -5,13 +5,12 @@ pub enum EditableMode {
     NonEditable,
 }
 
-impl EditableMode {
-    /// Determine the editable mode based on the command-line arguments.
-    pub fn from_args(no_editable: bool) -> Self {
-        if no_editable {
-            Self::NonEditable
-        } else {
+impl From<bool> for EditableMode {
+    fn from(value: bool) -> Self {
+        if value {
             Self::Editable
+        } else {
+            Self::NonEditable
         }
     }
 }

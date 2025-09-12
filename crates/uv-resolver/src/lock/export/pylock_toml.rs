@@ -620,7 +620,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
-        editable: EditableMode,
+        editable: Option<EditableMode>,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -736,8 +736,9 @@ impl<'lock> PylockToml {
                             .into_boxed_path(),
                     ),
                     editable: match editable {
-                        EditableMode::NonEditable => None,
-                        EditableMode::Editable => sdist.editable,
+                        None => sdist.editable,
+                        Some(EditableMode::NonEditable) => None,
+                        Some(EditableMode::Editable) => Some(true),
                     },
                     subdirectory: None,
                 }),
@@ -1369,6 +1370,7 @@ impl PylockTomlWheel {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
+            zstd: None,
         });
 
         Ok(RegistryBuiltWheel {
@@ -1525,6 +1527,7 @@ impl PylockTomlSdist {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
+            zstd: None,
         });
 
         Ok(RegistrySourceDist {

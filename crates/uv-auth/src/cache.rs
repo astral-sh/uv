@@ -148,8 +148,8 @@ impl CredentialsCache {
 
         let mut realms = self.realms.write().unwrap();
 
-        // Always replace existing entries if we have a password
-        if credentials.password().is_some() {
+        // Always replace existing entries if we have a password or token
+        if credentials.is_authenticated() {
             return realms.insert(key, credentials.clone());
         }
 

@@ -112,6 +112,19 @@ pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
     Ok(input)
 }
 
+/// Prompt the user for username in the given [`Term`].
+pub fn username(prompt: &str, term: &Term) -> std::io::Result<String> {
+    term.write_str(prompt)?;
+    term.show_cursor()?;
+    term.flush()?;
+
+    let input = term.read_line()?;
+
+    term.clear_line()?;
+
+    Ok(input)
+}
+
 /// Prompt the user for input text in the given [`Term`].
 ///
 /// This is a slimmed-down version of `dialoguer::Input`.
@@ -282,4 +295,20 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
     term.write_line("")?;
 
     Ok(input)
+}
+
+/// Formats a number of bytes into a human readable SI-prefixed size (binary units).
+///
+/// Returns a tuple of `(quantity, units)`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+pub fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
+    const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+    let bytes_f32 = bytes as f32;
+    let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
+    (bytes_f32 / 1024_f32.powi(i as i32), UNITS[i])
 }

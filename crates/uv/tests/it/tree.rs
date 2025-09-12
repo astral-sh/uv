@@ -1669,3 +1669,33 @@ fn only_group() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn show_sizes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--show-sizes").arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0 ([SIZE])
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}

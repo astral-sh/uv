@@ -107,6 +107,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::Pyodide { .. } => {
                 Self::new(target_lexicon::OperatingSystem::Emscripten)
             }
+            uv_platform_tags::Os::Ios { .. } => {
+                Self::new(target_lexicon::OperatingSystem::IOS(None))
+            }
         }
     }
 }

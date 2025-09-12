@@ -6,7 +6,7 @@ use futures::StreamExt;
 use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
@@ -29,7 +29,7 @@ use crate::commands::project::{
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -45,12 +45,13 @@ pub(crate) async fn tree(
     no_dedupe: bool,
     invert: bool,
     outdated: bool,
+    show_sizes: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -79,8 +80,6 @@ pub(crate) async fn tree(
     };
     let groups = groups.with_defaults(default_groups);
 
-    let native_tls = network_settings.native_tls;
-
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
     let interpreter = if frozen && universal {
         None
@@ -89,7 +88,7 @@ pub(crate) async fn tree(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -107,7 +106,7 @@ pub(crate) async fn tree(
                 project_dir,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -142,7 +141,7 @@ pub(crate) async fn tree(
     let lock = match LockOperation::new(
         mode,
         &settings,
-        network_settings,
+        client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -156,7 +155,7 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -216,13 +215,10 @@ pub(crate) async fn tree(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(
+                client_builder.clone(),
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
-            .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .index_locations(index_locations)
+            .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);
@@ -283,6 +279,7 @@ pub(crate) async fn tree(
         &groups,
         no_dedupe,
         invert,
+        show_sizes,
     );
 
     print!("{tree}");

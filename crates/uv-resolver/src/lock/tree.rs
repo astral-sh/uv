@@ -10,6 +10,7 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_console::human_readable_bytes;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -30,6 +31,10 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
+    lock: &'env Lock,
+    /// Whether to show sizes in the rendered output.
+    show_sizes: bool,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -44,6 +49,7 @@ impl<'env> TreeDisplay<'env> {
         groups: &DependencyGroupsWithDefaults,
         no_dedupe: bool,
         invert: bool,
+        show_sizes: bool,
     ) -> Self {
         // Identify any workspace members.
         //
@@ -398,6 +404,8 @@ impl<'env> TreeDisplay<'env> {
             latest,
             depth,
             no_dedupe,
+            lock,
+            show_sizes,
         }
     }
 
@@ -444,6 +452,17 @@ impl<'env> TreeDisplay<'env> {
                     Edge::Dev(group, _) => {
                         let _ = write!(line, " (group: {group})");
                     }
+                }
+            }
+
+            // Append compressed wheel size, if available in the lockfile.
+            // Keep it simple: use the first wheel entry that includes a size.
+            if self.show_sizes {
+                let package = self.lock.find_by_id(package_id);
+                if let Some(size_bytes) = package.wheels.iter().find_map(|wheel| wheel.size) {
+                    let (bytes, unit) = human_readable_bytes(size_bytes);
+                    line.push(' ');
+                    line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
                 }
             }
 

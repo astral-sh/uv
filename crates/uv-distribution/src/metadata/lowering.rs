@@ -306,22 +306,24 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member
-                                .pyproject_toml()
-                                .is_package(!workspace.is_required_member(&requirement.name))
-                            {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(true),
-                                    r#virtual: Some(false),
-                                }
                             } else {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(false),
-                                    r#virtual: Some(true),
+                                let value = workspace.required_members().get(&requirement.name);
+                                let is_required_member = value.is_some();
+                                let editability = value.copied().flatten();
+                                if member.pyproject_toml().is_package(!is_required_member) {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(editability.unwrap_or(true)),
+                                        r#virtual: Some(false),
+                                    }
+                                } else {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(false),
+                                        r#virtual: Some(true),
+                                    }
                                 }
                             };
                             (source, marker)

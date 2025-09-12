@@ -3,6 +3,82 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.17
+
+Released on 2025-09-10.
+
+### Enhancements
+
+- Improve error message for HTTP validation in auth services ([#15768](https://github.com/astral-sh/uv/pull/15768))
+- Respect `PYX_API_URL` when suggesting `uv auth login` on 401 ([#15774](https://github.com/astral-sh/uv/pull/15774))
+- Add pyx as a supported PyTorch index URL ([#15769](https://github.com/astral-sh/uv/pull/15769))
+
+### Bug fixes
+
+- Avoid initiating login flow for invalid API keys ([#15773](https://github.com/astral-sh/uv/pull/15773))
+- Do not search for a password for requests with a token attached already ([#15772](https://github.com/astral-sh/uv/pull/15772))
+- Filter pre-release Python versions in `uv init --script` ([#15747](https://github.com/astral-sh/uv/pull/15747))
+
+## 0.8.16
+
+### Enhancements
+
+- Allow `--editable` to override `editable = false` annotations ([#15712](https://github.com/astral-sh/uv/pull/15712))
+- Allow `editable = false` for workspace sources ([#15708](https://github.com/astral-sh/uv/pull/15708))
+- Show a dedicated error for virtual environments in source trees on build ([#15748](https://github.com/astral-sh/uv/pull/15748))
+- Support Android platform tags ([#15646](https://github.com/astral-sh/uv/pull/15646))
+- Support iOS platform tags ([#15640](https://github.com/astral-sh/uv/pull/15640))
+- Support scripts with inline metadata in `--with-requirements` and `--requirements` ([#12763](https://github.com/astral-sh/uv/pull/12763))
+
+### Preview features
+
+- Support `--no-project` in `uv format` ([#15572](https://github.com/astral-sh/uv/pull/15572))
+- Allow `uv format` in unmanaged projects ([#15553](https://github.com/astral-sh/uv/pull/15553))
+
+### Bug fixes
+
+- Avoid erroring when `match-runtime` target is optional ([#15671](https://github.com/astral-sh/uv/pull/15671))
+- Ban empty usernames and passwords in `uv auth` ([#15743](https://github.com/astral-sh/uv/pull/15743))
+- Error early for parent path in build backend ([#15733](https://github.com/astral-sh/uv/pull/15733))
+- Retry on IO errors during HTTP/2 streaming ([#15675](https://github.com/astral-sh/uv/pull/15675))
+- Support recursive requirements and constraints inclusion ([#15657](https://github.com/astral-sh/uv/pull/15657))
+- Use token store credentials for `uv publish` ([#15759](https://github.com/astral-sh/uv/pull/15759))
+- Fix virtual environment activation script compatibility with latest nushell ([#15272](https://github.com/astral-sh/uv/pull/15272))
+- Skip Python interpreters that cannot be queried with permission errors ([#15685](https://github.com/astral-sh/uv/pull/15685))
+
+### Documentation
+
+- Clarify that `uv auth` commands take a URL ([#15664](https://github.com/astral-sh/uv/pull/15664))
+- Improve the CLI help for options that accept requirements files ([#15706](https://github.com/astral-sh/uv/pull/15706))
+- Adds example for caching for managed Python downloads in Docker builds ([#15689](https://github.com/astral-sh/uv/pull/15689))
+
+## 0.8.15
+
+### Python
+
+- Upgrade SQLite 3.50.4 in CPython builds for [CVE-2025-6965](https://github.com/advisories/GHSA-2m69-gcr7-jv3q) (see also [python/cpython#137134](https://github.com/python/cpython/issues/137134))
+
+### Enhancements
+
+- Add `uv auth` commands for credential management ([#15570](https://github.com/astral-sh/uv/pull/15570))
+- Add pyx support to `uv auth` commands ([#15636](https://github.com/astral-sh/uv/pull/15636))
+- Add `uv tree --show-sizes` to show package sizes ([#15531](https://github.com/astral-sh/uv/pull/15531))
+- Add `--python-platform riscv64-unknown-linux` ([#15630](https://github.com/astral-sh/uv/pull/15630))
+- Add `--python-platform` to `uv run` and `uv tool` ([#15515](https://github.com/astral-sh/uv/pull/15515))
+- Add `uv publish --dry-run` ([#15638](https://github.com/astral-sh/uv/pull/15638))
+- Add zstandard support for wheels ([#15645](https://github.com/astral-sh/uv/pull/15645))
+- Allow registries to pre-provide core metadata ([#15644](https://github.com/astral-sh/uv/pull/15644))
+- Retry streaming Python and binary download errors ([#15567](https://github.com/astral-sh/uv/pull/15567))
+
+### Bug fixes
+
+- Fix settings rendering for `extra-build-dependencies` ([#15622](https://github.com/astral-sh/uv/pull/15622))
+- Skip non-existent directories in bytecode compilation ([#15608](https://github.com/astral-sh/uv/pull/15608))
+
+### Error messages
+
+- Add error trace to invalid package format ([#15626](https://github.com/astral-sh/uv/pull/15626))
+
 ## 0.8.14
 
 ### Python

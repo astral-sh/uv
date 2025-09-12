@@ -54,11 +54,11 @@ enum ExceptionSafeStderr {
 }
 
 impl ExceptionSafeStderr {
-    fn new() -> Result<Self, windows_result::Error> {
+    fn new() -> Result<Self, windows::core::Error> {
         // SAFETY: winapi call, no interesting parameters
         let handle = unsafe { GetStdHandle(STD_ERROR_HANDLE) }?;
         if handle.is_invalid() {
-            return Err(windows_result::Error::empty());
+            return Err(windows::core::Error::empty());
         }
         let mut mode = CONSOLE_MODE::default();
         // SAFETY: winapi calls, no interesting parameters
@@ -73,7 +73,7 @@ impl ExceptionSafeStderr {
         }
     }
 
-    fn write_winerror(&mut self, s: &str) -> Result<(), windows_result::Error> {
+    fn write_winerror(&mut self, s: &str) -> Result<(), windows::core::Error> {
         match self {
             Self::WriteConsole(handle) => {
                 // According to comments in the ReactOS source, NT's behavior is that writes of 80

@@ -99,6 +99,9 @@ pub enum Error {
 
     #[error(transparent)]
     InvalidEnvironment(#[from] environment::InvalidEnvironment),
+
+    #[error(transparent)]
+    RetryParsing(#[from] uv_client::RetryParsingError),
 }
 
 impl Error {

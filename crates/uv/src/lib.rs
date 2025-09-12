@@ -24,10 +24,11 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
-    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
-    ToolNamespace, TopLevelArgs, compat::CompatArgs,
+    AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
+    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
+use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
@@ -169,15 +170,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) = &mut **command
         {
             let settings = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+            let client_builder = BaseClientBuilder::new(
+                settings.network_settings.connectivity,
+                settings.network_settings.native_tls,
+                settings.network_settings.allow_insecure_host,
+            )
+            .retries_from_env()?;
             Some(
-                RunCommand::from_args(
-                    command,
-                    settings.network_settings,
-                    *module,
-                    *script,
-                    *gui_script,
-                )
-                .await?,
+                RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
+                    .await?,
             )
         } else {
             None
@@ -429,7 +430,83 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
+    // Configure the global network settings.
+    let client_builder = BaseClientBuilder::new(
+        globals.network_settings.connectivity,
+        globals.network_settings.native_tls,
+        globals.network_settings.allow_insecure_host.clone(),
+    )
+    .retries_from_env()?;
+
     match *cli.command {
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Login(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthLoginSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
+            show_settings!(args);
+
+            commands::auth_login(
+                args.service,
+                args.username,
+                args.password,
+                args.token,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Logout(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthLogoutSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
+            show_settings!(args);
+
+            commands::auth_logout(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Token(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthTokenSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+            );
+            show_settings!(args);
+
+            commands::auth_token(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Dir(args),
+        }) => {
+            commands::auth_dir(args.service.as_ref())?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -511,7 +588,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.config_setting,
                 args.settings.config_settings_package,
                 args.settings.build_isolation.clone(),
@@ -587,7 +664,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
                 &args.settings.config_setting,
@@ -727,7 +804,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -788,7 +865,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 cache,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -837,7 +914,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
@@ -891,7 +968,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                globals.network_settings,
+                client_builder,
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
@@ -976,7 +1053,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python,
                 args.install_mirrors,
                 &args.settings,
-                &globals.network_settings,
+                &client_builder,
                 cli.top_level.no_config,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1039,7 +1116,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
@@ -1064,6 +1141,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals,
                 cli.top_level.no_config,
                 cli.top_level.global_args.project.is_some(),
+                client_builder,
                 filesystem,
                 cache,
                 printer,
@@ -1078,16 +1156,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                     dry_run,
                 }),
-        }) => {
-            commands::self_update(
-                target_version,
-                token,
-                dry_run,
-                printer,
-                globals.network_settings,
-            )
-            .await
-        }
+        }) => commands::self_update(target_version, token, dry_run, printer, client_builder).await,
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1198,10 +1267,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.options,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 invocation_source,
                 args.isolated,
                 globals.python_preference,
@@ -1286,11 +1356,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 &entrypoints,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.force,
                 args.options,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1334,10 +1405,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Box::pin(commands::tool_upgrade(
                 args.names,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.args,
                 args.filesystem,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1421,7 +1493,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_install_mirror,
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
-                globals.network_settings,
+                client_builder,
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1450,7 +1522,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_install_mirror,
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
-                globals.network_settings,
+                client_builder,
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1488,7 +1560,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::python_find_script(
                     (&script).into(),
                     args.show_version,
-                    &globals.network_settings,
+                    &client_builder,
                     globals.python_preference,
                     globals.python_downloads,
                     cli.top_level.no_config,
@@ -1532,7 +1604,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.global,
                 args.rm,
                 args.install_mirrors,
-                globals.network_settings,
+                client_builder,
                 &cache,
                 printer,
                 globals.preview,
@@ -1573,6 +1645,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 files,
                 username,
                 password,
+                dry_run,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -1622,11 +1695,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 username,
                 password,
                 check_url,
                 index_locations,
+                dry_run,
                 &cache,
                 printer,
             )
@@ -1681,6 +1755,7 @@ async fn run_project(
     // TODO(zanieb): Determine a better story for passing `no_config` in here
     no_config: bool,
     explicit_project: bool,
+    client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
     printer: Printer,
@@ -1721,7 +1796,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
-                &globals.network_settings,
+                &client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 no_config,
@@ -1779,9 +1854,10 @@ async fn run_project(
                 args.editable,
                 args.modifications,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1833,7 +1909,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1877,7 +1953,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1999,7 +2075,7 @@ async fn run_project(
                 args.workspace,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2043,7 +2119,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2084,7 +2160,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -2123,12 +2199,13 @@ async fn run_project(
                 args.no_dedupe,
                 args.invert,
                 args.outdated,
+                args.show_sizes,
                 args.python_version,
                 args.python_platform,
                 args.python,
                 args.install_mirrors,
                 args.resolver,
-                &globals.network_settings,
+                &client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2175,7 +2252,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
@@ -2202,10 +2279,11 @@ async fn run_project(
                 args.diff,
                 args.extra_args,
                 args.version,
-                globals.network_settings,
+                client_builder,
                 cache,
                 printer,
                 globals.preview,
+                args.no_project,
             ))
             .await
         }

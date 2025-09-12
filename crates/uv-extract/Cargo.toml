@@ -32,12 +32,14 @@ rayon = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 sha2 = { workspace = true }
+tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
 zip = { workspace = true }
+zstd = { workspace = true }
 
 [features]
 default = []

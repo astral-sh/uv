@@ -21,7 +21,7 @@ use uv_pep508::{
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
-use crate::{BuildBackendSettings, Error};
+use crate::{BuildBackendSettings, Error, error_on_venv};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
@@ -40,7 +40,7 @@ pub enum ValidationError {
     UnknownExtension(String),
     #[error("Can't infer content type because `{}` does not have an extension. Please use a support extension (`.md`, `.rst`, `.txt`) or set the content type manually.", _0.user_display())]
     MissingExtension(PathBuf),
-    #[error("Unsupported content type: `{0}`")]
+    #[error("Unsupported content type: {0}")]
     UnsupportedContentType(String),
     #[error("`project.description` must be a single line")]
     DescriptionNewlines,
@@ -51,14 +51,14 @@ pub enum ValidationError {
     )]
     MixedLicenseGenerations,
     #[error(
-        "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`"
+        "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: {0}"
     )]
     InvalidGroup(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
     ReservedGuiScripts,
-    #[error("`project.license` is not a valid SPDX expression: `{0}`")]
+    #[error("`project.license` is not a valid SPDX expression: {0}")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
 }
 
@@ -437,18 +437,20 @@ impl PyProjectToml {
                         .strip_prefix(root)
                         .expect("walkdir starts with root");
                     if !license_globs.match_path(relative) {
-                        trace!("Not a license files match: `{}`", relative.user_display());
+                        trace!("Not a license files match: {}", relative.user_display());
                         continue;
                     }
                     if !entry.file_type().is_file() {
                         trace!(
-                            "Not a file in license files match: `{}`",
+                            "Not a file in license files match: {}",
                             relative.user_display()
                         );
                         continue;
                     }
 
-                    debug!("License files match: `{}`", relative.user_display());
+                    error_on_venv(entry.file_name(), entry.path())?;
+
+                    debug!("License files match: {}", relative.user_display());
                     license_files.push(relative.portable_display().to_string());
                 }
 
@@ -622,7 +624,7 @@ impl PyProjectToml {
             {
                 warn!(
                     "Entrypoint names should consist of letters, numbers, dots, underscores and \
-                    dashes; non-compliant name: `{name}`"
+                    dashes; non-compliant name: {name}"
                 );
             }
 
@@ -1358,12 +1360,12 @@ mod tests {
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
-        assert_snapshot!(format_err(err), @r###"
+        assert_snapshot!(format_err(err), @r"
         Invalid pyproject.toml
-          Caused by: `project.license` is not a valid SPDX expression: `MIT XOR Apache-2`
+          Caused by: `project.license` is not a valid SPDX expression: MIT XOR Apache-2
           Caused by: MIT XOR Apache-2
             ^^^ unknown term
-        "###);
+        ");
     }
 
     #[test]
@@ -1398,7 +1400,7 @@ mod tests {
             foo = "bar"
         "#
         });
-        assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `a@b`");
+        assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: a@b");
     }
 
     #[test]

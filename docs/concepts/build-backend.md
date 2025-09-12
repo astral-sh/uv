@@ -31,7 +31,7 @@ To use uv as a build backend in an existing project, add `uv_build` to the
 
 ```toml title="pyproject.toml"
 [build-system]
-requires = ["uv_build>=0.8.14,<0.9.0"]
+requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
 ```
 
@@ -240,7 +240,7 @@ module root alongside the source code.
 !!! tip
 
     When using the uv build backend through a frontend that is not uv, such as pip or
-    `pythom -m build`, debug logging can be enabled through environment variables with
+    `python -m build`, debug logging can be enabled through environment variables with
     `RUST_LOG=uv=debug` or `RUST_LOG=uv=verbose`. When used through uv, the uv build backend shares
     the verbosity level of uv.
 

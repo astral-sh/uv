@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.14"
+version = "0.8.17"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -69,6 +69,7 @@ axoupdater = { workspace = true, features = [
     "github_releases",
     "tokio",
 ], optional = true }
+base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
@@ -84,10 +85,12 @@ indoc = { workspace = true }
 itertools = { workspace = true }
 h2 = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
+open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
@@ -106,6 +109,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "json", "regi
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
@@ -115,6 +119,8 @@ arrayvec = { workspace = true }
 self-replace = { workspace = true }
 
 [dev-dependencies]
+uv-publish = { workspace = true, features = ["test"] }
+
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 backon = { workspace = true }
@@ -138,7 +144,6 @@ zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
-windows-result = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
@@ -152,6 +157,7 @@ ignored = [
 
 [features]
 default = ["performance", "uv-distribution/static", "default-tests"]
+native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]

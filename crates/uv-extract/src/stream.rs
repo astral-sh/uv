@@ -686,6 +686,16 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
         .map_err(Error::io_or_compression)
 }
 
+/// Unpack a `.tar.zst` archive from a file on disk into the target directory.
+pub fn untar_zst_file<R: std::io::Read>(reader: R, target: impl AsRef<Path>) -> Result<(), Error> {
+    let reader = std::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
+    let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
+    let mut archive = tar::Archive::new(decompressed);
+    archive.set_preserve_mtime(false);
+    archive.unpack(target).map_err(Error::io_or_compression)?;
+    Ok(())
+}
+
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
