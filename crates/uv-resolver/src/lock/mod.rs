@@ -3058,6 +3058,14 @@ impl Package {
         self.id.version.as_ref()
     }
 
+    /// Returns the Git SHA of the package, if it is a Git source.
+    pub fn git_sha(&self) -> Option<&GitOid> {
+        match &self.id.source {
+            Source::Git(_, git) => Some(&git.precise),
+            _ => None,
+        }
+    }
+
     /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
