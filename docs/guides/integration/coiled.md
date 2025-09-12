@@ -124,18 +124,19 @@ $ uvx coiled batch run \
     uv run process.py
 ```
 
-The same exact thing that happened locally before now happens on a remote cloud VM on AWS. To
-monitor batch jobs, either view them on [cloud.coiled.io](https://cloud.coiled.io)
-(`coiled batch run` prints a link in its terminal output) or use the `coiled batch status`,
-`coiled batch wait`, and `coiled batch logs` CLI command.
+The same process that previously ran locally is now running on a remote cloud VM on AWS.
+
+You can monitor the progress of the batch job in the UI at
+[cloud.coiled.io](https://cloud.coiled.io) or from the terminal using the `coiled batch status`,
+`coiled batch wait`, and `coiled batch logs` commands.
 
 ![Coiled UI](https://docs.coiled.io/_images/uv-coiled.png)
 
-Note there are several other options we could have specified, like, the instance type (the default
-is a 4-core virtual machine with 16 GiB of memory), disk size, whether to use spot instance, etc.
-See the
+Note there's additional configuration we could have specified, e.g., the instance type (the default
+is a 4-core virtual machine with 16 GiB of memory), disk size, whether to use spot instance, and
+more. See the
 [Coiled Batch documentation](https://docs.coiled.io/user_guide/batch.html?utm_source=uv-docs) for
 more details.
 
-For more details on Coiled, and how it can be used in other use cases, see the
+For more details on Coiled, and how it can help with other use cases, see the
 [Coiled documentation](https://docs.coiled.io?utm_source=uv-docs).
