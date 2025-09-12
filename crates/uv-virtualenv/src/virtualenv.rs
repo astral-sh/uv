@@ -132,11 +132,19 @@ pub(crate) fn create(
                     fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail(allow_prompt) => {
-                    match allow_prompt
-                        .then(|| confirm_clear(location, name))
-                        .transpose()?
-                        .flatten()
-                    {
+                    let confirmation = if is_virtualenv {
+                        if allow_prompt {
+                            confirm_clear(location, name)?
+                        } else {
+                            // When --no-clear is specified, don't prompt, just fail
+                            Some(false)
+                        }
+                    } else {
+                        // Refuse to remove a non-virtual environment; don't even prompt.
+                        Some(false)
+                    };
+
+                    match confirmation {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
@@ -165,30 +173,12 @@ pub(crate) fn create(
                             )));
                         }
                         // When we don't have a TTY, warn that the behavior will change in the future
-                        // Or when --no-clear was specified, fail without prompting
                         None => {
-                            if allow_prompt {
-                                warn_user_once!(
-                                    "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
-                                    location.user_display(),
-                                    "--clear".green(),
-                                );
-                            } else {
-                                let hint = format!(
-                                    "Use the `{}` flag to clear the {name} or `{}` to allow overwriting",
-                                    "--clear".green(),
-                                    "--allow-existing".green()
-                                );
-                                return Err(Error::Io(io::Error::new(
-                                    io::ErrorKind::AlreadyExists,
-                                    format!(
-                                        "A {name} already exists at {}\n\n{}{} {hint}",
-                                        location.user_display(),
-                                        "error".bold().red(),
-                                        ":".bold(),
-                                    ),
-                                )));
-                            }
+                            warn_user_once!(
+                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
+                                location.user_display(),
+                                "--clear".green(),
+                            );
                         }
                     }
                 }

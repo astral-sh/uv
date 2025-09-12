@@ -967,17 +967,18 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    ");
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
@@ -1011,15 +1012,17 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
-    Activate with: source .venv/[BIN]/activate
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
     );
 
@@ -1706,9 +1709,9 @@ fn no_clear_with_existing_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at .venv
+      Caused by: A virtual environment already exists at: .venv
 
-    error: Use the `--clear` flag to clear the virtual environment or `--allow-existing` to allow overwriting
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
     );
 }
@@ -1760,9 +1763,9 @@ fn no_clear_overrides_clear() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A directory already exists at .venv
+      Caused by: A directory already exists at: .venv
 
-    error: Use the `--clear` flag to clear the directory or `--allow-existing` to allow overwriting
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
     );
 }
