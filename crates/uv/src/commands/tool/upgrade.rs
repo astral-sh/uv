@@ -335,7 +335,7 @@ async fn upgrade_tool(
             environment,
             changelog,
         } = update_environment(
-            environment,
+            environment.into_inner(),
             spec,
             Modifications::Exact,
             build_constraints,

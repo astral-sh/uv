@@ -51,18 +51,33 @@ pub(crate) async fn list(
             continue;
         };
 
-        // Output tool name and version
-        let version = match installed_tools.version(&name, cache) {
+        // Get the tool environment
+        let tool_env = match installed_tools.get_environment(&name, cache) {
+            Ok(Some(env)) => env,
+            Ok(None) => {
+                warn_user!(
+                    "Tool `{name}` environment not found (run `{}` to reinstall)",
+                    format!("uv tool install {name} --reinstall").green()
+                );
+                continue;
+            }
+            Err(e) => {
+                warn_user!(
+                    "{e} (run `{}` to reinstall)",
+                    format!("uv tool install {name} --reinstall").green()
+                );
+                continue;
+            }
+        };
+
+        // Get the tool version
+        let version = match tool_env.version() {
             Ok(version) => version,
             Err(e) => {
-                if let uv_tool::Error::EnvironmentError(e) = e {
-                    warn_user!(
-                        "{e} (run `{}` to reinstall)",
-                        format!("uv tool install {name} --reinstall").green()
-                    );
-                } else {
-                    writeln!(printer.stderr(), "{e}")?;
-                }
+                warn_user!(
+                    "{e} (run `{}` to reinstall)",
+                    format!("uv tool install {name} --reinstall").green()
+                );
                 continue;
             }
         };
@@ -99,14 +114,8 @@ pub(crate) async fn list(
             .unwrap_or_default();
 
         let python_version = if show_python {
-            match installed_tools.get_environment(&name, cache) {
-                Ok(Some(env)) => {
-                    let interpreter = env.interpreter();
-                    format!(" [{}]", interpreter.markers().implementation_version())
-                }
-                Ok(None) => String::from(" [python: not found]"),
-                Err(e) => format!(" [python: error: {e}]"),
-            }
+            let interpreter = tool_env.interpreter();
+            format!(" [{}]", interpreter.python_full_version())
         } else {
             String::new()
         };

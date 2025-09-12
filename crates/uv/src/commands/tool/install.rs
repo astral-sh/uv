@@ -440,7 +440,7 @@ pub(crate) async fn install(
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
         let environment = match update_environment(
-            environment,
+            environment.into_inner(),
             spec,
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
