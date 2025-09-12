@@ -2,6 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
 
+use fs_err::File;
 use thiserror::Error;
 
 #[cfg(all(windows, target_arch = "x86"))]
@@ -128,18 +129,26 @@ impl Launcher {
     /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific
     /// feature and cannot be written on other platforms.
     #[cfg(not(windows))]
-    pub fn write_to_file(self, _file_path: &Path, _is_gui: bool) -> Result<(), Error> {
+    pub fn write_to_file(self, _file: &mut File, _is_gui: bool) -> Result<(), Error> {
         Err(Error::NotWindows)
     }
 
     /// Write this trampoline launcher to a file.
     #[cfg(windows)]
-    pub fn write_to_file(self, file_path: &Path, is_gui: bool) -> Result<(), Error> {
+    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+        use std::io::Write;
         use uv_fs::Simplified;
+
         let python_path = self.python_path.simplified_display().to_string();
 
+        // Create temporary file for the base launcher
+        let temp_dir = tempfile::TempDir::new()?;
+        let temp_file = temp_dir
+            .path()
+            .join(format!("uv-trampoline-{}.exe", std::process::id()));
+
         // Write the launcher binary
-        fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
+        fs_err::write(&temp_file, get_launcher_bin(is_gui)?)?;
 
         // Write resources
         let resources = &[
@@ -152,10 +161,17 @@ impl Launcher {
         if let Some(script_data) = self.script_data {
             let mut all_resources = resources.to_vec();
             all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
-            write_resources(file_path, &all_resources)?;
+            write_resources(&temp_file, &all_resources)?;
         } else {
-            write_resources(file_path, resources)?;
+            write_resources(&temp_file, resources)?;
         }
+
+        // Read back the complete file
+        let launcher = fs_err::read(&temp_file)?;
+        fs_err::remove_file(&temp_file)?;
+
+        // Then write it to the handle
+        file.write_all(&launcher)?;
 
         Ok(())
     }
@@ -403,6 +419,9 @@ pub fn windows_script_launcher(
     write_resources(&temp_file, resources)?;
 
     // Read back the complete file
+    // TODO(zanieb): It's weird that we write/read from a temporary file here because in the main
+    // usage at `write_script_entrypoints` we do the same thing again. We should refactor these
+    // to avoid repeated work.
     let launcher = fs_err::read(&temp_file)?;
     fs_err::remove_file(temp_file)?;
 

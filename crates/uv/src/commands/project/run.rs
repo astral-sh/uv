@@ -1969,7 +1969,11 @@ fn copy_entrypoint(
     };
 
     let launcher = launcher.with_python_path(python_path);
-    launcher.write_to_file(target, is_gui)?;
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(target)?;
+    launcher.write_to_file(&mut file, is_gui)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 
