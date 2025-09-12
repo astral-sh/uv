@@ -14,8 +14,7 @@ fn packse_add_remove_one_package() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `packse`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
     ");
 
@@ -223,8 +222,7 @@ fn packse_add_remove_existing_package_noop() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `packse`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
     ");
 
@@ -260,8 +258,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: In project `packse`: `[tool.uv.dev-dependencies]` is deprecated.
-    Instead use `[dependency-groups] dev = []`.
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
     ");
 
