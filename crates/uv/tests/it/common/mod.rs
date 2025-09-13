@@ -38,17 +38,21 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/vendor/", url.trim_end_matches('/')))
         .ok()
         .unwrap_or(format!(
-            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/vendor/"
         ))
 }
 
 pub fn packse_index_url() -> String {
-    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
-        "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
-    ))
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/simple-html/", url.trim_end_matches('/')))
+        .ok()
+        .unwrap_or(format!(
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
+        ))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
@@ -746,10 +750,13 @@ impl TestContext {
             format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/"),
             "https://astral-sh.github.io/packse/PACKSE_VERSION/".to_string(),
         ));
-        filters.push((
-            format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
-            "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
-        ));
+        // Developer convenience
+        if let Ok(packse_test_index) = env::var(EnvVars::UV_TEST_PACKSE_INDEX) {
+            filters.push((
+                packse_test_index.trim_end_matches('/').to_string(),
+                "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
+            ));
+        }
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
         // Avoid breaking the tests when bumping the uv version

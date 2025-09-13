@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.52/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 

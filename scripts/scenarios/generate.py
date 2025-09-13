@@ -9,7 +9,7 @@ Important:
 
 Requirements:
 
-    $ uv pip install -r scripts/scenarios/requirements.txt
+    $ uv pip install -r scripts/scenarios/pylock.toml
 
     Uses `git`, `rustfmt`, and `cargo insta test` requirements from the project.
 
@@ -27,7 +27,7 @@ Usage:
 
         Override the uv package index and update the tests
 
-        $ UV_TEST_INDEX_URL="http://localhost:3141/simple/" ./scripts/scenarios/generate.py <path to scenarios>
+        $ UV_TEST_PACKSE_INDEX="http://localhost:3141" ./scripts/scenarios/generate.py <path to scenarios>
 
         If an editable version of packse is installed, this script will use its bundled scenarios by default.
 
@@ -49,7 +49,7 @@ INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
 COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
 LOCK_TEMPLATE = TEMPLATES / "lock.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
-REQUIREMENTS = TOOL_ROOT / "requirements.txt"
+REQUIREMENTS = TOOL_ROOT / "pylock.toml"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
@@ -83,7 +83,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
 
-    # Don't update the version to `0.0.0` to preserve the `UV_TEST_VENDOR_LINKS_URL`
+    # Don't update the version to `0.0.0` to preserve the `UV_TEST_PACKSE_URL`
     # in local tests.
     if packse_version != "0.0.0":
         update_common_mod_rs(packse_version)
@@ -116,7 +116,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             targets.append(target)
 
     logging.info("Loading scenario metadata...")
-    data = packse.inspect.inspect(
+    data = packse.inspect.variables_for_templates(
         targets=targets,
         no_hash=True,
     )
@@ -189,9 +189,9 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         )
 
         data["index_url"] = os.environ.get(
-            "UV_TEST_INDEX_URL",
-            f"https://astral-sh.github.io/packse/{ref}/simple-html/",
-        )
+            "UV_TEST_PACKSE_INDEX",
+            f"https://astral-sh.github.io/packse/{ref}",
+        ) + "/simple-html"
 
         # Render the template
         logging.info(f"Rendering template {template.name}")

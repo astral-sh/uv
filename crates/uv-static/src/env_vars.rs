@@ -771,16 +771,12 @@ impl EnvVars {
     #[attr_hidden]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
 
-    /// Used to set the vendor links url for tests.
-    #[attr_hidden]
-    pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
-
     /// Used to disable delay for HTTP retries in tests.
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// Used to set an index url for tests.
+    /// Used to set a packse index url for tests.
     #[attr_hidden]
-    pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
 
     /// Used for testing named indexes in tests.
     #[attr_hidden]
