@@ -1151,8 +1151,7 @@ enum Source<'a> {
 impl Source<'_> {
     fn path(&self) -> &Path {
         match self {
-            Self::File(path) => path.as_ref(),
-            Self::Directory(path) => path.as_ref(),
+            Self::File(path) | Self::Directory(path) => path.as_ref(),
         }
     }
 
