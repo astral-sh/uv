@@ -983,7 +983,7 @@ async fn get_or_create_environment(
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
                         debug!("Using existing tool `{}`", requirement.name);
-                        return Ok((from, environment));
+                        return Ok((from, environment.into_inner()));
                     }
                 }
             }
