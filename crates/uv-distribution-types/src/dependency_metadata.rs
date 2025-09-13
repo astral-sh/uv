@@ -49,7 +49,7 @@ impl DependencyMetadata {
                 version: version.clone(),
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
-                provides_extras: metadata.provides_extras.clone(),
+                provides_extra: metadata.provides_extra.clone(),
                 dynamic: false,
             })
         } else {
@@ -70,7 +70,7 @@ impl DependencyMetadata {
                 version,
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
-                provides_extras: metadata.provides_extras.clone(),
+                provides_extra: metadata.provides_extra.clone(),
                 dynamic: false,
             })
         }
@@ -109,6 +109,6 @@ pub struct StaticMetadata {
         )
     )]
     pub requires_python: Option<VersionSpecifiers>,
-    #[serde(default)]
-    pub provides_extras: Box<[ExtraName]>,
+    #[serde(default, alias = "provides-extras")]
+    pub provides_extra: Box<[ExtraName]>,
 }

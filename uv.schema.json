@@ -2195,7 +2195,7 @@
         "name": {
           "$ref": "#/definitions/PackageName"
         },
-        "provides-extras": {
+        "provides-extra": {
           "type": "array",
           "default": [],
           "items": {

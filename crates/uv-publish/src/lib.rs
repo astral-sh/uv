@@ -746,7 +746,7 @@ impl FormMetadata {
             requires_python,
             requires_external,
             project_urls,
-            provides_extras,
+            provides_extra,
             dynamic,
         } = metadata(file, filename).await?;
 
@@ -808,7 +808,7 @@ impl FormMetadata {
         add_vec("platform", platforms);
         add_vec("project_urls", project_urls);
         add_vec("provides_dist", provides_dist);
-        add_vec("provides_extra", provides_extras);
+        add_vec("provides_extra", provides_extra);
         add_vec("requires_dist", requires_dist);
         add_vec("requires_external", requires_external);
 

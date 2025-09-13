@@ -358,7 +358,7 @@ impl ResolverOutput {
         if let Some(metadata) = metadata.as_ref() {
             // Validate the extra.
             if let Some(extra) = extra {
-                if !metadata.provides_extras.contains(extra) {
+                if !metadata.provides_extra.contains(extra) {
                     diagnostics.push(ResolutionDiagnostic::MissingExtra {
                         dist: dist.clone(),
                         extra: extra.clone(),
