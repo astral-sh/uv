@@ -3,7 +3,6 @@ use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
 
@@ -664,21 +663,21 @@ impl LockedFile {
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
         );
-        match file.file().try_lock_exclusive() {
+        match file.file().try_lock() {
             Ok(()) => {
                 debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !matches!(err, std::fs::TryLockError::WouldBlock) {
+                    // Log error code and enum kind to help debugging more exotic failures.
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
-                file.file().lock_exclusive().map_err(|err| {
+                file.file().lock().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
                     std::io::Error::other(format!(
                         "Could not acquire lock for `{resource}` at `{}`: {}",
@@ -686,7 +685,6 @@ impl LockedFile {
                         err
                     ))
                 })?;
-
                 debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
@@ -771,7 +769,7 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = fs2::FileExt::unlock(self.0.file()) {
+        if let Err(err) = self.0.file().unlock() {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),
