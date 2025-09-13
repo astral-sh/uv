@@ -74,7 +74,7 @@ impl Metadata {
                 .map(Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
-            provides_extras: metadata.provides_extras,
+            provides_extras: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
         }
@@ -94,7 +94,7 @@ impl Metadata {
         let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
-            provides_extras: metadata.provides_extras,
+            provides_extras: metadata.provides_extra,
             dynamic: metadata.dynamic,
         };
         let RequiresDist {

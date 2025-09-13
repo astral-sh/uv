@@ -49,7 +49,7 @@ impl DependencyMetadata {
                 version: version.clone(),
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
-                provides_extras: metadata.provides_extras.clone(),
+                provides_extra: metadata.provides_extras.clone(),
                 dynamic: false,
             })
         } else {
@@ -70,7 +70,7 @@ impl DependencyMetadata {
                 version,
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
-                provides_extras: metadata.provides_extras.clone(),
+                provides_extra: metadata.provides_extras.clone(),
                 dynamic: false,
             })
         }
