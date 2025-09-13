@@ -576,7 +576,7 @@ async fn lock_and_sync(
     let mode = if locked {
         LockMode::Locked(target.interpreter())
     } else {
-        LockMode::Write(target.interpreter())
+        LockMode::Write(target.interpreter(), false)
     };
 
     // Initialize any shared state.

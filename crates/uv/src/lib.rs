@@ -1949,6 +1949,7 @@ async fn run_project(
                 args.locked,
                 args.frozen,
                 args.dry_run,
+                args.force,
                 args.python,
                 args.install_mirrors,
                 args.settings,
