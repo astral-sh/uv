@@ -99,7 +99,7 @@ pub struct Metadata23 {
     /// A string containing the name of an optional feature. Must be a valid Python identifier.
     /// May be used to make a dependency conditional on whether the optional feature has been
     /// requested.
-    pub provides_extras: Vec<String>,
+    pub provides_extra: Vec<String>,
     /// A string containing the name of another core metadata field.
     pub dynamic: Vec<String>,
 }
@@ -145,7 +145,7 @@ impl Metadata23 {
         let requires_python = headers.get_first_value("Requires-Python");
         let requires_external = headers.get_all_values("Requires-External").collect();
         let project_urls = headers.get_all_values("Project-URL").collect();
-        let provides_extras = headers.get_all_values("Provides-Extra").collect();
+        let provides_extra = headers.get_all_values("Provides-Extra").collect();
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();
         Ok(Self {
@@ -174,7 +174,7 @@ impl Metadata23 {
             requires_python,
             requires_external,
             project_urls,
-            provides_extras,
+            provides_extra,
             dynamic,
         })
     }
@@ -264,7 +264,7 @@ impl Metadata23 {
         );
         write_all(&mut writer, "Requires-External", &self.requires_external);
         write_all(&mut writer, "Project-URL", &self.project_urls);
-        write_all(&mut writer, "Provides-Extra", &self.provides_extras);
+        write_all(&mut writer, "Provides-Extra", &self.provides_extra);
         write_opt_str(
             &mut writer,
             "Description-Content-Type",

@@ -237,8 +237,8 @@ pub struct CoreMetadatum {
     pub requires_python: Option<VersionSpecifiers>,
     #[serde(default)]
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
-    #[serde(default)]
-    pub provides_extras: Box<[ExtraName]>,
+    #[serde(default, alias = "provides-extras")]
+    pub provides_extra: Box<[ExtraName]>,
 }
 
 #[derive(Debug, Clone)]
