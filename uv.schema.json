@@ -174,7 +174,7 @@
       ]
     },
     "dependency-metadata": {
-      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
       "type": [
         "array",
         "null"
@@ -1302,7 +1302,7 @@
           ]
         },
         "dependency-metadata": {
-          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
           "type": [
             "array",
             "null"
@@ -2195,7 +2195,7 @@
         "name": {
           "$ref": "#/definitions/PackageName"
         },
-        "provides-extras": {
+        "provides-extra": {
           "type": "array",
           "default": [],
           "items": {

@@ -547,7 +547,7 @@ impl PyProjectToml {
             license_files,
             classifiers: self.project.classifiers.clone().unwrap_or_default(),
             requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
-            provides_extras: extras.iter().map(ToString::to_string).collect(),
+            provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
             // Not supported.

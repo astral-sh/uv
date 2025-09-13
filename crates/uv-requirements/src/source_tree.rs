@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Determine the extras to include when resolving the requirements.
         let extras = self
             .extras
-            .extra_names(metadata.provides_extras.iter())
+            .extra_names(metadata.provides_extra.iter())
             .cloned()
             .collect::<Vec<_>>();
 
@@ -111,7 +111,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         let requirements = requirements.into_boxed_slice();
         let project = metadata.name;
-        let extras = metadata.provides_extras;
+        let extras = metadata.provides_extra;
 
         Ok(SourceTreeResolution {
             requirements,
