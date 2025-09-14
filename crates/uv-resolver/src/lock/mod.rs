@@ -1229,11 +1229,11 @@ impl Lock {
                     if let Some(requires_python) = metadata.requires_python.as_ref() {
                         table.insert("requires-python", value(requires_python.to_string()));
                     }
-                    if !metadata.provides_extras.is_empty() {
+                    if !metadata.provides_extra.is_empty() {
                         table.insert(
                             "provides-extras",
                             value(serde::Serialize::serialize(
-                                &metadata.provides_extras,
+                                &metadata.provides_extra,
                                 toml_edit::ser::ValueSerializer::new(),
                             )?),
                         );
@@ -1332,7 +1332,7 @@ impl Lock {
         }
 
         let expected: BTreeSet<_> = provides_extra.iter().collect();
-        let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
             let expected = Box::into_iter(provides_extra).collect();
@@ -1783,7 +1783,7 @@ impl Lock {
                 }
 
                 // Validate the `provides-extras` metadata.
-                match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                match self.satisfies_provides_extra(metadata.provides_extra, package) {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1824,7 +1824,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extras, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -1905,7 +1905,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -2346,14 +2346,14 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
-        let provides_extras = if id.source.is_immutable() {
+        let provides_extra = if id.source.is_immutable() {
             Box::default()
         } else {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
-                .provides_extras
+                .provides_extra
                 .clone()
         };
         let dependency_groups = if id.source.is_immutable() {
@@ -2386,7 +2386,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
-                provides_extras,
+                provides_extra,
                 dependency_groups,
             },
         })
@@ -2995,10 +2995,10 @@ impl Package {
                 }
             }
 
-            if !self.metadata.provides_extras.is_empty() {
+            if !self.metadata.provides_extra.is_empty() {
                 let provides_extras = self
                     .metadata
-                    .provides_extras
+                    .provides_extra
                     .iter()
                     .map(|extra| {
                         serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
@@ -3136,7 +3136,7 @@ impl Package {
 
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
-        &self.metadata.provides_extras
+        &self.metadata.provides_extra
     }
 
     /// Returns the dependency groups the package provides, if any.
@@ -3211,8 +3211,8 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default)]
-    provides_extras: Box<[ExtraName]>,
+    #[serde(default, rename = "provides-extras")]
+    provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
@@ -3235,7 +3235,7 @@ impl PackageMetadata {
 
         Self {
             requires_dist: unwire_requirements(self.requires_dist),
-            provides_extras: self.provides_extras,
+            provides_extra: self.provides_extra,
             dependency_groups: self
                 .dependency_groups
                 .into_iter()

@@ -20009,7 +20009,7 @@ fn lock_dependency_metadata() -> Result<()> {
          |
       11 |         requires_dist = ["typing-extensions"]
          |         ^^^^^^^^^^^^^
-      unknown field `requires_dist`, expected one of `name`, `version`, `requires-dist`, `requires-python`, `provides-extras`
+      unknown field `requires_dist`, expected one of `name`, `version`, `requires-dist`, `requires-python`, `provides-extra`, `provides-extras`
 
     Resolved 4 packages in [TIME]
     Added idna v3.6

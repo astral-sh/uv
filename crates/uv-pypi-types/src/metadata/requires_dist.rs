@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
@@ -15,13 +14,11 @@ use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
 /// This is a subset of [`ResolutionMetadata`]; specifically, it omits the `version` and `requires-python`
 /// fields, which aren't necessary when extracting the requirements of a package without installing
 /// the package itself.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
-    pub provides_extras: Box<[ExtraName]>,
-    #[serde(default)]
+    pub provides_extra: Box<[ExtraName]>,
     pub dynamic: bool,
 }
 
@@ -86,7 +83,7 @@ impl RequiresDist {
             .collect::<Result<Box<_>, _>>()?;
 
         // Extract the optional dependencies.
-        let provides_extras = project
+        let provides_extra = project
             .optional_dependencies
             .unwrap_or_default()
             .into_keys()
@@ -95,7 +92,7 @@ impl RequiresDist {
         Ok(Self {
             name,
             requires_dist,
-            provides_extras,
+            provides_extra,
             dynamic,
         })
     }
