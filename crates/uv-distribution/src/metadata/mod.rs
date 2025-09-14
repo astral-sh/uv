@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -28,6 +28,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
+    #[error("No pyproject.toml found at: {0}")]
+    MissingPyprojectToml(PathBuf),
     #[error("Failed to parse entry: `{0}`")]
     LoweringError(PackageName, #[source] Box<LoweringError>),
     #[error("Failed to parse entry in group `{0}`: `{1}`")]

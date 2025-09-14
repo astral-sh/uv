@@ -58,6 +58,13 @@ impl SourcedDependencyGroups {
         source_strategy: SourceStrategy,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
+        // If the `pyproject.toml` doesn't exist, fail early.
+        if !pyproject_path.is_file() {
+            return Err(MetadataError::MissingPyprojectToml(
+                pyproject_path.to_path_buf(),
+            ));
+        }
+
         let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
                 git_member

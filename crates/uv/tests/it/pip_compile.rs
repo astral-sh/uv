@@ -16179,6 +16179,34 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn group_target_does_not_exist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv%%%"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("does/not/exist/pyproject.toml:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: does/not/exist/pyproject.toml
+      Caused by: No pyproject.toml found at: does/not/exist/pyproject.toml
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/10957>
 #[cfg(feature = "python-eol")]
 #[test]
