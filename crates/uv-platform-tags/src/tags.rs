@@ -554,23 +554,23 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
         (Os::FreeBsd { release }, arch) => {
             let release_tag = release.replace(['.', '-'], "_").to_lowercase();
-            let arch_tag = arch.freebsd_name().unwrap_or(arch.name());
+            let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
-            let arch_tag = arch.netbsd_name().unwrap_or(arch.name());
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::OpenBsd { release }, arch) => {
-            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
-            let arch_tag = arch.openbsd_name().unwrap_or(arch.name());
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
                 release_arch: SmallString::from(release_arch),

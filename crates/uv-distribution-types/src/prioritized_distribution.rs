@@ -902,7 +902,7 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: ArcStr::from(arch.linux_name()),
+                    value: ArcStr::from(arch.name()),
                 }));
                 marker.or(tag_marker);
             }

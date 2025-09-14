@@ -197,7 +197,7 @@ impl Arch {
         }
     }
 
-    /// Returns the standard name of the architecture in the Linux world.
+    /// Returns the standard name of the architecture.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Aarch64 => "aarch64",
@@ -216,64 +216,22 @@ impl Arch {
         }
     }
 
-    /// Returns the standard name of the architecture in the FreeBSD world, if it differs from the
-    /// Linux name.
-    pub fn freebsd_name(&self) -> Option<&'static str> {
+    /// Represents the hardware platform.
+    ///
+    /// This is the same as the native platform's `uname -m` output.
+    ///
+    /// Based on: <https://github.com/PyO3/maturin/blob/8ab42219247277fee513eac753a3e90e76cd46b9/src/target/mod.rs#L131>
+    pub fn machine(&self) -> &'static str {
         match self {
-            Self::Aarch64 => None,
-            Self::Armv5TEL => Some("armv5"),
-            Self::Armv6L => Some("armv6"),
-            Self::Armv7L => Some("armv7"),
-            Self::Powerpc64Le => Some("powerpc64le"),
-            Self::Powerpc64 => Some("powerpc64"),
-            Self::Powerpc => Some("powerpc"),
-            Self::X86 => Some("i386"),
-            Self::X86_64 => Some("amd64"),
-            Self::S390X => None,
-            Self::LoongArch64 => None,
-            Self::Riscv64 => None,
-            Self::Wasm32 => None,
-        }
-    }
-
-    /// Returns the standard name of the architecture in the NetBSD world, if it differs from the
-    /// Linux name.
-    pub fn netbsd_name(&self) -> Option<&'static str> {
-        match self {
-            Self::Aarch64 => None,
-            Self::Armv5TEL => Some("armv5"),
-            Self::Armv6L => Some("armv6"),
-            Self::Armv7L => Some("armv7"),
-            Self::Powerpc64Le => Some("powerpc64le"),
-            Self::Powerpc64 => Some("powerpc64"),
-            Self::Powerpc => Some("powerpc"),
-            Self::X86 => Some("i386"),
-            Self::X86_64 => Some("amd64"),
-            Self::S390X => None,
-            Self::LoongArch64 => None,
-            Self::Riscv64 => None,
-            Self::Wasm32 => None,
-        }
-    }
-
-
-    /// Returns the standard name of the architecture in the FreeBSD world, if it differs from the
-    /// Linux name.
-    pub fn openbsd_name(&self) -> Option<&'static str> {
-        match self {
-            Self::Aarch64 => Some("arm64"),
-            Self::Armv5TEL => Some("armv5"),
-            Self::Armv6L => Some("armv6"),
-            Self::Armv7L => Some("armv7"),
-            Self::Powerpc64Le => Some("powerpc64le"),
-            Self::Powerpc64 => Some("powerpc64"),
-            Self::Powerpc => Some("powerpc"),
-            Self::X86 => Some("i386"),
-            Self::X86_64 => Some("amd64"),
-            Self::S390X => None,
-            Self::LoongArch64 => None,
-            Self::Riscv64 => None,
-            Self::Wasm32 => None,
+            Self::Aarch64 => "arm64",
+            Self::Armv5TEL | Self::Armv6L | Self::Armv7L => "arm",
+            Self::Powerpc | Self::Powerpc64Le | Self::Powerpc64 => "powerpc",
+            Self::X86 => "i386",
+            Self::X86_64 => "amd64",
+            Self::Riscv64 => "riscv",
+            Self::Wasm32 => "wasm32",
+            Self::S390X => "s390x",
+            Self::LoongArch64 => "loongarch64",
         }
     }
 }
