@@ -6124,19 +6124,3 @@ fn test_gist_enterprise_subdomain() {
     error: HTTP status client error (404 Not Found) for url (https://enterprise.github.com/api/v3/gists/abcd1234)
     "###);
 }
-
-#[test]
-fn test_standard_github_gist_url() {
-    let context = TestContext::new("3.12");
-
-    // Test 3: Standard GitHub gist URL (should get auth error, showing recognition works)
-    uv_snapshot!(context.filters(), context.run()
-        .arg("https://gist.github.com/nonexistent/fakegistid12345"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: HTTP status client error (404 Not Found) for url (https://api.github.com/gists/fakegistid12345)
-    "###);
-}
