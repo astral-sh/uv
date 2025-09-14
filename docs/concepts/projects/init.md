@@ -301,8 +301,9 @@ Hello from example-ext!
 
 !!! important
 
-    Changes to the extension code in `lib.rs` or `main.cpp` will require running `--reinstall` to
-    rebuild them.
+    When creating a project with maturin or scikit-build-core, uv configures [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys)
+    to include common source file types. To force a rebuild, e.g. when changing files outside
+    `cache-keys` or when not using `cache-keys`, use `--reinstall`.
 
 ## Creating a minimal project
 
