@@ -302,7 +302,7 @@ Hello from example-ext!
 !!! important
 
     When creating a project with maturin or scikit-build-core, uv configures [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys)
-    to include source common file types. To force a rebuild, e.g. when changing files outside
+    to include common source file types. To force a rebuild, e.g. when changing files outside
     `cache-keys` or when not using `cache-keys`, use `--reinstall`.
 
 ## Creating a minimal project
