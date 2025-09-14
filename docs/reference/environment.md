@@ -117,6 +117,10 @@ updating the `uv.lock` file.
 
 Equivalent to the `--token` argument for self update. A GitHub token for authentication.
 
+### `GH_HOST`
+
+The GitHub hostname. Defaults to `github.com`.
+
 ### `UV_GIT_LFS`
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.

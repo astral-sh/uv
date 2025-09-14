@@ -20,6 +20,24 @@ use crate::{
     rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited},
 };
 
+/// Get the GitHub API base URL, respecting GH_HOST for GitHub Enterprise
+fn get_github_api_base_url() -> String {
+    // First check for explicit override
+    if let Ok(url) = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL) {
+        return url;
+    }
+    
+    // Then check for GH_HOST
+    let github_host = std::env::var(EnvVars::GH_HOST).unwrap_or_else(|_| "github.com".to_string());
+    
+    if github_host == "github.com" {
+        "https://api.github.com/repos".to_string()
+    } else {
+        // GitHub Enterprise Server: use /api/v3/ path pattern (GitHub CLI standard)
+        format!("https://{github_host}/api/v3/repos")
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
     #[error(transparent)]
@@ -97,8 +115,7 @@ impl GitResolver {
         // Determine the Git reference.
         let rev = url.reference().as_rev();
 
-        let github_api_base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
-            .unwrap_or("https://api.github.com/repos".to_owned());
+        let github_api_base_url = get_github_api_base_url();
         let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{rev}");
 
         debug!("Querying GitHub for commit at: {github_api_url}");
