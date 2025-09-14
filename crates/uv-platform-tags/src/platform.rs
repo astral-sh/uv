@@ -151,21 +151,7 @@ pub enum Arch {
 
 impl fmt::Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Self::Aarch64 => write!(f, "aarch64"),
-            Self::Armv5TEL => write!(f, "armv5tel"),
-            Self::Armv6L => write!(f, "armv6l"),
-            Self::Armv7L => write!(f, "armv7l"),
-            Self::Powerpc64Le => write!(f, "ppc64le"),
-            Self::Powerpc64 => write!(f, "ppc64"),
-            Self::Powerpc => write!(f, "ppc"),
-            Self::X86 => write!(f, "i686"),
-            Self::X86_64 => write!(f, "x86_64"),
-            Self::S390X => write!(f, "s390x"),
-            Self::LoongArch64 => write!(f, "loongarch64"),
-            Self::Riscv64 => write!(f, "riscv64"),
-            Self::Wasm32 => write!(f, "wasm32"),
-        }
+        write!(f, "{}", self.name())
     }
 }
 
@@ -211,7 +197,7 @@ impl Arch {
         }
     }
 
-    /// Returns the canonical name of the architecture.
+    /// Returns the standard name of the architecture in the Linux world.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Aarch64 => "aarch64",
@@ -230,23 +216,64 @@ impl Arch {
         }
     }
 
-    /// Returns an iterator over all supported architectures.
-    pub fn iter() -> impl Iterator<Item = Self> {
-        [
-            Self::Aarch64,
-            Self::Armv5TEL,
-            Self::Armv6L,
-            Self::Armv7L,
-            Self::Powerpc64Le,
-            Self::Powerpc64,
-            Self::Powerpc,
-            Self::X86,
-            Self::X86_64,
-            Self::S390X,
-            Self::LoongArch64,
-            Self::Riscv64,
-        ]
-        .iter()
-        .copied()
+    /// Returns the standard name of the architecture in the FreeBSD world, if it differs from the
+    /// Linux name.
+    pub fn freebsd_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Aarch64 => None,
+            Self::Armv5TEL => Some("armv5"),
+            Self::Armv6L => Some("armv6"),
+            Self::Armv7L => Some("armv7"),
+            Self::Powerpc64Le => Some("powerpc64le"),
+            Self::Powerpc64 => Some("powerpc64"),
+            Self::Powerpc => Some("powerpc"),
+            Self::X86 => Some("i386"),
+            Self::X86_64 => Some("amd64"),
+            Self::S390X => None,
+            Self::LoongArch64 => None,
+            Self::Riscv64 => None,
+            Self::Wasm32 => None,
+        }
+    }
+
+    /// Returns the standard name of the architecture in the NetBSD world, if it differs from the
+    /// Linux name.
+    pub fn netbsd_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Aarch64 => None,
+            Self::Armv5TEL => Some("armv5"),
+            Self::Armv6L => Some("armv6"),
+            Self::Armv7L => Some("armv7"),
+            Self::Powerpc64Le => Some("powerpc64le"),
+            Self::Powerpc64 => Some("powerpc64"),
+            Self::Powerpc => Some("powerpc"),
+            Self::X86 => Some("i386"),
+            Self::X86_64 => Some("amd64"),
+            Self::S390X => None,
+            Self::LoongArch64 => None,
+            Self::Riscv64 => None,
+            Self::Wasm32 => None,
+        }
+    }
+
+
+    /// Returns the standard name of the architecture in the FreeBSD world, if it differs from the
+    /// Linux name.
+    pub fn openbsd_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Aarch64 => Some("arm64"),
+            Self::Armv5TEL => Some("armv5"),
+            Self::Armv6L => Some("armv6"),
+            Self::Armv7L => Some("armv7"),
+            Self::Powerpc64Le => Some("powerpc64le"),
+            Self::Powerpc64 => Some("powerpc64"),
+            Self::Powerpc => Some("powerpc"),
+            Self::X86 => Some("i386"),
+            Self::X86_64 => Some("amd64"),
+            Self::S390X => None,
+            Self::LoongArch64 => None,
+            Self::Riscv64 => None,
+            Self::Wasm32 => None,
+        }
     }
 }
