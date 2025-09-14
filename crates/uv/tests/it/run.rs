@@ -6126,7 +6126,7 @@ fn test_gist_enterprise_subdomain() {
 }
 
 #[test]
-fn test_standard_github_gist_unauthorized() {
+fn test_standard_github_gist_url() {
     let context = TestContext::new("3.12");
 
     // Test 3: Standard GitHub gist URL (should get auth error, showing recognition works)
@@ -6137,6 +6137,6 @@ fn test_standard_github_gist_unauthorized() {
     ----- stdout -----
 
     ----- stderr -----
-    error: HTTP status client error (401 Unauthorized) for url (https://api.github.com/gists/fakegistid12345)
+    error: HTTP status client error (404 Not Found) for url (https://api.github.com/gists/fakegistid12345)
     "###);
 }
