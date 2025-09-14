@@ -174,11 +174,9 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        if cache.refresh().is_none() {
-            if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                    return Ok(Self(environment));
-                }
+        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
+            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
+                return Ok(Self(environment));
             }
         }
 
