@@ -308,6 +308,6 @@ unsafe extern "system" fn unhandled_exception_filter(
 pub(crate) fn setup() {
     // SAFETY: winapi call, argument is a mostly async-signal-safe function
     unsafe {
-        SetUnhandledExceptionFilter(Some(Some(unhandled_exception_filter)));
+        SetUnhandledExceptionFilter(Some(unhandled_exception_filter));
     }
 }
