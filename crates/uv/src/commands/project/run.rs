@@ -61,17 +61,17 @@ fn is_gist_url(url: &DisplaySafeUrl) -> bool {
     let Some(host) = url.host_str() else {
         return false;
     };
-    
+
     // Standard GitHub: gist.github.com
     if host == "gist.github.com" {
         return true;
     }
-    
+
     // Enterprise subdomain pattern: gist.hostname.com
     if host.starts_with("gist.") {
         return true;
     }
-    
+
     // Enterprise path pattern: hostname.com/gist/
     if url.path().starts_with("/gist/") {
         // Accept if GH_HOST matches this host
@@ -81,26 +81,33 @@ fn is_gist_url(url: &DisplaySafeUrl) -> bool {
         // Accept common GitHub Enterprise patterns
         return host.contains("github") || host.contains("git");
     }
-    
+
     false
+}
+
+/// Extract gist ID from URL path segments
+fn gist_id_from_path(url: &DisplaySafeUrl) -> Option<&str> {
+    let segments = url.path_segments()?;
+    let segments: Vec<&str> = segments.filter(|s| !s.is_empty()).collect();
+    segments.last().copied()
 }
 
 /// Extract the GitHub hostname and gist ID from a gist URL
 fn parse_gist_url(url: &DisplaySafeUrl) -> Option<(String, String)> {
     let host = url.host_str()?;
-    
+
     if host == "gist.github.com" {
         // Standard GitHub: gist.github.com/[username/]gist_id
-        let gist_id = url.path_segments()?.find(|s| !s.is_empty() && !s.contains('.'))?;
+        let gist_id = gist_id_from_path(url)?;
         return Some(("github.com".to_string(), gist_id.to_string()));
     }
-    
+
     if let Some(github_host) = host.strip_prefix("gist.") {
-        // Enterprise subdomain: gist.hostname.com/[username/]gist_id  
-        let gist_id = url.path_segments()?.find(|s| !s.is_empty() && !s.contains('.'))?;
+        // Enterprise subdomain: gist.hostname.com/[username/]gist_id
+        let gist_id = gist_id_from_path(url)?;
         return Some((github_host.to_string(), gist_id.to_string()));
     }
-    
+
     if url.path().starts_with("/gist/") {
         // Enterprise path: hostname.com/gist/gist_id
         let mut segments = url.path_segments()?;
@@ -109,7 +116,7 @@ fn parse_gist_url(url: &DisplaySafeUrl) -> Option<(String, String)> {
             return Some((host.to_string(), gist_id.to_string()));
         }
     }
-    
+
     None
 }
 use crate::commands::pip::loggers::{
@@ -1702,7 +1709,7 @@ async fn resolve_gist_url(
     // Parse and validate the gist URL
     let (github_host, gist_id) = parse_gist_url(url)
         .ok_or_else(|| anyhow!("URL is not a valid GitHub gist URL: {}", url))?;
-    
+
     // Build the API URL using GitHub CLI-compatible patterns
     let api_url = if github_host == "github.com" {
         format!("https://api.github.com/gists/{gist_id}")

@@ -117,10 +117,6 @@ updating the `uv.lock` file.
 
 Equivalent to the `--token` argument for self update. A GitHub token for authentication.
 
-### `GH_HOST`
-
-The GitHub hostname. Defaults to `github.com`.
-
 ### `UV_GIT_LFS`
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.
@@ -603,6 +599,10 @@ Used to detect Fish shell usage.
 Forces colored output regardless of terminal support.
 
 See [force-color.org](https://force-color.org).
+
+### `GH_HOST`
+
+The GitHub hostname. Defaults to `github.com`.
 
 ### `GITHUB_ACTIONS`
 
