@@ -2235,7 +2235,7 @@ mod tests {
         assert!(matches!(
             client.get(server.uri()).send().await,
             Err(reqwest_middleware::Error::Middleware(_))
-        ),);
+        ));
 
         Ok(())
     }
