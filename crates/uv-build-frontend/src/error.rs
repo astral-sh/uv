@@ -167,13 +167,13 @@ fn hint_build_dependency(
     } else {
         package_name.to_string()
     };
-    // The build backend 'mesonpy' can be installed via the 'meson-python' Python package 
+    // The build backend 'mesonpy' can be installed via the 'meson-python' Python package
     let build_package = if build_backend == "mesonpy" {
         "meson-python"
     } else {
         build_backend
     };
-    
+
     write!(
         f,
         "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
