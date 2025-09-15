@@ -120,8 +120,13 @@ pub(crate) fn create(
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
-                OnExisting::Remove => {
-                    debug!("Removing existing {name} due to `--clear`");
+                OnExisting::Remove(source) => {
+                    let reason = match source {
+                        Some(OnExistingSource::ClearFlag) => "due to `--clear`",
+                        Some(OnExistingSource::SyncDefault) => "for environment synchronization",
+                        None => "as requested",
+                    };
+                    debug!("Removing existing {name} {reason}");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
                     // the unresolved path and will remove the symlink itself.
@@ -637,6 +642,14 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OnExistingSource {
+    /// Removal triggered by `--clear` flag
+    ClearFlag,
+    /// Removal as part of default sync behavior
+    SyncDefault,
+}
+
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub enum OnExisting {
     /// Fail if the directory already exists and is non-empty.
@@ -646,7 +659,7 @@ pub enum OnExisting {
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
-    Remove,
+    Remove(Option<OnExistingSource>),
 }
 
 impl OnExisting {
@@ -654,7 +667,7 @@ impl OnExisting {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove
+            Self::Remove(Some(OnExistingSource::ClearFlag))
         } else {
             Self::default()
         }
