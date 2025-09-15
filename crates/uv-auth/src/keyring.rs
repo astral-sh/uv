@@ -87,9 +87,26 @@ impl KeyringProvider {
         // Ensure we strip credentials from the URL before storing
         let url = url.without_credentials();
 
+        // If there's no path, we'll perform a host-level login
+        let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {
+            let mut target = String::new();
+            if url.scheme() != "https" {
+                target.push_str(url.scheme());
+                target.push_str("://");
+            }
+            target.push_str(host);
+            if let Some(port) = url.port() {
+                target.push(':');
+                target.push_str(&port.to_string());
+            }
+            target
+        } else {
+            url.to_string()
+        };
+
         match &self.backend {
             KeyringProviderBackend::Native => {
-                self.store_native(url.as_str(), username, password).await?;
+                self.store_native(&target, username, password).await?;
                 Ok(true)
             }
             KeyringProviderBackend::Subprocess => {
@@ -122,9 +139,26 @@ impl KeyringProvider {
         // Ensure we strip credentials from the URL before storing
         let url = url.without_credentials();
 
+        // If there's no path, we'll perform a host-level login
+        let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {
+            let mut target = String::new();
+            if url.scheme() != "https" {
+                target.push_str(url.scheme());
+                target.push_str("://");
+            }
+            target.push_str(host);
+            if let Some(port) = url.port() {
+                target.push(':');
+                target.push_str(&port.to_string());
+            }
+            target
+        } else {
+            url.to_string()
+        };
+
         match &self.backend {
             KeyringProviderBackend::Native => {
-                self.remove_native(url.as_str(), username).await?;
+                self.remove_native(&target, username).await?;
                 Ok(())
             }
             KeyringProviderBackend::Subprocess => {
