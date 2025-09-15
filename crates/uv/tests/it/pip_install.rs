@@ -10484,7 +10484,7 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
-/// Regression test that we don't discover workspaces with `--no-sources` or the UV_NO_SOURCES
+/// Regression test that we don't discover workspaces with `--no-sources` or the `UV_NO_SOURCES`
 /// environment variable.
 ///
 /// We have a workspace dependency shadowing a PyPI package and using this package's version to
