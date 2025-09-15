@@ -41,6 +41,10 @@ impl EnvVars {
     /// comma-separated list of additional locations to search for packages.
     pub const UV_FIND_LINKS: &'static str = "UV_FIND_LINKS";
 
+    /// Equivalent to the `--no-sources` command-line argument. If set, uv will
+    /// not use the sources for any operations.
+    pub const UV_NO_SOURCES: &'static str = "UV_NO_SOURCES";
+
     /// Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
     /// directory for caching instead of the default cache directory.
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
