@@ -6213,7 +6213,6 @@ dependencies = [
  "uv-scripts",
  "uv-types",
  "uv-warnings",
- "uv-workspace",
 ]
 
 [[package]]
@@ -6257,6 +6256,7 @@ dependencies = [
  "clap",
  "dashmap",
  "either",
+ "fs-err",
  "futures",
  "hashbrown 0.15.5",
  "indexmap",

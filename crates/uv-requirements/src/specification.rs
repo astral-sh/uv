@@ -44,12 +44,12 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::PyProjectToml;
 
-use crate::RequirementsSource;
+use crate::{RequirementsSource, SourceTree};
 
 #[derive(Debug, Default, Clone)]
 pub struct RequirementsSpecification {
@@ -64,7 +64,7 @@ pub struct RequirementsSpecification {
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
-    pub source_trees: Vec<PathBuf>,
+    pub source_trees: Vec<SourceTree>,
     /// The groups to use for `source_trees`
     pub groups: BTreeMap<PathBuf, DependencyGroups>,
     /// The extras used to collect requirements.
@@ -174,11 +174,11 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let _ = toml::from_str::<PyProjectToml>(&contents)
+                let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
-                    source_trees: vec![path.clone()],
+                    source_trees: vec![SourceTree::PyProjectToml(path.clone(), pyproject_toml)],
                     ..Self::default()
                 }
             }
@@ -301,13 +301,23 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
+            RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    source_trees: vec![path.clone()],
+                    source_trees: vec![SourceTree::SetupPy(path.clone())],
+                    ..Self::default()
+                }
+            }
+            RequirementsSource::SetupCfg(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
+                Self {
+                    source_trees: vec![SourceTree::SetupCfg(path.clone())],
                     ..Self::default()
                 }
             }
