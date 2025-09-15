@@ -261,11 +261,6 @@ skip isolation when building source distributions.
 Equivalent to the `--no-build-package` command line argument. If set, uv will
 not build source distributions for the given space-delimited list of packages.
 
-### `UV_NO_SOURCES`
-
-Equivalent to the `--no-sources` command-line argument. If set, uv will
-Ignore the `tool.uv.sources` table when resolving dependencies.
-
 ### `UV_NO_CACHE`
 
 Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
@@ -318,6 +313,11 @@ alias, for backwards compatibility.
 
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
+
+### `UV_NO_SOURCES`
+
+Equivalent to the `--no-sources` command-line argument. If set, uv will
+not use the sources for any operations.
 
 ### `UV_NO_SYNC`
 
