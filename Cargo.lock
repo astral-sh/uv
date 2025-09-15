@@ -857,15 +857,15 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e09ced7ebbccb63b4c65413d821f2e00ce54c5ca4514ddc6b3c892fdbcbc69d"
+checksum = "b430743a6eb14e9764d4260d4c0d8123087d504eeb9c48f2b2a5e810dd369df4"
 dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
  "unicode-width 0.2.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -1138,7 +1138,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1291,7 +1291,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2043,7 +2043,7 @@ version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70a646d946d06bedbbc4cac4c218acf4bbf2d87757a784857025f4d447e4e1cd"
 dependencies = [
- "console 0.16.0",
+ "console 0.16.1",
  "portable-atomic",
  "unicode-width 0.2.1",
  "unit-prefix",
@@ -3619,7 +3619,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5041,7 +5041,7 @@ dependencies = [
  "base64 0.22.1",
  "byteorder",
  "clap",
- "console 0.16.0",
+ "console 0.16.1",
  "ctrlc",
  "dotenvy",
  "dunce",
@@ -5504,7 +5504,7 @@ dependencies = [
 name = "uv-console"
 version = "0.0.1"
 dependencies = [
- "console 0.16.0",
+ "console 0.16.1",
 ]
 
 [[package]]
@@ -6207,7 +6207,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "configparser",
- "console 0.16.0",
+ "console 0.16.1",
  "fs-err",
  "futures",
  "rustc-hash",
@@ -6521,7 +6521,7 @@ version = "0.8.17"
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
- "console 0.16.0",
+ "console 0.16.1",
  "fs-err",
  "itertools 0.14.0",
  "owo-colors",
