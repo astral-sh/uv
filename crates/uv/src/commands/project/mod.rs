@@ -1368,7 +1368,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove(Some(uv_virtualenv::OnExistingSource::SyncDefault)),
+                        uv_virtualenv::OnExisting::Remove(Some(
+                            uv_virtualenv::OnExistingSource::SyncDefault,
+                        )),
                         false,
                         false,
                         upgradeable,
@@ -1408,7 +1410,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(Some(uv_virtualenv::OnExistingSource::SyncDefault)),
+                    uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::OnExistingSource::SyncDefault,
+                    )),
                     false,
                     false,
                     upgradeable,
@@ -1560,7 +1564,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove(Some(uv_virtualenv::OnExistingSource::SyncDefault)),
+                        uv_virtualenv::OnExisting::Remove(Some(
+                            uv_virtualenv::OnExistingSource::SyncDefault,
+                        )),
                         false,
                         false,
                         upgradeable,
@@ -1600,7 +1606,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(Some(uv_virtualenv::OnExistingSource::SyncDefault)),
+                    uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::OnExistingSource::SyncDefault,
+                    )),
                     false,
                     false,
                     upgradeable,
