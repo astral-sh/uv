@@ -116,7 +116,7 @@ jobs:
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         env:
           # renovate: datasource=github-tags depName=koalaman/shellcheck
-          SHELLCHECK_VERSION: "v0.10.0"
+          SHELLCHECK_VERSION: "v0.11.0"
           SHELLCHECK_OPTS: --shell bash
         with:
           version: ${{ env.SHELLCHECK_VERSION }}
