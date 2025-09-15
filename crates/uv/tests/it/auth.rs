@@ -8,6 +8,114 @@ use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 #[cfg(feature = "native-auth")]
+fn add_package_native_auth_realm() -> Result<()> {
+    let context = TestContext::new("3.12").with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        "#
+    })?;
+
+    // Try to add a package without credentials.
+    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    // Login to the domain
+    uv_snapshot!(context.auth_login()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@https://pypi-proxy.fly.dev/
+    "
+    );
+
+    // Try to add the original package without credentials again. This should use credentials
+    // storied in the system keyring.
+    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    // Logout of the domain
+    uv_snapshot!(context.auth_logout()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for public@https://pypi-proxy.fly.dev/
+    "
+    );
+
+    // Authentication should fail again
+    uv_snapshot!(context.add().arg("iniconfig").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
 fn add_package_native_auth() -> Result<()> {
     let context = TestContext::new("3.12").with_real_home();
 
@@ -272,6 +380,200 @@ fn token_native_auth() -> Result<()> {
 
     ----- stderr -----
     error: Cannot specify a username both via the URL and CLI; found `--username different` and `public`
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn token_native_auth_realm() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]).with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    // Without persisted credentials
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
+    ");
+
+    // Without persisted credentials (with a username in the request)
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/
+    ");
+
+    // Login to the index
+    uv_snapshot!(context.auth_login()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@https://pypi-proxy.fly.dev/
+    "
+    );
+
+    // Show the credentials
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    // Show the credentials for a child URL
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // Without the username
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
+    ");
+
+    // Without the username
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    ");
+
+    // With a mismatched username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("private")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for private@https://pypi-proxy.fly.dev/
+    ");
+
+    // With a mismatched port
+    uv_snapshot!(context.auth_token()
+        .arg("https://pypi-proxy.fly.dev:1000")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev:1000/
+    ");
+
+    // Login to the index with a token
+    uv_snapshot!(context.auth_login()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--token")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://pypi-proxy.fly.dev/
+    "
+    );
+
+    // Retrieve the token without a username
+    uv_snapshot!(context.auth_token()
+        .arg("pypi-proxy.fly.dev")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    context
+        .auth_logout()
+        .arg("pypi-proxy.fly.dev")
+        .arg("--username")
+        .arg("public")
+        .status()?;
+
+    // Retrieve token using URL with embedded username (no --username needed)
+    uv_snapshot!(context.auth_token()
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     Ok(())
