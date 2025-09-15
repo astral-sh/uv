@@ -3573,7 +3573,7 @@ impl Source {
                             let given_path = Path::new(given);
                             if given_path.is_relative() {
                                 // Keep the original relative path for flat indices
-                                return Ok(given_path.to_path_buf());
+                                return Ok(uv_fs::normalize_path(given_path).into_owned());
                             }
                         }
                         // Default fallback behavior
@@ -3581,7 +3581,7 @@ impl Source {
                     })
                     .map_err(LockErrorKind::IndexRelativePath)?
                     .into_boxed_path();
-                
+
                 let source = RegistrySource::Path(path);
                 Ok(Self::Registry(source))
             }

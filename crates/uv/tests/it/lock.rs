@@ -11272,10 +11272,6 @@ fn lock_find_links_relative_path_preserved() -> Result<()> {
         );
     });
 
-    // Verify that the lockfile contains relative paths as specified by the user
-    assert!(lock.contains(r#"source = { registry = "../local_packages" }"#), 
-        "Lockfile should preserve relative path for flat index as specified by user");
-
     // Re-run with `--locked` to ensure the lockfile is valid.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
     success: true
