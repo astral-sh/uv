@@ -174,6 +174,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.network_settings.connectivity,
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
+                settings.preview,
             )
             .retries_from_env()?;
             Some(
@@ -438,6 +439,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.connectivity,
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
+        globals.preview,
     )
     .retries_from_env()?;
 
