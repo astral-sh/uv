@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use either::Either;
 use thiserror::Error;
@@ -222,19 +223,19 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                let credentials = Arc::new(credentials);
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
@@ -456,19 +457,19 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                let credentials = Arc::new(credentials);
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = None;
                             let source = registry_source(&requirement, index, conflict);

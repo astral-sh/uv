@@ -5603,6 +5603,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uv-auth",
  "uv-cache",
  "uv-cache-info",
  "uv-client",
