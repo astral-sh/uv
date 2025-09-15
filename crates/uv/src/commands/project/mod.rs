@@ -1369,7 +1369,7 @@ impl ProjectEnvironment {
                         prompt,
                         false,
                         uv_virtualenv::OnExisting::Remove(Some(
-                            uv_virtualenv::OnExistingSource::SyncDefault,
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
                         )),
                         false,
                         false,
@@ -1411,7 +1411,7 @@ impl ProjectEnvironment {
                     prompt,
                     false,
                     uv_virtualenv::OnExisting::Remove(Some(
-                        uv_virtualenv::OnExistingSource::SyncDefault,
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
                     )),
                     false,
                     false,
@@ -1565,7 +1565,7 @@ impl ScriptEnvironment {
                         prompt,
                         false,
                         uv_virtualenv::OnExisting::Remove(Some(
-                            uv_virtualenv::OnExistingSource::SyncDefault,
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
                         )),
                         false,
                         false,
@@ -1607,7 +1607,7 @@ impl ScriptEnvironment {
                     prompt,
                     false,
                     uv_virtualenv::OnExisting::Remove(Some(
-                        uv_virtualenv::OnExistingSource::SyncDefault,
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
                     )),
                     false,
                     false,

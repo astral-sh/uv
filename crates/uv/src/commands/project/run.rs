@@ -481,7 +481,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove(None),
+                    uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    )),
                     false,
                     false,
                     false,
@@ -681,7 +683,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove(None),
+                    uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    )),
                     false,
                     false,
                     false,
@@ -914,7 +918,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove(None),
+                    uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    )),
                     false,
                     false,
                     false,
@@ -1040,7 +1046,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 base_interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove(None),
+                uv_virtualenv::OnExisting::Remove(Some(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                )),
                 false,
                 false,
                 false,

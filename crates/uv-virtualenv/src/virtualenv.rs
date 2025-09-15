@@ -122,8 +122,12 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove(source) => {
                     let reason = match source {
-                        Some(OnExistingSource::ClearFlag) => "due to `--clear`",
-                        Some(OnExistingSource::SyncDefault) => "for environment synchronization",
+                        Some(RemovalReason::ClearFlag) => "due to `--clear`",
+                        Some(RemovalReason::ManagedEnvironment) => {
+                            "for environment synchronization"
+                        }
+                        Some(RemovalReason::TemporaryEnvironment) => "for temporary environment",
+                        Some(RemovalReason::Requested) => "as requested",
                         None => "as requested",
                     };
                     debug!("Removing existing {name} {reason}");
@@ -643,11 +647,15 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum OnExistingSource {
+pub enum RemovalReason {
     /// Removal triggered by `--clear` flag
     ClearFlag,
-    /// Removal as part of default sync behavior
-    SyncDefault,
+    /// Removal for temporary environments (build isolation, cache, etc.)
+    TemporaryEnvironment,
+    /// Removal for managed environments (sync operations)
+    ManagedEnvironment,
+    /// Removal as explicitly requested
+    Requested,
 }
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
@@ -659,7 +667,7 @@ pub enum OnExisting {
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
-    Remove(Option<OnExistingSource>),
+    Remove(Option<RemovalReason>),
 }
 
 impl OnExisting {
@@ -667,7 +675,7 @@ impl OnExisting {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(Some(OnExistingSource::ClearFlag))
+            Self::Remove(Some(RemovalReason::ClearFlag))
         } else {
             Self::default()
         }
