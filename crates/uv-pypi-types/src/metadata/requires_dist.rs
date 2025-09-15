@@ -24,9 +24,7 @@ pub struct RequiresDist {
 
 impl RequiresDist {
     /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
-    pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml = PyProjectToml::from_toml(contents)?;
-
+    pub fn from_pyproject_toml(pyproject_toml: PyProjectToml) -> Result<Self, MetadataError> {
         let project = pyproject_toml
             .project
             .ok_or(MetadataError::FieldNotFound("project"))?;

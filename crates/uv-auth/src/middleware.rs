@@ -22,7 +22,7 @@ use crate::{
     realm::Realm,
 };
 
-use crate::{TextCredentialStore, TomlCredentialError};
+use crate::{Index, TextCredentialStore, TomlCredentialError};
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -297,7 +297,7 @@ impl Middleware for AuthMiddleware {
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = tracing_url(&request, request_credentials.as_ref());
-        let maybe_index_url = self.indexes.index_url_for(request.url());
+        let index = self.indexes.index_for(request.url());
         let auth_policy = self.indexes.auth_policy_for(request.url());
         trace!("Handling request for {url} with authentication policy {auth_policy}");
 
@@ -312,7 +312,7 @@ impl Middleware for AuthMiddleware {
                         extensions,
                         next,
                         &url,
-                        maybe_index_url,
+                        index,
                         auth_policy,
                     )
                     .await;
@@ -406,8 +406,8 @@ impl Middleware for AuthMiddleware {
             .as_ref()
             .map(|credentials| credentials.to_username())
             .unwrap_or(Username::none());
-        let credentials = if let Some(index_url) = maybe_index_url {
-            self.cache().get_url(index_url, &username).or_else(|| {
+        let credentials = if let Some(index) = index {
+            self.cache().get_url(&index.url, &username).or_else(|| {
                 self.cache()
                     .get_realm(Realm::from(&**retry_request_url), username)
             })
@@ -435,7 +435,7 @@ impl Middleware for AuthMiddleware {
             .fetch_credentials(
                 credentials.as_deref(),
                 retry_request_url,
-                maybe_index_url,
+                index,
                 auth_policy,
             )
             .await
@@ -529,7 +529,7 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
         url: &DisplaySafeUrl,
-        index_url: Option<&DisplaySafeUrl>,
+        index: Option<&Index>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
@@ -545,11 +545,15 @@ impl AuthMiddleware {
         trace!("Request for {url} is missing a password, looking for credentials");
 
         // There's just a username, try to find a password.
-        // If we have an index URL, check the cache for that URL. Otherwise,
+        // If we have an index, check the cache for that URL. Otherwise,
         // check for the realm.
-        let maybe_cached_credentials = if let Some(index_url) = index_url {
+        let maybe_cached_credentials = if let Some(index) = index {
             self.cache()
-                .get_url(index_url, credentials.as_username().as_ref())
+                .get_url(&index.url, credentials.as_username().as_ref())
+                .or_else(|| {
+                    self.cache()
+                        .get_url(&index.root_url, credentials.as_username().as_ref())
+                })
         } else {
             self.cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
@@ -574,14 +578,14 @@ impl AuthMiddleware {
             .fetch_credentials(
                 Some(&credentials),
                 DisplaySafeUrl::ref_cast(request.url()),
-                index_url,
+                index,
                 auth_policy,
             )
             .await
         {
             request = credentials.authenticate(request);
             Some(credentials)
-        } else if index_url.is_some() {
+        } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
             if let Some(credentials) = self
                 .cache()
@@ -608,7 +612,7 @@ impl AuthMiddleware {
         &self,
         credentials: Option<&Credentials>,
         url: &DisplaySafeUrl,
-        maybe_index_url: Option<&DisplaySafeUrl>,
+        index: Option<&Index>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
         let username = Username::from(
@@ -617,8 +621,8 @@ impl AuthMiddleware {
 
         // Fetches can be expensive, so we will only run them _once_ per realm or index URL and username combination
         // All other requests for the same realm or index URL will wait until the first one completes
-        let key = if let Some(index_url) = maybe_index_url {
-            (FetchUrl::Index(index_url.clone()), username)
+        let key = if let Some(index) = index {
+            (FetchUrl::Index(index.url.clone()), username)
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
@@ -719,13 +723,16 @@ impl AuthMiddleware {
                 } else {
                     String::new()
                 };
-                if let Some(index_url) = maybe_index_url {
-                    debug!("Checking native store for credentials for index URL {}{}", display_username, index_url);
-                    native_store.fetch(DisplaySafeUrl::ref_cast(index_url), username).await
+                if let Some(index) = index {
+                    // N.B. The native store performs an exact look up right now, so we use the root
+                    // URL of the index instead of relying on prefix-matching.
+                    debug!("Checking native store for credentials for index URL {}{}", display_username, index.root_url);
+                    native_store.fetch(&index.root_url, username).await
                 } else {
                     debug!("Checking native store for credentials for URL {}{}", display_username, url);
                     native_store.fetch(url, username).await
                 }
+                // TODO(zanieb): We should have a realm fallback here too
             } else {
                 None
             }
@@ -742,19 +749,20 @@ impl AuthMiddleware {
                 // URLs; instead, we fetch if there's a username or if the user has requested to
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
-                    if let Some(index_url) = maybe_index_url {
-                        debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
-                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), Some(username)).await
+                    if let Some(index) = index {
+                        debug!("Checking keyring for credentials for index URL {}@{}", username, index.url);
+                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
-                    if let Some(index_url) = maybe_index_url {
+                    if let Some(index) = index {
                         debug!(
-                            "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
+                            "Checking keyring for credentials for index URL {} without username due to `authenticate = always`",
+                            index.url
                         );
-                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), None).await
+                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), None).await
                     } else {
                         None
                     }

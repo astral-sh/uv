@@ -1488,18 +1488,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn source_tree_requires_dist(
         &self,
-        source_tree: &Path,
+        path: &Path,
+        pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_requires_dist(source_tree).await {
+        match uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml.clone()) {
             Ok(requires_dist) => {
-                debug!(
-                    "Found static `requires-dist` for: {}",
-                    source_tree.display()
-                );
+                debug!("Found static `requires-dist` for: {}", path.display());
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    source_tree,
+                    path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
@@ -1509,21 +1507,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(requires_dist))
             }
             Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
+                err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                | uv_pypi_types::MetadataError::DynamicField(_)
+                | uv_pypi_types::MetadataError::FieldNotFound(_)
+                | uv_pypi_types::MetadataError::PoetrySyntax),
             ) => {
                 debug!(
                     "No static `requires-dist` available for: {} ({err:?})",
-                    source_tree.display()
+                    path.display()
                 );
                 Ok(None)
             }
-            Err(err) => Err(err),
+            Err(err) => Err(Error::PyprojectToml(err)),
         }
     }
 
@@ -3023,25 +3018,6 @@ async fn read_pyproject_toml(
     let pyproject_toml = PyProjectToml::from_toml(&content)?;
 
     Ok(pyproject_toml)
-}
-
-/// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::RequiresDist, Error> {
-    // Read the `pyproject.toml` file.
-    let pyproject_toml = project_root.join("pyproject.toml");
-    let content = match fs::read_to_string(pyproject_toml).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPyprojectToml);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(&content)
-        .map_err(Error::PyprojectToml)?;
-
-    Ok(requires_dist)
 }
 
 /// Wheel metadata stored in the source distribution cache.

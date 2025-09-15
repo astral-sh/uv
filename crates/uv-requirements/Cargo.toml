@@ -34,7 +34,6 @@ uv-resolver = { workspace = true, features = ["clap"] }
 uv-scripts = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 configparser = { workspace = true }
