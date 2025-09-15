@@ -1788,8 +1788,8 @@ fn no_clear_conflicts_with_allow_existing() {
     ----- stderr -----
     error: the argument '--no-clear' cannot be used with '--allow-existing'
 
-    Usage: uv venv --cache-dir [CACHE_DIR] --no-clear --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <PATH>
-    
+    Usage: uv venv --cache-dir [CACHE_DIR] --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <PATH>
+
     For more information, try '--help'.
     "
     );

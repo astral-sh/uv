@@ -116,6 +116,20 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
+            let hint = format!(
+                "Use the `{}` flag or set `{}` to replace the existing {name}",
+                "--clear".green(),
+                "UV_VENV_CLEAR=1".green()
+            );
+            let err = Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                    location.user_display(),
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                ),
+            )));
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
@@ -131,20 +145,21 @@ pub(crate) fn create(
                     remove_virtualenv(&location)?;
                     fs::create_dir_all(&location)?;
                 }
-                OnExisting::Fail(allow_prompt) => {
-                    let confirmation = if is_virtualenv {
-                        if allow_prompt {
-                            confirm_clear(location, name)?
-                        } else {
-                            // When --no-clear is specified, don't prompt, just fail
-                            Some(false)
-                        }
-                    } else {
-                        // Refuse to remove a non-virtual environment; don't even prompt.
-                        Some(false)
-                    };
-
-                    match confirmation {
+                OnExisting::Fail => {
+                    return Err(Error::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "A {name} already exists at: {}\n\n{}{} {hint}",
+                            location.user_display(),
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                        ),
+                    )));
+                }
+                // If not a virtual environment, fail without prompting.
+                OnExisting::Prompt if !is_virtualenv => return err,
+                OnExisting::Prompt => {
+                    match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
@@ -156,22 +171,7 @@ pub(crate) fn create(
                             remove_virtualenv(&location)?;
                             fs::create_dir_all(&location)?;
                         }
-                        Some(false) => {
-                            let hint = format!(
-                                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                                "--clear".green(),
-                                "UV_VENV_CLEAR=1".green()
-                            );
-                            return Err(Error::Io(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!(
-                                    "A {name} already exists at: {}\n\n{}{} {hint}",
-                                    location.user_display(),
-                                    "hint".bold().cyan(),
-                                    ":".bold(),
-                                ),
-                            )));
-                        }
+                        Some(false) => return err,
                         // When we don't have a TTY, warn that the behavior will change in the future
                         None => {
                             warn_user_once!(
@@ -642,22 +642,20 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum OnExisting {
+    /// Prompt before removing an existing directory.
+    ///
+    /// If a TTY is not available, fail.
+    #[default]
+    Prompt,
     /// Fail if the directory already exists and is non-empty.
-    /// The bool parameter controls whether prompting is allowed.
-    Fail(bool),
+    Fail,
     /// Allow an existing directory, overwriting virtual environment files while retaining other
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
     Remove,
-}
-
-impl Default for OnExisting {
-    fn default() -> Self {
-        Self::Fail(true) // Allow prompting by default
-    }
 }
 
 impl OnExisting {
@@ -666,9 +664,10 @@ impl OnExisting {
             Self::Allow
         } else if clear {
             Self::Remove
+        } else if no_clear {
+            Self::Fail
         } else {
-            // If no_clear is true, don't allow prompting
-            Self::Fail(!no_clear)
+            Self::Prompt
         }
     }
 }
