@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -16,9 +16,36 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
+use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
+
+#[derive(Debug, Clone)]
+pub enum SourceTree {
+    PyProjectToml(PathBuf, PyProjectToml),
+    SetupPy(PathBuf),
+    SetupCfg(PathBuf),
+}
+
+impl SourceTree {
+    /// Return the [`Path`] to the file representing the source tree (e.g., the `pyproject.toml`).
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::PyProjectToml(path, ..) => path,
+            Self::SetupPy(path) => path,
+            Self::SetupCfg(path) => path,
+        }
+    }
+
+    /// Return the [`PyProjectToml`] if this is a `pyproject.toml`-based source tree.
+    pub fn pyproject_toml(&self) -> Option<&PyProjectToml> {
+        match self {
+            Self::PyProjectToml(.., toml) => Some(toml),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
@@ -73,7 +100,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Resolve the requirements from the provided source trees.
     pub async fn resolve(
         self,
-        source_trees: impl Iterator<Item = &Path>,
+        source_trees: impl Iterator<Item = &SourceTree>,
     ) -> Result<Vec<SourceTreeResolution>> {
         let resolutions: Vec<_> = source_trees
             .map(async |source_tree| self.resolve_source_tree(source_tree).await)
@@ -84,9 +111,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     }
 
     /// Infer the dependencies for a directory dependency.
-    async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
-        let metadata = self.resolve_requires_dist(path).await?;
-        let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
+    async fn resolve_source_tree(&self, source_tree: &SourceTree) -> Result<SourceTreeResolution> {
+        let metadata = self.resolve_requires_dist(source_tree).await?;
+        let origin =
+            RequirementOrigin::Project(source_tree.path().to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
         let extras = self
@@ -124,15 +152,15 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// requirements without building the distribution, even if the project contains (e.g.) a
     /// dynamic version since, critically, we don't need to install the package itself; only its
     /// dependencies.
-    async fn resolve_requires_dist(&self, path: &Path) -> Result<RequiresDist> {
+    async fn resolve_requires_dist(&self, source_tree: &SourceTree) -> Result<RequiresDist> {
         // Convert to a buildable source.
-        let source_tree = fs_err::canonicalize(path).with_context(|| {
+        let path = fs_err::canonicalize(source_tree.path()).with_context(|| {
             format!(
                 "Failed to canonicalize path to source tree: {}",
-                path.user_display()
+                source_tree.path().user_display()
             )
         })?;
-        let source_tree = source_tree.parent().ok_or_else(|| {
+        let path = path.parent().ok_or_else(|| {
             anyhow::anyhow!(
                 "The file `{}` appears to be a `pyproject.toml`, `setup.py`, or `setup.cfg` file, which must be in a directory",
                 path.user_display()
@@ -144,16 +172,18 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // _only_ need the requirements. So, for example, even if the version is dynamic, we can
         // still extract the requirements without performing a build, unlike in the database where
         // we typically construct a "complete" metadata object.
-        if let Some(metadata) = self.database.requires_dist(source_tree).await? {
-            return Ok(metadata);
+        if let Some(pyproject_toml) = source_tree.pyproject_toml() {
+            if let Some(metadata) = self.database.requires_dist(path, pyproject_toml).await? {
+                return Ok(metadata);
+            }
         }
 
-        let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
+        let Ok(url) = Url::from_directory_path(path).map(DisplaySafeUrl::from) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
-            install_path: Cow::Borrowed(source_tree),
+            install_path: Cow::Borrowed(path),
             editable: None,
         });
 

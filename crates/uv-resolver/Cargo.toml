@@ -47,6 +47,7 @@ arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 hashbrown = { workspace = true }
 indexmap = { workspace = true }

@@ -42,7 +42,7 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitUrl,
+    ParsedGitUrl, PyProjectToml,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -1808,13 +1808,29 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = database
-                    .requires_dist(root.join(source_tree))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?;
+                let parent = root.join(source_tree);
+                let path = parent.join("pyproject.toml");
+                let metadata =
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => {
+                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
+                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                                    path: path.clone(),
+                                    err,
+                                })?;
+                            database
+                                .requires_dist(&parent, &pyproject_toml)
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                        Err(err) => {
+                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                        }
+                    };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -5898,6 +5914,18 @@ enum LockErrorKind {
     },
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
+    #[error("Failed to read `{path}`")]
+    UnreadablePyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: std::io::Error,
+    },
+    #[error("Failed to parse `{path}`")]
+    InvalidPyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: toml::de::Error,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
