@@ -3566,9 +3566,23 @@ impl Source {
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
                 let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
-                    .map_err(LockErrorKind::IndexRelativePath)?;
-                let source = RegistrySource::Path(path.into_boxed_path());
+                    .or_else(|_| {
+                        // If relative_to fails, check if the user originally provided a relative path
+                        // that we should preserve (for flat indices)
+                        if let Some(given) = url.given() {
+                            let given_path = Path::new(given);
+                            if given_path.is_relative() {
+                                // Keep the original relative path for flat indices
+                                return Ok(given_path.to_path_buf());
+                            }
+                        }
+                        // Default fallback behavior
+                        std::path::absolute(&path)
+                    })
+                    .map_err(LockErrorKind::IndexRelativePath)?
+                    .into_boxed_path();
+                
+                let source = RegistrySource::Path(path);
                 Ok(Self::Registry(source))
             }
         }
