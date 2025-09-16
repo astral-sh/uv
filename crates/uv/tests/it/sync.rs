@@ -10986,6 +10986,25 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
         "#,
     )?;
 
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
