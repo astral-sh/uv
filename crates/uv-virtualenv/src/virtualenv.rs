@@ -121,6 +121,8 @@ pub(crate) fn create(
                 "--clear".green(),
                 "UV_VENV_CLEAR=1".green()
             );
+            // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
+            // when `--no-clear` is used do we want to suggest `--clear`?
             let err = Err(Error::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!(
@@ -145,17 +147,7 @@ pub(crate) fn create(
                     remove_virtualenv(&location)?;
                     fs::create_dir_all(&location)?;
                 }
-                OnExisting::Fail => {
-                    return Err(Error::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "A {name} already exists at: {}\n\n{}{} {hint}",
-                            location.user_display(),
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                        ),
-                    )));
-                }
+                OnExisting::Fail => return err,
                 // If not a virtual environment, fail without prompting.
                 OnExisting::Prompt if !is_virtualenv => return err,
                 OnExisting::Prompt => {
