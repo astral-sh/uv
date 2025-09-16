@@ -636,11 +636,13 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
-    /// Removal triggered by user request (`--clear` flag or `UV_VENV_CLEAR`)
+    /// The removal was explicitly requested, i.e., with `--clear`.
     UserRequest,
-    /// Removal for temporary environments (build isolation, cache, etc.)
+    /// The environment can be removed because it is considered temporary, e.g., a build
+    /// environment.
     TemporaryEnvironment,
-    /// Removal for managed environments (sync operations)
+    /// The environment can be removed because it is managed by uv, e.g., a project or tool
+    /// environment.
     ManagedEnvironment,
 }
 
