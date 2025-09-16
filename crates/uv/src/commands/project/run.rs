@@ -24,7 +24,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified, create_symlink};
+use uv_fs::{PythonExt, Simplified, create_symlink, symlink_or_copy_file};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
@@ -1102,7 +1102,23 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         interpreter.sys_executable(),
                         ephemeral_env.sys_executable(),
                     ) {
-                        Ok(()) => {}
+                        Ok(true) => {}
+                        // If the entrypoint was not a valid target for copy, link it
+                        Ok(false) => {
+                            match symlink_or_copy_file(
+                                entry.path(),
+                                ephemeral_env.scripts().join(entry.file_name()),
+                            ) {
+                                Ok(()) => {}
+                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                                    trace!(
+                                        "Skipping copy of entrypoint `{}`: already exists",
+                                        &entry.path().display()
+                                    );
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
                         // If the entrypoint already exists, skip it.
                         Err(CopyEntrypointError::Io(err))
                             if err.kind() == std::io::ErrorKind::AlreadyExists =>
@@ -1860,7 +1876,7 @@ fn copy_entrypoint(
     target: &Path,
     previous_executable: &Path,
     python_executable: &Path,
-) -> Result<(), CopyEntrypointError> {
+) -> Result<bool, CopyEntrypointError> {
     use std::io::{Seek, Write};
     use std::os::unix::fs::PermissionsExt;
 
@@ -1874,7 +1890,7 @@ fn copy_entrypoint(
             "Skipping copy of entrypoint `{}`: file is too small to contain a shebang",
             source.user_display()
         );
-        return Ok(());
+        return Ok(false);
     }
 
     // Check if it starts with `#!` to avoid reading binary files and such into memory
@@ -1883,7 +1899,7 @@ fn copy_entrypoint(
             "Skipping copy of entrypoint `{}`: does not start with #!",
             source.user_display()
         );
-        return Ok(());
+        return Ok(false);
     }
 
     let mut contents = String::new();
@@ -1897,7 +1913,7 @@ fn copy_entrypoint(
                 "Skipping copy of entrypoint `{}`: is not valid UTF-8",
                 source.user_display()
             );
-            return Ok(());
+            return Ok(false);
         }
         Err(err) => return Err(err.into()),
     }
@@ -1925,7 +1941,7 @@ fn copy_entrypoint(
             "Skipping copy of entrypoint `{}`: does not start with expected shebang",
             source.user_display()
         );
-        return Ok(());
+        return Ok(false);
     };
 
     let contents = format!("#!{}\n{}", python_executable.display(), contents);
@@ -1939,7 +1955,7 @@ fn copy_entrypoint(
 
     trace!("Updated entrypoint at {}", target.user_display());
 
-    Ok(())
+    Ok(true)
 }
 
 /// Create a copy of the entrypoint at `source` at `target`, if it's a Python script launcher,
@@ -1950,11 +1966,11 @@ fn copy_entrypoint(
     target: &Path,
     _previous_executable: &Path,
     python_executable: &Path,
-) -> Result<(), CopyEntrypointError> {
+) -> Result<bool, CopyEntrypointError> {
     use uv_trampoline_builder::Launcher;
 
     let Some(launcher) = Launcher::try_from_path(source)? else {
-        return Ok(());
+        return Ok(false);
     };
 
     let is_gui = launcher.python_path.ends_with("pythonw.exe");
@@ -1974,5 +1990,5 @@ fn copy_entrypoint(
 
     trace!("Updated entrypoint at {}", target.user_display());
 
-    Ok(())
+    Ok(true)
 }
