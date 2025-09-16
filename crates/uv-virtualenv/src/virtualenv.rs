@@ -141,7 +141,6 @@ pub(crate) fn create(
                         RemovalReason::UserRequest => "due to `--clear`",
                         RemovalReason::ManagedEnvironment => "for environment synchronization",
                         RemovalReason::TemporaryEnvironment => "for temporary environment",
-                        RemovalReason::Requested => "as requested",
                     };
                     debug!("Removing existing {name} {reason}");
                     // Before removing the virtual environment, we need to canonicalize the path
@@ -648,8 +647,6 @@ pub enum RemovalReason {
     TemporaryEnvironment,
     /// Removal for managed environments (sync operations)
     ManagedEnvironment,
-    /// Removal as explicitly requested
-    Requested,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
