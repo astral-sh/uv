@@ -22901,7 +22901,7 @@ fn lock_group_requires_undefined_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `myproject` has malformed dependency groups
+    error: Project `myproject @ .` has malformed dependency groups
       Caused by: Failed to find group `foo` specified in `[tool.uv.dependency-groups]`
     ");
     Ok(())
@@ -22936,7 +22936,7 @@ fn lock_group_requires_dev_dep() -> Result<()> {
 
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    error: Project `myproject` has malformed dependency groups
+    error: Project `myproject @ .` has malformed dependency groups
       Caused by: `[tool.uv.dependency-groups]` specifies the `dev` group, but only `tool.uv.dev-dependencies` was found. To reference the `dev` group, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
     ");
     Ok(())
@@ -23091,7 +23091,7 @@ fn lock_group_include_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
     ");
 
@@ -23126,7 +23126,7 @@ fn lock_group_include_dev() -> Result<()> {
 
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
     "#);
 
@@ -23157,7 +23157,7 @@ fn lock_group_include_missing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Failed to find group `bar` included by `foo`
     ");
 
@@ -23188,7 +23188,7 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
@@ -23201,7 +23201,7 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
@@ -23307,7 +23307,7 @@ fn lock_group_invalid_entry_table() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project `project` has malformed dependency groups
+    error: Project `project @ .` has malformed dependency groups
       Caused by: Group `foo` contains an unknown dependency object specifier: {"bar": "unknown"}
     "#);
 
