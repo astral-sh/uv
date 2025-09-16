@@ -119,6 +119,32 @@ pub struct VariantPropertyType {
     pub value: VariantValue,
 }
 
+/// The stages at which a plugin is run.
+///
+/// Specifically captures whether it needs to be run at install time.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginUse {
+    /// The plugin is never run, it is only static.
+    None,
+    /// The plugin is run at build time, the install time evaluation is static.
+    Build,
+    /// The plugin is run both at build time and at install time.
+    #[default]
+    All,
+}
+
+impl PluginUse {
+    /// Whether to run this plugin on installation, `false` for plugins evaluated from
+    /// default priorities.
+    pub fn run_on_install(self) -> bool {
+        match self {
+            Self::All => true,
+            Self::None | Self::Build => false,
+        }
+    }
+}
+
 /// Provider information
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -134,6 +160,8 @@ pub struct Provider {
     pub enable_if: MarkerTree,
     /// Dependency specifiers for how to install the plugin
     pub requires: Vec<Requirement<VerbatimParsedUrl>>,
+    /// Whether this plugin is run at install time.
+    pub plugin_use: Option<PluginUse>,
 }
 
 impl Provider {
