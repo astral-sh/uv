@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -35,7 +34,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
 use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::{Provider, VariantPropertyType, VariantsJsonContent};
+use uv_variants::variants_json::{Provider, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -594,25 +593,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         variants_json: VariantsJsonContent,
         marker_env: &MarkerEnvironment,
     ) -> Result<ResolvedVariants, Error> {
-        // Collect all known properties for dynamic providers.
-        // TODO(konsti): We shouldn't need to do this conversion.
-        let mut known_properties = BTreeSet::default();
-        for variant in variants_json.variants.values() {
-            for (namespace, features) in &**variant {
-                for (feature, value) in features {
-                    for value in value {
-                        // TODO(charlie): At minimum, we can probably avoid these clones.
-                        known_properties.insert(VariantPropertyType {
-                            namespace: namespace.clone(),
-                            feature: feature.clone(),
-                            value: value.clone(),
-                        });
-                    }
-                }
-            }
-        }
-        let known_properties: Vec<_> = known_properties.into_iter().collect();
-
         // Compute the set of available variants.
         let provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
@@ -620,7 +600,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .enable_if
                     .evaluate(marker_env, MarkerVariantsUniversal, &[])
             }))
-            .map(|(name, provider)| self.query_variant_provider(name, provider, &known_properties))
+            .map(|(name, provider)| self.query_variant_provider(name, provider))
             // TODO(konsti): Buffer size
             .buffered(8)
             .map_ok(|config| (config.namespace.clone(), config))
@@ -637,7 +617,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         name: &VariantNamespace,
         provider: &Provider,
-        known_properties: &[VariantPropertyType],
     ) -> Result<Arc<VariantProviderOutput>, Error> {
         let config = if self.build_context.variants().register(provider.clone()) {
             debug!("Querying provider `{name}` for variants");
@@ -648,7 +627,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .build_context
                 .setup_variants(backend_name, provider, BuildOutput::Debug)
                 .await?;
-            let config = builder.query(known_properties).await?;
+            let config = builder.query().await?;
             trace!(
                 "Found namespace {} with configs {:?}",
                 config.namespace, config

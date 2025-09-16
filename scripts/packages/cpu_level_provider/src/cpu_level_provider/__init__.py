@@ -22,10 +22,7 @@ class VariantPropertyType:
 
 
 def get_supported_configs(
-    known_properties: frozenset[VariantPropertyType] | None,
 ) -> list[VariantFeatureConfigType]:
-    if known_properties is not None:
-        raise ValueError("known_properties are unsupported")
     if override := os.getenv("UV_CPU_LEVEL_OVERRIDE"):
         try:
             current_level = int(override)
@@ -98,7 +95,7 @@ def get_x86_64_level() -> int | None:
 
 
 def main():
-    print(get_supported_configs(None))
+    print(get_supported_configs())
 
 
 if __name__ == "__main__":

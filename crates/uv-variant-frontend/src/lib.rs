@@ -27,7 +27,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
 use uv_variants::VariantProviderOutput;
-use uv_variants::variants_json::{Provider, VariantPropertyType};
+use uv_variants::variants_json::Provider;
 use uv_virtualenv::OnExisting;
 
 pub struct VariantBuild {
@@ -50,11 +50,8 @@ pub struct VariantBuild {
 }
 
 impl VariantsTrait for VariantBuild {
-    async fn query(
-        &self,
-        known_properties: &[VariantPropertyType],
-    ) -> anyhow::Result<VariantProviderOutput> {
-        Ok(self.build(known_properties).await?)
+    async fn query(&self) -> anyhow::Result<VariantProviderOutput> {
+        Ok(self.build().await?)
     }
 }
 
@@ -151,15 +148,9 @@ impl VariantBuild {
     }
 
     /// Run a variant provider to infer compatible variants.
-    pub async fn build(
-        &self,
-        known_properties: &[VariantPropertyType],
-    ) -> Result<VariantProviderOutput, Error> {
+    pub async fn build(&self) -> Result<VariantProviderOutput, Error> {
         // Write the hook output to a file so that we can read it back reliably.
         let out_file = self.temp_dir.path().join("output.json");
-        let in_file = self.temp_dir.path().join("input.json");
-        let in_writer = fs_err::File::create(&in_file)?;
-        serde_json::to_writer(in_writer, known_properties)?;
 
         // Construct the appropriate build script based on the build kind.
         let script = formatdoc! {
@@ -168,32 +159,7 @@ impl VariantBuild {
 
             import json
 
-            if backend.dynamic:
-                class VariantPropertyType:
-                    namespace: str
-                    feature: str
-                    value: str
-
-                    def __init__(self, namespace: str, feature: str, value: str):
-                        self.namespace = namespace
-                        self.feature = feature
-                        self.value = value
-
-                with open("{in_file}") as fp:
-                    known_properties = json.load(fp)
-
-                # Filter to the namespace of the plugin.
-                filtered_properties = []
-                for known_property in known_properties:
-                    # We don't know the namespace ahead of time, so the frontend passes all properties.
-                    if known_property["namespace"] != backend.namespace:
-                        continue
-                    filtered_properties.append(VariantPropertyType(**known_property))
-                known_properties = frozenset(filtered_properties)
-            else:
-                known_properties = None
-
-            configs = backend.get_supported_configs(known_properties)
+            configs = backend.get_supported_configs()
             features = {{config.name: config.values for config in configs}}
             output = {{"namespace": backend.namespace, "features": features}}
 
@@ -201,7 +167,6 @@ impl VariantBuild {
                 fp.write(json.dumps(output))
             "#,
             backend = self.backend.import(&self.backend_name),
-            in_file = in_file.escape_for_python(),
             out_file = out_file.escape_for_python()
         };
 
