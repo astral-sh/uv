@@ -136,13 +136,8 @@ pub(crate) fn create(
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
-                OnExisting::Remove(source) => {
-                    let reason = match source {
-                        RemovalReason::UserRequest => "due to `--clear`",
-                        RemovalReason::ManagedEnvironment => "for environment synchronization",
-                        RemovalReason::TemporaryEnvironment => "for temporary environment",
-                    };
-                    debug!("Removing existing {name} {reason}");
+                OnExisting::Remove(reason) => {
+                    debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
                     // the unresolved path and will remove the symlink itself.
@@ -647,6 +642,16 @@ pub enum RemovalReason {
     TemporaryEnvironment,
     /// Removal for managed environments (sync operations)
     ManagedEnvironment,
+}
+
+impl std::fmt::Display for RemovalReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserRequest => f.write_str("requested with `--clear`"),
+            Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
+            Self::TemporaryEnvironment => f.write_str("environment is temporary"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
