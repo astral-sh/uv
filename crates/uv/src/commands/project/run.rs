@@ -24,7 +24,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified, create_symlink};
+use uv_fs::{PythonExt, Simplified, create_symlink, symlink_or_copy_file};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
@@ -1132,24 +1132,69 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // See https://github.com/jupyterlab/jupyterlab/issues/17716
                 for dir in &["etc/jupyter", "share/jupyter"] {
                     let source = interpreter.sys_prefix().join(dir);
-                    if !matches!(source.try_exists(), Ok(true)) {
-                        continue;
-                    }
-                    if !source.is_dir() {
-                        continue;
-                    }
-                    let target = ephemeral_env.sys_prefix().join(dir);
-                    if let Some(parent) = target.parent() {
-                        fs_err::create_dir_all(parent)?;
-                    }
-                    match create_symlink(&source, &target) {
-                        Ok(()) => trace!(
-                            "Created link for {} -> {}",
-                            target.user_display(),
-                            source.user_display()
-                        ),
-                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    let entries = match fs_err::read_dir(source) {
+                        Ok(entries) => entries,
+                        // Skip missing directories or non-directories
+                        Err(err)
+                            if matches!(
+                                err.kind(),
+                                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory,
+                            ) =>
+                        {
+                            continue;
+                        }
                         Err(err) => return Err(err.into()),
+                    };
+
+                    // Ensure the parent directory exists
+                    fs_err::create_dir_all(ephemeral_env.sys_prefix().join(dir))?;
+
+                    // We perform a shallow merge, i.e., we will iterate over the top-level entries
+                    // and link them to the ephemeral environment. This is is an attempted balance
+                    // between ensuring _all_ files from every environment are present and avoiding
+                    // copying the entire tree / allowing the `--with` requirements to override
+                    // contents of the base environment.
+                    //
+                    // See https://github.com/astral-sh/uv/issues/15219
+                    for entry in entries {
+                        let entry = entry?;
+                        let target = ephemeral_env.sys_prefix().join(dir).join(entry.file_name());
+                        if entry.file_type()?.is_file() {
+                            match symlink_or_copy_file(entry.path(), &target) {
+                                Ok(()) => trace!(
+                                    "Created link for {} -> {}",
+                                    target.user_display(),
+                                    entry.path().user_display()
+                                ),
+                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                                    trace!(
+                                        "Skipping link of `{}`: already exists",
+                                        entry.path().user_display()
+                                    );
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        } else if entry.file_type()?.is_dir() {
+                            match create_symlink(entry.path(), &target) {
+                                Ok(()) => trace!(
+                                    "Created link for {} -> {}",
+                                    target.user_display(),
+                                    entry.path().user_display()
+                                ),
+                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                                    trace!(
+                                        "Skipping link of `{}`: already exists",
+                                        entry.path().user_display()
+                                    );
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        } else {
+                            trace!(
+                                "Skipping link of entry `{}`: unknown file type",
+                                entry.path().user_display()
+                            );
+                        }
                     }
                 }
             }
