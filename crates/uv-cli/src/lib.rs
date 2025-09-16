@@ -636,7 +636,7 @@ pub struct VersionArgs {
     pub refresh: RefreshArgs,
 
     /// Update the version of a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
     /// The Python interpreter to use for resolving and syncing.
@@ -2564,7 +2564,7 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("all_packages"))]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with("all_packages"))]
     pub package: Option<PackageName>,
 
     /// Builds all packages in the workspace.
@@ -3329,7 +3329,7 @@ pub struct RunArgs {
     /// Run the command in a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with = "all_packages")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Avoid discovering the project or workspace.
@@ -3612,7 +3612,7 @@ pub struct SyncArgs {
     /// declared by the specified workspace member package.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with = "all_packages")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Sync the environment for a Python script, rather than the current project.
@@ -3913,7 +3913,7 @@ pub struct AddArgs {
     pub refresh: RefreshArgs,
 
     /// Add the dependency to a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
     /// Add the dependency to the specified Python script, rather than to a project.
@@ -4059,7 +4059,7 @@ pub struct RemoveArgs {
     pub refresh: RefreshArgs,
 
     /// Remove the dependencies from a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
     /// Remove the dependency from the specified Python script, rather than from a project.
@@ -4246,7 +4246,7 @@ pub struct ExportArgs {
     /// Export the dependencies for a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with = "all_packages")]
+    #[arg(long, env = EnvVars::UV_PACKAGE, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Prune the given package from the dependency tree.
