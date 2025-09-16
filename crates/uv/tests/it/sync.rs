@@ -10996,13 +10996,12 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @r"
@@ -11056,7 +11055,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the declared conflicts: {`example:dev`, `example:magic`}
     ");
 
     Ok(())
