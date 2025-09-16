@@ -18,7 +18,6 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_variants::VariantProviderOutput;
 use uv_variants::cache::VariantProviderCache;
-use uv_variants::variants_json::VariantPropertyType;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation};
@@ -204,10 +203,7 @@ pub trait SourceBuildTrait {
 }
 
 pub trait VariantsTrait {
-    fn query(
-        &self,
-        known_properties: &[VariantPropertyType],
-    ) -> impl Future<Output = Result<VariantProviderOutput>>;
+    fn query(&self) -> impl Future<Output = Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]
