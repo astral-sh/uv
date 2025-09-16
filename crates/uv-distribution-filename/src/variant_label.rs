@@ -7,7 +7,7 @@ use uv_small_str::SmallString;
 pub enum InvalidVariantLabel {
     #[error("Invalid character `{invalid}` in variant label, only [a-z0-9._] are allowed: {input}")]
     InvalidCharacter { invalid: char, input: String },
-    #[error("Variant label must be between 1 and 8 characters long, not {length}: {input}")]
+    #[error("Variant label must be between 1 and 16 characters long, not {length}: {input}")]
     InvalidLength { length: usize, input: String },
 }
 
@@ -36,7 +36,10 @@ impl FromStr for VariantLabel {
             .chars()
             .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '.'))
         {
-            if !invalid.is_ascii_lowercase() && !invalid.is_ascii_digit() && invalid != '.' {
+            if !invalid.is_ascii_lowercase()
+                && !invalid.is_ascii_digit()
+                && !matches!(invalid, '.' | '_')
+            {
                 return Err(InvalidVariantLabel::InvalidCharacter {
                     invalid,
                     input: label.to_string(),
@@ -45,7 +48,7 @@ impl FromStr for VariantLabel {
         }
 
         // We checked that the label is ASCII only above, so we can use `len()`.
-        if label.is_empty() || label.len() > 8 {
+        if label.is_empty() || label.len() > 16 {
             return Err(InvalidVariantLabel::InvalidLength {
                 length: label.len(),
                 input: label.to_string(),
