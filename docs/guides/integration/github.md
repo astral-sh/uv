@@ -406,7 +406,8 @@ After saving:
 
 ![PyPI project publishing settings dialog showing the configured trusted publishing settings](../../assets/pypi-with-trusted-publisher.png)
 
-Finally, tag a release and push it:
+Finally, tag a release and push it. Make sure it starts with `v` to match the pattern in the
+workflow.
 
 ```console
 $ git tag -a v0.1.0 -m v0.1.0
