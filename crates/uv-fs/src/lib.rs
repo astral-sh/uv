@@ -693,9 +693,50 @@ impl LockedFile {
         }
     }
 
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
-    /// context, as this can block the runtime while waiting for another process to release the
-    /// lock.
+    /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
+    /// [`LockedFile::acquire_blocking`].
+    fn lock_file_shared_blocking(
+        file: fs_err::File,
+        resource: &str,
+    ) -> Result<Self, std::io::Error> {
+        trace!(
+            "Checking shared lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        // TODO(konsti): Update fs_err to support this.
+        match FileExt::try_lock_shared(file.file()) {
+            Ok(()) => {
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
+                info!(
+                    "Waiting to acquire shared lock for `{resource}` at `{}`",
+                    file.path().user_display(),
+                );
+                FileExt::lock_shared(file.file()).map_err(|err| {
+                    // Not an fs_err method, we need to build our own path context
+                    std::io::Error::other(format!(
+                        "Could not acquire shared lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
+                })?;
+
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+        }
+    }
+
+    /// The same as [`LockedFile::acquire`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
     pub fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
@@ -703,6 +744,19 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
+    }
+
+    /// The same as [`LockedFile::acquire_blocking`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
+    pub fn acquire_shared_blocking(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        Self::lock_file_shared_blocking(file, &resource)
     }
 
     /// Acquire a cross-process lock for a resource using a file at the provided path.
@@ -714,6 +768,18 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+    }
+
+    /// Acquire a cross-process read lock for a shared resource using a file at the provided path.
+    #[cfg(feature = "tokio")]
+    pub async fn acquire_shared(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
+            .await?
     }
 
     #[cfg(unix)]

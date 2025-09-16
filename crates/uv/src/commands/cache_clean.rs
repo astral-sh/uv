@@ -14,7 +14,7 @@ use crate::printer::Printer;
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) fn cache_clean(
     packages: &[PackageName],
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
@@ -25,6 +25,7 @@ pub(crate) fn cache_clean(
         )?;
         return Ok(ExitStatus::Success);
     }
+    let cache = cache.with_exclusive_lock()?;
 
     let summary = if packages.is_empty() {
         writeln!(
