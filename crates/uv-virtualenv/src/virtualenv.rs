@@ -122,7 +122,7 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove(source) => {
                     let reason = match source {
-                        RemovalReason::ClearFlag => "due to `--clear`",
+                        RemovalReason::UserRequest => "due to `--clear`",
                         RemovalReason::ManagedEnvironment => "for environment synchronization",
                         RemovalReason::TemporaryEnvironment => "for temporary environment",
                         RemovalReason::Requested => "as requested",
@@ -645,8 +645,8 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
-    /// Removal triggered by `--clear` flag
-    ClearFlag,
+    /// Removal triggered by user request (`--clear` flag or UV_VENV_CLEAR)
+    UserRequest,
     /// Removal for temporary environments (build isolation, cache, etc.)
     TemporaryEnvironment,
     /// Removal for managed environments (sync operations)
@@ -672,7 +672,7 @@ impl OnExisting {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(RemovalReason::ClearFlag)
+            Self::Remove(RemovalReason::UserRequest)
         } else {
             Self::default()
         }
