@@ -640,7 +640,7 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
     /// Removal triggered by user request (`--clear` flag or UV_VENV_CLEAR)
     UserRequest,
@@ -652,7 +652,7 @@ pub enum RemovalReason {
     Requested,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum OnExisting {
     /// Prompt before removing an existing directory.
     ///
