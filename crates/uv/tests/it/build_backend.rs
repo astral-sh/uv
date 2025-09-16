@@ -1158,7 +1158,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: There are settings for the `uv_build` build backend defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [TEMP_DIR]/pyproject.toml
+    warning: There are settings for `uv_build` defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [TEMP_DIR]/pyproject.toml
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
