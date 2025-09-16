@@ -136,8 +136,8 @@ pub(crate) fn create(
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
-                OnExisting::Remove => {
-                    debug!("Removing existing {name} due to `--clear`");
+                OnExisting::Remove(reason) => {
+                    debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
                     // the unresolved path and will remove the symlink itself.
@@ -634,6 +634,28 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum RemovalReason {
+    /// The removal was explicitly requested, i.e., with `--clear`.
+    UserRequest,
+    /// The environment can be removed because it is considered temporary, e.g., a build
+    /// environment.
+    TemporaryEnvironment,
+    /// The environment can be removed because it is managed by uv, e.g., a project or tool
+    /// environment.
+    ManagedEnvironment,
+}
+
+impl std::fmt::Display for RemovalReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserRequest => f.write_str("requested with `--clear`"),
+            Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
+            Self::TemporaryEnvironment => f.write_str("environment is temporary"),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum OnExisting {
     /// Prompt before removing an existing directory.
@@ -647,7 +669,7 @@ pub enum OnExisting {
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
-    Remove,
+    Remove(RemovalReason),
 }
 
 impl OnExisting {
@@ -655,7 +677,7 @@ impl OnExisting {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove
+            Self::Remove(RemovalReason::UserRequest)
         } else if no_clear {
             Self::Fail
         } else {
