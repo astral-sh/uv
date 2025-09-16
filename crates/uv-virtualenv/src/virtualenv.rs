@@ -116,6 +116,22 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
+            let hint = format!(
+                "Use the `{}` flag or set `{}` to replace the existing {name}",
+                "--clear".green(),
+                "UV_VENV_CLEAR=1".green()
+            );
+            // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
+            // when `--no-clear` is used do we want to suggest `--clear`?
+            let err = Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                    location.user_display(),
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                ),
+            )));
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
@@ -137,15 +153,11 @@ pub(crate) fn create(
                     remove_virtualenv(&location)?;
                     fs::create_dir_all(&location)?;
                 }
-                OnExisting::Fail => {
-                    let confirmation = if is_virtualenv {
-                        confirm_clear(location, name)?
-                    } else {
-                        // Refuse to remove a non-virtual environment; don't even prompt.
-                        Some(false)
-                    };
-
-                    match confirmation {
+                OnExisting::Fail => return err,
+                // If not a virtual environment, fail without prompting.
+                OnExisting::Prompt if !is_virtualenv => return err,
+                OnExisting::Prompt => {
+                    match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
@@ -157,22 +169,7 @@ pub(crate) fn create(
                             remove_virtualenv(&location)?;
                             fs::create_dir_all(&location)?;
                         }
-                        Some(false) => {
-                            let hint = format!(
-                                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                                "--clear".green(),
-                                "UV_VENV_CLEAR=1".green()
-                            );
-                            return Err(Error::Io(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!(
-                                    "A {name} already exists at: {}\n\n{}{} {hint}",
-                                    location.user_display(),
-                                    "hint".bold().cyan(),
-                                    ":".bold(),
-                                ),
-                            )));
-                        }
+                        Some(false) => return err,
                         // When we don't have a TTY, warn that the behavior will change in the future
                         None => {
                             warn_user_once!(
@@ -655,10 +652,26 @@ pub enum RemovalReason {
     Requested,
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum RemovalReason {
+    /// Removal triggered by user request (`--clear` flag or UV_VENV_CLEAR)
+    UserRequest,
+    /// Removal for temporary environments (build isolation, cache, etc.)
+    TemporaryEnvironment,
+    /// Removal for managed environments (sync operations)
+    ManagedEnvironment,
+    /// Removal as explicitly requested
+    Requested,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OnExisting {
-    /// Fail if the directory already exists and is non-empty.
+    /// Prompt before removing an existing directory.
+    ///
+    /// If a TTY is not available, fail.
     #[default]
+    Prompt,
+    /// Fail if the directory already exists and is non-empty.
     Fail,
     /// Allow an existing directory, overwriting virtual environment files while retaining other
     /// files in the directory.
@@ -668,13 +681,15 @@ pub enum OnExisting {
 }
 
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool) -> Self {
+    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
         if allow_existing {
             Self::Allow
         } else if clear {
             Self::Remove(RemovalReason::UserRequest)
+        } else if no_clear {
+            Self::Fail
         } else {
-            Self::default()
+            Self::Prompt
         }
     }
 }

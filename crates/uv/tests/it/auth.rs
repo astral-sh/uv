@@ -67,16 +67,17 @@ fn add_package_native_auth_realm() -> Result<()> {
     // storied in the system keyring.
     uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 
@@ -176,16 +177,17 @@ fn add_package_native_auth() -> Result<()> {
     // credentials storied in the system keyring.
     uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 
@@ -286,12 +288,12 @@ fn token_native_auth() -> Result<()> {
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Without the username
@@ -341,12 +343,12 @@ fn token_native_auth() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     context
@@ -360,12 +362,12 @@ fn token_native_auth() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Conflict between --username and URL username is rejected
@@ -410,12 +412,12 @@ fn token_native_auth_realm() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -469,36 +471,36 @@ fn token_native_auth_realm() -> Result<()> {
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Without the username
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
     // Without the username
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // With a mismatched username
@@ -568,12 +570,12 @@ fn token_native_auth_realm() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     Ok(())
@@ -1848,12 +1850,12 @@ fn native_auth_prefix_match() -> Result<()> {
         .arg("--username")
         .arg("testuser")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    testpass
 
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://example.com/api/v1
     "
     );
 
@@ -1892,18 +1894,17 @@ fn native_auth_host_fallback() -> Result<()> {
     );
 
     // Should fallback to host-level matching
-    // TODO(zanieb): This is not working as intended
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/any/path")
         .arg("--username")
         .arg("testuser")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    hostpass
 
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://example.com/any/path
     "
     );
 

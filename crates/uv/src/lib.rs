@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -1107,7 +1107,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
-            let on_existing = uv_virtualenv::OnExisting::from_args(args.allow_existing, args.clear);
+            let on_existing = uv_virtualenv::OnExisting::from_args(
+                args.allow_existing,
+                args.clear,
+                args.no_clear,
+            );
 
             commands::venv(
                 &project_dir,
@@ -1659,42 +1663,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index_locations,
             } = PublishSettings::resolve(args, filesystem);
 
-            let (publish_url, check_url) = if let Some(index_name) = index {
-                debug!("Publishing with index {index_name}");
-                let index = index_locations
-                    .simple_indexes()
-                    .find(|index| {
-                        index
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.as_ref() == index_name)
-                    })
-                    .with_context(|| {
-                        let mut index_names: Vec<String> = index_locations
-                            .simple_indexes()
-                            .filter_map(|index| index.name.as_ref())
-                            .map(ToString::to_string)
-                            .collect();
-                        index_names.sort();
-                        if index_names.is_empty() {
-                            format!("No indexes were found, can't use index: `{index_name}`")
-                        } else {
-                            let index_names = index_names.join("`, `");
-                            format!(
-                                "Index not found: `{index_name}`. Found indexes: `{index_names}`"
-                            )
-                        }
-                    })?;
-                let publish_url = index
-                    .publish_url
-                    .clone()
-                    .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
-                let check_url = index.url.clone();
-                (publish_url, Some(check_url))
-            } else {
-                (publish_url, check_url)
-            };
-
             commands::publish(
                 files,
                 publish_url,
@@ -1704,6 +1672,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 username,
                 password,
                 check_url,
+                index,
                 index_locations,
                 dry_run,
                 &cache,
