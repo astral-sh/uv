@@ -23,7 +23,7 @@ use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, RegistryVariantsJson, SourceDist, ToUrlError,
+    Name, RegistryVariantsJson, SourceDist, ToUrlError, VariantsJson,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -564,15 +564,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
     }
 
-    #[instrument(skip_all, fields(variants_json = %variants_json.filename))]
+    #[instrument(skip_all, fields(variants_json = %registry_variants_json.filename))]
     pub async fn fetch_and_query_variants(
         &self,
-        variants_json: &RegistryVariantsJson,
+        registry_variants_json: &RegistryVariantsJson,
         marker_env: &MarkerEnvironment,
     ) -> Result<ResolvedVariants, Error> {
-        let variants_json = self.fetch_variants_json(variants_json).await?;
+        let variants_json = self.fetch_variants_json(registry_variants_json).await?;
         let resolved_variants = self
-            .query_variant_providers(variants_json, marker_env)
+            .query_variant_providers(variants_json, marker_env, &registry_variants_json.filename)
             .await?;
         Ok(resolved_variants)
     }
@@ -592,13 +592,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         variants_json: VariantsJsonContent,
         marker_env: &MarkerEnvironment,
+        debug_filename: &VariantsJson,
     ) -> Result<ResolvedVariants, Error> {
-        // Compute the set of available variants.
-        let provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
+        // Query the install time provider.
+        let mut provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
-                provider
-                    .enable_if
-                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+                provider.plugin_use.unwrap_or_default().run_on_install()
+                    && provider
+                        .enable_if
+                        .evaluate(marker_env, MarkerVariantsUniversal, &[])
             }))
             .map(|(name, provider)| self.query_variant_provider(name, provider))
             // TODO(konsti): Buffer size
@@ -606,6 +608,29 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .map_ok(|config| (config.namespace.clone(), config))
             .try_collect()
             .await?;
+
+        // "Query" the non-install time providers, whose properties are all in the priorities
+        for (namespace, _provider) in variants_json.providers.iter().filter(|(_, provider)| {
+            !provider.plugin_use.unwrap_or_default().run_on_install()
+                && provider
+                    .enable_if
+                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+        }) {
+            let Some(features) = variants_json.default_priorities.property.get(namespace) else {
+                warn!(
+                    "Missing namespace {namespace} in default properties for {}=={}",
+                    debug_filename.name, debug_filename.version
+                );
+                continue;
+            };
+            provider_outputs.insert(
+                namespace.clone(),
+                Arc::new(VariantProviderOutput {
+                    namespace: namespace.clone(),
+                    features: features.clone().into_iter().collect(),
+                }),
+            );
+        }
 
         Ok(ResolvedVariants {
             variants_json,
