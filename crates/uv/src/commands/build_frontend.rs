@@ -629,8 +629,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517
