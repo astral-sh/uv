@@ -217,11 +217,22 @@ impl Conflicts {
 ///
 /// A `TryFrom<Vec<ConflictItem>>` impl may be used to build a set from a
 /// sequence. Note though that at least 2 items are required.
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Hash)]
 pub struct ConflictSet {
     set: BTreeSet<ConflictItem>,
+    /// Whether this conflict set was inferred from transitively included items.
+    ///
+    /// Note this field is _not_ included in equality checks.
     is_inferred_conflict: bool,
 }
+
+impl PartialEq for ConflictSet {
+    fn eq(&self, other: &Self) -> bool {
+        self.set == other.set
+    }
+}
+
+impl Eq for ConflictSet {}
 
 impl ConflictSet {
     /// Create a pair of items that conflict with one another.
