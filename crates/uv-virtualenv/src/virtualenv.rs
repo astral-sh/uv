@@ -122,13 +122,10 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove(source) => {
                     let reason = match source {
-                        Some(RemovalReason::ClearFlag) => "due to `--clear`",
-                        Some(RemovalReason::ManagedEnvironment) => {
-                            "for environment synchronization"
-                        }
-                        Some(RemovalReason::TemporaryEnvironment) => "for temporary environment",
-                        Some(RemovalReason::Requested) => "as requested",
-                        None => "as requested",
+                        RemovalReason::ClearFlag => "due to `--clear`",
+                        RemovalReason::ManagedEnvironment => "for environment synchronization",
+                        RemovalReason::TemporaryEnvironment => "for temporary environment",
+                        RemovalReason::Requested => "as requested",
                     };
                     debug!("Removing existing {name} {reason}");
                     // Before removing the virtual environment, we need to canonicalize the path
@@ -667,7 +664,7 @@ pub enum OnExisting {
     /// files in the directory.
     Allow,
     /// Remove an existing directory.
-    Remove(Option<RemovalReason>),
+    Remove(RemovalReason),
 }
 
 impl OnExisting {
@@ -675,7 +672,7 @@ impl OnExisting {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(Some(RemovalReason::ClearFlag))
+            Self::Remove(RemovalReason::ClearFlag)
         } else {
             Self::default()
         }

@@ -1368,9 +1368,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
-                        )),
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1410,9 +1410,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(Some(
+                    uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
-                    )),
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1564,9 +1564,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove(Some(
+                        uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
-                        )),
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1606,9 +1606,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(Some(
+                    uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
-                    )),
+                    ),
                     false,
                     false,
                     upgradeable,

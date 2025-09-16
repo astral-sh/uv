@@ -187,9 +187,7 @@ impl CachedEnvironment {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            uv_virtualenv::OnExisting::Remove(Some(
-                uv_virtualenv::RemovalReason::TemporaryEnvironment,
-            )),
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
             false,
             false,
