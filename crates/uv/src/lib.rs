@@ -1107,7 +1107,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
-            let on_existing = uv_virtualenv::OnExisting::from_args(args.allow_existing, args.clear);
+            let on_existing = uv_virtualenv::OnExisting::from_args(
+                args.allow_existing,
+                args.clear,
+                args.no_clear,
+            );
 
             commands::venv(
                 &project_dir,

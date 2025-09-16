@@ -2754,6 +2754,18 @@ pub struct VenvArgs {
     #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
     pub clear: bool,
 
+    /// Fail without prompting if any existing files or directories are present at the target path.
+    ///
+    /// By default, when a TTY is available, `uv venv` will prompt to clear a non-empty directory.
+    /// When `--no-clear` is used, the command will exit with an error instead of prompting.
+    #[clap(
+        long,
+        overrides_with = "clear",
+        conflicts_with = "allow_existing",
+        hide = true
+    )]
+    pub no_clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
     /// By default, `uv venv` will exit with an error if the given path is non-empty. The
