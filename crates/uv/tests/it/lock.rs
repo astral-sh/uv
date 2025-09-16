@@ -11338,10 +11338,10 @@ fn lock_find_links_http_wheel() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/links.html" }
-        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -11429,10 +11429,10 @@ fn lock_find_links_http_sdist() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/links.html" }
-        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
