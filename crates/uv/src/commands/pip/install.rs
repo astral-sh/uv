@@ -26,6 +26,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
+use uv_python::pyodide_version;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
@@ -360,6 +361,7 @@ pub(crate) async fn pip_install(
             .map(|index| index.with_origin(Origin::RequirementsTxt))
             .collect(),
         no_index,
+        pyodide_version(&interpreter)?,
     );
 
     // Determine the PyTorch backend.

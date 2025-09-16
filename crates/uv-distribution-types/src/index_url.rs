@@ -277,12 +277,28 @@ impl IndexLocations {
     ///
     /// If the current index location has an `index` set, it will be preserved.
     #[must_use]
-    pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
-        Self {
+    pub fn combine(
+        self,
+        indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        no_index: bool,
+        pyodide_ver: Option<&str>,
+    ) -> Self {
+        let mut res = Self {
             indexes: self.indexes.into_iter().chain(indexes).collect(),
             flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
             no_index: self.no_index || no_index,
+        };
+        if res.is_none()
+            && let Some(s) = pyodide_ver
+        {
+            let index = Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
+                DisplaySafeUrl::parse(&format!("https://index.pyodide.org/{s}")).unwrap(),
+            ))));
+            res.indexes.push(DEFAULT_INDEX.clone());
+            res.indexes.push(index);
         }
+        res
     }
 
     /// Returns `true` if no index configuration is set, i.e., the [`IndexLocations`] matches the
