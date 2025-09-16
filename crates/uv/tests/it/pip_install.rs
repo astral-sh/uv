@@ -9813,7 +9813,7 @@ fn recursive_dependency_group() -> Result<()> {
 
     ----- stderr -----
     error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
-      Caused by: Project `myproject @ .` has malformed dependency groups
+      Caused by: Project `myproject` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `test` -> `test`
     ");
 
@@ -9845,7 +9845,7 @@ fn recursive_dependency_group() -> Result<()> {
 
     ----- stderr -----
     error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
-      Caused by: Project `myproject @ .` has malformed dependency groups
+      Caused by: Project `myproject` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
