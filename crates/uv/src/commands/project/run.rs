@@ -25,7 +25,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -1353,7 +1353,7 @@ fn can_skip_ephemeral(
         &spec.constraints,
         &spec.overrides,
         &markers,
-        settings.resolver.sources,
+        SyncModel::Stateful,
         tags,
         config_setting,
         config_settings_package,

@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, Reinstall, SourceStrategy};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
