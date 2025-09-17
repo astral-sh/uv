@@ -6802,9 +6802,12 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "thiserror 2.0.16",
  "tracing",
  "uv-distribution-filename",
+ "uv-normalize",
  "uv-once-map",
+ "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
 ]

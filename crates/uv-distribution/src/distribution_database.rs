@@ -1,12 +1,14 @@
-use std::future::Future;
-use std::io;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
+use std::ffi::OsString;
+use std::future::Future;
+use std::path::Path;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::{env, io};
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
@@ -27,13 +29,15 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
-use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace};
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace, VersionOrUrl};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
 use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variant_lock::{VariantLock, VariantLockProvider, VariantLockResolved};
 use uv_variants::variants_json::{Provider, VariantsJsonContent};
 
 use crate::archive::Archive;
@@ -594,7 +598,33 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         marker_env: &MarkerEnvironment,
         debug_filename: &VariantsJson,
     ) -> Result<ResolvedVariants, Error> {
+        // TODO: parse_boolish_environment_variable
+        let locked_and_inferred =
+            env::var_os("UV_VARIANT_LOCK_INCOMPLETE").is_some_and(|var| var == "1");
+        // TODO(konsti): Integrate this properly, and add this to the CLI.
+        let variant_lock = if let Some(variant_lock_path) = env::var_os("UV_VARIANT_LOCK") {
+            let variant_lock: VariantLock = toml::from_slice(
+                &fs_err::read(&variant_lock_path).map_err(Error::VariantLockRead)?,
+            )
+            .map_err(|err| Error::VariantLockParse(PathBuf::from(&variant_lock_path), err))?;
+            // TODO(konsti): If parsing fails, check the version
+            if !VersionSpecifiers::from_str(">=0.1,<0.2")
+                .unwrap()
+                .contains(&variant_lock.metadata.version)
+            {
+                return Err(Error::VariantLockVersion(
+                    PathBuf::from(variant_lock_path),
+                    variant_lock.metadata.version,
+                ));
+            }
+
+            Some((variant_lock_path, variant_lock))
+        } else {
+            None
+        };
+
         // Query the install time provider.
+        // TODO(konsti): Don't use threads if we're fully static.
         let mut provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
                 provider.plugin_use.unwrap_or_default().run_on_install()
@@ -602,10 +632,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .enable_if
                         .evaluate(marker_env, MarkerVariantsUniversal, &[])
             }))
-            .map(|(name, provider)| self.query_variant_provider(name, provider))
+            .map(|(name, provider)| {
+                self.resolve_provider(locked_and_inferred, variant_lock.as_ref(), name, provider)
+            })
             // TODO(konsti): Buffer size
             .buffered(8)
-            .map_ok(|config| (config.namespace.clone(), config))
             .try_collect()
             .await?;
 
@@ -636,6 +667,42 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             variants_json,
             target_variants: provider_outputs,
         })
+    }
+
+    async fn resolve_provider(
+        &self,
+        locked_and_inferred: bool,
+        variant_lock: Option<&(OsString, VariantLock)>,
+        name: &VariantNamespace,
+        provider: &Provider,
+    ) -> Result<(VariantNamespace, Arc<VariantProviderOutput>), Error> {
+        if let Some((variant_lock_path, variant_lock)) = &variant_lock {
+            if let Some(static_provider) = variant_lock
+                .provider
+                .iter()
+                .find(|static_provider| satisfies_provider_requires(provider, static_provider))
+            {
+                Ok((
+                    static_provider.namespace.clone(),
+                    Arc::new(VariantProviderOutput {
+                        namespace: static_provider.namespace.clone(),
+                        features: static_provider.properties.clone().into_iter().collect(),
+                    }),
+                ))
+            } else if locked_and_inferred {
+                let config = self.query_variant_provider(name, provider).await?;
+                Ok((config.namespace.clone(), config))
+            } else {
+                Err(Error::VariantLockMissing {
+                    variant_lock: PathBuf::from(variant_lock_path),
+                    requires: provider.requires.clone(),
+                    plugin_api: provider.plugin_api.clone().unwrap_or_default().clone(),
+                })
+            }
+        } else {
+            let config = self.query_variant_provider(name, provider).await?;
+            Ok((config.namespace.clone(), config))
+        }
     }
 
     async fn query_variant_provider(
@@ -1463,6 +1530,43 @@ fn add_tar_zst_extension(mut url: DisplaySafeUrl) -> DisplaySafeUrl {
 
     url.set_path(&path);
     url
+}
+
+fn satisfies_provider_requires(
+    requested_provider: &Provider,
+    static_provider: &VariantLockProvider,
+) -> bool {
+    // TODO(konsti): Correct plugin_api inference.
+    if static_provider.plugin_api.clone().or(static_provider
+        .resolved
+        .first()
+        .map(|resolved| resolved.name().to_string()))
+        != requested_provider.plugin_api.clone().or(static_provider
+            .resolved
+            .first()
+            .map(|resolved| resolved.name().to_string()))
+    {
+        return false;
+    }
+    requested_provider.requires.iter().all(|requested| {
+        static_provider.resolved.iter().any(|resolved| {
+            // We ignore extras for simplicity.
+            &requested.name == resolved.name()
+                && match (&requested.version_or_url, resolved) {
+                    (None, _) => true,
+                    (
+                        Some(VersionOrUrl::VersionSpecifier(requested)),
+                        VariantLockResolved::Version(_name, resolved),
+                    ) => requested.contains(resolved),
+                    (
+                        Some(VersionOrUrl::Url(resolved_url)),
+                        VariantLockResolved::Url(_name, url),
+                    ) => resolved_url == &**url,
+                    // We don't support URL<->version matching
+                    _ => false,
+                }
+        })
+    })
 }
 
 #[cfg(test)]

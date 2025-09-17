@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 use zip::result::ZipError;
@@ -11,8 +12,8 @@ use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendErr
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::VariantNamespace;
-use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_pep508::{Requirement, VariantNamespace};
+use uv_pypi_types::{HashAlgorithm, HashDigest, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
 
@@ -83,6 +84,23 @@ pub enum Error {
     WheelVariantNamespaceMismatch {
         declared: VariantNamespace,
         actual: VariantNamespace,
+    },
+    #[error("Failed to read variant lock")]
+    VariantLockRead(#[source] std::io::Error),
+    #[error("Variant lock has an unsupported format: {}", _0.user_display())]
+    VariantLockParse(PathBuf, #[source] toml::de::Error),
+    #[error("Variant lock has an unsupported version {}, only version 0.1 is supported: {}", _1, _0.user_display())]
+    VariantLockVersion(PathBuf, Version),
+    #[error(
+        "Variant lock is missing a matching provider and `UV_VARIANT_LOCK_INCOMPLETE` is not set\n  variant lock: {}\n  requires: `{}`\n  plugin-api: {}",
+        variant_lock.user_display(),
+        requires.iter().join("`, `"),
+        plugin_api
+    )]
+    VariantLockMissing {
+        variant_lock: PathBuf,
+        requires: Vec<Requirement<VerbatimParsedUrl>>,
+        plugin_api: String,
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
