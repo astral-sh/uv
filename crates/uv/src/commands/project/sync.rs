@@ -98,7 +98,7 @@ pub(crate) async fn sync(
     } else {
         // Identify the project.
         let project = if frozen {
-            VirtualProject::discover_defaulted(
+            VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
                     members: MemberDiscovery::None,
@@ -115,7 +115,7 @@ pub(crate) async fn sync(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover_defaulted(
+            VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,

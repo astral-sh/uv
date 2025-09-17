@@ -367,7 +367,7 @@ async fn find_target(
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
     } else {
-        VirtualProject::discover_defaulted(
+        VirtualProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
             &WorkspaceCache::default(),

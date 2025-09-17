@@ -45,7 +45,7 @@ pub(crate) async fn pin(
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover_defaulted(
+        match VirtualProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
             &workspace_cache,
