@@ -316,7 +316,7 @@ impl BuildContext for BuildDispatch<'_> {
             extraneous: _,
         } = Planner::new(resolution).build(
             site_packages,
-            InstallationStrategy::Strict,
+            InstallationStrategy::Permissive,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
