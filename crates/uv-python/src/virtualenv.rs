@@ -79,19 +79,27 @@ pub(crate) enum CondaEnvironmentKind {
 impl CondaEnvironmentKind {
     /// Whether the given `CONDA_PREFIX` path is the base Conda environment.
     ///
-    /// When the base environment is used, `CONDA_DEFAULT_ENV` will be set to a name, i.e., `base` or
-    /// `root` which does not match the prefix, e.g. `/usr/local` instead of
-    /// `/usr/local/conda/envs/<name>`.
+    /// The base environment is typically stored in a location matching the `_CONDA_ROOT` path.
     ///
-    /// Note the name `CONDA_DEFAULT_ENV` is misleading, it's the current environment, not the base
-    /// environment name.
+    /// Additionally, when the base environment is active, `CONDA_DEFAULT_ENV` will be set to a
+    /// name, e.g., `base`, which does not match the `CONDA_PREFIX`, e.g., `/usr/local` instead of
+    /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
+    /// active environment name, not a constant base environment name.
     fn from_prefix_path(path: &Path) -> Self {
-        // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
+        // If `_CONDA_ROOT` is set and matches `CONDA_PREFIX`, it's the base environment.
+        if let Ok(conda_root) = env::var(EnvVars::CONDA_ROOT) {
+            if path == Path::new(&conda_root) {
+                return Self::Base;
+            }
+        }
+
+        // Next, we'll use a heuristic based on `CONDA_DEFAULT_ENV`
         let Ok(current_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
             return Self::Child;
         };
 
-        // These are the expected names for the base environment
+        // These are the expected names for the base environment; we may want to remove this
+        // restriction in the future as it's not strictly necessary.
         if current_env != "base" && current_env != "root" {
             return Self::Child;
         }

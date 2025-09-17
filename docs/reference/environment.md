@@ -584,11 +584,15 @@ This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
 
 ### `CONDA_DEFAULT_ENV`
 
-Used to determine if an active Conda environment is the base environment or not.
+Used to determine the name of the active Conda environment.
 
 ### `CONDA_PREFIX`
 
-Used to detect an activated Conda environment.
+Used to detect the path of an active Conda environment.
+
+### `CONDA_ROOT`
+
+Used to determine the root install path of Conda.
 
 ### `FISH_VERSION`
 
