@@ -18,6 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
+use uv_configuration::TargetTriple;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -45,6 +46,7 @@ use uv_workspace::WorkspaceCache;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
+use crate::commands::pip;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -58,7 +60,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 /// The user-facing command used to invoke a tool run.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -89,10 +91,11 @@ pub(crate) async fn run(
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
@@ -267,10 +270,11 @@ pub(crate) async fn run(
         build_constraints,
         show_resolution,
         python.as_deref(),
+        python_platform,
         install_mirrors,
         options,
         &settings,
-        &network_settings,
+        &client_builder,
         isolated,
         python_preference,
         python_downloads,
@@ -289,19 +293,21 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                    .with_hint(format!(
-                        "`{}` invokes the `{}` package. Did you mean `{}`?",
-                        format!("uvx run {rest}").green(),
-                        "run".cyan(),
-                        format!("uvx {rest}").green()
-                    ))
-                    .with_context("tool")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .with_hint(format!(
+                    "`{}` invokes the `{}` package. Did you mean `{}`?",
+                    format!("uvx run {rest}").green(),
+                    "run".cyan(),
+                    format!("uvx {rest}").green()
+                ))
+                .with_context("tool")
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .with_context("tool")
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -677,10 +683,11 @@ async fn get_or_create_environment(
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -690,12 +697,6 @@ async fn get_or_create_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
     let reporter = PythonDownloadReporter::single(printer);
 
     // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
@@ -743,7 +744,7 @@ async fn get_or_create_environment(
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
-        &client_builder,
+        client_builder,
         cache,
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
@@ -793,7 +794,7 @@ async fn get_or_create_environment(
                         vec![spec],
                         &interpreter,
                         settings,
-                        network_settings,
+                        client_builder,
                         &state,
                         concurrency,
                         cache,
@@ -868,14 +869,9 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec = RequirementsSpecification::from_sources(
-        with,
-        constraints,
-        overrides,
-        None,
-        &client_builder,
-    )
-    .await?;
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, None, client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -889,7 +885,7 @@ async fn get_or_create_environment(
                 spec.requirements.clone(),
                 &interpreter,
                 settings,
-                network_settings,
+                client_builder,
                 &state,
                 concurrency,
                 cache,
@@ -915,7 +911,7 @@ async fn get_or_create_environment(
         spec.overrides.clone(),
         &interpreter,
         settings,
-        network_settings,
+        client_builder,
         &state,
         concurrency,
         cache,
@@ -966,8 +962,9 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers = interpreter.resolver_marker_environment();
-                    let tags = interpreter.tags()?;
+                    let markers =
+                        pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
+                    let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
@@ -978,7 +975,7 @@ async fn get_or_create_environment(
                             overrides.iter(),
                             &markers,
                             SyncModel::Stateful,
-                            tags,
+                            &tags,
                             config_setting,
                             config_settings_package,
                             &extra_build_requires,
@@ -1013,7 +1010,7 @@ async fn get_or_create_environment(
 
     // Read the `--build-constraints` requirements.
     let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, &client_builder)
+        operations::read_constraints(build_constraints, client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement),
@@ -1026,8 +1023,9 @@ async fn get_or_create_environment(
         spec.clone(),
         build_constraints.clone(),
         &interpreter,
+        python_platform.as_ref(),
         settings,
-        network_settings,
+        client_builder,
         &state,
         if show_resolution {
             Box::new(DefaultResolveLogger)
@@ -1061,7 +1059,7 @@ async fn get_or_create_environment(
                     &interpreter,
                     python_request.as_ref(),
                     &err,
-                    &client_builder,
+                    client_builder,
                     &reporter,
                     &install_mirrors,
                     python_preference,
@@ -1085,8 +1083,9 @@ async fn get_or_create_environment(
                     spec,
                     build_constraints,
                     &interpreter,
+                    python_platform.as_ref(),
                     settings,
-                    network_settings,
+                    client_builder,
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)

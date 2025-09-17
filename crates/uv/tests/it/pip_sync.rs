@@ -1269,7 +1269,7 @@ fn mismatched_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1278,9 +1278,9 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    "
     );
 
     Ok(())
@@ -2613,7 +2613,7 @@ fn incompatible_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2622,9 +2622,10 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            Failed to read from zip file
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: Failed to read from zip file
+            Caused by: unable to locate the end of central directory record
+    "
     );
 
     Ok(())

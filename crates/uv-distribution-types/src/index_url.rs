@@ -8,6 +8,7 @@ use std::sync::{Arc, LazyLock, RwLock};
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
+use tracing::trace;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
@@ -81,22 +82,21 @@ impl schemars::JsonSchema for IndexUrl {
 }
 
 impl IndexUrl {
+    #[inline]
+    fn inner(&self) -> &VerbatimUrl {
+        match self {
+            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
+        }
+    }
+
     /// Return the raw URL for the index.
     pub fn url(&self) -> &DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.raw(),
-            Self::Url(url) => url.raw(),
-            Self::Path(url) => url.raw(),
-        }
+        self.inner().raw()
     }
 
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.to_url(),
-            Self::Url(url) => url.to_url(),
-            Self::Path(url) => url.to_url(),
-        }
+        self.inner().to_url()
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
@@ -139,21 +139,13 @@ impl IndexUrl {
 
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pypi(url) => Display::fmt(url, f),
-            Self::Url(url) => Display::fmt(url, f),
-            Self::Path(url) => Display::fmt(url, f),
-        }
+        Display::fmt(self.inner(), f)
     }
 }
 
 impl Verbatim for IndexUrl {
     fn verbatim(&self) -> Cow<'_, str> {
-        match self {
-            Self::Pypi(url) => url.verbatim(),
-            Self::Url(url) => url.verbatim(),
-            Self::Path(url) => url.verbatim(),
-        }
+        self.inner().verbatim()
     }
 }
 
@@ -203,11 +195,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        match self {
-            Self::Pypi(url) => url.without_credentials().serialize(serializer),
-            Self::Url(url) => url.without_credentials().serialize(serializer),
-            Self::Path(url) => url.without_credentials().serialize(serializer),
-        }
+        self.inner().without_credentials().serialize(serializer)
     }
 }
 
@@ -248,11 +236,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
-        match index {
-            IndexUrl::Pypi(url) => url.to_url(),
-            IndexUrl::Url(url) => url.to_url(),
-            IndexUrl::Path(url) => url.to_url(),
-        }
+        index.inner().to_url()
     }
 }
 
@@ -260,11 +244,7 @@ impl Deref for IndexUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Pypi(url) => url,
-            Self::Url(url) => url,
-            Self::Path(url) => url,
-        }
+        self.inner()
     }
 }
 
@@ -457,6 +437,14 @@ impl<'a> IndexLocations {
     pub fn cache_index_credentials(&self) {
         for index in self.known_indexes() {
             if let Some(credentials) = index.credentials() {
+                trace!(
+                    "Read credentials for index {}",
+                    index
+                        .name
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| index.url.to_string())
+                );
                 let credentials = Arc::new(credentials);
                 uv_auth::store_credentials(index.raw_url(), credentials.clone());
                 if let Some(root_url) = index.root_url() {

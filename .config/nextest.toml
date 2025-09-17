@@ -2,3 +2,14 @@
 # Mark tests that take longer than 10s as slow.
 # Terminate after 120s as a stop-gap measure to terminate on deadlock.
 slow-timeout =  { period = "10s", terminate-after = 12 }
+
+[test-groups]
+serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(native_auth)'
+test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = 'package(uv-keyring)'
+test-group = 'serial'

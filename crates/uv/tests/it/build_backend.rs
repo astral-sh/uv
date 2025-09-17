@@ -1,7 +1,7 @@
 use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
@@ -453,7 +453,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/Django_plugin/__init__.py`
+    error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
@@ -467,7 +467,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/Django_plugin/__init__.py`
+    error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
 
     // Use `Django_plugin` instead of `django_plugin`
@@ -603,7 +603,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/foo/__init__.py`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     fs_err::create_dir(context.temp_dir.join("src"))?;
@@ -617,7 +617,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module at: `src/foo/__init__.py`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     Ok(())
@@ -883,4 +883,149 @@ fn invalid_build_backend_settings_are_ignored() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Error when there is a relative module root outside the project root, such as
+/// `tool.uv.build-backend.module-root = ".."`.
+#[test]
+fn error_on_relative_module_root_outside_project_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-root = ".."
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    context.temp_dir.child("__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Module root must be inside the project: ..
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Module root must be inside the project: ..
+    ");
+
+    Ok(())
+}
+
+/// Error when there is a relative data directory outside the project root, such as
+/// `tool.uv.build-backend.data.headers = "../headers"`.
+#[test]
+fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend.data]
+        headers = "../header"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let project_module = project.child("src/project");
+    project_module.create_dir_all()?;
+    project_module.child("__init__.py").touch()?;
+
+    context.temp_dir.child("headers").create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    ");
+
+    Ok(())
+}
+
+/// Show an explicit error when there is a venv in source tree.
+#[test]
+fn venv_in_source_tree() {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("--name")
+        .arg("foo")
+        .assert()
+        .success();
+
+    context
+        .venv()
+        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
 }

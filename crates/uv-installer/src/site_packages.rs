@@ -565,7 +565,6 @@ impl SitePackages {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncModel {
     /// A stateful sync, as in the `uv pip` CLI, whereby packages that are already installed in

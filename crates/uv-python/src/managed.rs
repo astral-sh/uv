@@ -15,7 +15,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_platform::{Error as PlatformError, Os};
@@ -574,7 +574,7 @@ impl ManagedPythonInstallation {
         let stdlib = if self.key.os().is_windows() {
             self.python_dir().join("Lib")
         } else {
-            let lib_suffix = self.key.variant.suffix();
+            let lib_suffix = self.key.variant.lib_suffix();
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
@@ -605,7 +605,7 @@ impl ManagedPythonInstallation {
                     self.path(),
                     self.key.major,
                     self.key.minor,
-                    self.key.variant.suffix(),
+                    self.key.variant.lib_suffix(),
                 )?;
             }
         }
@@ -857,7 +857,7 @@ impl PythonMinorVersionLink {
                 .is_ok_and(|metadata| {
                     // Check that this is a reparse point, which indicates this
                     // is a symlink or junction.
-                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
         }
     }

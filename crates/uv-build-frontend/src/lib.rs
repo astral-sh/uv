@@ -1159,8 +1159,16 @@ impl PythonRunner {
             .envs(environment_variables)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
-            .env(EnvVars::CLICOLOR_FORCE, "1")
+            // NOTE: it would be nice to get colored output from build backends,
+            // but setting CLICOLOR_FORCE=1 changes the output of underlying
+            // tools, which might mess with wrappers trying to parse their
+            // output.
             .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
+            // Remove potentially-sensitive environment variables.
+            .env_remove(EnvVars::PYX_API_KEY)
+            .env_remove(EnvVars::UV_API_KEY)
+            .env_remove(EnvVars::PYX_AUTH_TOKEN)
+            .env_remove(EnvVars::UV_AUTH_TOKEN)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

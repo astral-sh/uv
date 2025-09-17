@@ -19,6 +19,17 @@ fn user_scheme_bin_filter() -> (String, String) {
     }
 }
 
+// Override sys.base_prefix with a path that's guaranteed not to contain
+// uv, as otherwise the tests may pick up an already installed uv
+// when testing against the system Python install. See #15368.
+const TEST_SCRIPT: &str = "
+import sys
+import uv
+
+sys.base_prefix = '/dev/null'
+print(uv.find_uv_bin())
+";
+
 #[test]
 fn find_uv_bin_venv() {
     let context = TestContext::new("3.12")
@@ -48,7 +59,7 @@ fn find_uv_bin_venv() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -91,7 +102,7 @@ fn find_uv_bin_target() {
     // We should find the binary in the target directory
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())")
+        .arg(TEST_SCRIPT)
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @r"
     success: true
     exit_code: 0
@@ -137,7 +148,7 @@ fn find_uv_bin_prefix() {
     // We should find the binary in the prefix directory
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())")
+        .arg(TEST_SCRIPT)
         .env(
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
@@ -231,7 +242,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .arg(context.workspace_root.join("scripts/packages/fake-uv"))
         .arg("python")
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -283,7 +294,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .arg("anyio")
         .arg("python")
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"),
+        .arg(TEST_SCRIPT),
      @r"
     success: true
     exit_code: 0
@@ -351,7 +362,7 @@ fn find_uv_bin_user_bin() {
     // We should find the binary in the virtual environment first
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -372,7 +383,7 @@ fn find_uv_bin_user_bin() {
     // We should find the binary in the bin now
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -442,19 +453,19 @@ fn find_uv_bin_error_message() {
 
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r#"
+        .arg(TEST_SCRIPT), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Traceback (most recent call last):
-      File "<string>", line 1, in <module>
+      File "<string>", line 6, in <module>
       File "[SITE_PACKAGES]/uv/_find_uv.py", line 50, in find_uv_bin
         raise UvNotFound(
     uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
      - [VENV]/[BIN]
-     - [PYTHON-BIN-3.12]/
+     - /dev/null/[BIN]
      - [SITE_PACKAGES]/[BIN]
      - [USER_SCHEME]/[BIN]
     "#
@@ -491,7 +502,7 @@ fn find_uv_bin_py38() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -531,7 +542,7 @@ fn find_uv_bin_py39() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -571,7 +582,7 @@ fn find_uv_bin_py310() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -611,7 +622,7 @@ fn find_uv_bin_py311() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -651,7 +662,7 @@ fn find_uv_bin_py312() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -691,7 +702,7 @@ fn find_uv_bin_py313() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -731,7 +742,7 @@ fn find_uv_bin_py314() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg(TEST_SCRIPT), @r"
     success: true
     exit_code: 0
     ----- stdout -----

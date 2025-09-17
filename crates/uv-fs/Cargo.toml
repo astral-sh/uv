@@ -37,7 +37,6 @@ rustix = { workspace = true }
 backon = { workspace = true }
 junction = { workspace = true }
 windows = { workspace = true }
-windows-core = { workspace = true }
 
 [features]
 default = []

@@ -86,6 +86,7 @@ Ok(
                                 },
                             },
                         },
+                        zstd: None,
                     },
                 ],
                 fork_markers: [],
@@ -94,7 +95,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    provides_extras: [],
+                    provides_extra: [],
                     dependency_groups: {},
                 },
             },

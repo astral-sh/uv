@@ -141,6 +141,15 @@ impl ResolvedDistRef<'_> {
             },
         }
     }
+
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Self::InstallableRegistrySourceDist { sdist, .. } => Some(&sdist.index),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => Some(&wheel.index),
+            Self::Installed { .. } => None,
+        }
+    }
 }
 
 impl Display for ResolvedDistRef<'_> {

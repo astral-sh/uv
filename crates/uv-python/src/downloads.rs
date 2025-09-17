@@ -12,6 +12,7 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
+use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryError, RetryPolicy};
 use serde::Deserialize;
 use thiserror::Error;
@@ -21,7 +22,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
+use uv_client::{BaseClient, WrappedReqwestError, is_transient_network_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
@@ -496,6 +497,11 @@ impl PythonDownloadRequest {
         })
     }
 
+    /// Whether this download request opts-in to a debug Python version.
+    pub fn allows_debug(&self) -> bool {
+        self.version.as_ref().is_some_and(VersionRequest::is_debug)
+    }
+
     /// Whether this download request opts-in to alternative Python implementations.
     pub fn allows_alternative_implementations(&self) -> bool {
         self.implementation
@@ -930,6 +936,7 @@ impl ManagedPythonDownload {
     pub async fn fetch_with_retry(
         &self,
         client: &BaseClient,
+        retry_policy: &ExponentialBackoff,
         installation_dir: &Path,
         scratch_dir: &Path,
         reinstall: bool,
@@ -940,7 +947,6 @@ impl ManagedPythonDownload {
         let mut total_attempts = 0;
         let mut retried_here = false;
         let start_time = SystemTime::now();
-        let retry_policy = client.retry_policy();
         loop {
             let result = self
                 .fetch(
@@ -961,7 +967,7 @@ impl ManagedPythonDownload {
                     total_attempts += err.attempts();
                     // We currently interpret e.g. "3 retries" to mean we should make 4 attempts.
                     let n_past_retries = total_attempts - 1;
-                    if is_extended_transient_error(&err) {
+                    if is_transient_network_error(&err) {
                         let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
                         if let reqwest_retry::RetryDecision::Retry { execute_after } =
                             retry_decision

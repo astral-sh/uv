@@ -15,10 +15,10 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use uv_auth::Indexes;
+use uv_auth::{Indexes, PyxTokenStore};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
-use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -29,7 +29,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{PypiSimpleDetail, ResolutionMetadata};
+use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
@@ -48,38 +48,33 @@ use crate::{
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
 }
 
-impl RegistryClientBuilder<'_> {
-    pub fn new(cache: Cache) -> Self {
+impl<'a> RegistryClientBuilder<'a> {
+    pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
         Self {
-            index_urls: IndexUrls::default(),
+            index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder: BaseClientBuilder::new(),
+            base_client_builder,
         }
     }
-}
 
-impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
-        self.base_client_builder = self.base_client_builder.with_custom_client(client);
+        self.base_client_builder = self.base_client_builder.custom_client(client);
         self
     }
 
     #[must_use]
-    pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
-        self.index_urls = index_locations.index_urls();
-        self.base_client_builder = self
-            .base_client_builder
-            .indexes(Indexes::from(index_locations));
+    pub fn index_locations(mut self, index_locations: IndexLocations) -> Self {
+        self.index_locations = index_locations;
         self
     }
 
@@ -98,37 +93,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
-        self
-    }
-
-    #[must_use]
-    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .allow_insecure_host(allow_insecure_host);
-        self
-    }
-
-    #[must_use]
-    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
-        self
-    }
-
-    #[must_use]
-    pub fn retries(mut self, retries: u32) -> Self {
-        self.base_client_builder = self.base_client_builder.retries(retries);
-        self
-    }
-
-    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
-        self.base_client_builder = self.base_client_builder.retries_from_env()?;
-        Ok(self)
-    }
-
-    #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
         self
     }
 
@@ -183,9 +147,13 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     pub fn build(self) -> RegistryClient {
+        self.index_locations.cache_index_credentials();
+        let index_urls = self.index_locations.index_urls();
+
         // Build a base client
         let builder = self
             .base_client_builder
+            .indexes(Indexes::from(&self.index_locations))
             .redirect(RedirectPolicy::RetriggerMiddleware);
 
         let client = builder.build();
@@ -197,7 +165,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let client = CachedClient::new(client);
 
         RegistryClient {
-            index_urls: self.index_urls,
+            index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -205,13 +173,20 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             timeout,
             flat_indexes: Arc::default(),
+            pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
     }
 
     /// Share the underlying client between two different middleware configurations.
     pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
+        self.index_locations.cache_index_credentials();
+        let index_urls = self.index_locations.index_urls();
+
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.base_client_builder.wrap_existing(existing);
+        let client = self
+            .base_client_builder
+            .indexes(Indexes::from(&self.index_locations))
+            .wrap_existing(existing);
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();
@@ -220,7 +195,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let client = CachedClient::new(client);
 
         RegistryClient {
-            index_urls: self.index_urls,
+            index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -228,21 +203,8 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             timeout,
             flat_indexes: Arc::default(),
+            pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
-    }
-}
-
-impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    type Error = std::io::Error;
-
-    fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            index_urls: IndexUrls::default(),
-            index_strategy: IndexStrategy::default(),
-            torch_backend: None,
-            cache: Cache::temp()?,
-            base_client_builder: value,
-        })
     }
 }
 
@@ -265,6 +227,9 @@ pub struct RegistryClient {
     timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// The pyx token store to use for persistent credentials.
+    // TODO(charlie): The token store is only needed for `is_known_url`; can we avoid storing it here?
+    pyx_token_store: Option<PyxTokenStore>,
 }
 
 /// The format of the package metadata returned by querying an index.
@@ -552,7 +517,7 @@ impl RegistryClient {
         let result = if matches!(index, IndexUrl::Path(_)) {
             self.fetch_local_index(package_name, &url).await
         } else {
-            self.fetch_remote_index(package_name, &url, &cache_entry, cache_control)
+            self.fetch_remote_index(package_name, &url, index, &cache_entry, cache_control)
                 .await
         };
 
@@ -593,14 +558,27 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         url: &DisplaySafeUrl,
+        index: &IndexUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl<'_>,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+        // In theory, we should be able to pass `MediaType::all()` to all registries, and as
+        // unsupported media types should be ignored by the server. For now, we implement this
+        // defensively to avoid issues with misconfigured servers.
+        let accept = if self
+            .pyx_token_store
+            .as_ref()
+            .is_some_and(|token_store| token_store.is_known_url(index.url()))
+        {
+            MediaType::all()
+        } else {
+            MediaType::pypi()
+        };
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip, deflate, zstd")
-            .header("Accept", MediaType::accepts())
+            .header("Accept", accept)
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
         let parse_simple_response = |response: Response| {
@@ -625,17 +603,48 @@ impl RegistryClient {
                 })?;
 
                 let unarchived = match media_type {
-                    MediaType::Json => {
+                    MediaType::PyxV1Msgpack => {
                         let bytes = response
                             .bytes()
                             .await
                             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        let data: PyxSimpleDetail = rmp_serde::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_msgpack_err(err, url.clone()))?;
+
+                        SimpleMetadata::from_pyx_files(
+                            data.files,
+                            data.core_metadata,
+                            package_name,
+                            &url,
+                        )
+                    }
+                    MediaType::PyxV1Json => {
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        let data: PyxSimpleDetail = serde_json::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
+
+                        SimpleMetadata::from_pyx_files(
+                            data.files,
+                            data.core_metadata,
+                            package_name,
+                            &url,
+                        )
+                    }
+                    MediaType::PypiV1Json => {
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+
                         let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
                         SimpleMetadata::from_pypi_files(data.files, package_name, &url)
                     }
-                    MediaType::Html => {
+                    MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response
                             .text()
                             .await
@@ -1129,6 +1138,7 @@ pub struct SimpleMetadata(Vec<SimpleMetadatum>);
 pub struct SimpleMetadatum {
     pub version: Version,
     pub files: VersionFiles,
+    pub metadata: Option<ResolutionMetadata>,
 }
 
 impl SimpleMetadata {
@@ -1141,7 +1151,7 @@ impl SimpleMetadata {
         package_name: &PackageName,
         base: &Url,
     ) -> Self {
-        let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+        let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
@@ -1153,11 +1163,7 @@ impl SimpleMetadata {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
-            let version = match filename {
-                DistFilename::SourceDistFilename(ref inner) => &inner.version,
-                DistFilename::WheelFilename(ref inner) => &inner.version,
-            };
-            let file = match File::try_from(file, &base) {
+            let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1165,7 +1171,7 @@ impl SimpleMetadata {
                     continue;
                 }
             };
-            match map.entry(version.clone()) {
+            match version_map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(filename, file);
                 }
@@ -1176,9 +1182,78 @@ impl SimpleMetadata {
                 }
             }
         }
+
         Self(
-            map.into_iter()
-                .map(|(version, files)| SimpleMetadatum { version, files })
+            version_map
+                .into_iter()
+                .map(|(version, files)| SimpleMetadatum {
+                    version,
+                    files,
+                    metadata: None,
+                })
+                .collect(),
+        )
+    }
+
+    fn from_pyx_files(
+        files: Vec<uv_pypi_types::PyxFile>,
+        mut core_metadata: FxHashMap<Version, uv_pypi_types::CoreMetadatum>,
+        package_name: &PackageName,
+        base: &Url,
+    ) -> Self {
+        let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+
+        // Convert to a reference-counted string.
+        let base = SmallString::from(base.as_str());
+
+        // Group the distributions by version and kind
+        for file in files {
+            let file = match File::try_from_pyx(file, &base) {
+                Ok(file) => file,
+                Err(err) => {
+                    // Ignore files with unparsable version specifiers.
+                    warn!("Skipping file for {package_name}: {err}");
+                    continue;
+                }
+            };
+            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
+            else {
+                warn!("Skipping file for {package_name}: {}", file.filename);
+                continue;
+            };
+            match version_map.entry(filename.version().clone()) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().push(filename, file);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let mut files = VersionFiles::default();
+                    files.push(filename, file);
+                    entry.insert(files);
+                }
+            }
+        }
+
+        Self(
+            version_map
+                .into_iter()
+                .map(|(version, files)| {
+                    let metadata =
+                        core_metadata
+                            .remove(&version)
+                            .map(|metadata| ResolutionMetadata {
+                                name: package_name.clone(),
+                                version: version.clone(),
+                                requires_dist: metadata.requires_dist,
+                                requires_python: metadata.requires_python,
+                                provides_extra: metadata.provides_extra,
+                                dynamic: false,
+                            });
+                    SimpleMetadatum {
+                        version,
+                        files,
+                        metadata,
+                    }
+                })
                 .collect(),
         )
     }
@@ -1217,25 +1292,50 @@ impl ArchivedSimpleMetadata {
 
 #[derive(Debug)]
 enum MediaType {
-    Json,
-    Html,
+    PyxV1Msgpack,
+    PyxV1Json,
+    PypiV1Json,
+    PypiV1Html,
+    TextHtml,
 }
 
 impl MediaType {
     /// Parse a media type from a string, returning `None` if the media type is not supported.
     fn from_str(s: &str) -> Option<Self> {
         match s {
-            "application/vnd.pypi.simple.v1+json" => Some(Self::Json),
-            "application/vnd.pypi.simple.v1+html" | "text/html" => Some(Self::Html),
+            "application/vnd.pyx.simple.v1+msgpack" => Some(Self::PyxV1Msgpack),
+            "application/vnd.pyx.simple.v1+json" => Some(Self::PyxV1Json),
+            "application/vnd.pypi.simple.v1+json" => Some(Self::PypiV1Json),
+            "application/vnd.pypi.simple.v1+html" => Some(Self::PypiV1Html),
+            "text/html" => Some(Self::TextHtml),
             _ => None,
         }
     }
 
-    /// Return the `Accept` header value for all supported media types.
+    /// Return the `Accept` header value for all PyPI media types.
     #[inline]
-    const fn accepts() -> &'static str {
+    const fn pypi() -> &'static str {
         // See: https://peps.python.org/pep-0691/#version-format-selection
         "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
+    }
+
+    /// Return the `Accept` header value for all supported media types.
+    #[inline]
+    const fn all() -> &'static str {
+        // See: https://peps.python.org/pep-0691/#version-format-selection
+        "application/vnd.pyx.simple.v1+msgpack, application/vnd.pyx.simple.v1+json;q=0.9, application/vnd.pypi.simple.v1+json;q=0.8, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
+    }
+}
+
+impl std::fmt::Display for MediaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PyxV1Msgpack => write!(f, "application/vnd.pyx.simple.v1+msgpack"),
+            Self::PyxV1Json => write!(f, "application/vnd.pyx.simple.v1+json"),
+            Self::PypiV1Json => write!(f, "application/vnd.pypi.simple.v1+json"),
+            Self::PypiV1Html => write!(f, "application/vnd.pypi.simple.v1+html"),
+            Self::TextHtml => write!(f, "text/html"),
+        }
     }
 }
 
@@ -1268,7 +1368,7 @@ mod tests {
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
+    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
@@ -1317,7 +1417,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1377,7 +1477,7 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();
@@ -1425,7 +1525,7 @@ mod tests {
             .await;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache)
+        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
         let client = registry_client.cached_client().uncached();

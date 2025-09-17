@@ -1060,9 +1060,11 @@ fn python_install_preview_upgrade() {
 fn python_install_freethreaded() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
         .with_managed_python_dirs()
-        .with_python_download_cache();
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13t"), @r"
@@ -1096,6 +1098,26 @@ fn python_install_freethreaded() {
 
     ----- stderr -----
     "###);
+
+    // We should find it with opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // We should be able to select it with `+freethreaded`
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+freethreaded"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
 
     // Create a virtual environment with the freethreaded Python
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.13t"), @r"
@@ -1186,6 +1208,284 @@ fn python_install_freethreaded() {
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
      - cpython-3.13.7+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+}
+
+// We only support debug builds on Unix
+#[cfg(unix)]
+#[test]
+fn python_install_debug() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install the latest version
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13+debug"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7+debug-[PLATFORM] (python3.13d)
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13d{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should be installed in the bin directory
+    bin_python.assert(predicate::path::exists());
+
+    // On Unix, it should be a link
+    #[cfg(unix)]
+    bin_python.assert(predicate::path::is_symlink());
+
+    // The executable should "work"
+    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
+        .arg("-c").arg("import subprocess; print('hello world')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello world
+
+    ----- stderr -----
+    "###);
+
+    // We should find it with opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13d"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
+
+    ----- stderr -----
+    ");
+
+    // We should find it without opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
+
+    ----- stderr -----
+    ");
+
+    // Should be distinct from 3.13
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+
+    // Now we should prefer the non-debug version without opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.7-[PLATFORM]/bin/python3.13
+
+    ----- stderr -----
+    ");
+
+    // But still select it with opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13d"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
+
+    ----- stderr -----
+    ");
+
+    // We should allow selection with `+debug`
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+debug"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
+
+    ----- stderr -----
+    ");
+
+    // Should work with older Python versions too
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12d"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11+debug-[PLATFORM] (python3.12d)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Uninstalled 3 versions in [TIME]
+     - cpython-3.12.11+debug-[PLATFORM] (python3.12d)
+     - cpython-3.13.7+debug-[PLATFORM] (python3.13d)
+     - cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+}
+
+// We only support debug builds on Unix
+#[cfg(unix)]
+#[test]
+fn python_install_debug_freethreaded() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install the latest version
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13td"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7+freethreaded+debug-[PLATFORM] (python3.13td)
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13td{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should be installed in the bin directory
+    bin_python.assert(predicate::path::exists());
+
+    // On Unix, it should be a link
+    #[cfg(unix)]
+    bin_python.assert(predicate::path::is_symlink());
+
+    // The executable should "work"
+    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
+        .arg("-c").arg("import subprocess; print('hello world')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello world
+
+    ----- stderr -----
+    "###);
+
+    // We should find it with opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13td"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
+
+    ----- stderr -----
+    ");
+
+    // We should not find it without opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.13 in virtual environments, managed installations, or search path
+    ");
+
+    // We should allow selection with `+freethread+debug`
+    // TODO(zanieb): We don't support this yet
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+freethreaded+debug"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
+
+    ----- stderr -----
+    ");
+
+    // Should be distinct from 3.13
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+
+    // Should be distinct from 3.13t
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7+freethreaded-[PLATFORM] (python3.13t)
+    ");
+
+    // Should be distinct from 3.13d
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13d"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     + cpython-3.13.7+debug-[PLATFORM] (python3.13d)
+    ");
+
+    // Now we should prefer the non-debug version without opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.7-[PLATFORM]/bin/python3.13
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.7+freethreaded-[PLATFORM]/bin/python3.13t
+
+    ----- stderr -----
+    ");
+
+    // But still select it with opt-in
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13td"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Uninstalled 4 versions in [TIME]
+     - cpython-3.13.7+freethreaded+debug-[PLATFORM] (python3.13td)
+     - cpython-3.13.7+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.7+debug-[PLATFORM] (python3.13d)
      - cpython-3.13.7-[PLATFORM] (python3.13)
     ");
 }

@@ -25,6 +25,11 @@ impl GitOid {
     pub fn as_short_str(&self) -> &str {
         &self.as_str()[..16]
     }
+
+    /// Return a (very) truncated representation, i.e., the first 8 characters of the SHA.
+    pub fn as_tiny_str(&self) -> &str {
+        &self.as_str()[..8]
+    }
 }
 
 #[derive(Debug, Error, PartialEq)]
