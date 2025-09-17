@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
 
-use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
@@ -399,18 +398,18 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
 
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                    format!("{pretty} (`{current}`)")
                 } else {
-                    format!("`{}`", current.cyan())
+                    format!("`{current}`")
                 };
 
                 Some(format!(
                     "The distribution is compatible with {}, but you're using {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", "),
@@ -421,9 +420,9 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                     "The distribution requires {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -436,17 +435,17 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
 
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                    format!("{pretty} (`{current}`)")
                 } else {
-                    format!("`{}`", current.cyan())
+                    format!("`{current}`")
                 };
                 Some(format!(
                     "The distribution is compatible with {}, but you're using {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", "),
@@ -457,9 +456,9 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                     "The distribution requires {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -472,17 +471,17 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
 
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                    format!("{pretty} (`{current}`)")
                 } else {
-                    format!("`{}`", current.cyan())
+                    format!("`{current}`")
                 };
                 Some(format!(
                     "The distribution is compatible with {}, but you're on {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", "),
@@ -493,9 +492,9 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                     "The distribution requires {}",
                     wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+                            format!("{pretty} (`{tag}`)")
                         } else {
-                            format!("`{}`", tag.cyan())
+                            format!("`{tag}`")
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
