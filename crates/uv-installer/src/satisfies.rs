@@ -19,7 +19,7 @@ use uv_normalize::PackageName;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
-use crate::SyncModel;
+use crate::InstallationStrategy;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
@@ -37,7 +37,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
-        model: SyncModel,
+        installation: InstallationStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -83,7 +83,7 @@ impl RequirementSatisfaction {
                 // declaratively ahead-of-time. So if you `uv sync` to install `./path/to/idna` and
                 // later `uv sync` to install `anyio`, we'll know (during that second sync) if the
                 // already-installed `idna` should come from the registry or not.
-                if model == SyncModel::Stateless {
+                if installation == InstallationStrategy::Strict {
                     if !matches!(distribution.kind, InstalledDistKind::Registry { .. }) {
                         debug!("Distribution type mismatch for {name}: {distribution:?}");
                         return Self::Mismatch;

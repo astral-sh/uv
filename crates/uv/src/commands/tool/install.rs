@@ -14,7 +14,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
 };
-use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -406,7 +406,7 @@ pub(crate) async fn install(
                         constraints.iter(),
                         overrides.iter(),
                         &markers,
-                        SyncModel::Stateful,
+                        InstallationStrategy::Permissive,
                         &tags,
                         config_setting,
                         config_settings_package,

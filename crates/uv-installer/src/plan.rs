@@ -24,7 +24,7 @@ use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
-use crate::{SitePackages, SyncModel};
+use crate::{InstallationStrategy, SitePackages};
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -52,11 +52,11 @@ impl<'a> Planner<'a> {
     pub fn build(
         self,
         mut site_packages: SitePackages,
+        installation: InstallationStrategy,
         reinstall: &Reinstall,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
-        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -126,7 +126,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
-                            model,
+                            installation,
                             tags,
                             config_settings,
                             config_settings_package,

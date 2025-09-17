@@ -28,7 +28,7 @@ use uv_distribution_types::{
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages, SyncModel};
+use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -316,11 +316,11 @@ impl BuildContext for BuildDispatch<'_> {
             extraneous: _,
         } = Planner::new(resolution).build(
             site_packages,
+            InstallationStrategy::Strict,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
             self.index_locations,
-            SyncModel::Stateless,
             self.config_settings,
             self.config_settings_package,
             self.extra_build_requires(),
