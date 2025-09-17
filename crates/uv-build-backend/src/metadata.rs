@@ -79,7 +79,7 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
                 debug!(
-                    "Not using uv build backend direct build of `{name}`, \
+                    "Not using uv build backend direct build for source tree `{name}`, \
                     failed to parse pyproject.toml: {err}"
                 );
                 return false;
