@@ -104,12 +104,15 @@ impl CondaEnvironmentKind {
             return Self::Child;
         }
 
-        // These are the expected names for the base environment; we may want to remove this
-        // restriction in the future as it's not strictly necessary.
-        if current_env != "base" && current_env != "root" {
-            return Self::Child;
+        // If the environment name is "base" or "root", treat it as a base environment
+        //
+        // These are the expected names for the base environment; and is retained for backwards
+        // compatibility, but in a future breaking release we should remove this special-casing.
+        if current_env == "base" || current_env == "root" {
+            return Self::Base;
         }
 
+        // For other environment names, use the path-based logic
         let Some(name) = path.file_name() else {
             return Self::Child;
         };
