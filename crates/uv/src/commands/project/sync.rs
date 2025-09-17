@@ -115,12 +115,8 @@ pub(crate) async fn sync(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(
-                project_dir,
-                &DiscoveryOptions::default(),
-                &workspace_cache,
-            )
-            .await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
 
         // TODO(lucab): improve warning content

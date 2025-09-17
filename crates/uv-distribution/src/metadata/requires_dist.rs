@@ -61,7 +61,6 @@ impl RequiresDist {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
-
             ..DiscoveryOptions::default()
         };
         let Some(project_workspace) =
