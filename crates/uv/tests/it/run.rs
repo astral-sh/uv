@@ -5101,10 +5101,10 @@ fn run_groups_requires_python() -> Result<()> {
     // See https://github.com/astral-sh/uv/issues/14160
     let output = context
         .run()
+        .arg("-vv")
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions")
-        .arg("-vv")
         .output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
