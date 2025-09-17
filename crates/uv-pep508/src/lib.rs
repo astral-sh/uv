@@ -11,11 +11,13 @@
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::<VerbatimUrl>::from_str(marker).unwrap();
 //! assert_eq!(dependency_specification.name.as_ref(), "requests");
-//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]);
+//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()].into());
 //! ```
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -25,26 +27,28 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
 
-use cursor::Cursor;
-pub use marker::{
+use uv_cache_key::{CacheKey, CacheKeyHasher};
+use uv_normalize::{ExtraName, PackageName};
+
+use crate::cursor::Cursor;
+pub use crate::marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
-pub use origin::RequirementOrigin;
+pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
-pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
-pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
+pub use crate::verbatim_url::{
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
+    split_scheme, strip_host,
+};
 /// Version and version specifiers used in requirements (reexport).
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
-pub use verbatim_url::{
-    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
-    split_scheme, strip_host,
-};
 
 mod cursor;
 pub mod marker;
@@ -249,6 +253,49 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
+impl<T: Pep508Url> CacheKey for Requirement<T> {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.as_str().cache_key(state);
+
+        self.extras.len().cache_key(state);
+        for extra in &self.extras {
+            extra.as_str().cache_key(state);
+        }
+
+        // TODO(zanieb): We inline cache key handling for the child types here, but we could
+        // move the implementations to the children. The intent here was to limit the scope of
+        // types exposing the `CacheKey` trait for now.
+        if let Some(version_or_url) = &self.version_or_url {
+            1u8.cache_key(state);
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(spec) => {
+                    0u8.cache_key(state);
+                    spec.len().cache_key(state);
+                    for specifier in spec.iter() {
+                        specifier.operator().as_str().cache_key(state);
+                        specifier.version().cache_key(state);
+                    }
+                }
+                VersionOrUrl::Url(url) => {
+                    1u8.cache_key(state);
+                    url.cache_key(state);
+                }
+            }
+        } else {
+            0u8.cache_key(state);
+        }
+
+        if let Some(marker) = self.marker.contents() {
+            1u8.cache_key(state);
+            marker.to_string().cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        // `origin` is intentionally omitted
+    }
+}
+
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
@@ -281,7 +328,7 @@ impl<T: Pep508Url> Requirement<T> {
 }
 
 /// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
-pub trait Pep508Url: Display + Debug + Sized {
+pub trait Pep508Url: Display + Debug + Sized + CacheKey {
     /// String to URL parsing error
     type Err: Error + Debug;
 
@@ -296,7 +343,7 @@ impl Pep508Url for Url {
     type Err = url::ParseError;
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
-        Url::parse(url)
+        Self::parse(url)
     }
 
     fn displayable_with_credentials(&self) -> impl Display {
@@ -334,22 +381,15 @@ impl Reporter for TracingReporter {
 
 #[cfg(feature = "schemars")]
 impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
-    fn schema_name() -> String {
-        "Requirement".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Requirement")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`"
+        })
     }
 }
 
@@ -1003,6 +1043,41 @@ fn parse_pep508_requirement<T: Pep508Url>(
         marker: marker.unwrap_or_default(),
         origin: None,
     })
+}
+
+#[cfg(feature = "rkyv")]
+/// An [`rkyv`] implementation for [`Requirement`].
+impl<T: Pep508Url + Display> rkyv::Archive for Requirement<T> {
+    type Archived = rkyv::string::ArchivedString;
+    type Resolver = rkyv::string::StringResolver;
+
+    #[inline]
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        let as_str = self.to_string();
+        rkyv::string::ArchivedString::resolve_from_str(&as_str, resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<T: Pep508Url + Display, S> rkyv::Serialize<S> for Requirement<T>
+where
+    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
+    S::Error: rkyv::rancor::Source,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        let as_str = self.to_string();
+        rkyv::string::ArchivedString::serialize_from_str(&as_str, serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
+    rkyv::Deserialize<Requirement<T>, D> for rkyv::string::ArchivedString
+{
+    fn deserialize(&self, _deserializer: &mut D) -> Result<Requirement<T>, D::Error> {
+        // SAFETY: We only serialize valid requirements.
+        Ok(Requirement::<T>::from_str(self.as_str()).unwrap())
+    }
 }
 
 #[cfg(test)]

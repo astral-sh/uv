@@ -19,8 +19,9 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -28,7 +29,6 @@ use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -44,20 +44,23 @@ pub(crate) async fn pip_tree(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     concurrency: Concurrency,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -71,32 +74,31 @@ pub(crate) async fn pip_tree(
             packages
                 .entry(package.name())
                 .or_default()
-                .push(package.metadata()?);
+                .push(package.read_metadata()?);
         }
         packages
     };
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let markers = environment.interpreter().resolver_marker_environment();
+    let tags = environment.interpreter().tags()?;
 
     // Determine the latest version for each package.
     let latest = if outdated && !packages.is_empty() {
         let capabilities = IndexCapabilities::default();
 
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        let client_builder = client_builder.keyring(keyring_provider);
 
         // Initialize the registry client.
-        let client = RegistryClientBuilder::try_from(client_builder)?
-            .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-            .index_locations(&index_locations)
-            .index_strategy(index_strategy)
-            .markers(environment.interpreter().markers())
-            .platform(environment.interpreter().platform())
-            .build();
+        let client = RegistryClientBuilder::new(
+            client_builder,
+            cache.clone().with_refresh(Refresh::All(Timestamp::now())),
+        )
+        .index_locations(index_locations)
+        .index_strategy(index_strategy)
+        .markers(environment.interpreter().markers())
+        .platform(environment.interpreter().platform())
+        .build();
         let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
@@ -173,7 +175,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
@@ -219,7 +221,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.

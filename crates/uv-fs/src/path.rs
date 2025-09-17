@@ -69,14 +69,14 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
+
         if path.as_os_str() == "" {
             // Avoid printing an empty string for the current directory
             return Path::new(".").display();
         }
-
-        // Attempt to strip the current working directory, then the canonicalized current working
-        // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()
     }
@@ -207,7 +207,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 }
 
 /// Normalize a [`Path`], removing things like `.` and `..`.
-pub fn normalize_path(path: &Path) -> Cow<Path> {
+pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
     // Fast path: if the path is already normalized, return it as-is.
     if path.components().all(|component| match component {
         Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
@@ -277,21 +277,6 @@ fn normalized(path: &Path) -> PathBuf {
     normalized
 }
 
-/// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
-pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-    let path = path.as_ref();
-    debug_assert!(
-        path.is_absolute(),
-        "path must be absolute: {}",
-        path.display()
-    );
-    if cfg!(windows) {
-        Ok(path.to_path_buf())
-    } else {
-        fs_err::canonicalize(path)
-    }
-}
-
 /// Compute a path describing `path` relative to `base`.
 ///
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
@@ -345,11 +330,11 @@ pub struct PortablePathBuf(Box<Path>);
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PortablePathBuf {
-    fn schema_name() -> String {
-        PathBuf::schema_name()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PortablePathBuf")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         PathBuf::json_schema(_gen)
     }
 }
@@ -410,6 +395,12 @@ impl From<PortablePathBuf> for Box<Path> {
 impl From<Box<Path>> for PortablePathBuf {
     fn from(path: Box<Path>) -> Self {
         Self(path)
+    }
+}
+
+impl<'a> From<&'a Path> for PortablePathBuf {
+    fn from(path: &'a Path) -> Self {
+        Box::<Path>::from(path).into()
     }
 }
 

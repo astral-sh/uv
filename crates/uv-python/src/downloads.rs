@@ -12,7 +12,8 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
-use reqwest_retry::RetryPolicy;
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::{RetryError, RetryPolicy};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
@@ -21,10 +22,11 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
+use uv_client::{BaseClient, WrappedReqwestError, is_transient_network_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
+use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -34,9 +36,8 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::PythonInstallationKey;
-use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::{self, Arch, Libc, Os};
+use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -49,6 +50,8 @@ pub enum Error {
     MissingExtension(String, ExtensionError),
     #[error("Invalid Python version: {0}")]
     InvalidPythonVersion(String),
+    #[error("Invalid request key (empty request)")]
+    EmptyRequest,
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Failed to download {0}")]
@@ -96,9 +99,9 @@ pub enum Error {
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
     #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
-    Mirror(&'static str, &'static str),
+    Mirror(&'static str, String),
     #[error("Failed to determine the libc used on the current platform")]
-    LibcDetection(#[from] LibcDetectionError),
+    LibcDetection(#[from] platform::LibcDetectionError),
     #[error("Remote Python downloads JSON is not yet supported, please use a local path")]
     RemoteJSONNotSupported,
     #[error("The JSON of the python downloads is invalid: {0}")]
@@ -109,29 +112,60 @@ pub enum Error {
         url: Box<Url>,
         python_builds_dir: PathBuf,
     },
+    #[error(transparent)]
+    BuildVersion(#[from] BuildVersionError),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl Error {
+    // Return the number of attempts that were made to complete this request before this error was
+    // returned. Note that e.g. 3 retries equates to 4 attempts.
+    //
+    // It's easier to do arithmetic with "attempts" instead of "retries", because if you have
+    // nested retry loops you can just add up all the attempts directly, while adding up the
+    // retries requires +1/-1 adjustments.
+    fn attempts(&self) -> u32 {
+        // Unfortunately different variants of `Error` track retry counts in different ways. We
+        // could consider unifying the variants we handle here in `Error::from_reqwest_middleware`
+        // instead, but both approaches will be fragile as new variants get added over time.
+        if let Self::NetworkErrorWithRetries { retries, .. } = self {
+            return retries + 1;
+        }
+        // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
+        // our rust-version is high enough.
+        if let Self::NetworkMiddlewareError(_, anyhow_error) = self {
+            if let Some(RetryError::WithRetries { retries, .. }) =
+                anyhow_error.downcast_ref::<RetryError>()
+            {
+                return retries + 1;
+            }
+        }
+        1
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
-    url: &'static str,
-    sha256: Option<&'static str>,
+    url: Cow<'static, str>,
+    sha256: Option<Cow<'static, str>>,
+    build: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct PythonDownloadRequest {
     pub(crate) version: Option<VersionRequest>,
     pub(crate) implementation: Option<ImplementationName>,
     pub(crate) arch: Option<ArchRequest>,
     pub(crate) os: Option<Os>,
     pub(crate) libc: Option<Libc>,
+    pub(crate) build: Option<String>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
     pub(crate) prereleases: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
     Explicit(Arch),
     Environment(Arch),
@@ -145,22 +179,22 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Check if this platform request is satisfied by an installation key.
-    pub fn matches(&self, key: &PythonInstallationKey) -> bool {
+    /// Check if this platform request is satisfied by a platform.
+    pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
-            if key.os != os {
+            if !platform.os.supports(os) {
                 return false;
             }
         }
 
         if let Some(arch) = self.arch {
-            if !arch.satisfied_by(key.arch) {
+            if !arch.satisfied_by(platform) {
                 return false;
             }
         }
 
         if let Some(libc) = self.libc {
-            if key.libc != libc {
+            if platform.libc != libc {
                 return false;
             }
         }
@@ -194,10 +228,14 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, arch: Arch) -> bool {
+    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
-            Self::Explicit(request) => request == arch,
-            Self::Environment(env) => env.supports(arch),
+            Self::Explicit(request) => request == platform.arch,
+            Self::Environment(env) => {
+                // Check if the environment's platform can run the target platform
+                let env_platform = Platform::new(platform.os, env, platform.libc);
+                env_platform.supports(platform)
+            }
         }
     }
 
@@ -223,13 +261,24 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            build: None,
             prereleases,
         }
     }
 
     #[must_use]
     pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
-        self.implementation = Some(implementation);
+        match implementation {
+            // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
+            ImplementationName::Pyodide => {
+                self = self.with_os(Os::new(target_lexicon::OperatingSystem::Emscripten));
+                self = self.with_arch(Arch::new(target_lexicon::Architecture::Wasm32, None));
+                self = self.with_libc(Libc::Some(target_lexicon::Environment::Musl));
+            }
+            _ => {
+                self.implementation = Some(implementation);
+            }
+        }
         self
     }
 
@@ -269,6 +318,12 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[must_use]
+    pub fn with_build(mut self, build: String) -> Self {
+        self.build = Some(build);
+        self
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
@@ -301,15 +356,29 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
+        let platform = Platform::from_env()?;
         if self.arch.is_none() {
-            self.arch = Some(ArchRequest::Environment(Arch::from_env()));
+            self.arch = Some(ArchRequest::Environment(platform.arch));
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env());
+            self.os = Some(platform.os);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(platform.libc);
         }
+        Ok(self)
+    }
+
+    /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
+    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+        if self.build.is_some() {
+            return Ok(self);
+        }
+        let Some(implementation) = self.implementation else {
+            return Ok(self);
+        };
+
+        self.build = python_build_version_from_env(implementation)?;
         Ok(self)
     }
 
@@ -318,6 +387,7 @@ impl PythonDownloadRequest {
             self.implementation = Some(ImplementationName::CPython);
         }
         self = self.fill_platform()?;
+        self = self.fill_build_from_env()?;
         Ok(self)
     }
 
@@ -352,23 +422,16 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(os) = &self.os {
-            if key.os != *os {
-                return false;
-            }
+        // Check platform requirements
+        let request = PlatformRequest {
+            os: self.os,
+            arch: self.arch,
+            libc: self.libc,
+        };
+        if !request.matches(key.platform()) {
+            return false;
         }
 
-        if let Some(arch) = &self.arch {
-            if !arch.satisfied_by(key.arch) {
-                return false;
-            }
-        }
-
-        if let Some(libc) = &self.libc {
-            if key.libc != *libc {
-                return false;
-            }
-        }
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
@@ -398,7 +461,31 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        self.satisfied_by_key(download.key())
+        // First check the key
+        if !self.satisfied_by_key(download.key()) {
+            return false;
+        }
+
+        // Then check the build if specified
+        if let Some(ref requested_build) = self.build {
+            let Some(download_build) = download.build() else {
+                debug!(
+                    "Skipping download `{}`: a build version was requested but is not available for this download",
+                    download
+                );
+                return false;
+            };
+
+            if download_build != requested_build {
+                debug!(
+                    "Skipping download `{}`: requested build version `{}` does not match download build version `{}`",
+                    download, requested_build, download_build
+                );
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Whether this download request opts-in to pre-release Python versions.
@@ -410,9 +497,16 @@ impl PythonDownloadRequest {
         })
     }
 
+    /// Whether this download request opts-in to a debug Python version.
+    pub fn allows_debug(&self) -> bool {
+        self.version.as_ref().is_some_and(VersionRequest::is_debug)
+    }
+
     /// Whether this download request opts-in to alternative Python implementations.
     pub fn allows_alternative_implementations(&self) -> bool {
-        self.implementation.is_some()
+        self.implementation
+            .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
+            || self.os.is_some_and(|os| os.is_emscripten())
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -426,40 +520,19 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
-        if let Some(os) = self.os() {
-            let interpreter_os = Os::from(interpreter.platform().os());
-            if &interpreter_os != os {
-                debug!(
-                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
-                );
-                return false;
-            }
-        }
-        if let Some(arch) = self.arch() {
-            let interpreter_arch = Arch::from(&interpreter.platform().arch());
-            if !arch.satisfied_by(interpreter_arch) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
-                );
-                return false;
-            }
+        let platform = self.platform();
+        let interpreter_platform = Platform::from(interpreter.platform());
+        if !platform.matches(&interpreter_platform) {
+            debug!(
+                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
+            );
+            return false;
         }
         if let Some(implementation) = self.implementation() {
-            let interpreter_implementation = interpreter.implementation_name();
-            if LenientImplementationName::from(interpreter_implementation)
-                != LenientImplementationName::from(*implementation)
-            {
+            if !implementation.matches_interpreter(interpreter) {
                 debug!(
-                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
-                );
-                return false;
-            }
-        }
-        if let Some(libc) = self.libc() {
-            let interpreter_libc = Libc::from(interpreter.platform().os());
-            if &interpreter_libc != libc {
-                debug!(
-                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                    "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                    interpreter.implementation_name(),
                 );
                 return false;
             }
@@ -488,9 +561,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
                     "Managed Python installations are expected to always have known implementation names, found {name}"
                 ),
             },
-            Some(ArchRequest::Explicit(key.arch)),
-            Some(key.os),
-            Some(key.libc),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
             Some(key.prerelease.is_some()),
         )
     }
@@ -527,42 +600,194 @@ impl Display for PythonDownloadRequest {
         write!(f, "{}", parts.join("-"))
     }
 }
-
 impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        #[derive(Debug, Clone)]
+        enum Position {
+            Start,
+            Implementation,
+            Version,
+            Os,
+            Arch,
+            Libc,
+            End,
+        }
+
+        impl Position {
+            pub(crate) fn next(&self) -> Self {
+                match self {
+                    Self::Start => Self::Implementation,
+                    Self::Implementation => Self::Version,
+                    Self::Version => Self::Os,
+                    Self::Os => Self::Arch,
+                    Self::Arch => Self::Libc,
+                    Self::Libc => Self::End,
+                    Self::End => Self::End,
+                }
+            }
+        }
+
+        #[derive(Debug)]
+        struct State<'a, P: Iterator<Item = &'a str>> {
+            parts: P,
+            part: Option<&'a str>,
+            position: Position,
+            error: Option<Error>,
+            count: usize,
+        }
+
+        impl<'a, P: Iterator<Item = &'a str>> State<'a, P> {
+            fn new(parts: P) -> Self {
+                Self {
+                    parts,
+                    part: None,
+                    position: Position::Start,
+                    error: None,
+                    count: 0,
+                }
+            }
+
+            fn next_part(&mut self) {
+                self.next_position();
+                self.part = self.parts.next();
+                self.count += 1;
+                self.error.take();
+            }
+
+            fn next_position(&mut self) {
+                self.position = self.position.next();
+            }
+
+            fn record_err(&mut self, err: Error) {
+                // For now, we only record the first error encountered. We could record all of the
+                // errors for a given part, then pick the most appropriate one later.
+                self.error.get_or_insert(err);
+            }
+        }
+
+        if s.is_empty() {
+            return Err(Error::EmptyRequest);
+        }
+
         let mut parts = s.split('-');
-        let mut version = None;
+
         let mut implementation = None;
+        let mut version = None;
         let mut os = None;
         let mut arch = None;
         let mut libc = None;
 
-        let mut position = 0;
+        let mut state = State::new(parts.by_ref());
+        state.next_part();
+
         loop {
-            // Consume each part
-            let Some(part) = parts.next() else { break };
-            position += 1;
-
-            if part.eq_ignore_ascii_case("any") {
-                continue;
-            }
-
-            match position {
-                1 => implementation = Some(ImplementationName::from_str(part)?),
-                2 => {
-                    version = Some(
-                        VersionRequest::from_str(part)
-                            .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
-                    );
+            let Some(part) = state.part else { break };
+            match state.position {
+                Position::Start => unreachable!("We start before the loop"),
+                Position::Implementation => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match ImplementationName::from_str(part) {
+                        Ok(val) => {
+                            implementation = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
                 }
-                3 => os = Some(Os::from_str(part)?),
-                4 => arch = Some(ArchRequest::Explicit(Arch::from_str(part)?)),
-                5 => libc = Some(Libc::from_str(part)?),
-                _ => return Err(Error::TooManyParts(s.to_string())),
+                Position::Version => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match VersionRequest::from_str(part)
+                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))
+                    {
+                        // Err(err) if !first_part => return Err(err),
+                        Ok(val) => {
+                            version = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err);
+                        }
+                    }
+                }
+                Position::Os => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Os::from_str(part) {
+                        Ok(val) => {
+                            os = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::Arch => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Arch::from_str(part) {
+                        Ok(val) => {
+                            arch = Some(ArchRequest::Explicit(val));
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::Libc => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Libc::from_str(part) {
+                        Ok(val) => {
+                            libc = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::End => {
+                    if state.count > 5 {
+                        return Err(Error::TooManyParts(s.to_string()));
+                    }
+
+                    // Throw the first error for the current part
+                    //
+                    // TODO(zanieb): It's plausible another error variant is a better match but it
+                    // sounds hard to explain how? We could peek at the next item in the parts, and
+                    // see if that informs the type of this one, or we could use some sort of
+                    // similarity or common error matching, but this sounds harder.
+                    if let Some(err) = state.error {
+                        return Err(err);
+                    }
+                    state.next_part();
+                }
             }
         }
+
         Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
@@ -584,6 +809,7 @@ struct JsonPythonDownload {
     url: String,
     sha256: Option<String>,
     variant: Option<String>,
+    build: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -598,7 +824,25 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
+/// A wrapper type to display a `ManagedPythonDownload` with its build information.
+pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
+
+impl Display for ManagedPythonDownloadWithBuild<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(build) = self.0.build {
+            write!(f, "{}+{}", self.0.key, build)
+        } else {
+            write!(f, "{}", self.0.key)
+        }
+    }
+}
+
 impl ManagedPythonDownload {
+    /// Return a display type that includes the build information.
+    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
+        ManagedPythonDownloadWithBuild(self)
+    }
+
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     ///
     /// If there is no stable version matching the request, a compatible pre-release version will
@@ -606,7 +850,7 @@ impl ManagedPythonDownload {
     pub fn from_request(
         request: &PythonDownloadRequest,
         python_downloads_json_url: Option<&str>,
-    ) -> Result<&'static ManagedPythonDownload, Error> {
+    ) -> Result<&'static Self, Error> {
         if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
             return Ok(download);
         }
@@ -632,7 +876,7 @@ impl ManagedPythonDownload {
     /// so `python_downloads_json_url` is only used in the first call to this function.
     pub fn iter_all(
         python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+    ) -> Result<impl Iterator<Item = &'static Self>, Error> {
         let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
             let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
                 python_downloads_json_url
@@ -667,8 +911,8 @@ impl ManagedPythonDownload {
         Ok(downloads.iter())
     }
 
-    pub fn url(&self) -> &'static str {
-        self.url
+    pub fn url(&self) -> &Cow<'static, str> {
+        &self.url
     }
 
     pub fn key(&self) -> &PythonInstallationKey {
@@ -679,8 +923,12 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&'static str> {
-        self.sha256
+    pub fn sha256(&self) -> Option<&Cow<'static, str>> {
+        self.sha256.as_ref()
+    }
+
+    pub fn build(&self) -> Option<&'static str> {
+        self.build
     }
 
     /// Download and extract a Python distribution, retrying on failure.
@@ -688,6 +936,7 @@ impl ManagedPythonDownload {
     pub async fn fetch_with_retry(
         &self,
         client: &BaseClient,
+        retry_policy: &ExponentialBackoff,
         installation_dir: &Path,
         scratch_dir: &Path,
         reinstall: bool,
@@ -695,9 +944,9 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let mut n_past_retries = 0;
+        let mut total_attempts = 0;
+        let mut retried_here = false;
         let start_time = SystemTime::now();
-        let retry_policy = client.retry_policy();
         loop {
             let result = self
                 .fetch(
@@ -710,25 +959,41 @@ impl ManagedPythonDownload {
                     reporter,
                 )
                 .await;
-            if result
-                .as_ref()
-                .err()
-                .is_some_and(|err| is_extended_transient_error(err))
-            {
-                let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    debug!(
-                        "Transient failure while handling response for {}; retrying...",
-                        self.key()
-                    );
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-                    tokio::time::sleep(duration).await;
-                    n_past_retries += 1;
-                    continue;
+            let result = match result {
+                Ok(download_result) => Ok(download_result),
+                Err(err) => {
+                    // Inner retry loops (e.g. `reqwest-retry` middleware) might make more than one
+                    // attempt per error we see here.
+                    total_attempts += err.attempts();
+                    // We currently interpret e.g. "3 retries" to mean we should make 4 attempts.
+                    let n_past_retries = total_attempts - 1;
+                    if is_transient_network_error(&err) {
+                        let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                        if let reqwest_retry::RetryDecision::Retry { execute_after } =
+                            retry_decision
+                        {
+                            debug!(
+                                "Transient failure while handling response for {}; retrying...",
+                                self.key()
+                            );
+                            let duration = execute_after
+                                .duration_since(SystemTime::now())
+                                .unwrap_or_else(|_| Duration::default());
+                            tokio::time::sleep(duration).await;
+                            retried_here = true;
+                            continue; // Retry.
+                        }
+                    }
+                    if retried_here {
+                        Err(Error::NetworkErrorWithRetries {
+                            err: Box::new(err),
+                            retries: n_past_retries,
+                        })
+                    } else {
+                        Err(err)
+                    }
                 }
-            }
+            };
             return result;
         }
     }
@@ -772,10 +1037,12 @@ impl ManagedPythonDownload {
 
         let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
-        if let Some(python_builds_dir) = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR) {
+        if let Some(python_builds_dir) =
+            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
+        {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256 {
+            let hash_prefix = match self.sha256.as_deref() {
                 Some(sha) => {
                     // Shorten the hash to avoid too-long-filename errors
                     &sha[..9]
@@ -868,13 +1135,32 @@ impl ManagedPythonDownload {
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
         if extracted.join("install").is_dir() {
             extracted = extracted.join("install");
+        // If the distribution is a Pyodide archive, the Python installation is in the `pyodide-root/dist` directory.
+        } else if self.os().is_emscripten() {
+            extracted = extracted.join("pyodide-root").join("dist");
         }
 
-        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
-        // it, and python-build-standalone releases after `20240726` include it, but releases prior
-        // to that date do not.
         #[cfg(unix)]
         {
+            // Pyodide distributions require all of the supporting files to be alongside the Python
+            // executable, so they don't have a `bin` directory. We create it and link
+            // `bin/pythonX.Y` to `dist/python`.
+            if self.os().is_emscripten() {
+                fs_err::create_dir_all(extracted.join("bin"))?;
+                fs_err::os::unix::fs::symlink(
+                    "../python",
+                    extracted
+                        .join("bin")
+                        .join(format!("python{}.{}", self.key.major, self.key.minor)),
+                )?;
+            }
+
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            //
+            // Pyodide releases never contain this link by default.
+            //
+            // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
+            // but releases prior to that date do not.
             match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),
@@ -942,7 +1228,11 @@ impl ManagedPythonDownload {
             archive_writer.flush().await?;
         }
         // Move the completed file into place, invalidating the `File` instance.
-        fs_err::rename(&temp_file, target_cache_file)?;
+        match rename_with_retry(&temp_file, target_cache_file).await {
+            Ok(()) => {}
+            Err(_) if target_cache_file.is_file() => {}
+            Err(err) => return Err(err.into()),
+        }
         Ok(())
     }
 
@@ -958,11 +1248,11 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
         direction: Direction,
     ) -> Result<(), Error> {
-        let mut hashers = self
-            .sha256
-            .into_iter()
-            .map(|_| Hasher::from(HashAlgorithm::Sha256))
-            .collect::<Vec<_>>();
+        let mut hashers = if self.sha256.is_some() {
+            vec![Hasher::from(HashAlgorithm::Sha256)]
+        } else {
+            vec![]
+        };
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         if let Some(reporter) = reporter {
@@ -980,7 +1270,7 @@ impl ManagedPythonDownload {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
-        if let Some(expected) = self.sha256 {
+        if let Some(expected) = self.sha256.as_deref() {
             let actual = HashDigest::from(hashers.pop().unwrap()).digest;
             if !actual.eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
@@ -1011,7 +1301,10 @@ impl ManagedPythonDownload {
                     let Some(suffix) = self.url.strip_prefix(
                         "https://github.com/astral-sh/python-build-standalone/releases/download/",
                     ) else {
-                        return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
+                        return Err(Error::Mirror(
+                            EnvVars::UV_PYTHON_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -1023,7 +1316,10 @@ impl ManagedPythonDownload {
                 if let Some(mirror) = pypy_install_mirror {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
-                        return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));
+                        return Err(Error::Mirror(
+                            EnvVars::UV_PYPY_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -1034,7 +1330,7 @@ impl ManagedPythonDownload {
             _ => {}
         }
 
-        Ok(Url::parse(self.url)?)
+        Ok(Url::parse(&self.url)?)
     }
 }
 
@@ -1126,22 +1422,22 @@ fn parse_json_downloads(
                 }
             };
 
-            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
-            let sha256 = entry
-                .sha256
+            let url = Cow::Owned(entry.url);
+            let sha256 = entry.sha256.map(Cow::Owned);
+            let build = entry
+                .build
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
                     implementation,
                     &version,
-                    os,
-                    arch,
-                    libc,
+                    Platform::new(os, arch, libc),
                     variant,
                 ),
                 url,
                 sha256,
+                build,
             })
         })
         .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
@@ -1195,8 +1491,8 @@ pub enum Direction {
 impl Direction {
     fn as_str(&self) -> &str {
         match self {
-            Direction::Download => "download",
-            Direction::Extract => "extract",
+            Self::Download => "download",
+            Self::Extract => "extract",
         }
     }
 }
@@ -1295,5 +1591,312 @@ async fn read_url(
             .into_async_read();
 
         Ok((Either::Right(stream.compat()), size))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::implementation::LenientImplementationName;
+    use crate::installation::PythonInstallationKey;
+    use uv_platform::{Arch, Libc, Os, Platform};
+
+    use super::*;
+
+    /// Parse a request with all of its fields.
+    #[test]
+    fn test_python_download_request_from_str_complete() {
+        let request = PythonDownloadRequest::from_str("cpython-3.12.0-linux-x86_64-gnu")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.12.0").unwrap())
+        );
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(
+            request.libc,
+            Some(Libc::Some(target_lexicon::Environment::Gnu))
+        );
+    }
+
+    /// Parse a request with `any` in various positions.
+    #[test]
+    fn test_python_download_request_from_str_with_any() {
+        let request = PythonDownloadRequest::from_str("any-3.11-any-x86_64-any")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.11").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with `any` implied by the omission of segments.
+    #[test]
+    fn test_python_download_request_from_str_missing_segment() {
+        let request =
+            PythonDownloadRequest::from_str("pypy-linux").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::PyPy));
+        assert_eq!(request.version, None);
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    #[test]
+    fn test_python_download_request_from_str_version_only() {
+        let request =
+            PythonDownloadRequest::from_str("3.10.5").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.10.5").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    #[test]
+    fn test_python_download_request_from_str_implementation_only() {
+        let request =
+            PythonDownloadRequest::from_str("cpython").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(request.version, None);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with the OS and architecture specified.
+    #[test]
+    fn test_python_download_request_from_str_os_arch() {
+        let request = PythonDownloadRequest::from_str("windows-x86_64")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(request.version, None);
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Windows))
+        );
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with a pre-release version.
+    #[test]
+    fn test_python_download_request_from_str_prerelease() {
+        let request = PythonDownloadRequest::from_str("cpython-3.13.0rc1")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.13.0rc1").unwrap())
+        );
+        assert_eq!(request.os, None,);
+        assert_eq!(request.arch, None,);
+        assert_eq!(request.libc, None);
+    }
+
+    /// We fail on extra parts in the request.
+    #[test]
+    fn test_python_download_request_from_str_too_many_parts() {
+        let result = PythonDownloadRequest::from_str("cpython-3.12-linux-x86_64-gnu-extra");
+
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// We don't allow an empty request.
+    #[test]
+    fn test_python_download_request_from_str_empty() {
+        let result = PythonDownloadRequest::from_str("");
+
+        assert!(matches!(result, Err(Error::EmptyRequest)), "{result:?}");
+    }
+
+    /// Parse a request with all "any" segments.
+    #[test]
+    fn test_python_download_request_from_str_all_any() {
+        let request = PythonDownloadRequest::from_str("any-any-any-any-any")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(request.version, None);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    /// Test that "any" is case-insensitive in various positions.
+    #[test]
+    fn test_python_download_request_from_str_case_insensitive_any() {
+        let request = PythonDownloadRequest::from_str("ANY-3.11-Any-x86_64-aNy")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.11").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with an invalid leading segment.
+    #[test]
+    fn test_python_download_request_from_str_invalid_leading_segment() {
+        let result = PythonDownloadRequest::from_str("foobar-3.14-windows");
+
+        assert!(
+            matches!(result, Err(Error::ImplementationError(_))),
+            "{result:?}"
+        );
+    }
+
+    /// Parse a request with segments in an invalid order.
+    #[test]
+    fn test_python_download_request_from_str_out_of_order() {
+        let result = PythonDownloadRequest::from_str("3.12-cpython");
+
+        assert!(
+            matches!(result, Err(Error::InvalidRequestPlatform(_))),
+            "{result:?}"
+        );
+    }
+
+    /// Parse a request with too many "any" segments.
+    #[test]
+    fn test_python_download_request_from_str_too_many_any() {
+        let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
+
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// Test that build filtering works correctly
+    #[test]
+    fn test_python_download_request_build_filtering() {
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("20240814".to_string());
+
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert!(
+            !downloads.is_empty(),
+            "Should find at least one matching download"
+        );
+        for download in downloads {
+            assert_eq!(download.build(), Some("20240814"));
+        }
+    }
+
+    /// Test that an invalid build results in no matches
+    #[test]
+    fn test_python_download_request_invalid_build() {
+        // Create a request with a non-existent build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("99999999".to_string());
+
+        // Should find no matching downloads
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert_eq!(downloads.len(), 0);
+    }
+
+    /// Test build display
+    #[test]
+    fn test_managed_python_download_build_display() {
+        // Create a test download with a build
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
+            3,
+            12,
+            0,
+            None,
+            Platform::new(
+                Os::from_str("linux").unwrap(),
+                Arch::from_str("x86_64").unwrap(),
+                Libc::from_str("gnu").unwrap(),
+            ),
+            crate::PythonVariant::default(),
+        );
+
+        let download_with_build = ManagedPythonDownload {
+            key,
+            url: Cow::Borrowed("https://example.com/python.tar.gz"),
+            sha256: Some(Cow::Borrowed("abc123")),
+            build: Some("20240101"),
+        };
+
+        // Test display with build
+        assert_eq!(
+            download_with_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu+20240101"
+        );
+
+        // Test download without build
+        let download_without_build = ManagedPythonDownload {
+            key: download_with_build.key.clone(),
+            url: Cow::Borrowed("https://example.com/python.tar.gz"),
+            sha256: Some(Cow::Borrowed("abc123")),
+            build: None,
+        };
+
+        // Test display without build
+        assert_eq!(
+            download_without_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu"
+        );
     }
 }

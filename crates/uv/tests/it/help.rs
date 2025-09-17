@@ -16,6 +16,7 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -25,6 +26,7 @@ fn help() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -96,6 +98,7 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -105,6 +108,7 @@ fn help_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -174,6 +178,7 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -183,6 +188,7 @@ fn help_short_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -290,12 +296,14 @@ fn help_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache
@@ -466,10 +474,9 @@ fn help_subsubcommand() {
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
 
-    A `python` executable is not made globally available, managed Python versions are only used in uv
-    commands or in active virtual environments. There is experimental support for adding Python
-    executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv
-    python dir --bin` to retrieve the target directory.
+    By default, Python executables are added to a directory on the path with a minor version suffix,
+    e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use `uv python dir
+    --bin` to see the target directory.
 
     Multiple Python versions may be requested.
 
@@ -501,6 +508,16 @@ fn help_subsubcommand() {
               `~/.local/share/uv/python`.
               
               [env: UV_PYTHON_INSTALL_DIR=]
+
+          --no-bin
+              Do not install a Python executable into the `bin` directory.
+              
+              This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
+
+          --no-registry
+              Do not register the Python installation in the Windows registry.
+              
+              This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
 
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
@@ -717,12 +734,14 @@ fn help_flag_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -786,6 +805,10 @@ fn help_flag_subsubcommand() {
     Options:
       -i, --install-dir <INSTALL_DIR>
               The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --no-bin
+              Do not install a Python executable into the `bin` directory
+          --no-registry
+              Do not register the Python installation in the Windows registry
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations [env:
               UV_PYTHON_INSTALL_MIRROR=]
@@ -854,6 +877,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -863,6 +887,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -881,6 +906,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -890,6 +916,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -915,10 +942,12 @@ fn help_unknown_subsubcommand() {
     error: There is no command `foobar` for `uv python`. Did you mean one of:
         list
         install
+        upgrade
         find
         pin
         dir
         uninstall
+        update-shell
     ");
 }
 
@@ -935,6 +964,7 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -944,6 +974,7 @@ fn help_with_global_option() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1056,6 +1087,7 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -1065,6 +1097,7 @@ fn help_with_no_pager() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface

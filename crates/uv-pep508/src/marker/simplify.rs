@@ -9,6 +9,7 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
+use crate::marker::tree::ContainerOperator;
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
@@ -64,8 +65,8 @@ fn collect_dnf(
                     continue;
                 }
 
-                // Detect whether the range for this edge can be simplified as a star inequality.
-                if let Some(specifier) = star_range_inequality(&range) {
+                // Detect whether the range for this edge can be simplified as a star specifier.
+                if let Some(specifier) = star_range_specifier(&range) {
                     path.push(MarkerExpression::Version {
                         key: marker.key().into(),
                         specifier,
@@ -154,6 +155,22 @@ fn collect_dnf(
                     key: marker.key().into(),
                     value: ArcStr::from(marker.value()),
                     operator,
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
+        MarkerTreeKind::List(marker) => {
+            for (is_high, tree) in marker.children() {
+                let expr = MarkerExpression::List {
+                    pair: marker.pair().clone(),
+                    operator: if is_high {
+                        ContainerOperator::In
+                    } else {
+                        ContainerOperator::NotIn
+                    },
                 };
 
                 path.push(expr);
@@ -343,22 +360,34 @@ where
     Some(excluded)
 }
 
-/// Returns `Some` if the version expression can be simplified as a star inequality with the given
-/// specifier.
+/// Returns `Some` if the version range can be simplified as a star specifier.
 ///
-/// For example, `python_full_version < '3.8' or python_full_version >= '3.9'` can be simplified to
-/// `python_full_version != '3.8.*'`.
-fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
+/// Only for the two bounds case not covered by [`VersionSpecifier::from_release_only_bounds`].
+///
+/// For negative ranges like `python_full_version < '3.8' or python_full_version >= '3.9'`,
+/// returns `!= '3.8.*'`.
+fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
+    if range.iter().count() != 2 {
+        return None;
+    }
+    // Check for negative star range: two segments [(Unbounded, Excluded(v1)), (Included(v2), Unbounded)]
     let (b1, b2) = range.iter().collect_tuple()?;
-
-    match (b1, b2) {
-        ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
-            if v1.release().len() == 2
-                && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-        {
-            Some(VersionSpecifier::not_equals_star_version(v1.clone()))
+    if let ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded)) =
+        (b1, b2)
+    {
+        match *v1.only_release_trimmed().release() {
+            [major] if *v2.release() == [major, 1] => {
+                Some(VersionSpecifier::not_equals_star_version(Version::new([
+                    major, 0,
+                ])))
+            }
+            [major, minor] if *v2.release() == [major, minor + 1] => {
+                Some(VersionSpecifier::not_equals_star_version(v1.clone()))
+            }
+            _ => None,
         }
-        _ => None,
+    } else {
+        None
     }
 }
 
@@ -384,18 +413,18 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
         MarkerExpression::VersionIn {
             key,
             versions,
-            negated,
+            operator,
         } => {
             let MarkerExpression::VersionIn {
                 key: key2,
                 versions: versions2,
-                negated: negated2,
+                operator: operator2,
             } = right
             else {
                 return false;
             };
 
-            key == key2 && versions == versions2 && negated != negated2
+            key == key2 && versions == versions2 && operator != operator2
         }
         MarkerExpression::String {
             key,
@@ -427,6 +456,17 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
             };
 
             name == name2 && operator.negate() == *operator2
+        }
+        MarkerExpression::List { pair, operator } => {
+            let MarkerExpression::List {
+                pair: pair2,
+                operator: operator2,
+            } = right
+            else {
+                return false;
+            };
+
+            pair == pair2 && operator != operator2
         }
     }
 }

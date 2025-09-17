@@ -1,12 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uv_macros::OptionsMetadata;
 
 /// Settings for the uv build backend (`uv_build`).
-///
-/// !!! note
-///
-///     The uv build backend is currently in preview and may change in any future release.
 ///
 /// Note that those settings only apply when using the `uv_build` backend, other build backends
 /// (such as hatchling) have their own configuration.
@@ -38,15 +34,19 @@ pub struct BuildBackendSettings {
     /// For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
     /// `foo-stubs.bar`.
     ///
+    /// For namespace packages with multiple modules, the path can be a list, e.g.,
+    /// `["foo", "bar"]`. We recommend using a single module per package, splitting multiple
+    /// packages into a workspace.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
     #[option(
         default = r#"None"#,
-        value_type = "str",
+        value_type = "str | list[str]",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<String>,
+    pub module_name: Option<ModuleName>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -155,7 +155,7 @@ pub struct BuildBackendSettings {
     ///   with this package as build requirement use the include directory to find additional header
     ///   files.
     /// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
-    ///   to uses these two options.
+    ///   to use these two options.
     // TODO(konsti): We should show a flat example instead.
     // ```toml
     // [tool.uv.build-backend.data]
@@ -165,7 +165,7 @@ pub struct BuildBackendSettings {
     #[option(
         default = r#"{}"#,
         value_type = "dict[str, str]",
-        example = r#"data = { "headers": "include/headers", "scripts": "bin" }"#
+        example = r#"data = { headers = "include/headers", scripts = "bin" }"#
     )]
     pub data: WheelDataIncludes,
 }
@@ -185,6 +185,17 @@ impl Default for BuildBackendSettings {
     }
 }
 
+/// Whether to include a single module or multiple modules.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub enum ModuleName {
+    /// A single module name.
+    Name(String),
+    /// Multiple module names, which are all included.
+    Names(Vec<String>),
+}
+
 /// Data includes for wheels.
 ///
 /// See `BuildBackendSettings::data`.
@@ -193,16 +204,16 @@ impl Default for BuildBackendSettings {
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct WheelDataIncludes {
-    purelib: Option<String>,
-    platlib: Option<String>,
-    headers: Option<String>,
-    scripts: Option<String>,
-    data: Option<String>,
+    purelib: Option<PathBuf>,
+    platlib: Option<PathBuf>,
+    headers: Option<PathBuf>,
+    scripts: Option<PathBuf>,
+    data: Option<PathBuf>,
 }
 
 impl WheelDataIncludes {
     /// Yield all data directories name and corresponding paths.
-    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &Path)> {
         [
             ("purelib", self.purelib.as_deref()),
             ("platlib", self.platlib.as_deref()),

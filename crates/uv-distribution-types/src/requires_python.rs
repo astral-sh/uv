@@ -66,15 +66,8 @@ impl RequiresPython {
     ) -> Option<Self> {
         // Convert to PubGrub range and perform an intersection.
         let range = specifiers
-            .into_iter()
-            .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
-            .fold(None, |range: Option<Ranges<Version>>, requires_python| {
-                if let Some(range) = range {
-                    Some(range.intersection(&requires_python))
-                } else {
-                    Some(requires_python)
-                }
-            })?;
+            .map(|specs| release_specifiers_to_ranges(specs.clone()))
+            .reduce(|acc, r| acc.intersection(&r))?;
 
         // If the intersection is empty, return `None`.
         if range.is_empty() {
@@ -577,7 +570,7 @@ impl Default for RequiresPythonRange {
 
 impl From<RequiresPythonRange> for Ranges<Version> {
     fn from(value: RequiresPythonRange) -> Self {
-        Ranges::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
+        Self::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
             value.0.into(),
             value.1.into(),
         ))
@@ -597,8 +590,8 @@ pub struct SimplifiedMarkerTree(MarkerTree);
 impl SimplifiedMarkerTree {
     /// Simplifies the given markers by assuming the given `requires-python`
     /// bound is true.
-    pub fn new(requires_python: &RequiresPython, marker: MarkerTree) -> SimplifiedMarkerTree {
-        SimplifiedMarkerTree(requires_python.simplify_markers(marker))
+    pub fn new(requires_python: &RequiresPython, marker: MarkerTree) -> Self {
+        Self(requires_python.simplify_markers(marker))
     }
 
     /// Complexifies the given markers by adding the given `requires-python` as

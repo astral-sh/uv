@@ -1,9 +1,10 @@
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, iter, mem};
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
@@ -12,9 +13,9 @@ use toml_edit::{
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
-use uv_normalize::GroupName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
@@ -129,10 +130,10 @@ impl AddBoundsKind {
         // second most significant component, so most versions are either major.minor.patch or
         // 0.major.minor.
         match self {
-            AddBoundsKind::Lower => {
+            Self::Lower => {
                 VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(version))
             }
-            AddBoundsKind::Major => {
+            Self::Major => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -173,7 +174,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Minor => {
+            Self::Minor => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -242,7 +243,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Exact => {
+            Self::Exact => {
                 VersionSpecifiers::from_iter([VersionSpecifier::equals_version(version)])
             }
         }
@@ -392,6 +393,7 @@ impl PyProjectTomlMut {
 
     /// Add an [`Index`] to `tool.uv.index`.
     pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+        let size = self.doc.len();
         let existing = self
             .doc
             .entry("tool")
@@ -472,8 +474,7 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| DisplaySafeUrl::parse(url).ok())
-            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| url != index.url.without_credentials().as_str())
         {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
@@ -552,6 +553,9 @@ impl PyProjectTomlMut {
                     table.set_position(position + 1);
                 }
             }
+        } else {
+            let position = isize::try_from(size).expect("TOML table size fits in `isize`");
+            table.set_position(position);
         }
 
         // Push the item to the table.
@@ -1559,28 +1563,28 @@ fn reformat_array_multiline(deps: &mut Array) {
 
     let mut indentation_prefix = None;
 
+    // Calculate the indentation prefix based on the indentation of the first dependency entry.
+    if let Some(first_item) = deps.iter().next() {
+        let decor_prefix = first_item
+            .decor()
+            .prefix()
+            .and_then(|s| s.as_str())
+            .and_then(|s| s.lines().last())
+            .unwrap_or_default();
+
+        let decor_prefix = decor_prefix
+            .split_once('#')
+            .map(|(s, _)| s)
+            .unwrap_or(decor_prefix);
+
+        indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
+    }
+
+    let indentation_prefix_str = format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
+
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
-
-        // Calculate the indentation prefix based on the indentation of the first dependency entry.
-        if indentation_prefix.is_none() {
-            let decor_prefix = decor
-                .prefix()
-                .and_then(|s| s.as_str())
-                .and_then(|s| s.lines().last())
-                .unwrap_or_default();
-
-            let decor_prefix = decor_prefix
-                .split_once('#')
-                .map(|(s, _)| s)
-                .unwrap_or(decor_prefix);
-
-            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
-        }
-
-        let indentation_prefix_str =
-            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {

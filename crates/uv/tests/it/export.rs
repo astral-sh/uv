@@ -1,17 +1,19 @@
 #![allow(clippy::disallowed_types)]
 
-use crate::common::{
-    READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, TestContext, apply_filters,
-    decode_token, uv_snapshot,
-};
+#[cfg(feature = "git")]
+use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
+use crate::common::{TestContext, apply_filters, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+#[cfg(feature = "git")]
 use std::path::Path;
 use std::process::Stdio;
+#[cfg(feature = "git")]
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 #[test]
 fn requirements_txt_dependency() -> Result<()> {
@@ -583,7 +585,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'darwin'",
@@ -1275,6 +1277,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
+#[cfg(feature = "git")]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
@@ -1346,7 +1349,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         "",
     ));
     filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
-    uv_snapshot!(filters, context.export().env("GIT_SSH_COMMAND", failing_git_ssh_command), @r#"
+    uv_snapshot!(filters, context.export().env(EnvVars::GIT_SSH_COMMAND, failing_git_ssh_command), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1377,7 +1380,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         ssh_deploy_key.portable_display()
     );
 
-    uv_snapshot!(context.filters(), context.export().env("GIT_SSH_COMMAND", git_ssh_command), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1601,7 +1604,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'win32'",
@@ -1897,7 +1900,7 @@ fn devrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1921,10 +1924,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1937,10 +1941,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1959,8 +1964,9 @@ fn devrequirements_txt_() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2573,7 +2579,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -2692,7 +2698,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -3320,9 +3326,9 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
         # via
         #   project
         #   torchvision
-    torchvision==0.21.0 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    torchvision==0.21.0 ; (python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via project
-    torchvision==0.21.0+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torchvision==0.21.0+cpu ; (python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
         # via project
     typing-extensions==4.12.2 \
         --hash=sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d \
@@ -4526,6 +4532,89 @@ fn pep_751_https_credentials() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     "#);
+
+    Ok(())
+}
+
+/// Support `UV_NO_EDITABLE=1 uv export`.
+///
+/// <https://github.com/astral-sh/uv/issues/15103>
+#[test]
+fn no_editable_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("--name")
+        .arg("project")
+        .arg(".")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR]
+    .
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn export_only_group_and_extra_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = ["pytest"]
+
+        [dependency-groups]
+        dev = ["ruff"]
+        "#,
+    )?;
+
+    // Using --only-group and --extra together should error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--extra").arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    // Using --only-group and --all-extras together should also error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
 
     Ok(())
 }

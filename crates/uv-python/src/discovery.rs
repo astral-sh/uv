@@ -8,8 +8,6 @@ use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
-use which::{which, which_all};
-
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
@@ -17,17 +15,20 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_preview::Preview;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+use which::{which, which_all};
 
 use crate::downloads::{PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::ManagedPythonInstallations;
+use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+use crate::python_version::python_build_versions_from_env;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -35,12 +36,12 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
 
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -65,6 +66,26 @@ pub enum PythonRequest {
     /// A request for a specific Python installation key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to managed Python downloads.
     Key(PythonDownloadRequest),
+}
+
+impl<'a> serde::Deserialize<'a> for PythonRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::parse(&s))
+    }
+}
+
+impl serde::Serialize for PythonRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = self.to_canonical_string();
+        serializer.serialize_str(&s)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -108,9 +129,9 @@ impl FromStr for PythonDownloads {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "auto" | "automatic" | "true" | "1" => Ok(PythonDownloads::Automatic),
-            "manual" => Ok(PythonDownloads::Manual),
-            "never" | "false" | "0" => Ok(PythonDownloads::Never),
+            "auto" | "automatic" | "true" | "1" => Ok(Self::Automatic),
+            "manual" => Ok(Self::Manual),
+            "never" | "false" | "0" => Ok(Self::Never),
             _ => Err(format!("Invalid value for `python-download`: '{s}'")),
         }
     }
@@ -118,11 +139,7 @@ impl FromStr for PythonDownloads {
 
 impl From<bool> for PythonDownloads {
     fn from(value: bool) -> Self {
-        if value {
-            PythonDownloads::Automatic
-        } else {
-            PythonDownloads::Never
-        }
+        if value { Self::Automatic } else { Self::Never }
     }
 }
 
@@ -149,11 +166,13 @@ pub(crate) struct DiscoveryPreferences {
 pub enum PythonVariant {
     #[default]
     Default,
+    Debug,
     Freethreaded,
+    FreethreadedDebug,
 }
 
 /// A Python discovery version request.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VersionRequest {
     /// Allow an appropriate default Python version.
     #[default]
@@ -233,7 +252,7 @@ pub enum Error {
 
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
-    RegistryError(#[from] windows_result::Error),
+    RegistryError(#[from] windows::core::Error),
 
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
@@ -246,6 +265,9 @@ pub enum Error {
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
     #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
+
+    #[error(transparent)]
+    BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
 /// Lazily iterate over Python executables in mutable virtual environments.
@@ -314,6 +336,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
+    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
@@ -324,7 +347,11 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
-                // Check that the Python version and platform satisfy the request to avoid unnecessary interpreter queries later
+
+                let build_versions = python_build_versions_from_env()?;
+
+                // Check that the Python version and platform satisfy the request to avoid
+                // unnecessary interpreter queries later
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
@@ -332,14 +359,52 @@ fn python_executables_from_installed<'a>(
                             debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
                             return false;
                         }
-                        if !platform.matches(installation.key()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
+                        if !platform.matches(installation.platform()) {
+                            debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
+
+                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
+                            let Some(installation_build) = installation.build() else {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
+                                );
+                                return false;
+                            };
+                            if installation_build != requested_build {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+                                );
+                                return false;
+                            }
+                        }
+
                         true
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
+                    .map(move |installation| {
+                        // If it's not a patch version request, then attempt to read the stable
+                        // minor version link.
+                        let executable = version
+                                .patch()
+                                .is_none()
+                                .then(|| {
+                                    PythonMinorVersionLink::from_installation(
+                                        &installation,
+                                        preview,
+                                    )
+                                    .filter(PythonMinorVersionLink::exists)
+                                    .map(
+                                        |minor_version_link| {
+                                            minor_version_link.symlink_executable.clone()
+                                        },
+                                    )
+                                })
+                                .flatten()
+                                .unwrap_or_else(|| installation.executable(false));
+                        (PythonSource::Managed, executable)
+                    })
+                )
             })
     })
     .flatten_ok();
@@ -402,7 +467,16 @@ fn python_executables_from_installed<'a>(
     .flatten();
 
     match preference {
-        PythonPreference::OnlyManaged => Box::new(from_managed_installations),
+        PythonPreference::OnlyManaged => {
+            // TODO(zanieb): Ideally, we'd create "fake" managed installation directories for tests,
+            // but for now... we'll just include the test interpreters which are always on the
+            // search path.
+            if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok() {
+                Box::new(from_managed_installations.chain(from_search_path))
+            } else {
+                Box::new(from_managed_installations)
+            }
+        }
         PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
@@ -432,6 +506,7 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -452,7 +527,7 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
-        python_executables_from_installed(version, implementation, platform, preference);
+        python_executables_from_installed(version, implementation, platform, preference, preview);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -651,16 +726,23 @@ fn python_interpreters<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    preview: Preview,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    python_interpreters_from_executables(
+    let interpreters = python_interpreters_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(version, implementation, platform, environments, preference).filter_ok(
-            move |(source, path)| {
-                source_satisfies_environment_preference(*source, path, environments)
-            },
-        ),
+        python_executables(
+            version,
+            implementation,
+            platform,
+            environments,
+            preference,
+            preview,
+        )
+        .filter_ok(move |(source, path)| {
+            source_satisfies_environment_preference(*source, path, environments)
+        }),
         cache,
     )
     .filter_ok(move |(source, interpreter)| {
@@ -678,6 +760,23 @@ fn python_interpreters<'a>(
             false
         }
     })
+    .filter_ok(move |(source, interpreter)| {
+        satisfies_python_preference(*source, interpreter, preference)
+    });
+
+    if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok() {
+        Either::Left(interpreters.map_ok(|(source, interpreter)| {
+            // In test mode, change the source to `Managed` if a version was marked as such via
+            // `TestContext::with_versions_as_managed`.
+            if interpreter.is_managed() {
+                (PythonSource::Managed, interpreter)
+            } else {
+                (source, interpreter)
+            }
+        }))
+    } else {
+        Either::Right(interpreters)
+    }
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -805,6 +904,95 @@ fn source_satisfies_environment_preference(
     }
 }
 
+/// Returns true if a Python interpreter matches the [`PythonPreference`].
+pub fn satisfies_python_preference(
+    source: PythonSource,
+    interpreter: &Interpreter,
+    preference: PythonPreference,
+) -> bool {
+    // If the source is "explicit", we will not apply the Python preference, e.g., if the user has
+    // activated a virtual environment, we should always allow it. We may want to invalidate the
+    // environment in some cases, like in projects, but we can't distinguish between explicit
+    // requests for a different Python preference or a persistent preference in a configuration file
+    // which would result in overly aggressive invalidation.
+    let is_explicit = match source {
+        PythonSource::ProvidedPath
+        | PythonSource::ParentInterpreter
+        | PythonSource::ActiveEnvironment
+        | PythonSource::CondaPrefix => true,
+        PythonSource::Managed
+        | PythonSource::DiscoveredEnvironment
+        | PythonSource::SearchPath
+        | PythonSource::SearchPathFirst
+        | PythonSource::Registry
+        | PythonSource::MicrosoftStore
+        | PythonSource::BaseCondaPrefix => false,
+    };
+
+    match preference {
+        PythonPreference::OnlyManaged => {
+            // Perform a fast check using the source before querying the interpreter
+            if matches!(source, PythonSource::Managed) || interpreter.is_managed() {
+                true
+            } else {
+                if is_explicit {
+                    debug!(
+                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+        }
+        // If not "only" a kind, any interpreter is okay
+        PythonPreference::Managed | PythonPreference::System => true,
+        PythonPreference::OnlySystem => {
+            if is_system_interpreter(source, interpreter) {
+                true
+            } else {
+                if is_explicit {
+                    debug!(
+                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn is_system_interpreter(source: PythonSource, interpreter: &Interpreter) -> bool {
+    match source {
+        // A managed interpreter is never a system interpreter
+        PythonSource::Managed => false,
+        // We can't be sure if this is a system interpreter without checking
+        PythonSource::ProvidedPath
+        | PythonSource::ParentInterpreter
+        | PythonSource::ActiveEnvironment
+        | PythonSource::CondaPrefix
+        | PythonSource::DiscoveredEnvironment
+        | PythonSource::SearchPath
+        | PythonSource::SearchPathFirst
+        | PythonSource::Registry
+        | PythonSource::BaseCondaPrefix => !interpreter.is_managed(),
+        // Managed interpreters should never be found in the store
+        PythonSource::MicrosoftStore => true,
+    }
+}
+
 /// Check if an encountered error is critical and should stop discovery.
 ///
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
@@ -813,7 +1001,7 @@ impl Error {
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
-            Error::Query(err, _, source) => match &**err {
+            Self::Query(err, _, source) => match &**err {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
@@ -832,17 +1020,27 @@ impl Error {
                     );
                     false
                 }
+                #[cfg(windows)]
+                InterpreterError::CorruptWindowsPackage { path, err } => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
+                InterpreterError::PermissionDenied { path, err } => {
+                    debug!(
+                        "Skipping unexecutable interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
                 InterpreterError::NotFound(path)
                 | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
-                    if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
-                        .then(|| {
-                            path.parent()
-                                .and_then(Path::parent)
-                                .map(|path| path.join("pyvenv.cfg").try_exists())
-                        })
-                        .flatten()
+                    if matches!(source, PythonSource::ActiveEnvironment)
+                        && uv_fs::is_virtualenv_executable(path)
                     {
                         true
                     } else {
@@ -851,7 +1049,7 @@ impl Error {
                     }
                 }
             },
-            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
+            Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at {}", path.display());
                 false
             }
@@ -899,6 +1097,7 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -990,6 +1189,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
@@ -1002,6 +1202,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
@@ -1018,6 +1219,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
@@ -1031,12 +1233,9 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
-            .filter_ok(|(_source, interpreter)| {
-                interpreter
-                    .implementation_name()
-                    .eq_ignore_ascii_case(implementation.into())
-            })
+            .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
@@ -1052,12 +1251,9 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
-                .filter_ok(|(_source, interpreter)| {
-                    interpreter
-                        .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into())
-                })
+                .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
@@ -1067,6 +1263,7 @@ pub fn find_python_installations<'a>(
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
                 }
             }
+
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
@@ -1076,8 +1273,11 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
-                .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
+                .filter_ok(move |(_source, interpreter)| {
+                    request.satisfied_by_interpreter(interpreter)
+                })
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
@@ -1093,9 +1293,13 @@ pub(crate) fn find_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    preview: Preview,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    let installations =
+        find_python_installations(request, environments, preference, cache, preview);
     let mut first_prerelease = None;
+    let mut first_debug = None;
+    let mut first_managed = None;
     let mut first_error = None;
     for result in installations {
         // Iterate until the first critical error or happy result
@@ -1132,9 +1336,23 @@ pub(crate) fn find_python_installation(
             && !installation.source.allows_prereleases()
             && !has_default_executable_name
         {
-            debug!("Skipping pre-release {}", installation.key());
+            debug!("Skipping pre-release installation {}", installation.key());
             if first_prerelease.is_none() {
                 first_prerelease = Some(installation.clone());
+            }
+            continue;
+        }
+
+        // If it's a debug build and debug builds aren't allowed, skip it — but store it for later
+        // since we'll use a debug build if no other versions are available.
+        if installation.key().variant().is_debug()
+            && !request.allows_debug()
+            && !installation.source.allows_debug()
+            && !has_default_executable_name
+        {
+            debug!("Skipping debug installation {}", installation.key());
+            if first_debug.is_none() {
+                first_debug = Some(installation.clone());
             }
             continue;
         }
@@ -1152,12 +1370,51 @@ pub(crate) fn find_python_installation(
             continue;
         }
 
+        // If it's a managed Python installation, and system interpreters are preferred, skip it
+        // for now.
+        if matches!(preference, PythonPreference::System)
+            && !is_system_interpreter(installation.source, installation.interpreter())
+        {
+            debug!(
+                "Skipping managed installation {}: system installation preferred",
+                installation.key()
+            );
+            if first_managed.is_none() {
+                first_managed = Some(installation.clone());
+            }
+            continue;
+        }
+
         // If we didn't skip it, this is the installation to use
         return result;
     }
 
+    // If we only found managed installations, and the preference allows them, we should return
+    // the first one.
+    if let Some(installation) = first_managed {
+        debug!(
+            "Allowing managed installation {}: no system installations",
+            installation.key()
+        );
+        return Ok(Ok(installation));
+    }
+
+    // If we only found debug installations, they're implicitly allowed and we should return the
+    // first one.
+    if let Some(installation) = first_debug {
+        debug!(
+            "Allowing debug installation {}: no non-debug installations",
+            installation.key()
+        );
+        return Ok(Ok(installation));
+    }
+
     // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
+        debug!(
+            "Allowing pre-release installation {}: no stable installations",
+            installation.key()
+        );
         return Ok(Ok(installation));
     }
 
@@ -1190,12 +1447,13 @@ pub(crate) fn find_best_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    preview: Preview,
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache);
+    let result = find_python_installation(request, environments, preference, cache, preview);
     match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
@@ -1223,7 +1481,7 @@ pub(crate) fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache);
+        let result = find_python_installation(&request, environments, preference, cache, preview);
         match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1240,14 +1498,16 @@ pub(crate) fn find_best_python_installation(
     debug!("Looking for a default Python installation");
     let request = PythonRequest::Default;
     Ok(
-        find_python_installation(&request, environments, preference, cache)?.map_err(|err| {
-            // Use a more general error in this case since we looked for multiple versions
-            PythonNotFound {
-                request,
-                python_preference: err.python_preference,
-                environment_preference: err.environment_preference,
-            }
-        }),
+        find_python_installation(&request, environments, preference, cache, preview)?.map_err(
+            |err| {
+                // Use a more general error in this case since we looked for multiple versions
+                PythonNotFound {
+                    request,
+                    python_preference: err.python_preference,
+                    environment_preference: err.environment_preference,
+                }
+            },
+        ),
     )
 }
 
@@ -1282,13 +1542,15 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
 pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::prelude::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
-        FILE_FLAG_OPEN_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_MODE, MAXIMUM_REPARSE_DATA_BUFFER_SIZE,
+        OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
+    use windows::core::PCWSTR;
 
     // The path must be absolute.
     if !path.is_absolute() {
@@ -1333,7 +1595,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     let Ok(md) = fs_err::symlink_metadata(path) else {
         return false;
     };
-    if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+    if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 == 0 {
         return false;
     }
 
@@ -1347,19 +1609,19 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     #[allow(unsafe_code)]
     let reparse_handle = unsafe {
         CreateFileW(
-            path_encoded.as_mut_ptr(),
+            PCWSTR(path_encoded.as_mut_ptr()),
             0,
-            0,
-            std::ptr::null_mut(),
+            FILE_SHARE_MODE(0),
+            None,
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            std::ptr::null_mut(),
+            None,
         )
     };
 
-    if reparse_handle == INVALID_HANDLE_VALUE {
+    let Ok(reparse_handle) = reparse_handle else {
         return false;
-    }
+    };
 
     let mut buf = [0u16; MAXIMUM_REPARSE_DATA_BUFFER_SIZE as usize];
     let mut bytes_returned = 0;
@@ -1370,19 +1632,20 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
         DeviceIoControl(
             reparse_handle,
             FSCTL_GET_REPARSE_POINT,
-            std::ptr::null_mut(),
+            None,
             0,
-            buf.as_mut_ptr().cast(),
+            Some(buf.as_mut_ptr().cast()),
             buf.len() as u32 * 2,
-            &mut bytes_returned,
-            std::ptr::null_mut(),
-        ) != 0
+            Some(&raw mut bytes_returned),
+            None,
+        )
+        .is_ok()
     };
 
     // SAFETY: The handle is valid.
     #[allow(unsafe_code)]
     unsafe {
-        CloseHandle(reparse_handle);
+        let _ = CloseHandle(reparse_handle);
     }
 
     // If the operation failed, assume it's not a reparse point.
@@ -1405,18 +1668,47 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 impl PythonVariant {
     fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
-            PythonVariant::Default => !interpreter.gil_disabled(),
-            PythonVariant::Freethreaded => interpreter.gil_disabled(),
+            // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
+            // backwards compatibility, but we may want to change this in the future.
+            Self::Default => !interpreter.gil_disabled(),
+            Self::Debug => interpreter.debug_enabled(),
+            Self::Freethreaded => interpreter.gil_disabled(),
+            Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
         }
     }
 
-    /// Return the lib or executable suffix for the variant, e.g., `t` for `python3.13t`.
+    /// Return the executable suffix for the variant, e.g., `t` for `python3.13t`.
     ///
     /// Returns an empty string for the default Python variant.
     pub fn suffix(self) -> &'static str {
         match self {
             Self::Default => "",
+            Self::Debug => "d",
             Self::Freethreaded => "t",
+            Self::FreethreadedDebug => "td",
+        }
+    }
+
+    /// Return the lib suffix for the variant, e.g., `t` for `python3.13t` but an empty string for
+    /// `python3.13d` or `python3.13`.
+    pub fn lib_suffix(self) -> &'static str {
+        match self {
+            Self::Default | Self::Debug => "",
+            Self::Freethreaded | Self::FreethreadedDebug => "t",
+        }
+    }
+
+    pub fn is_freethreaded(self) -> bool {
+        match self {
+            Self::Default | Self::Debug => false,
+            Self::Freethreaded | Self::FreethreadedDebug => true,
+        }
+    }
+
+    pub fn is_debug(self) -> bool {
+        match self {
+            Self::Default | Self::Freethreaded => false,
+            Self::Debug | Self::FreethreadedDebug => true,
         }
     }
 }
@@ -1519,7 +1811,7 @@ impl PythonRequest {
     ///
     /// This can only return `Err` if `@` is used. Otherwise, if no match is found, it returns
     /// `Ok(None)`.
-    pub fn try_from_tool_name(value: &str) -> Result<Option<PythonRequest>, Error> {
+    pub fn try_from_tool_name(value: &str) -> Result<Option<Self>, Error> {
         let lowercase_value = &value.to_ascii_lowercase();
         // Omitting the empty string from these lists excludes bare versions like "39".
         let abstract_version_prefixes = if cfg!(windows) {
@@ -1553,7 +1845,7 @@ impl PythonRequest {
         implementation_names: impl IntoIterator<Item = &'a str>,
         // the string to parse
         lowercase_value: &str,
-    ) -> Result<Option<PythonRequest>, Error> {
+    ) -> Result<Option<Self>, Error> {
         for prefix in abstract_version_prefixes {
             if let Some(version_request) =
                 Self::try_split_prefix_and_version(prefix, lowercase_value)?
@@ -1625,6 +1917,24 @@ impl PythonRequest {
         Ok(rest.parse().ok())
     }
 
+    /// Check if this request includes a specific patch version.
+    pub fn includes_patch(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Any => false,
+            Self::Version(version_request) => version_request.patch().is_some(),
+            Self::Directory(..) => false,
+            Self::File(..) => false,
+            Self::ExecutableName(..) => false,
+            Self::Implementation(..) => false,
+            Self::ImplementationVersion(_, version) => version.patch().is_some(),
+            Self::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.patch().is_some()),
+        }
+    }
+
     /// Check if a given interpreter satisfies the interpreter request.
     pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
@@ -1633,11 +1943,9 @@ impl PythonRequest {
         }
 
         match self {
-            PythonRequest::Default | PythonRequest::Any => true,
-            PythonRequest::Version(version_request) => {
-                version_request.matches_interpreter(interpreter)
-            }
-            PythonRequest::Directory(directory) => {
+            Self::Default | Self::Any => true,
+            Self::Version(version_request) => version_request.matches_interpreter(interpreter),
+            Self::Directory(directory) => {
                 // `sys.prefix` points to the environment root or `sys.executable` is the same
                 is_same_executable(directory, interpreter.sys_prefix())
                     || is_same_executable(
@@ -1645,7 +1953,7 @@ impl PythonRequest {
                         interpreter.sys_executable(),
                     )
             }
-            PythonRequest::File(file) => {
+            Self::File(file) => {
                 // The interpreter satisfies the request both if it is the venv...
                 if is_same_executable(interpreter.sys_executable(), file) {
                     return true;
@@ -1677,7 +1985,7 @@ impl PythonRequest {
                 }
                 false
             }
-            PythonRequest::ExecutableName(name) => {
+            Self::ExecutableName(name) => {
                 // First, see if we have a match in the venv ...
                 if interpreter
                     .sys_executable()
@@ -1706,16 +2014,16 @@ impl PythonRequest {
                 }
                 false
             }
-            PythonRequest::Implementation(implementation) => interpreter
+            Self::Implementation(implementation) => interpreter
                 .implementation_name()
                 .eq_ignore_ascii_case(implementation.into()),
-            PythonRequest::ImplementationVersion(implementation, version) => {
+            Self::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
                     && interpreter
                         .implementation_name()
                         .eq_ignore_ascii_case(implementation.into())
             }
-            PythonRequest::Key(request) => request.satisfied_by_interpreter(interpreter),
+            Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
     }
 
@@ -1732,6 +2040,19 @@ impl PythonRequest {
         }
     }
 
+    /// Whether this request opts-in to a debug Python version.
+    pub(crate) fn allows_debug(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Any => true,
+            Self::Version(version) => version.is_debug(),
+            Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
+            Self::Implementation(_) => false,
+            Self::ImplementationVersion(_, _) => true,
+            Self::Key(request) => request.allows_debug(),
+        }
+    }
+
     /// Whether this request opts-in to an alternative Python implementation, e.g., PyPy.
     pub(crate) fn allows_alternative_implementations(&self) -> bool {
         match self {
@@ -1739,8 +2060,10 @@ impl PythonRequest {
             Self::Any => true,
             Self::Version(_) => false,
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
-            Self::Implementation(_) => true,
-            Self::ImplementationVersion(_, _) => true,
+            Self::Implementation(implementation)
+            | Self::ImplementationVersion(implementation, _) => {
+                !matches!(implementation, ImplementationName::CPython)
+            }
             Self::Key(request) => request.allows_alternative_implementations(),
         }
     }
@@ -1776,6 +2099,21 @@ impl PythonSource {
 
     /// Whether a pre-release Python installation from this source can be used without opt-in.
     pub(crate) fn allows_prereleases(self) -> bool {
+        match self {
+            Self::Managed | Self::Registry | Self::MicrosoftStore => false,
+            Self::SearchPath
+            | Self::SearchPathFirst
+            | Self::CondaPrefix
+            | Self::BaseCondaPrefix
+            | Self::ProvidedPath
+            | Self::ParentInterpreter
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment => true,
+        }
+    }
+
+    /// Whether a debug Python installation from this source can be used without opt-in.
+    pub(crate) fn allows_debug(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
@@ -1860,12 +2198,12 @@ impl PythonPreference {
         }
 
         match self {
-            PythonPreference::OnlyManaged => matches!(source, PythonSource::Managed),
+            Self::OnlyManaged => matches!(source, PythonSource::Managed),
             Self::Managed | Self::System => matches!(
                 source,
                 PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
             ),
-            PythonPreference::OnlySystem => {
+            Self::OnlySystem => {
                 matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
         }
@@ -1875,6 +2213,30 @@ impl PythonPreference {
         match self {
             Self::OnlySystem => false,
             Self::Managed | Self::System | Self::OnlyManaged => true,
+        }
+    }
+
+    /// Returns a new preference when the `--system` flag is used.
+    ///
+    /// This will convert [`PythonPreference::Managed`] to [`PythonPreference::System`] when system
+    /// is set.
+    #[must_use]
+    pub fn with_system_flag(self, system: bool) -> Self {
+        match self {
+            // TODO(zanieb): It's not clear if we want to allow `--system` to override
+            // `--managed-python`. We should probably make this `from_system_flag` and refactor
+            // handling of the `PythonPreference` to use an `Option` so we can tell if the user
+            // provided it?
+            Self::OnlyManaged => self,
+            Self::Managed => {
+                if system {
+                    Self::System
+                } else {
+                    self
+                }
+            }
+            Self::System => self,
+            Self::OnlySystem => self,
         }
     }
 }
@@ -2066,6 +2428,11 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
+    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
+        Self::MajorMinor(key.major, key.minor, key.variant)
+    }
+
     /// Return possible executable names for the given version request.
     pub(crate) fn executable_names(
         &self,
@@ -2140,10 +2507,12 @@ impl VersionRequest {
         }
 
         // Include free-threaded variants
-        if self.is_freethreaded() {
-            for i in 0..names.len() {
-                let name = names[i].with_variant(PythonVariant::Freethreaded);
-                names.push(name);
+        if let Some(variant) = self.variant() {
+            if variant != PythonVariant::Default {
+                for i in 0..names.len() {
+                    let name = names[i].with_variant(variant);
+                    names.push(name);
+                }
             }
         }
 
@@ -2442,6 +2811,18 @@ impl VersionRequest {
         }
     }
 
+    /// Whether this request is for a debug Python variant.
+    pub(crate) fn is_debug(&self) -> bool {
+        match self {
+            Self::Any | Self::Default => false,
+            Self::Major(_, variant)
+            | Self::MajorMinor(_, _, variant)
+            | Self::MajorMinorPatch(_, _, _, variant)
+            | Self::MajorMinorPrerelease(_, _, _, variant)
+            | Self::Range(_, variant) => variant.is_debug(),
+        }
+    }
+
     /// Whether this request is for a free-threaded Python variant.
     pub(crate) fn is_freethreaded(&self) -> bool {
         match self {
@@ -2450,7 +2831,7 @@ impl VersionRequest {
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
-            | Self::Range(_, variant) => variant == &PythonVariant::Freethreaded,
+            | Self::Range(_, variant) => variant.is_freethreaded(),
         }
     }
 
@@ -2495,24 +2876,43 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Stripping the 't' suffix produces awkward error messages if the user tries a version
-        // like "latest". HACK: If the version is all letters, don't even try to parse it further.
-        if s.chars().all(char::is_alphabetic) {
-            return Err(Error::InvalidVersionRequest(s.to_string()));
+        /// Extract the variant from the end of a version request string, returning the prefix and
+        /// the variant type.
+        fn parse_variant(s: &str) -> Result<(&str, PythonVariant), Error> {
+            // This cannot be a valid version, just error immediately
+            if s.chars().all(char::is_alphabetic) {
+                return Err(Error::InvalidVersionRequest(s.to_string()));
+            }
+
+            let Some(mut start) = s.rfind(|c: char| c.is_numeric()) else {
+                return Ok((s, PythonVariant::Default));
+            };
+
+            // Advance past the first digit
+            start += 1;
+
+            // Ensure we're not out of bounds
+            if start + 1 > s.len() {
+                return Ok((s, PythonVariant::Default));
+            }
+
+            let variant = &s[start..];
+            let prefix = &s[..start];
+
+            // Strip a leading `+` if present
+            let variant = variant.strip_prefix('+').unwrap_or(variant);
+
+            // TODO(zanieb): Special-case error for use of `dt` instead of `td`
+
+            // If there's not a valid variant, fallback to failure in [`Version::from_str`]
+            let Ok(variant) = PythonVariant::from_str(variant) else {
+                return Ok((s, PythonVariant::Default));
+            };
+
+            Ok((prefix, variant))
         }
 
-        // Check if the version request is for a free-threaded Python version
-        let (s, variant) = s
-            .strip_suffix('t')
-            .map_or((s, PythonVariant::Default), |s| {
-                (s, PythonVariant::Freethreaded)
-            });
-
-        if variant == PythonVariant::Freethreaded && s.ends_with('t') {
-            // More than one trailing "t" is not allowed
-            return Err(Error::InvalidVersionRequest(format!("{s}t")));
-        }
-
+        let (s, variant) = parse_variant(s)?;
         let Ok(version) = Version::from_str(s) else {
             return parse_version_specifiers_request(s, variant);
         };
@@ -2525,26 +2925,11 @@ impl FromStr for VersionRequest {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         }
 
-        // Check if the local version includes a variant
-        let variant = if version.local().is_empty() {
-            variant
-        } else {
-            // If we already have a variant, do not allow another to be requested
-            if variant != PythonVariant::Default {
-                return Err(Error::InvalidVersionRequest(s.to_string()));
-            }
-
-            let uv_pep440::LocalVersionSlice::Segments([uv_pep440::LocalSegment::String(local)]) =
-                version.local()
-            else {
-                return Err(Error::InvalidVersionRequest(s.to_string()));
-            };
-
-            match local.as_str() {
-                "freethreaded" => PythonVariant::Freethreaded,
-                _ => return Err(Error::InvalidVersionRequest(s.to_string())),
-            }
-        };
+        // We don't allow local version suffixes unless they're variants, in which case they'd
+        // already be stripped.
+        if !version.local().is_empty() {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        }
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
         let Ok(release) = try_into_u8_slice(&version.release()) else {
@@ -2596,6 +2981,8 @@ impl FromStr for PythonVariant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "t" | "freethreaded" => Ok(Self::Freethreaded),
+            "d" | "debug" => Ok(Self::Debug),
+            "td" | "freethreaded+debug" => Ok(Self::FreethreadedDebug),
             "" => Ok(Self::Default),
             _ => Err(()),
         }
@@ -2606,7 +2993,9 @@ impl fmt::Display for PythonVariant {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Default => f.write_str("default"),
+            Self::Debug => f.write_str("debug"),
             Self::Freethreaded => f.write_str("freethreaded"),
+            Self::FreethreadedDebug => f.write_str("freethreaded+debug"),
         }
     }
 }
@@ -2636,23 +3025,15 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
-            Self::Major(major, PythonVariant::Default) => write!(f, "{major}"),
-            Self::Major(major, PythonVariant::Freethreaded) => write!(f, "{major}t"),
-            Self::MajorMinor(major, minor, PythonVariant::Default) => write!(f, "{major}.{minor}"),
-            Self::MajorMinor(major, minor, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}t")
+            Self::Major(major, variant) => write!(f, "{major}{}", variant.suffix()),
+            Self::MajorMinor(major, minor, variant) => {
+                write!(f, "{major}.{minor}{}", variant.suffix())
             }
-            Self::MajorMinorPatch(major, minor, patch, PythonVariant::Default) => {
-                write!(f, "{major}.{minor}.{patch}")
+            Self::MajorMinorPatch(major, minor, patch, variant) => {
+                write!(f, "{major}.{minor}.{patch}{}", variant.suffix())
             }
-            Self::MajorMinorPatch(major, minor, patch, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}.{patch}t")
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default) => {
-                write!(f, "{major}.{minor}{prerelease}")
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}{prerelease}t")
+            Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
+                write!(f, "{major}.{minor}{prerelease}{}", variant.suffix())
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
@@ -2720,6 +3101,18 @@ impl PythonPreference {
                     &[PythonSource::SearchPath]
                 }
             }
+        }
+    }
+
+    /// Return the canonical name.
+    // TODO(zanieb): This should be a `Display` impl and we should have a different view for
+    // the sources
+    pub fn canonical_name(&self) -> &'static str {
+        match self {
+            Self::OnlyManaged => "only managed",
+            Self::Managed => "prefer managed",
+            Self::System => "prefer system",
+            Self::OnlySystem => "only system",
         }
     }
 }
@@ -2865,8 +3258,8 @@ mod tests {
         discovery::{PythonRequest, VersionRequest},
         downloads::{ArchRequest, PythonDownloadRequest},
         implementation::ImplementationName,
-        platform::{Arch, Libc, Os},
     };
+    use uv_platform::{Arch, Libc, Os};
 
     use super::{Error, PythonVariant};
 
@@ -2940,6 +3333,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -2953,12 +3347,13 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: Some(ImplementationName::CPython),
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
-                os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
+                os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
+                build: None,
                 prereleases: None
             })
         );
@@ -2975,6 +3370,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -2988,12 +3384,13 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: None,
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -3414,6 +3811,7 @@ mod tests {
             "any",
             &[
                 "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "graalpy", "graalpy3",
+                "pyodide", "pyodide3",
             ],
         );
 

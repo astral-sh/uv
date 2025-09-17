@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,24 @@ pub use crate::path::*;
 pub mod cachedir;
 mod path;
 pub mod which;
+
+/// Append an extension to a [`PathBuf`].
+///
+/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
+///
+/// If there is no file name, the path is returned unchanged.
+///
+/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
+pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
+    let Some(name) = path.file_name() else {
+        // If there is no file name, we cannot add an extension.
+        return Cow::Borrowed(path);
+    };
+    let mut name = name.to_os_string();
+    name.push(".");
+    name.push(extension.trim_start_matches('.'));
+    Cow::Owned(path.with_file_name(name))
+}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -84,6 +103,8 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
 /// junction at the same path.
 ///
 /// Note that because junctions are used, the source must be a directory.
+///
+/// Changes to this function should be reflected in [`create_symlink`].
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // If the source is a file, we can't create a junction
@@ -136,6 +157,38 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         }
         Err(err) => Err(err),
     }
+}
+
+/// Create a symlink at `dst` pointing to `src`.
+///
+/// On Windows, this uses the `junction` crate to create a junction point.
+///
+/// Note that because junctions are used, the source must be a directory.
+///
+/// Changes to this function should be reflected in [`replace_symlink`].
+#[cfg(windows)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // If the source is a file, we can't create a junction
+    if src.as_ref().is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Cannot create a junction for {}: is not a directory",
+                src.as_ref().display()
+            ),
+        ));
+    }
+
+    junction::create(
+        dunce::simplified(src.as_ref()),
+        dunce::simplified(dst.as_ref()),
+    )
+}
+
+/// Create a symlink at `dst` pointing to `src`.
+#[cfg(unix)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
 #[cfg(unix)]
@@ -575,8 +628,33 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
         .is_some_and(|name| name.starts_with(".tmp"))
 }
 
+/// Checks if the grandparent directory of the given executable is the base
+/// of a virtual environment.
+///
+/// The procedure described in PEP 405 includes checking both the parent and
+/// grandparent directory of an executable, but in practice we've found this to
+/// be unnecessary.
+pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
+    executable
+        .as_ref()
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(is_virtualenv_base)
+}
+
+/// Returns `true` if a path is the base path of a virtual environment,
+/// indicated by the presence of a `pyvenv.cfg` file.
+///
+/// The procedure described in PEP 405 includes scanning `pyvenv.cfg`
+/// for a `home` key, but in practice we've found this to be
+/// unnecessary.
+pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
+    path.as_ref().join("pyvenv.cfg").is_file()
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
+#[must_use]
 pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
@@ -752,4 +830,46 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_with_added_extension() {
+        // Test with simple package name (no dots)
+        let path = PathBuf::from("python");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("python.exe"));
+
+        // Test with package name containing single dot
+        let path = PathBuf::from("awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
+
+        // Test with package name containing multiple dots
+        let path = PathBuf::from("org.example.tool");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
+
+        // Test with different extensions
+        let path = PathBuf::from("script");
+        let result = with_added_extension(&path, "ps1");
+        assert_eq!(result, PathBuf::from("script.ps1"));
+
+        // Test with path that has directory components
+        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(
+            result,
+            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
+        );
+
+        // Test with empty path (edge case)
+        let path = PathBuf::new();
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, path); // Should return unchanged
+    }
 }

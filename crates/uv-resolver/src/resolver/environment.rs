@@ -1,9 +1,13 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
+
+use itertools::Itertools;
 use tracing::trace;
+
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
@@ -122,9 +126,9 @@ impl ResolverEnvironment {
     /// This enables `uv pip`-style resolutions. That is, the resolution
     /// returned is only guaranteed to be installable for this specific marker
     /// environment.
-    pub fn specific(marker_env: ResolverMarkerEnvironment) -> ResolverEnvironment {
+    pub fn specific(marker_env: ResolverMarkerEnvironment) -> Self {
         let kind = Kind::Specific { marker_env };
-        ResolverEnvironment { kind }
+        Self { kind }
     }
 
     /// Create a resolver environment for producing a multi-platform
@@ -145,14 +149,14 @@ impl ResolverEnvironment {
     /// the order of dependencies specified is also significant but has no
     /// specific guarantees around it). Changing the ordering can help when our
     /// custom fork prioritization fails.
-    pub fn universal(initial_forks: Vec<MarkerTree>) -> ResolverEnvironment {
+    pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
             include: Arc::new(crate::FxHashbrownSet::default()),
             exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
-        ResolverEnvironment { kind }
+        Self { kind }
     }
 
     /// Returns the marker environment corresponding to this resolver
@@ -217,7 +221,7 @@ impl ResolverEnvironment {
     ///
     /// This panics if the resolver environment corresponds to one and only one
     /// specific marker environment. i.e., "pip"-style resolution.
-    fn narrow_environment(&self, rhs: MarkerTree) -> ResolverEnvironment {
+    fn narrow_environment(&self, rhs: MarkerTree) -> Self {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -236,7 +240,7 @@ impl ResolverEnvironment {
                     include: Arc::clone(include),
                     exclude: Arc::clone(exclude),
                 };
-                ResolverEnvironment { kind }
+                Self { kind }
             }
         }
     }
@@ -263,7 +267,7 @@ impl ResolverEnvironment {
     pub(crate) fn filter_by_group(
         &self,
         rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
-    ) -> Option<ResolverEnvironment> {
+    ) -> Option<Self> {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -298,7 +302,7 @@ impl ResolverEnvironment {
                     include: Arc::new(include),
                     exclude: Arc::new(exclude),
                 };
-                Some(ResolverEnvironment { kind })
+                Some(Self { kind })
             }
         }
     }
@@ -374,15 +378,63 @@ impl ResolverEnvironment {
     /// This is useful in contexts where one wants to display a message
     /// relating to a particular fork, but either no message or an entirely
     /// different message when this isn't a fork.
-    pub(crate) fn end_user_fork_display(&self) -> Option<impl std::fmt::Display + '_> {
-        match self.kind {
+    pub(crate) fn end_user_fork_display(&self) -> Option<String> {
+        match &self.kind {
             Kind::Specific { .. } => None,
-            Kind::Universal { ref markers, .. } => {
-                if markers.is_true() {
-                    None
-                } else {
-                    Some(format!("split ({markers:?})"))
+            Kind::Universal {
+                initial_forks: _,
+                markers,
+                include,
+                exclude,
+            } => {
+                let format_conflict_item = |conflict_item: &ConflictItem| {
+                    format!(
+                        "{}{}",
+                        conflict_item.package(),
+                        match conflict_item.kind() {
+                            ConflictKind::Extra(extra) => format!("[{extra}]"),
+                            ConflictKind::Group(group) => {
+                                format!("[group:{group}]")
+                            }
+                            ConflictKind::Project => String::new(),
+                        }
+                    )
+                };
+
+                if markers.is_true() && include.is_empty() && exclude.is_empty() {
+                    return None;
                 }
+
+                let mut descriptors = Vec::new();
+                if !markers.is_true() {
+                    descriptors.push(format!("markers: {markers:?}"));
+                }
+                if !include.is_empty() {
+                    descriptors.push(format!(
+                        "included: {}",
+                        // Sort to ensure stable error messages
+                        include
+                            .iter()
+                            .map(format_conflict_item)
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .join(", "),
+                    ));
+                }
+                if !exclude.is_empty() {
+                    descriptors.push(format!(
+                        "excluded: {}",
+                        // Sort to ensure stable error messages
+                        exclude
+                            .iter()
+                            .map(format_conflict_item)
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .join(", "),
+                    ));
+                }
+
+                Some(format!("split ({})", descriptors.join("; ")))
             }
         }
     }
@@ -453,10 +505,7 @@ pub(crate) enum ForkingPossibility<'d> {
 }
 
 impl<'d> ForkingPossibility<'d> {
-    pub(crate) fn new(
-        env: &ResolverEnvironment,
-        dep: &'d PubGrubDependency,
-    ) -> ForkingPossibility<'d> {
+    pub(crate) fn new(env: &ResolverEnvironment, dep: &'d PubGrubDependency) -> Self {
         let marker = dep.package.marker();
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
@@ -479,7 +528,7 @@ pub(crate) struct Forker<'d> {
     marker: MarkerTree,
 }
 
-impl<'d> Forker<'d> {
+impl Forker<'_> {
     /// Attempt a fork based on the given resolver environment.
     ///
     /// If a fork is possible, then a new forker and at least one new
@@ -490,7 +539,7 @@ impl<'d> Forker<'d> {
     pub(crate) fn fork(
         &self,
         env: &ResolverEnvironment,
-    ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
+    ) -> Option<(Self, Vec<ResolverEnvironment>)> {
         if !env.included_by_marker(self.marker) {
             return None;
         }

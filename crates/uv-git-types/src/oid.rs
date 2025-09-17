@@ -25,6 +25,11 @@ impl GitOid {
     pub fn as_short_str(&self) -> &str {
         &self.as_str()[..16]
     }
+
+    /// Return a (very) truncated representation, i.e., the first 8 characters of the SHA.
+    pub fn as_tiny_str(&self) -> &str {
+        &self.as_str()[..8]
+    }
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -55,7 +60,7 @@ impl FromStr for GitOid {
 
         let mut bytes = [0; 40];
         bytes.copy_from_slice(s.as_bytes());
-        Ok(GitOid { bytes })
+        Ok(Self { bytes })
     }
 }
 
@@ -75,7 +80,7 @@ impl serde::Serialize for GitOid {
 }
 
 impl<'de> serde::Deserialize<'de> for GitOid {
-    fn deserialize<D>(deserializer: D) -> Result<GitOid, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

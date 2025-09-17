@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+#[cfg(unix)]
+use tracing::debug;
+
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[allow(clippy::doc_markdown)]
@@ -41,29 +44,74 @@ impl Shell {
     ///
     /// If `SHELL` is set, but contains a value that doesn't correspond to one of the supported
     /// shell types, then return `None`.
-    pub fn from_env() -> Option<Shell> {
+    pub fn from_env() -> Option<Self> {
         if std::env::var_os(EnvVars::NU_VERSION).is_some() {
-            Some(Shell::Nushell)
+            Some(Self::Nushell)
         } else if std::env::var_os(EnvVars::FISH_VERSION).is_some() {
-            Some(Shell::Fish)
+            Some(Self::Fish)
         } else if std::env::var_os(EnvVars::BASH_VERSION).is_some() {
-            Some(Shell::Bash)
+            Some(Self::Bash)
         } else if std::env::var_os(EnvVars::ZSH_VERSION).is_some() {
-            Some(Shell::Zsh)
+            Some(Self::Zsh)
         } else if std::env::var_os(EnvVars::KSH_VERSION).is_some() {
-            Some(Shell::Ksh)
+            Some(Self::Ksh)
         } else if let Some(env_shell) = std::env::var_os(EnvVars::SHELL) {
-            Shell::from_shell_path(env_shell)
+            Self::from_shell_path(env_shell)
         } else if cfg!(windows) {
             // Command Prompt relies on PROMPT for its appearance whereas PowerShell does not.
             // See: https://stackoverflow.com/a/66415037.
             if std::env::var_os(EnvVars::PROMPT).is_some() {
-                Some(Shell::Cmd)
+                Some(Self::Cmd)
             } else {
                 // Fallback to PowerShell if the PROMPT environment variable is not set.
-                Some(Shell::Powershell)
+                Some(Self::Powershell)
             }
         } else {
+            // Fallback to detecting the shell from the parent process
+            Self::from_parent_process()
+        }
+    }
+
+    /// Attempt to determine the shell from the parent process.
+    ///
+    /// This is a fallback method for when environment variables don't provide
+    /// enough information about the current shell. It looks at the parent process
+    /// to try to identify which shell is running.
+    ///
+    /// This method currently only works on Unix-like systems. On other platforms,
+    /// it returns `None`.
+    fn from_parent_process() -> Option<Self> {
+        #[cfg(unix)]
+        {
+            // Get the parent process ID
+            let ppid = nix::unistd::getppid();
+            debug!("Detected parent process ID: {ppid}");
+
+            // Try to read the parent process executable path
+            let proc_exe_path = format!("/proc/{ppid}/exe");
+            if let Ok(exe_path) = fs_err::read_link(&proc_exe_path) {
+                debug!("Parent process executable: {}", exe_path.display());
+                if let Some(shell) = Self::from_shell_path(&exe_path) {
+                    return Some(shell);
+                }
+            }
+
+            // If reading exe fails, try reading the comm file
+            let proc_comm_path = format!("/proc/{ppid}/comm");
+            if let Ok(comm) = fs_err::read_to_string(&proc_comm_path) {
+                let comm = comm.trim();
+                debug!("Parent process comm: {comm}");
+                if let Some(shell) = parse_shell_from_path(Path::new(comm)) {
+                    return Some(shell);
+                }
+            }
+
+            debug!("Could not determine shell from parent process");
+            None
+        }
+
+        #[cfg(not(unix))]
+        {
             None
         }
     }
@@ -79,14 +127,14 @@ impl Shell {
     /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
     /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
     /// ```
-    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Shell> {
+    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
         parse_shell_from_path(path.as_ref())
     }
 
     /// Returns `true` if the shell supports a `PATH` update command.
     pub fn supports_update(self) -> bool {
         match self {
-            Shell::Powershell | Shell::Cmd => true,
+            Self::Powershell | Self::Cmd => true,
             shell => !shell.configuration_files().is_empty(),
         }
     }
@@ -101,7 +149,7 @@ impl Shell {
             return vec![];
         };
         match self {
-            Shell::Bash => {
+            Self::Bash => {
                 // On Bash, we need to update both `.bashrc` and `.bash_profile`. The former is
                 // sourced for non-login shells, and the latter is sourced for login shells.
                 //
@@ -116,11 +164,11 @@ impl Shell {
                     home_dir.join(".bashrc"),
                 ]
             }
-            Shell::Ksh => {
+            Self::Ksh => {
                 // On Ksh it's standard POSIX `.profile` for login shells, and `.kshrc` for non-login.
                 vec![home_dir.join(".profile"), home_dir.join(".kshrc")]
             }
-            Shell::Zsh => {
+            Self::Zsh => {
                 // On Zsh, we only need to update `.zshenv`. This file is sourced for both login and
                 // non-login shells. However, we match rustup's logic for determining _which_
                 // `.zshenv` to use.
@@ -154,7 +202,7 @@ impl Shell {
                     vec![home_dir.join(".zshenv")]
                 }
             }
-            Shell::Fish => {
+            Self::Fish => {
                 // On Fish, we only need to update `config.fish`. This file is sourced for both
                 // login and non-login shells. However, we must respect Fish's logic, which reads
                 // from `$XDG_CONFIG_HOME/fish/config.fish` if set, and `~/.config/fish/config.fish`
@@ -169,16 +217,16 @@ impl Shell {
                     vec![home_dir.join(".config/fish/config.fish")]
                 }
             }
-            Shell::Csh => {
+            Self::Csh => {
                 // On Csh, we need to update both `.cshrc` and `.login`, like Bash.
                 vec![home_dir.join(".cshrc"), home_dir.join(".login")]
             }
             // TODO(charlie): Add support for Nushell.
-            Shell::Nushell => vec![],
+            Self::Nushell => vec![],
             // See: [`crate::windows::prepend_path`].
-            Shell::Powershell => vec![],
+            Self::Powershell => vec![],
             // See: [`crate::windows::prepend_path`].
-            Shell::Cmd => vec![],
+            Self::Cmd => vec![],
         }
     }
 
@@ -209,24 +257,24 @@ impl Shell {
     /// Returns the command necessary to prepend a directory to the `PATH` in this shell.
     pub fn prepend_path(self, path: &Path) -> Option<String> {
         match self {
-            Shell::Nushell => None,
-            Shell::Bash | Shell::Zsh | Shell::Ksh => Some(format!(
+            Self::Nushell => None,
+            Self::Bash | Self::Zsh | Self::Ksh => Some(format!(
                 "export PATH=\"{}:$PATH\"",
                 backslash_escape(&path.simplified_display().to_string()),
             )),
-            Shell::Fish => Some(format!(
+            Self::Fish => Some(format!(
                 "fish_add_path \"{}\"",
                 backslash_escape(&path.simplified_display().to_string()),
             )),
-            Shell::Csh => Some(format!(
+            Self::Csh => Some(format!(
                 "setenv PATH \"{}:$PATH\"",
                 backslash_escape(&path.simplified_display().to_string()),
             )),
-            Shell::Powershell => Some(format!(
+            Self::Powershell => Some(format!(
                 "$env:PATH = \"{};$env:PATH\"",
                 backtick_escape(&path.simplified_display().to_string()),
             )),
-            Shell::Cmd => Some(format!(
+            Self::Cmd => Some(format!(
                 "set PATH=\"{};%PATH%\"",
                 backslash_escape(&path.simplified_display().to_string()),
             )),
@@ -237,14 +285,14 @@ impl Shell {
 impl std::fmt::Display for Shell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Shell::Bash => write!(f, "Bash"),
-            Shell::Fish => write!(f, "Fish"),
-            Shell::Powershell => write!(f, "PowerShell"),
-            Shell::Cmd => write!(f, "Command Prompt"),
-            Shell::Zsh => write!(f, "Zsh"),
-            Shell::Nushell => write!(f, "Nushell"),
-            Shell::Csh => write!(f, "Csh"),
-            Shell::Ksh => write!(f, "Ksh"),
+            Self::Bash => write!(f, "Bash"),
+            Self::Fish => write!(f, "Fish"),
+            Self::Powershell => write!(f, "PowerShell"),
+            Self::Cmd => write!(f, "Command Prompt"),
+            Self::Zsh => write!(f, "Zsh"),
+            Self::Nushell => write!(f, "Nushell"),
+            Self::Csh => write!(f, "Csh"),
+            Self::Ksh => write!(f, "Ksh"),
         }
     }
 }

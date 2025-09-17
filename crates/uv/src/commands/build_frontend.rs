@@ -3,7 +3,6 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -15,21 +14,24 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    PreviewMode, SourceStrategy,
+    SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -38,7 +40,8 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
@@ -46,7 +49,7 @@ use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 enum Error {
@@ -111,14 +114,14 @@ pub(crate) async fn build_frontend(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
@@ -136,7 +139,7 @@ pub(crate) async fn build_frontend(
         python.as_deref(),
         install_mirrors,
         settings,
-        network_settings,
+        client_builder,
         no_config,
         python_preference,
         python_downloads,
@@ -179,24 +182,15 @@ async fn build_impl(
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<BuildResult> {
-    if list && preview.is_disabled() {
-        // We need the direct build for list and that is preview only.
-        writeln!(
-            printer.stderr(),
-            "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
-        )?;
-        return Ok(BuildResult::Failure);
-    }
-
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -207,19 +201,16 @@ async fn build_impl(
         fork_strategy: _,
         dependency_metadata,
         config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
+        config_settings_package,
+        build_isolation,
+        extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
         build_options,
         sources,
     } = settings;
-
-    let client_builder = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -272,7 +263,7 @@ async fn build_impl(
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
 
-        if !package.pyproject_toml().is_package() {
+        if !package.pyproject_toml().is_package(true) {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
@@ -309,7 +300,7 @@ async fn build_impl(
         let packages: Vec<_> = workspace
             .packages()
             .values()
-            .filter(|package| package.pyproject_toml().is_package())
+            .filter(|package| package.pyproject_toml().is_package(true))
             .map(|package| AnnotatedSource {
                 source: Source::Directory(Cow::Borrowed(package.root())),
                 package: Some(package.project().name.clone()),
@@ -352,11 +343,12 @@ async fn build_impl(
             build_logs,
             force_pep517,
             build_constraints,
-            *no_build_isolation,
-            no_build_isolation_package,
+            build_isolation,
+            extra_build_dependencies,
+            extra_build_variables,
             *index_strategy,
             *keyring_provider,
-            *exclude_newer,
+            exclude_newer.clone(),
             *sources,
             concurrency,
             build_options,
@@ -366,6 +358,7 @@ async fn build_impl(
             dependency_metadata,
             *link_mode,
             config_setting,
+            config_settings_package,
             preview,
         );
         async {
@@ -391,11 +384,33 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            err.to_string().ends_with("outside of the target directory")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 
@@ -429,11 +444,12 @@ async fn build_package(
     build_logs: bool,
     force_pep517: bool,
     build_constraints: &[RequirementsSource],
-    no_build_isolation: bool,
-    no_build_isolation_package: &[PackageName],
+    build_isolation: &BuildIsolation,
+    extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
     concurrency: Concurrency,
     build_options: &BuildOptions,
@@ -443,7 +459,8 @@ async fn build_package(
     dependency_metadata: &DependencyMetadata,
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
-    preview: PreviewMode,
+    config_settings_package: &PackageConfigSettings,
+    preview: Preview,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
@@ -499,20 +516,10 @@ async fn build_package(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
-
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
 
     // Read build constraints.
     let build_constraints =
@@ -539,9 +546,8 @@ async fn build_package(
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
@@ -550,14 +556,16 @@ async fn build_package(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Resolve the flat indexes from `--find-links`.
@@ -573,11 +581,15 @@ async fn build_package(
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
 
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
@@ -585,7 +597,10 @@ async fn build_package(
         state.clone(),
         index_strategy,
         config_setting,
-        build_isolation,
+        config_settings_package,
+        types_build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &hasher,
@@ -614,10 +629,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if preview.is_enabled()
-        && !force_pep517
-        && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517
@@ -1182,11 +1194,11 @@ impl BuildMessage {
     /// The normalized filename of the wheel or source distribution.
     fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 normalized_filename: name,
                 ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 normalized_filename: name,
                 ..
             } => name,
@@ -1196,10 +1208,10 @@ impl BuildMessage {
     /// The filename of the wheel or source distribution before normalization.
     fn raw_filename(&self) -> &str {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename: name, ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 raw_filename: name, ..
             } => name,
         }
@@ -1207,7 +1219,7 @@ impl BuildMessage {
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename,
                 output_dir,
                 ..
@@ -1218,7 +1230,7 @@ impl BuildMessage {
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
-            BuildMessage::List {
+            Self::List {
                 raw_filename,
                 file_list,
                 source_tree,

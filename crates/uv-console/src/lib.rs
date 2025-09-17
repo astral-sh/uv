@@ -6,6 +6,25 @@ use std::{cmp::Ordering, iter};
 /// This is a slimmed-down version of `dialoguer::Confirm`, with the post-confirmation report
 /// enabled.
 pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<bool> {
+    confirm_inner(message, None, term, default)
+}
+
+/// Prompt the user for confirmation in the given [`Term`], with a hint.
+pub fn confirm_with_hint(
+    message: &str,
+    hint: &str,
+    term: &Term,
+    default: bool,
+) -> std::io::Result<bool> {
+    confirm_inner(message, Some(hint), term, default)
+}
+
+fn confirm_inner(
+    message: &str,
+    hint: Option<&str>,
+    term: &Term,
+    default: bool,
+) -> std::io::Result<bool> {
     let prompt = format!(
         "{} {} {} {} {}",
         style("?".to_string()).for_stderr().yellow(),
@@ -18,6 +37,13 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
     );
 
     term.write_str(&prompt)?;
+    if let Some(hint) = hint {
+        term.write_str(&format!(
+            "\n\n{}{} {hint}",
+            style("hint").for_stderr().bold().cyan(),
+            style(":").for_stderr().bold()
+        ))?;
+    }
     term.hide_cursor()?;
     term.flush()?;
 
@@ -56,7 +82,14 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
             .cyan(),
     );
 
-    term.clear_line()?;
+    if hint.is_some() {
+        term.clear_last_lines(2)?;
+        // It's not clear why we need to clear to the end of the screen here, but it fixes lingering
+        // display of the hint on `bash` (the issue did not reproduce on `zsh`).
+        term.clear_to_end_of_screen()?;
+    } else {
+        term.clear_line()?;
+    }
     term.write_line(&report)?;
     term.show_cursor()?;
     term.flush()?;
@@ -73,6 +106,19 @@ pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
     term.flush()?;
 
     let input = term.read_secure_line()?;
+
+    term.clear_line()?;
+
+    Ok(input)
+}
+
+/// Prompt the user for username in the given [`Term`].
+pub fn username(prompt: &str, term: &Term) -> std::io::Result<String> {
+    term.write_str(prompt)?;
+    term.show_cursor()?;
+    term.flush()?;
+
+    let input = term.read_line()?;
 
     term.clear_line()?;
 
@@ -249,4 +295,20 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
     term.write_line("")?;
 
     Ok(input)
+}
+
+/// Formats a number of bytes into a human readable SI-prefixed size (binary units).
+///
+/// Returns a tuple of `(quantity, units)`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+pub fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
+    const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+    let bytes_f32 = bytes as f32;
+    let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
+    (bytes_f32 / 1024_f32.powi(i as i32), UNITS[i])
 }

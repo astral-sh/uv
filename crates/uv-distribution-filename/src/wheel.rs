@@ -5,7 +5,6 @@ use std::str::FromStr;
 use memchr::memchr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
-use url::Url;
 
 use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -135,34 +134,22 @@ impl WheelFilename {
 
     /// Return the wheel's Python tags.
     pub fn python_tags(&self) -> &[LanguageTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.python_tag),
-            WheelTag::Large { large } => large.python_tag.as_slice(),
-        }
+        self.tags.python_tags()
     }
 
     /// Return the wheel's ABI tags.
     pub fn abi_tags(&self) -> &[AbiTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.abi_tag),
-            WheelTag::Large { large } => large.abi_tag.as_slice(),
-        }
+        self.tags.abi_tags()
     }
 
     /// Return the wheel's platform tags.
     pub fn platform_tags(&self) -> &[PlatformTag] {
-        match &self.tags {
-            WheelTag::Small { small } => std::slice::from_ref(&small.platform_tag),
-            WheelTag::Large { large } => large.platform_tag.as_slice(),
-        }
+        self.tags.platform_tags()
     }
 
     /// Return the wheel's build tag, if present.
     pub fn build_tag(&self) -> Option<&BuildTag> {
-        match &self.tags {
-            WheelTag::Small { .. } => None,
-            WheelTag::Large { large } => large.build_tag.as_ref(),
-        }
+        self.tags.build_tag()
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
@@ -297,29 +284,6 @@ impl WheelFilename {
             version,
             tags,
         })
-    }
-}
-
-impl TryFrom<&Url> for WheelFilename {
-    type Error = WheelFilenameError;
-
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
-        let filename = url
-            .path_segments()
-            .ok_or_else(|| {
-                WheelFilenameError::InvalidWheelFileName(
-                    url.to_string(),
-                    "URL must have a path".to_string(),
-                )
-            })?
-            .next_back()
-            .ok_or_else(|| {
-                WheelFilenameError::InvalidWheelFileName(
-                    url.to_string(),
-                    "URL must contain a filename".to_string(),
-                )
-            })?;
-        Self::from_str(filename)
     }
 }
 

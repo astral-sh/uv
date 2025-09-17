@@ -8,10 +8,12 @@ use std::sync::{Arc, LazyLock, RwLock};
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
+use tracing::trace;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
@@ -38,33 +40,8 @@ impl IndexUrl {
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
-        let url = match split_scheme(path) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(path)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        if let Some(root_dir) = root_dir {
-                            VerbatimUrl::from_path(path, root_dir)?
-                        } else {
-                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                        }
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                if let Some(root_dir) = root_dir {
-                    VerbatimUrl::from_path(path, root_dir)?
-                } else {
-                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                }
-            }
-        };
-        Ok(Self::from(url.with_given(path)))
+        let url = VerbatimUrl::from_url_or_path(path, root_dir)?;
+        Ok(Self::from(url))
     }
 
     /// Return the root [`Url`] of the index, if applicable.
@@ -92,40 +69,34 @@ impl IndexUrl {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for IndexUrl {
-    fn schema_name() -> String {
-        "IndexUrl".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("IndexUrl")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path."
+        })
     }
 }
 
 impl IndexUrl {
+    #[inline]
+    fn inner(&self) -> &VerbatimUrl {
+        match self {
+            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
+        }
+    }
+
     /// Return the raw URL for the index.
     pub fn url(&self) -> &DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.raw(),
-            Self::Url(url) => url.raw(),
-            Self::Path(url) => url.raw(),
-        }
+        self.inner().raw()
     }
 
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.to_url(),
-            Self::Url(url) => url.to_url(),
-            Self::Path(url) => url.to_url(),
-        }
+        self.inner().to_url()
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
@@ -140,26 +111,64 @@ impl IndexUrl {
             Cow::Owned(url)
         }
     }
+
+    /// Warn user if the given URL was provided as an ambiguous relative path.
+    ///
+    /// This is a temporary warning. Ambiguous values will not be
+    /// accepted in the future.
+    pub fn warn_on_disambiguated_relative_path(&self) {
+        let Self::Path(verbatim_url) = &self else {
+            return;
+        };
+
+        if let Some(path) = verbatim_url.given() {
+            if !is_disambiguated_path(path) {
+                if cfg!(windows) {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                } else {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pypi(url) => Display::fmt(url, f),
-            Self::Url(url) => Display::fmt(url, f),
-            Self::Path(url) => Display::fmt(url, f),
-        }
+        Display::fmt(self.inner(), f)
     }
 }
 
 impl Verbatim for IndexUrl {
     fn verbatim(&self) -> Cow<'_, str> {
-        match self {
-            Self::Pypi(url) => url.verbatim(),
-            Self::Url(url) => url.verbatim(),
-            Self::Path(url) => url.verbatim(),
+        self.inner().verbatim()
+    }
+}
+
+/// Checks if a path is disambiguated.
+///
+/// Disambiguated paths are absolute paths, paths with valid schemes,
+/// and paths starting with "./" or "../" on Unix or ".\\", "..\\",
+/// "./", or "../" on Windows.
+fn is_disambiguated_path(path: &str) -> bool {
+    if cfg!(windows) {
+        if path.starts_with(".\\") || path.starts_with("..\\") || path.starts_with('/') {
+            return true;
         }
     }
+    if path.starts_with("./") || path.starts_with("../") || Path::new(path).is_absolute() {
+        return true;
+    }
+    // Check if the path has a scheme (like `file://`)
+    if let Some((scheme, _)) = split_scheme(path) {
+        return Scheme::parse(scheme).is_some();
+    }
+    // This is an ambiguous relative path
+    false
 }
 
 /// An error that can occur when parsing an [`IndexUrl`].
@@ -186,12 +195,12 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.to_string().serialize(serializer)
+        self.inner().without_credentials().serialize(serializer)
     }
 }
 
 impl<'de> serde::de::Deserialize<'de> for IndexUrl {
-    fn deserialize<D>(deserializer: D) -> Result<IndexUrl, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
@@ -227,11 +236,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
-        match index {
-            IndexUrl::Pypi(url) => url.to_url(),
-            IndexUrl::Url(url) => url.to_url(),
-            IndexUrl::Path(url) => url.to_url(),
-        }
+        index.inner().to_url()
     }
 }
 
@@ -239,11 +244,7 @@ impl Deref for IndexUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
-        match &self {
-            Self::Pypi(url) => url,
-            Self::Url(url) => url,
-            Self::Path(url) => url,
-        }
+        self.inner()
     }
 }
 
@@ -379,8 +380,8 @@ impl<'a> IndexLocations {
     ///
     /// This includes explicit indexes, implicit indexes, flat indexes, and the default index.
     ///
-    /// The indexes will be returned in the order in which they were defined, such that the
-    /// last-defined index is the last item in the vector.
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
     pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
         if self.no_index {
             self.flat_index.iter().rev().collect()
@@ -411,11 +412,72 @@ impl<'a> IndexLocations {
             indexes
         }
     }
+
+    /// Return a vector containing all known [`Index`] entries.
+    ///
+    /// This includes explicit indexes, implicit indexes, flat indexes, and default indexes;
+    /// in short, it includes all defined indexes, even if they're overridden by some other index
+    /// definition.
+    ///
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
+    pub fn known_indexes(&'a self) -> impl Iterator<Item = &'a Index> {
+        if self.no_index {
+            Either::Left(self.flat_index.iter().rev())
+        } else {
+            Either::Right(
+                std::iter::once(&*DEFAULT_INDEX)
+                    .chain(self.flat_index.iter().rev())
+                    .chain(self.indexes.iter().rev()),
+            )
+        }
+    }
+
+    /// Add all authenticated sources to the cache.
+    pub fn cache_index_credentials(&self) {
+        for index in self.known_indexes() {
+            if let Some(credentials) = index.credentials() {
+                trace!(
+                    "Read credentials for index {}",
+                    index
+                        .name
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| index.url.to_string())
+                );
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
+            }
+        }
+    }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.simple_api_cache_control();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.artifact_cache_control();
+            }
+        }
+        None
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
-    fn from(index_locations: &IndexLocations) -> uv_auth::Indexes {
-        uv_auth::Indexes::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+    fn from(index_locations: &IndexLocations) -> Self {
+        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
             let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();
@@ -511,30 +573,23 @@ impl<'a> IndexUrls {
     /// iterator.
     pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            Either::Right(
-                {
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .filter(|index| !index.default)
-                }
-                .chain({
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .find(|index| index.default)
-                        .into_iter()
-                }),
-            )
+            return Either::Left(std::iter::empty());
         }
+
+        let mut seen = FxHashSet::default();
+        let (non_default, default) = self
+            .indexes
+            .iter()
+            .filter(move |index| {
+                if let Some(name) = &index.name {
+                    seen.insert(name)
+                } else {
+                    true
+                }
+            })
+            .partition::<Vec<_>, _>(|index| !index.default);
+
+        Either::Right(non_default.into_iter().chain(default))
     }
 
     /// Return the `--no-index` flag.
@@ -550,6 +605,26 @@ impl<'a> IndexUrls {
             }
         }
         IndexStatusCodeStrategy::Default
+    }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.simple_api_cache_control();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.artifact_cache_control();
+            }
+        }
+        None
     }
 }
 
@@ -630,5 +705,189 @@ impl IndexCapabilities {
             .entry(index_url)
             .or_insert(Flags::empty())
             .insert(Flags::FORBIDDEN);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{IndexCacheControl, IndexFormat, IndexName};
+    use uv_small_str::SmallString;
+
+    #[test]
+    fn test_index_url_parse_valid_paths() {
+        // Absolute path
+        assert!(is_disambiguated_path("/absolute/path"));
+        // Relative path
+        assert!(is_disambiguated_path("./relative/path"));
+        assert!(is_disambiguated_path("../../relative/path"));
+        if cfg!(windows) {
+            // Windows absolute path
+            assert!(is_disambiguated_path("C:/absolute/path"));
+            // Windows relative path
+            assert!(is_disambiguated_path(".\\relative\\path"));
+            assert!(is_disambiguated_path("..\\..\\relative\\path"));
+        }
+    }
+
+    #[test]
+    fn test_index_url_parse_ambiguous_paths() {
+        // Test single-segment ambiguous path
+        assert!(!is_disambiguated_path("index"));
+        // Test multi-segment ambiguous path
+        assert!(!is_disambiguated_path("relative/path"));
+    }
+
+    #[test]
+    fn test_index_url_parse_with_schemes() {
+        assert!(is_disambiguated_path("file:///absolute/path"));
+        assert!(is_disambiguated_path("https://registry.com/simple/"));
+        assert!(is_disambiguated_path(
+            "git+https://github.com/example/repo.git"
+        ));
+    }
+
+    #[test]
+    fn test_cache_control_lookup() {
+        use std::str::FromStr;
+
+        use uv_small_str::SmallString;
+
+        use crate::IndexFormat;
+        use crate::index_name::IndexName;
+
+        let indexes = vec![
+            Index {
+                name: Some(IndexName::from_str("index1").unwrap()),
+                url: IndexUrl::from_str("https://index1.example.com/simple").unwrap(),
+                cache_control: Some(crate::IndexCacheControl {
+                    api: Some(SmallString::from("max-age=300")),
+                    files: Some(SmallString::from("max-age=1800")),
+                }),
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+            Index {
+                name: Some(IndexName::from_str("index2").unwrap()),
+                url: IndexUrl::from_str("https://index2.example.com/simple").unwrap(),
+                cache_control: None,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+        ];
+
+        let index_urls = IndexUrls::from_indexes(indexes);
+
+        let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
+        assert_eq!(
+            index_urls.simple_api_cache_control_for(&url1),
+            Some("max-age=300")
+        );
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&url1),
+            Some("max-age=1800")
+        );
+
+        let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url2), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url2), None);
+
+        let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url3), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url3), None);
+    }
+
+    #[test]
+    fn test_pytorch_default_cache_control() {
+        // Test that PyTorch indexes get default cache control from the getter methods
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("pytorch").unwrap()),
+            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
+            cache_control: None, // No explicit cache control
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
+
+        // IndexUrls should return the default for PyTorch
+        assert_eq!(index_urls.simple_api_cache_control_for(&pytorch_url), None);
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=365000000, immutable, public")
+        );
+
+        // IndexLocations should also return the default for PyTorch
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&pytorch_url),
+            None
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=365000000, immutable, public")
+        );
+    }
+
+    #[test]
+    fn test_pytorch_user_override_cache_control() {
+        // Test that user-specified cache control overrides PyTorch defaults
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("pytorch").unwrap()),
+            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
+            cache_control: Some(IndexCacheControl {
+                api: Some(SmallString::from("no-cache")),
+                files: Some(SmallString::from("max-age=3600")),
+            }),
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
+
+        // User settings should override defaults
+        assert_eq!(
+            index_urls.simple_api_cache_control_for(&pytorch_url),
+            Some("no-cache")
+        );
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=3600")
+        );
+
+        // Same for IndexLocations
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&pytorch_url),
+            Some("no-cache")
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&pytorch_url),
+            Some("max-age=3600")
+        );
     }
 }

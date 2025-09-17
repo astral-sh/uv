@@ -6,7 +6,7 @@ use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
 
@@ -15,12 +15,12 @@ use uv_redacted::DisplaySafeUrl;
 pub(crate) struct SimpleHtml {
     /// The [`BaseUrl`] to which all relative URLs should be resolved.
     pub(crate) base: BaseUrl,
-    /// The list of [`File`]s available for download sorted by filename.
-    pub(crate) files: Vec<File>,
+    /// The list of [`PypiFile`]s available for download sorted by filename.
+    pub(crate) files: Vec<PypiFile>,
 }
 
 impl SimpleHtml {
-    /// Parse the list of [`File`]s from the simple HTML page returned by the given URL.
+    /// Parse the list of [`PypiFile`]s from the simple HTML page returned by the given URL.
     #[instrument(skip_all, fields(url = % url))]
     pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
         let dom = tl::parse(text, tl::ParserOptions::default())?;
@@ -41,7 +41,7 @@ impl SimpleHtml {
         ));
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
-        let mut files: Vec<File> = dom
+        let mut files: Vec<PypiFile> = dom
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
@@ -76,10 +76,10 @@ impl SimpleHtml {
         Ok(Some(url))
     }
 
-    /// Parse a [`File`] from an `<a>` tag.
+    /// Parse a [`PypiFile`] from an `<a>` tag.
     ///
     /// Returns `None` if the `<a>` don't doesn't have an `href` attribute.
-    fn parse_anchor(link: &HTMLTag) -> Result<Option<File>, Error> {
+    fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
         let Some(href) = link
             .attributes()
@@ -212,7 +212,7 @@ impl SimpleHtml {
             .map(|upload_time| html_escape::decode_html_entities(upload_time))
             .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
 
-        Ok(Some(File {
+        Ok(Some(PypiFile {
             core_metadata,
             yanked,
             requires_python,
@@ -296,7 +296,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -353,7 +353,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -413,7 +413,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -470,7 +470,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
                     hashes: Hashes {
@@ -527,7 +527,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -584,7 +584,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "torchtext-0.17.0+cpu-cp39-cp39-win_amd64.whl",
                     hashes: Hashes {
@@ -639,7 +639,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -770,7 +770,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -825,7 +825,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -881,7 +881,7 @@ mod tests {
                     },
                 ),
                 files: [
-                    File {
+                    PypiFile {
                         core_metadata: None,
                         filename: "Jinja2-3.1.2-py3-none-any.whl",
                         hashes: Hashes {
@@ -938,7 +938,7 @@ mod tests {
                     },
                 ),
                 files: [
-                    File {
+                    PypiFile {
                         core_metadata: None,
                         filename: "Jinja2-3.1.2-py3-none-any.whl",
                         hashes: Hashes {
@@ -1012,7 +1012,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
                     hashes: Hashes {
@@ -1028,7 +1028,7 @@ mod tests {
                     url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
                     hashes: Hashes {
@@ -1094,7 +1094,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Flask-0.1.tar.gz",
                     hashes: Hashes {
@@ -1112,7 +1112,7 @@ mod tests {
                     url: "0.1/Flask-0.1.tar.gz",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Flask-0.10.1.tar.gz",
                     hashes: Hashes {
@@ -1130,7 +1130,7 @@ mod tests {
                     url: "0.10.1/Flask-0.10.1.tar.gz",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "flask-3.0.1.tar.gz",
                     hashes: Hashes {
@@ -1197,7 +1197,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
@@ -1270,7 +1270,7 @@ mod tests {
                 },
             ),
             files: [
-                File {
+                PypiFile {
                     core_metadata: Some(
                         Bool(
                             true,
@@ -1290,7 +1290,7 @@ mod tests {
                     url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: Some(
                         Bool(
                             true,
@@ -1310,7 +1310,7 @@ mod tests {
                     url: "/whl/Jinja2-3.1.3-py3-none-any.whl",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: Some(
                         Bool(
                             false,
@@ -1330,7 +1330,7 @@ mod tests {
                     url: "/whl/Jinja2-3.1.4-py3-none-any.whl",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: Some(
                         Bool(
                             false,
@@ -1350,7 +1350,7 @@ mod tests {
                     url: "/whl/Jinja2-3.1.5-py3-none-any.whl",
                     yanked: None,
                 },
-                File {
+                PypiFile {
                     core_metadata: Some(
                         Bool(
                             true,

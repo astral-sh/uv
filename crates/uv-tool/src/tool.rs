@@ -7,6 +7,7 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::VerbatimParsedUrl;
+use uv_python::PythonRequest;
 use uv_settings::ToolOptions;
 
 /// A tool entry.
@@ -22,7 +23,7 @@ pub struct Tool {
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
-    python: Option<String>,
+    python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
     /// The [`ToolOptions`] used to install this tool.
@@ -40,7 +41,7 @@ struct ToolWire {
     overrides: Vec<Requirement>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
-    python: Option<String>,
+    python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
     options: ToolOptions,
@@ -102,6 +103,7 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
+    pub from: Option<String>,
 }
 
 impl Display for ToolEntrypoint {
@@ -164,11 +166,11 @@ impl Tool {
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
         build_constraints: Vec<Requirement>,
-        python: Option<String>,
-        entrypoints: impl Iterator<Item = ToolEntrypoint>,
+        python: Option<PythonRequest>,
+        entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
     ) -> Self {
-        let mut entrypoints: Vec<_> = entrypoints.collect();
+        let mut entrypoints: Vec<_> = entrypoints.into_iter().collect();
         entrypoints.sort();
         Self {
             requirements,
@@ -280,7 +282,13 @@ impl Tool {
         }
 
         if let Some(ref python) = self.python {
-            table.insert("python", value(python));
+            table.insert(
+                "python",
+                value(serde::Serialize::serialize(
+                    &python,
+                    toml_edit::ser::ValueSerializer::new(),
+                )?),
+            );
         }
 
         table.insert("entrypoints", {
@@ -327,7 +335,7 @@ impl Tool {
         &self.build_constraints
     }
 
-    pub fn python(&self) -> &Option<String> {
+    pub fn python(&self) -> &Option<PythonRequest> {
         &self.python
     }
 
@@ -338,8 +346,15 @@ impl Tool {
 
 impl ToolEntrypoint {
     /// Create a new [`ToolEntrypoint`].
-    pub fn new(name: String, install_path: PathBuf) -> Self {
-        Self { name, install_path }
+    pub fn new(name: &str, install_path: PathBuf, from: String) -> Self {
+        let name = name
+            .trim_end_matches(std::env::consts::EXE_SUFFIX)
+            .to_string();
+        Self {
+            name,
+            install_path,
+            from: Some(from),
+        }
     }
 
     /// Returns the TOML table for this entrypoint.
@@ -351,6 +366,9 @@ impl ToolEntrypoint {
             // Use cross-platform slashes so the toml string type does not change
             value(PortablePath::from(&self.install_path).to_string()),
         );
+        if let Some(from) = &self.from {
+            table.insert("from", value(from));
+        }
         table
     }
 }

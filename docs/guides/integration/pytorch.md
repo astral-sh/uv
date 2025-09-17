@@ -355,11 +355,11 @@ explicit = true
 
 In some cases, you may want to use CPU-only builds in some cases, but CUDA-enabled builds in others,
 with the choice toggled by a user-provided extra (e.g., `uv sync --extra cpu` vs.
-`uv sync --extra cu124`).
+`uv sync --extra cu128`).
 
 With `tool.uv.sources`, you can use extra markers to specify the desired index for each enabled
 extra. For example, the following configuration would use PyTorch's CPU-only for
-`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu124`:
+`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu128`:
 
 ```toml
 [project]
@@ -410,7 +410,7 @@ explicit = true
 !!! note
 
     Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
-    on macOS when the `cu124` extra is enabled.
+    on macOS when the `cu128` extra is enabled.
 
 ## The `uv pip` interface
 
@@ -433,25 +433,39 @@ $ uv pip install torch torchvision torchaudio --index-url https://download.pytor
 
 ## Automatic backend selection
 
-In [preview](../../reference/settings.md#preview), uv can automatically select the appropriate
-PyTorch index at runtime by inspecting the system configuration via `--torch-backend=auto` (or
-`UV_TORCH_BACKEND=auto`):
+uv supports automatic selection of the appropriate PyTorch index via the `--torch-backend=auto`
+command-line argument (or the `UV_TORCH_BACKEND=auto` environment variable), as in:
 
 ```shell
+$ # With a command-line argument.
+$ uv pip install torch --torch-backend=auto
+
+$ # With an environment variable.
 $ UV_TORCH_BACKEND=auto uv pip install torch
 ```
 
-When enabled, uv will query for the installed CUDA driver version and use the most-compatible
-PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no such CUDA driver
-is found, uv will fall back to the CPU-only index. uv will continue to respect existing index
-configuration for any packages outside the PyTorch ecosystem.
+When enabled, uv will query for the installed CUDA driver, AMD GPU versions, and Intel GPU presence,
+then use the most-compatible PyTorch index for all relevant packages (e.g., `torch`, `torchvision`,
+etc.). If no such GPU is found, uv will fall back to the CPU-only index. uv will continue to respect
+existing index configuration for any packages outside the PyTorch ecosystem.
 
-To select a specific backend (e.g., `cu126`), set `--torch-backend=cu126` (or
-`UV_TORCH_BACKEND=cu126`).
+You can also select a specific backend (e.g., CUDA 12.6) with `--torch-backend=cu126` (or
+`UV_TORCH_BACKEND=cu126`):
 
-At present, `--torch-backend` is only available in the `uv pip` interface, and only supports
-detection of CUDA drivers (as opposed to other accelerators like ROCm or Intel GPUs).
+```shell
+$ # With a command-line argument.
+$ uv pip install torch torchvision --torch-backend=cu126
 
-As `--torch-backend` is a preview feature, it should be considered experimental and is not governed
-by uv's standard [versioning policy](../../reference/policies/versioning.md). `--torch-backend` may
-change or be removed entirely in future versions of uv.
+$ # With an environment variable.
+$ UV_TORCH_BACKEND=cu126 uv pip install torch torchvision
+```
+
+On Windows, Intel GPU (XPU) is not automatically selected with `--torch-backend=auto`, but you can
+manually specify it using `--torch-backend=xpu`:
+
+```shell
+$ # Manual selection for Intel GPU.
+$ uv pip install torch torchvision --torch-backend=xpu
+```
+
+At present, `--torch-backend` is only available in the `uv pip` interface.

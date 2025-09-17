@@ -184,8 +184,8 @@ access to the authenticated URL at installation time.
 ### Using credential providers
 
 In addition to providing credentials directly, uv supports discovery of credentials from netrc and
-keyring. See the [HTTP authentication](./authentication.md#http-authentication) documentation for
-details on setting up specific credential providers.
+keyring. See the [HTTP authentication](./authentication/http.md) documentation for details on
+setting up specific credential providers.
 
 By default, uv will attempt an unauthenticated request before querying providers. If the request
 fails, uv will search for credentials. If credentials are found, an authenticated request will be
@@ -243,6 +243,43 @@ authenticate = "never"
 
 When `authenticate` is set to `never`, uv will never search for credentials for the given index and
 will error if credentials are provided directly.
+
+### Customizing cache control headers
+
+By default, uv will respect the cache control headers provided by the index. For example, PyPI
+serves package metadata with a `max-age=600` header, thereby allowing uv to cache package metadata
+for 10 minutes; and wheels and source distributions with a `max-age=365000000, immutable` header,
+thereby allowing uv to cache artifacts indefinitely.
+
+To override the cache control headers for an index, use the `cache-control` setting:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+cache-control = { api = "max-age=600", files = "max-age=365000000, immutable" }
+```
+
+The `cache-control` setting accepts an object with two optional keys:
+
+- `api`: Controls caching for Simple API requests (package metadata).
+- `files`: Controls caching for artifact downloads (wheels and source distributions).
+
+The values for these keys are strings that follow the
+[HTTP Cache-Control](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control)
+syntax. For example, to force uv to always revalidate package metadata, set `api = "no-cache"`:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+cache-control = { api = "no-cache" }
+```
+
+This setting is most commonly used to override the default cache control headers for private indexes
+that otherwise disable caching, often unintentionally. We typically recommend following PyPI's
+approach to caching headers, i.e., setting `api = "max-age=600"` and
+`files = "max-age=365000000, immutable"`.
 
 ## "Flat" indexes
 

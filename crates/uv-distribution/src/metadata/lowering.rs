@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use either::Either;
 use thiserror::Error;
@@ -13,7 +14,7 @@ use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -149,7 +150,7 @@ impl LoweredRequirement {
             let mut remaining = total.negate();
             remaining.and(requirement.marker);
 
-            LoweredRequirement(Requirement {
+            Self(Requirement {
                 marker: remaining,
                 ..Requirement::from(requirement.clone())
             })
@@ -222,19 +223,19 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                let credentials = Arc::new(credentials);
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
@@ -306,19 +307,24 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.pyproject_toml().is_package() {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: true,
-                                    r#virtual: false,
-                                }
                             } else {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: false,
-                                    r#virtual: true,
+                                let value = workspace.required_members().get(&requirement.name);
+                                let is_required_member = value.is_some();
+                                let editability = value.copied().flatten();
+                                if member.pyproject_toml().is_package(!is_required_member) {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(editability.unwrap_or(true)),
+                                        r#virtual: Some(false),
+                                    }
+                                } else {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(false),
+                                        r#virtual: Some(true),
+                                    }
                                 }
                             };
                             (source, marker)
@@ -386,7 +392,7 @@ impl LoweredRequirement {
             let mut remaining = total.negate();
             remaining.and(requirement.marker);
 
-            LoweredRequirement(Requirement {
+            Self(Requirement {
                 marker: remaining,
                 ..Requirement::from(requirement.clone())
             })
@@ -451,19 +457,19 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                let credentials = Arc::new(credentials);
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = None;
                             let source = registry_source(&requirement, index, conflict);
@@ -562,10 +568,10 @@ pub enum SourceKind {
 impl std::fmt::Display for SourceKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceKind::Path => write!(f, "path"),
-            SourceKind::Url => write!(f, "URL"),
-            SourceKind::Git => write!(f, "Git"),
-            SourceKind::Registry => write!(f, "registry"),
+            Self::Path => write!(f, "path"),
+            Self::Url => write!(f, "URL"),
+            Self::Git => write!(f, "Git"),
+            Self::Registry => write!(f, "registry"),
         }
     }
 }
@@ -700,17 +706,23 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
+            let git = git_member.git_source.git.clone();
             let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
+            let subdirectory = if subdirectory == PathBuf::new() {
+                None
+            } else {
+                Some(subdirectory.into_boxed_path())
+            };
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
+                url: git.clone(),
+                subdirectory: subdirectory.clone(),
+            });
             return Ok(RequirementSource::Git {
-                git: git_member.git_source.git.clone(),
-                subdirectory: if subdirectory == PathBuf::new() {
-                    None
-                } else {
-                    Some(subdirectory.into_boxed_path())
-                },
-                url,
+                git,
+                subdirectory,
+                url: VerbatimUrl::from_url(url),
             });
         }
 
@@ -718,26 +730,31 @@ fn path_source(
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: true,
-                r#virtual: false,
+                editable,
+                r#virtual: Some(false),
             })
         } else {
             // Determine whether the project is a package or virtual.
+            // If the `package` option is unset, check if `tool.uv.package` is set
+            // on the path source (otherwise, default to `true`).
             let is_package = package.unwrap_or_else(|| {
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    // We don't require a build system for path dependencies
+                    .map(|pyproject_toml| pyproject_toml.is_package(false))
                     .unwrap_or(true)
             });
+
+            // If the project is not a package, treat it as a virtual dependency.
+            let r#virtual = !is_package;
 
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: false,
-                // If a project is not a package, treat it as a virtual dependency.
-                r#virtual: !is_package,
+                editable: Some(false),
+                r#virtual: Some(r#virtual),
             })
         }
     } else {

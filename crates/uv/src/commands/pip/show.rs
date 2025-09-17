@@ -12,7 +12,8 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_preview::Preview;
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -27,6 +28,7 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         #[allow(clippy::print_stderr)]
@@ -45,7 +47,9 @@ pub(crate) fn pip_show(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -53,8 +57,9 @@ pub(crate) fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    // Determine the markers to use for resolution.
+    // Determine the markers and tags to use for resolution.
     let markers = environment.interpreter().resolver_marker_environment();
+    let tags = environment.interpreter().tags()?;
 
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
@@ -94,12 +99,14 @@ pub(crate) fn pip_show(
     let mut requires_map = FxHashMap::default();
     // For Requires field
     for dist in &distributions {
-        if let Ok(metadata) = dist.metadata() {
+        if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
-                Box::into_iter(metadata.requires_dist)
+                metadata
+                    .requires_dist
+                    .iter()
                     .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| req.name)
+                    .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
                     .collect_vec(),
@@ -112,10 +119,12 @@ pub(crate) fn pip_show(
             if requires_map.contains_key(installed.name()) {
                 continue;
             }
-            if let Ok(metadata) = installed.metadata() {
-                let requires = Box::into_iter(metadata.requires_dist)
+            if let Ok(metadata) = installed.read_metadata() {
+                let requires = metadata
+                    .requires_dist
+                    .iter()
                     .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| req.name)
+                    .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {
                     requires_map.insert(installed.name(), requires);
@@ -167,7 +176,7 @@ pub(crate) fn pip_show(
                 .iter()
                 .filter(|(name, pkgs)| {
                     **name != distribution.name()
-                        && pkgs.iter().any(|pkg| pkg == distribution.name())
+                        && pkgs.iter().any(|pkg| *pkg == distribution.name())
                 })
                 .map(|(name, _)| name)
                 .sorted_unstable()
@@ -197,7 +206,7 @@ pub(crate) fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

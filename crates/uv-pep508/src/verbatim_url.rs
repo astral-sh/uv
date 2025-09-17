@@ -10,6 +10,7 @@ use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
 use url::{ParseError, Url};
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
@@ -18,17 +19,28 @@ use uv_redacted::DisplaySafeUrl;
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
+///
+/// The original string is not preserved after serialization/deserialization.
 #[derive(Debug, Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
     /// The URL as it was provided by the user.
+    ///
+    /// Even if originally set, this will be [`None`] after
+    /// serialization/deserialization.
     given: Option<ArcStr>,
 }
 
 impl Hash for VerbatimUrl {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.url.hash(state);
+    }
+}
+
+impl CacheKey for VerbatimUrl {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.url.as_str().cache_key(state);
     }
 }
 
@@ -51,6 +63,49 @@ impl VerbatimUrl {
             url: DisplaySafeUrl::from(url),
             given: None,
         })
+    }
+
+    /// Convert a [`VerbatimUrl`] from a path or a URL.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
+    pub fn from_url_or_path(
+        input: &str,
+        root_dir: Option<&Path>,
+    ) -> Result<Self, VerbatimUrlError> {
+        let url = match split_scheme(input) {
+            Some((scheme, ..)) => {
+                match Scheme::parse(scheme) {
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        Self::parse_url(input)?
+                    }
+                    None => {
+                        // Ex) `C:\Users\user\index`
+                        if let Some(root_dir) = root_dir {
+                            Self::from_path(input, root_dir)?
+                        } else {
+                            let absolute_path = std::path::absolute(input).map_err(|err| {
+                                VerbatimUrlError::Absolute(input.to_string(), err)
+                            })?;
+                            Self::from_absolute_path(absolute_path)?
+                        }
+                    }
+                }
+            }
+            None => {
+                // Ex) `/Users/user/index`
+                if let Some(root_dir) = root_dir {
+                    Self::from_path(input, root_dir)?
+                } else {
+                    let absolute_path = std::path::absolute(input)
+                        .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
+                    Self::from_absolute_path(absolute_path)?
+                }
+            }
+        };
+        Ok(url.with_given(input))
     }
 
     /// Parse a URL from an absolute or relative path.
@@ -221,19 +276,19 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        VerbatimUrl::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from(url))
     }
 }
 
 impl From<DisplaySafeUrl> for VerbatimUrl {
     fn from(url: DisplaySafeUrl) -> Self {
-        VerbatimUrl::from_url(url)
+        Self::from_url(url)
     }
 }
 
 impl From<VerbatimUrl> for Url {
     fn from(url: VerbatimUrl) -> Self {
-        Url::from(url.url)
+        Self::from(url.url)
     }
 }
 
@@ -249,12 +304,12 @@ impl serde::Serialize for VerbatimUrl {
 
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for VerbatimUrl {
-    fn deserialize<D>(deserializer: D) -> Result<VerbatimUrl, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let url = DisplaySafeUrl::deserialize(deserializer)?;
-        Ok(VerbatimUrl::from_url(url))
+        Ok(Self::from_url(url))
     }
 }
 
@@ -283,21 +338,19 @@ impl Pep508Url for VerbatimUrl {
                         let path = normalize_url_path(path);
 
                         if let Some(working_dir) = working_dir {
-                            return Ok(
-                                VerbatimUrl::from_path(path.as_ref(), working_dir)?.with_given(url)
-                            );
+                            return Ok(Self::from_path(path.as_ref(), working_dir)?.with_given(url));
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(path.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url))
+                    Ok(Self::parse_url(expanded)?.with_given(url))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url))
+                    Ok(Self::parse_url(expanded.as_ref())?.with_given(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
@@ -305,11 +358,12 @@ impl Pep508Url for VerbatimUrl {
                     #[cfg(feature = "non-pep508-extensions")]
                     {
                         if let Some(working_dir) = working_dir {
-                            return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                                .with_given(url));
+                            return Ok(
+                                Self::from_path(expanded.as_ref(), working_dir)?.with_given(url)
+                            );
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
                     Err(Self::Err::NotAUrl(expanded.to_string()))
@@ -320,12 +374,10 @@ impl Pep508Url for VerbatimUrl {
             #[cfg(feature = "non-pep508-extensions")]
             {
                 if let Some(working_dir) = working_dir {
-                    return Ok(
-                        VerbatimUrl::from_path(expanded.as_ref(), working_dir)?.with_given(url)
-                    );
+                    return Ok(Self::from_path(expanded.as_ref(), working_dir)?.with_given(url));
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
+                Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
             }
 
             #[cfg(not(feature = "non-pep508-extensions"))]
@@ -356,6 +408,10 @@ pub enum VerbatimUrlError {
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
     Normalization(PathBuf, #[source] std::io::Error),
+
+    /// Received a path that could not be converted to an absolute path.
+    #[error("path could not be converted to an absolute path: {0}")]
+    Absolute(String, #[source] std::io::Error),
 
     /// Received a path that could not be normalized.
     #[cfg(not(feature = "non-pep508-extensions"))]
@@ -468,7 +524,7 @@ pub fn looks_like_git_repository(url: &Url) -> bool {
 ///
 /// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
 /// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
-fn split_fragment(path: &Path) -> (Cow<Path>, Option<&str>) {
+fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
     let Some(s) = path.to_str() else {
         return (Cow::Borrowed(path), None);
     };

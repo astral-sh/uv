@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -17,8 +17,20 @@ use crate::{
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[rkyv(derive(Debug))]
 pub struct GroupName(SmallString);
 
 impl GroupName {
@@ -28,6 +40,11 @@ impl GroupName {
     #[allow(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
+    }
+
+    /// Return the underlying group name as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -96,17 +113,6 @@ impl AsRef<str> for GroupName {
 pub struct PipGroupName {
     pub path: Option<PathBuf>,
     pub name: GroupName,
-}
-
-impl PipGroupName {
-    /// Gets the path to use, applying the default if it's missing
-    pub fn path(&self) -> &Path {
-        if let Some(path) = &self.path {
-            path
-        } else {
-            Path::new("pyproject.toml")
-        }
-    }
 }
 
 impl FromStr for PipGroupName {
@@ -182,8 +188,8 @@ impl serde::Serialize for DefaultGroups {
         S: serde::Serializer,
     {
         match self {
-            DefaultGroups::All => serializer.serialize_str("all"),
-            DefaultGroups::List(groups) => {
+            Self::All => serializer.serialize_str("all"),
+            Self::List(groups) => {
                 let mut seq = serializer.serialize_seq(Some(groups.len()))?;
                 for group in groups {
                     seq.serialize_element(&group)?;
@@ -196,7 +202,7 @@ impl serde::Serialize for DefaultGroups {
 
 /// Deserialize a "all" or list of [`GroupName`] into a [`DefaultGroups`] enum.
 impl<'de> serde::Deserialize<'de> for DefaultGroups {
-    fn deserialize<D>(deserializer: D) -> Result<DefaultGroups, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -242,7 +248,7 @@ impl<'de> serde::Deserialize<'de> for DefaultGroups {
 impl Default for DefaultGroups {
     /// Note this is an "empty" default unlike other contexts where `["dev"]` is the default
     fn default() -> Self {
-        DefaultGroups::List(Vec::new())
+        Self::List(Vec::new())
     }
 }
 

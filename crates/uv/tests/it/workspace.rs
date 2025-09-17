@@ -1226,7 +1226,7 @@ fn workspace_inherit_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -1351,7 +1351,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1359,9 +1359,9 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=1.0.0b0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+      ╰─▶ Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1642,17 +1642,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
           And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())

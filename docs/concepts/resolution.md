@@ -139,7 +139,7 @@ bounds on `requires-python` often leads to formally correct but practically inco
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
-### Limited resolution environments
+## Limited resolution environments
 
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
@@ -172,7 +172,7 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
 
-### Required environments
+## Required environments
 
 In the Python ecosystem, packages can be published as source distributions, built distributions
 (wheels), or both; but to install a package, a built distribution is required. If a package lacks a
@@ -413,12 +413,14 @@ requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 ```
 
 These declarations are intended for cases in which a package does _not_ declare static metadata
-upfront, though they are also useful for packages that require disabling build isolation. In such
-cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
-environment prior to resolving the package.
+upfront, though they are also useful for packages that require
+[disabling build isolation](./projects/config.md#build-isolation) In such cases, it may be easier to
+declare the package metadata upfront, rather than creating a custom build environment prior to
+resolving the package.
 
-For example, you can declare the metadata for `flash-attn`, allowing uv to resolve without building
-the package from source (which itself requires installing `torch`):
+For example, past versions of `flash-attn` did not declare static metadata. By declaring metadata
+for `flash-attn` upfront, uv can resolve `flash-attn` without building the package from source
+(which itself requires installing `torch`):
 
 ```toml
 [project]
@@ -452,6 +454,77 @@ Entries in the `tool.uv.dependency-metadata` table follow the
 though only `name`, `version`, `requires-dist`, `requires-python`, and `provides-extra` are read by
 uv. The `version` field is also considered optional. If omitted, the metadata will be used for all
 versions of the specified package.
+
+## Conflicting dependencies
+
+uv requires that all optional dependencies ("extras") declared by the project are compatible with
+each other and resolves all optional dependencies together when creating the lockfile.
+
+If optional dependencies declared in one extra are not compatible with those in another extra, uv
+will fail to resolve the requirements of the project with an error.
+
+To work around this, uv supports declaring conflicting extras. For example, consider two sets of
+optional dependencies that conflict with one another:
+
+```toml title="pyproject.toml"
+[project.optional-dependencies]
+extra1 = ["numpy==2.1.2"]
+extra2 = ["numpy==2.0.0"]
+```
+
+If you run `uv lock` with the above dependencies, resolution will fail:
+
+```console
+$ uv lock
+  x No solution found when resolving dependencies:
+  `-> Because myproject[extra2] depends on numpy==2.0.0 and myproject[extra1] depends on numpy==2.1.2, we can conclude that myproject[extra1] and
+      myproject[extra2] are incompatible.
+      And because your project requires myproject[extra1] and myproject[extra2], we can conclude that your projects's requirements are unsatisfiable.
+```
+
+But if you specify that `extra1` and `extra2` are conflicting, uv will resolve them separately.
+Specify conflicts in the `tool.uv` section:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { extra = "extra1" },
+      { extra = "extra2" },
+    ],
+]
+```
+
+Now, running `uv lock` will succeed. Note though, that now you cannot install both `extra1` and
+`extra2` at the same time:
+
+```console
+$ uv sync --extra extra1 --extra extra2
+Resolved 3 packages in 14ms
+error: extra `extra1`, extra `extra2` are incompatible with the declared conflicts: {`myproject[extra1]`, `myproject[extra2]`}
+```
+
+This error occurs because installing both `extra1` and `extra2` would result in installing two
+different versions of a package into the same environment.
+
+The above strategy for dealing with conflicting extras also works with dependency groups:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+group1 = ["numpy==2.1.2"]
+group2 = ["numpy==2.0.0"]
+
+[tool.uv]
+conflicts = [
+    [
+      { group = "group1" },
+      { group = "group2" },
+    ],
+]
+```
+
+The only difference from conflicting extras is that you need to use the `group` key instead of
+`extra`.
 
 ## Lower bounds
 
@@ -513,11 +586,6 @@ reading and extracting archives in the following formats:
 - lzma tarball (`.tar.lzma`)
 - zip (`.zip`)
 
-## Learn more
-
-For more details about the internals of the resolver, see the
-[resolver reference](../reference/resolver-internals.md) documentation.
-
 ## Lockfile versioning
 
 The `uv.lock` file uses a versioned schema. The schema version is included in the `version` field of
@@ -535,3 +603,12 @@ The schema version is considered part of the public API, and so is only bumped i
 a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch
 versions within a given minor uv release are guaranteed to have full lockfile compatibility. In
 other words, lockfiles may only be rejected across minor releases.
+
+The `revision` field of the lockfile is used to track backwards compatible changes to the lockfile.
+For example, adding a new field to distributions. Changes to the revision will not cause older
+versions of uv to error.
+
+## Learn more
+
+For more details about the internals of the resolver, see the
+[resolver reference](../reference/internals/resolver.md) documentation.

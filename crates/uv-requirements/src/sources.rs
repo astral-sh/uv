@@ -13,6 +13,8 @@ pub enum RequirementsSource {
     Package(RequirementsTxtRequirement),
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
+    /// Dependencies were provided via a PEP 723 script.
+    Pep723Script(PathBuf),
     /// Dependencies were provided via a `pylock.toml` file.
     PylockToml(PathBuf),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
@@ -44,6 +46,12 @@ impl RequirementsSource {
             .is_some_and(|file_name| file_name.to_str().is_some_and(is_pylock_toml))
         {
             Ok(Self::PylockToml(path))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+        {
+            // TODO(blueraft): Support scripts without an extension.
+            Ok(Self::Pep723Script(path))
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -273,13 +281,13 @@ impl RequirementsSource {
     pub fn allows_extras(&self) -> bool {
         matches!(
             self,
-            Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
+            Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
 
     /// Returns `true` if the source allows groups to be specified.
     pub fn allows_groups(&self) -> bool {
-        matches!(self, Self::PyprojectToml(_))
+        matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
     }
 }
 
@@ -290,6 +298,7 @@ impl std::fmt::Display for RequirementsSource {
             Self::Editable(path) => write!(f, "-e {path:?}"),
             Self::PylockToml(path)
             | Self::RequirementsTxt(path)
+            | Self::Pep723Script(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)

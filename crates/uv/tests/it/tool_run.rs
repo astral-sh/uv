@@ -734,7 +734,7 @@ fn tool_run_cache() {
     Resolved [N] packages in [TIME]
     "###);
 
-    // Verify that `--refresh` recreates everything.
+    // Verify that `--refresh` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -742,7 +742,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -751,17 +751,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
-    // Verify that `--refresh-package` recreates everything. We may want to change this.
+    // Verify that `--refresh-package` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -770,7 +762,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -779,15 +771,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that varying the interpreter leads to a fresh environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1123,6 +1107,70 @@ fn tool_run_without_output() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // Performs a tool run with a comma-separated `--with` flag.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-w")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
 }
 
 #[test]
@@ -2050,6 +2098,54 @@ fn tool_run_python_at_version() {
 }
 
 #[test]
+fn tool_run_hint_version_not_available() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but Python downloads are set to 'never'
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
+        .env(EnvVars::UV_OFFLINE, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but uv is set to offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
+        .env(EnvVars::UV_NO_MANAGED_PYTHON, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but the Python preference is set to 'only system'
+    ");
+}
+
+#[test]
 fn tool_run_python_from() {
     let context = TestContext::new_with_versions(&["3.12", "3.11"])
         .with_filtered_counts()
@@ -2537,11 +2633,84 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .arg("script.py")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    ");
+
+    // Error when the script is not a valid PEP723 script.
+    let script = context.temp_dir.child("not_pep723_script.py");
+    script.write_str("import anyio")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("not_pep723_script.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `not_pep723_script.py` does not contain inline script metadata
+    ");
+
+    // Error when the script doesn't exist.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("missing_file.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `missing_file.py` (not found)
     ");
 
     Ok(())
@@ -2860,6 +3029,135 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
 
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_reresolve_python() -> anyhow::Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:run"
+        "#
+    })?;
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    let foo_init = foo_module.child("__init__.py");
+    foo_init.write_str(indoc! { r#"
+        import sys
+
+        def run():
+            print(".".join(str(key) for key in sys.version_info[:2]))
+       "#
+    })?;
+
+    // Although 3.11 is first on the path, we'll re-resolve with 3.12 because the `requires-python`
+    // is not compatible with 3.11.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    // When an incompatible Python version is explicitly requested, we should not re-resolve
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg("3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // Unless the discovered interpreter is compatible with the request
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg(">=3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that Windows executable resolution works correctly for package names with dots.
+/// This test verifies the fix for the bug where package names containing dots were
+/// incorrectly handled when adding Windows executable extensions.
+#[cfg(windows)]
+#[test]
+fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Copy the test package to a temporary location
+    let workspace_packages = context.workspace_root.join("scripts").join("packages");
+    let test_package_source = workspace_packages.join("package.name.with.dots");
+    let test_package_dest = context.temp_dir.child("package.name.with.dots");
+
+    copy_dir_all(&test_package_source, &test_package_dest)?;
+
+    // Test that uv tool run can find and execute the dotted package name
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(test_package_dest.path())
+        .arg("package.name.with.dots")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package.name.with.dots version 0.1.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + package-name-with-dots==0.1.0 (from file://[TEMP_DIR]/package.name.with.dots)
     "###);
 
     Ok(())

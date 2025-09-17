@@ -42,9 +42,9 @@ pub enum AuthPolicy {
 impl Display for AuthPolicy {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            AuthPolicy::Auto => write!(f, "auto"),
-            AuthPolicy::Always => write!(f, "always"),
-            AuthPolicy::Never => write!(f, "never"),
+            Self::Auto => write!(f, "auto"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
         }
     }
 }
@@ -86,7 +86,7 @@ impl Indexes {
         Self(FxHashSet::default())
     }
 
-    /// Create a new [`AuthIndexUrls`] from an iterator of [`AuthIndexUrl`]s.
+    /// Create a new [`Indexes`] instance from an iterator of [`Index`]s.
     pub fn from_indexes(urls: impl IntoIterator<Item = Index>) -> Self {
         let mut index_urls = Self::new();
         for url in urls {
@@ -95,9 +95,9 @@ impl Indexes {
         index_urls
     }
 
-    /// Get the index URL prefix for a URL if one exists.
-    pub fn index_url_for(&self, url: &Url) -> Option<&DisplaySafeUrl> {
-        self.find_prefix_index(url).map(|index| &index.url)
+    /// Get the index for a URL if one exists.
+    pub fn index_for(&self, url: &Url) -> Option<&Index> {
+        self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.

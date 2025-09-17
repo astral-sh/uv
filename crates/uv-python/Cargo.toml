@@ -27,7 +27,9 @@ uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-state = { workspace = true }
@@ -38,11 +40,13 @@ uv-warnings = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 configparser = { workspace = true }
+dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-goblin = { workspace = true, default-features = false }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
+ref-cast = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -64,23 +68,19 @@ url = { workspace = true }
 which = { workspace = true }
 once_cell = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-procfs = { workspace = true }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
-windows-result = { workspace = true }
-windows-sys = { workspace = true }
+windows = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.2" }
+assert_fs = { workspace = true }
 indoc = { workspace = true }
-insta = { version = "1.40.0" }
-itertools = { version = "0.14.0" }
-temp-env = { version = "0.3.6" }
+insta = { workspace = true }
+itertools = { workspace = true }
+temp-env = { workspace = true }
 tempfile = { workspace = true }
-test-log = { version = "0.2.16", features = ["trace"], default-features = false }
+test-log = { workspace = true }
 
 [build-dependencies]
 serde_json = { workspace = true }

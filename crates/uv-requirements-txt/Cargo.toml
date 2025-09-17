@@ -30,6 +30,7 @@ fs-err = { workspace = true }
 memchr = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
@@ -40,11 +41,11 @@ http = ["reqwest", "reqwest-middleware"]
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.2" }
+assert_fs = { workspace = true }
 indoc = { workspace = true }
-insta = { version = "1.40.0", features = ["filters"] }
-itertools = { version = "0.14.0" }
+insta = { workspace = true }
+itertools = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
-test-case = { version = "3.3.1" }
-tokio = { version = "1.40.0" }
+test-case = { workspace = true }
+tokio = { workspace = true }

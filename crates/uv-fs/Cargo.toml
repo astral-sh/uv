@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
@@ -38,7 +37,6 @@ rustix = { workspace = true }
 backon = { workspace = true }
 junction = { workspace = true }
 windows = { workspace = true }
-windows-core = { workspace = true }
 
 [features]
 default = []

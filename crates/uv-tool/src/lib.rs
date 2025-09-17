@@ -1,28 +1,27 @@
-use core::fmt;
-use fs_err as fs;
-
-use uv_dirs::user_executable_directory;
-use uv_pep440::Version;
-use uv_pep508::{InvalidNameError, PackageName};
-
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use fs_err as fs;
 use fs_err::File;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_install_wheel::read_record_file;
-
-pub use receipt::ToolReceipt;
-pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
+use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, Simplified};
+use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
+use uv_normalize::{InvalidNameError, PackageName};
+use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::remove_virtualenv;
+
+pub use receipt::ToolReceipt;
+pub use tool::{Tool, ToolEntrypoint};
 
 mod receipt;
 mod tool;
@@ -187,17 +186,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        // On Windows, if the current executable is in the directory, guard against self-deletion.
-        #[cfg(windows)]
-        if let Ok(itself) = std::env::current_exe() {
-            let target = std::path::absolute(&environment_path)?;
-            if itself.starts_with(&target) {
-                debug!("Detected self-delete of executable: {}", itself.display());
-                self_replace::self_delete_outside_path(&environment_path)?;
-            }
-        }
-
-        fs_err::remove_dir_all(environment_path)?;
+        remove_virtualenv(environment_path.as_path())?;
 
         Ok(())
     }
@@ -257,6 +246,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -283,9 +273,11 @@ impl InstalledTools {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
             false,
             false,
+            preview,
         )?;
 
         Ok(venv)
@@ -357,8 +349,8 @@ impl InstalledTool {
     }
 }
 
-impl fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for InstalledTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",

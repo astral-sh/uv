@@ -3,6 +3,8 @@
 
 pub(crate) mod common;
 
+mod auth;
+
 mod branching_urls;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -25,6 +27,9 @@ mod edit;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod export;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod format;
 
 mod help;
 
@@ -78,11 +83,17 @@ mod python_find;
 #[cfg(feature = "python")]
 mod python_list;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod python_module;
+
 #[cfg(feature = "python-managed")]
 mod python_install;
 
 #[cfg(feature = "python")]
 mod python_pin;
+
+#[cfg(feature = "python-managed")]
+mod python_upgrade;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod run;
@@ -125,4 +136,5 @@ mod version;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod workflow;
 
+mod extract;
 mod workspace;

@@ -7,15 +7,16 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    PreviewMode,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -29,9 +30,10 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum ExportTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script),
@@ -62,7 +64,7 @@ pub(crate) async fn export(
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     locked: bool,
     frozen: bool,
     include_annotations: bool,
@@ -71,7 +73,7 @@ pub(crate) async fn export(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -79,7 +81,7 @@ pub(crate) async fn export(
     quiet: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -135,9 +137,9 @@ pub(crate) async fn export(
     } else {
         Some(match &target {
             ExportTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -146,6 +148,7 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -154,7 +157,7 @@ pub(crate) async fn export(
                 project_dir,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -163,6 +166,7 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -190,11 +194,12 @@ pub(crate) async fn export(
     let lock = match LockOperation::new(
         mode,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -203,15 +208,12 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
-
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &groups)?;
 
     // Identify the installation target.
     let target = match &target {
@@ -261,6 +263,9 @@ pub(crate) async fn export(
             lock: &lock,
         },
     };
+
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&target, &extras, &groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;

@@ -11,7 +11,7 @@ echo "Updating metadata with rooster..."
 cd "$project_root"
 
 # Update the changelog
-uv tool run --from 'rooster-blue>=0.0.7' --python 3.12 -- \
+uv tool run --from 'rooster-blue @ git+https://github.com/zanieb/rooster@c24ea11bf3cfea89d6f8c782462cac4313e5e0d6' --python 3.12 -- \
     rooster release "$@"
 
 echo "Updating lockfile..."

@@ -11,19 +11,56 @@ use uv_redacted::DisplaySafeUrl;
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
+#[derive(Debug)]
 pub struct Error {
     kind: Box<ErrorKind>,
+    retries: u32,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.retries > 0 {
+            write!(
+                f,
+                "Request failed after {retries} retries",
+                retries = self.retries
+            )
+        } else {
+            Display::fmt(&self.kind, f)
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if self.retries > 0 {
+            Some(&self.kind)
+        } else {
+            self.kind.source()
+        }
+    }
 }
 
 impl Error {
-    /// Convert this error into its [`ErrorKind`] variant.
+    /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
+    pub fn new(kind: ErrorKind, retries: u32) -> Self {
+        Self {
+            kind: Box::new(kind),
+            retries,
+        }
+    }
+
+    /// Return the number of retries that were attempted before this error was returned.
+    pub fn retries(&self) -> u32 {
+        self.retries
+    }
+
+    /// Convert this error into an [`ErrorKind`].
     pub fn into_kind(self) -> ErrorKind {
         *self.kind
     }
 
-    /// Get a reference to the [`ErrorKind`] variant of this error.
+    /// Return the [`ErrorKind`] of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
@@ -36,6 +73,11 @@ impl Error {
     /// Create a new error from an HTML parsing error.
     pub(crate) fn from_html_err(err: html::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
+    }
+
+    /// Create a new error from a `MessagePack` parsing error.
+    pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
+        ErrorKind::BadMessagePack { source: err, url }.into()
     }
 
     /// Returns `true` if this error corresponds to an offline error.
@@ -78,7 +120,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(_url, err) => {
+            ErrorKind::WrappedReqwestError(_, err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -143,6 +185,7 @@ impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
         Self {
             kind: Box::new(kind),
+            retries: 0,
         }
     }
 }
@@ -151,9 +194,6 @@ impl From<ErrorKind> for Error {
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
-
-    #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
 
     #[error(transparent)]
     Flat(#[from] FlatIndexError),
@@ -216,6 +256,12 @@ pub enum ErrorKind {
         url: DisplaySafeUrl,
     },
 
+    #[error("Received some unexpected MessagePack from {}", url)]
+    BadMessagePack {
+        source: rmp_serde::decode::Error,
+        url: DisplaySafeUrl,
+    },
+
     #[error("Failed to read zip with range requests: `{0}`")]
     AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
 
@@ -262,13 +308,18 @@ pub enum ErrorKind {
         "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
     )]
     Offline(String),
+
+    #[error("Invalid cache control header: `{0}`")]
+    InvalidCacheControl(String),
 }
 
 impl ErrorKind {
+    /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
 
+    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,

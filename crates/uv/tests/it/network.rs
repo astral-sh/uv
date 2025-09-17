@@ -3,6 +3,7 @@ use std::{env, io};
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use http::StatusCode;
 use serde_json::json;
+use uv_static::EnvVars;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -48,7 +49,9 @@ async fn simple_http_500() {
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -72,7 +75,9 @@ async fn simple_io_err() {
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -99,7 +104,9 @@ async fn find_links_http_500() {
         .arg("tqdm")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -125,7 +132,9 @@ async fn find_links_io_error() {
         .arg("tqdm")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -154,7 +163,9 @@ async fn direct_url_http_500() {
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
         .pip_install()
-        .arg(format!("tqdm @ {tqdm_url}")), @r"
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -180,7 +191,9 @@ async fn direct_url_io_error() {
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
         .pip_install()
-        .arg(format!("tqdm @ {tqdm_url}")), @r"
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -239,7 +252,9 @@ async fn python_install_http_500() {
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
-        .arg(python_downloads_json.path()), @r"
+        .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -269,17 +284,79 @@ async fn python_install_io_error() {
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
-        .arg(python_downloads_json.path()), @r"
+        .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: Request failed after 3 retries
+      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: error sending request for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
+}
+
+#[tokio::test]
+async fn install_http_retries() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Create a server that always fails, so we can see the number of retries used
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: invalid digit found in string
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "999999999999"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: number too large to fit in target type
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "5")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 5 retries
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+    "
+    );
 }

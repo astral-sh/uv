@@ -37,7 +37,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             if file.is_dir() {
                 let mut directories = directories.lock().unwrap();
                 if directories.insert(path.clone()) {
-                    fs_err::create_dir_all(path)?;
+                    fs_err::create_dir_all(path).map_err(Error::Io)?;
                 }
                 return Ok(());
             }
@@ -45,12 +45,12 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             if let Some(parent) = path.parent() {
                 let mut directories = directories.lock().unwrap();
                 if directories.insert(parent.to_path_buf()) {
-                    fs_err::create_dir_all(parent)?;
+                    fs_err::create_dir_all(parent).map_err(Error::Io)?;
                 }
             }
 
             // Copy the file contents.
-            let outfile = fs_err::File::create(&path)?;
+            let outfile = fs_err::File::create(&path).map_err(Error::Io)?;
             let size = file.size();
             if size > 0 {
                 let mut writer = if let Ok(size) = usize::try_from(size) {
@@ -58,7 +58,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                 } else {
                     std::io::BufWriter::new(outfile)
                 };
-                std::io::copy(&mut file, &mut writer)?;
+                std::io::copy(&mut file, &mut writer).map_err(Error::io_or_compression)?;
             }
 
             // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
@@ -72,12 +72,13 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
-                        let permissions = fs_err::metadata(&path)?.permissions();
+                        let permissions = fs_err::metadata(&path).map_err(Error::Io)?.permissions();
                         if permissions.mode() & 0o111 != 0o111 {
                             fs_err::set_permissions(
                                 &path,
                                 Permissions::from_mode(permissions.mode() | 0o111),
-                            )?;
+                            )
+                            .map_err(Error::Io)?;
                         }
                     }
                 }
@@ -97,8 +98,10 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 /// This function returns the path to that top-level directory.
 pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
     // TODO(konstin): Verify the name of the directory.
-    let top_level =
-        fs_err::read_dir(source.as_ref())?.collect::<std::io::Result<Vec<fs_err::DirEntry>>>()?;
+    let top_level = fs_err::read_dir(source.as_ref())
+        .map_err(Error::Io)?
+        .collect::<std::io::Result<Vec<fs_err::DirEntry>>>()
+        .map_err(Error::Io)?;
     match top_level.as_slice() {
         [root] => Ok(root.path()),
         [] => Err(Error::EmptyArchive),

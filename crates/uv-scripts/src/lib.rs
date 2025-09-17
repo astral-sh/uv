@@ -9,12 +9,14 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
+use uv_configuration::SourceStrategy;
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
-use uv_settings::{GlobalOptions, ResolverInstallerOptions};
-use uv_workspace::pyproject::Sources;
+use uv_settings::{GlobalOptions, ResolverInstallerSchema};
+use uv_warnings::warn_user;
+use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
@@ -95,6 +97,46 @@ impl Pep723ItemRef<'_> {
             Self::Remote(..) => None,
         }
     }
+
+    /// Determine the working directory for the script.
+    pub fn directory(&self) -> Result<PathBuf, io::Error> {
+        match self {
+            Self::Script(script) => Ok(std::path::absolute(&script.path)?
+                .parent()
+                .expect("script path has no parent")
+                .to_owned()),
+            Self::Stdin(..) | Self::Remote(..) => std::env::current_dir(),
+        }
+    }
+
+    /// Collect any `tool.uv.index` from the script.
+    pub fn indexes(&self, source_strategy: SourceStrategy) -> &[uv_distribution_types::Index] {
+        match source_strategy {
+            SourceStrategy::Enabled => self
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.top_level.index.as_deref())
+                .unwrap_or(&[]),
+            SourceStrategy::Disabled => &[],
+        }
+    }
+
+    /// Collect any `tool.uv.sources` from the script.
+    pub fn sources(&self, source_strategy: SourceStrategy) -> &BTreeMap<PackageName, Sources> {
+        static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
+        match source_strategy {
+            SourceStrategy::Enabled => self
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .unwrap_or(&EMPTY),
+            SourceStrategy::Disabled => &EMPTY,
+        }
+    }
 }
 
 impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
@@ -104,6 +146,12 @@ impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
             Pep723Item::Stdin(metadata) => Self::Stdin(metadata),
             Pep723Item::Remote(metadata, url) => Self::Remote(metadata, url),
         }
+    }
+}
+
+impl<'item> From<&'item Pep723Script> for Pep723ItemRef<'item> {
+    fn from(script: &'item Pep723Script) -> Self {
+        Self::Script(script)
     }
 }
 
@@ -238,11 +286,25 @@ impl Pep723Script {
         let metadata = serialize_metadata(&default_metadata);
 
         let script = if let Some(existing_contents) = existing_contents {
+            let (mut shebang, contents) = extract_shebang(&existing_contents)?;
+            if !shebang.is_empty() {
+                shebang.push_str("\n#\n");
+                // If the shebang doesn't contain `uv`, it's probably something like
+                // `#! /usr/bin/env python`, which isn't going to respect the inline metadata.
+                // Issue a warning for users who might not know that.
+                // TODO: There are a lot of mistakes we could consider detecting here, like
+                // `uv run` without `--script` when the file doesn't end in `.py`.
+                if !regex::Regex::new(r"\buv\b").unwrap().is_match(&shebang) {
+                    warn_user!(
+                        "If you execute {} directly, it might ignore its inline metadata.\nConsider replacing its shebang with: {}",
+                        file.to_string_lossy().cyan(),
+                        "#!/usr/bin/env -S uv run --script".cyan(),
+                    );
+                }
+            }
             indoc::formatdoc! {r"
-            {metadata}
-            {content}
-            ",
-            content = String::from_utf8(existing_contents).map_err(|err| Pep723Error::Utf8(err.utf8_error()))?}
+            {shebang}{metadata}
+            {contents}" }
         } else {
             indoc::formatdoc! {r#"
             {metadata}
@@ -362,10 +424,11 @@ pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
-    pub top_level: ResolverInstallerOptions,
+    pub top_level: ResolverInstallerSchema,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 

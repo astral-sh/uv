@@ -5,52 +5,20 @@
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
-use std::path::Path;
 use std::process::Command;
-
-use assert_cmd::assert::Assert;
-use assert_cmd::prelude::*;
 
 use uv_static::EnvVars;
 
-use crate::common::{
-    build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, venv_to_interpreter,
-    TestContext,
-};
-
-fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
-    Command::new(venv_to_interpreter(venv))
-        .arg("-c")
-        .arg(command)
-        .current_dir(temp_dir)
-        .assert()
-}
-
-fn assert_installed(venv: &Path, package: &'static str, version: &'static str, temp_dir: &Path) {
-    assert_command(
-        venv,
-        format!("import {package} as package; print(package.__version__, end='')").as_str(),
-        temp_dir,
-    )
-    .success()
-    .stdout(version);
-}
-
-fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
-    assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
-}
+use crate::common::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
 
 /// Create a `pip install` command with options shared across all scenarios.
 fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
+    let mut command = context.pip_install();
     command
-        .arg("pip")
-        .arg("install")
         .arg("--index-url")
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
@@ -93,25 +61,20 @@ fn {{module_name}}() {
         {{/resolver_options.python_platform}}
         {{#root.requires}}
         .arg("{{requirement}}")
-        {{/root.requires}}, @r###"<snapshot>
-    "###);
+        {{/root.requires}}, @r#"<snapshot>
+    "#);
 
     {{#expected.explanation}}
     // {{expected.explanation}}
     {{/expected.explanation}}
     {{#expected.satisfiable}}
     {{#expected.packages}}
-    assert_installed(
-        &context.venv,
-        "{{module_name}}",
-        "{{version}}",
-        &context.temp_dir
-    );
+    context.assert_installed("{{module_name}}", "{{version}}");
     {{/expected.packages}}
     {{/expected.satisfiable}}
     {{^expected.satisfiable}}
     {{#root.requires}}
-    assert_not_installed(&context.venv, "{{module_name}}", &context.temp_dir);
+    context.assert_not_installed("{{module_name}}");
     {{/root.requires}}
     {{/expected.satisfiable}}
 }

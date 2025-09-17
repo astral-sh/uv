@@ -18,14 +18,15 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::ErrorTree;
+use crate::error::{ErrorTree, PrefixMatch};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
@@ -400,9 +401,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
+                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
                     Some("your project".to_string())
                 } else {
                     Some(format!("{package}"))
@@ -411,7 +412,7 @@ impl PubGrubReportFormatter<'_> {
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
-            PubGrubPackageInner::Dev { name, .. } if self.workspace_members.contains(name) => {
+            PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
             _ => None,
@@ -428,9 +429,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+                self.is_single_project_workspace() && extra.is_none() && group.is_none()
             }
             _ => false,
         }
@@ -647,7 +648,7 @@ impl PubGrubReportFormatter<'_> {
 
                     if package_name == dependency_name
                         && (dependency.extra().is_none() || package.extra() == dependency.extra())
-                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && (dependency.group().is_none() || dependency.group() == package.group())
                         && workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnItself {
@@ -944,17 +945,30 @@ impl PubGrubReportFormatter<'_> {
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
+            // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
+            if PrefixMatch::from_range(start, end).is_some() {
+                return false;
+            }
+
             let is_pre1 = match start {
                 Bound::Included(version) => version.any_prerelease(),
                 Bound::Excluded(version) => version.any_prerelease(),
                 Bound::Unbounded => false,
             };
+            if is_pre1 {
+                return true;
+            }
+
             let is_pre2 = match end {
                 Bound::Included(version) => version.any_prerelease(),
                 Bound::Excluded(version) => version.any_prerelease(),
                 Bound::Unbounded => false,
             };
-            is_pre1 || is_pre2
+            if is_pre2 {
+                return true;
+            }
+
+            false
         });
 
         if any_prerelease {
@@ -1009,13 +1023,13 @@ pub(crate) enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -1331,21 +1345,21 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` could not be parsed.\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` was invalid:\n{}",
+                    "{}{} The structure of `{}` was invalid\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidVersionMetadata {
@@ -1928,11 +1942,11 @@ impl std::fmt::Display for PackageRange<'_> {
                 PackageRangeKind::Available => write!(f, "are available:")?,
             }
         }
-        for segment in &segments {
+        for (lower, upper) in &segments {
             if segments.len() > 1 {
                 write!(f, "\n    ")?;
             }
-            match segment {
+            match (lower, upper) {
                 (Bound::Unbounded, Bound::Unbounded) => match self.kind {
                     PackageRangeKind::Dependency => write!(f, "{package}")?,
                     PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
@@ -1948,7 +1962,13 @@ impl std::fmt::Display for PackageRange<'_> {
                         write!(f, "{package}>={v},<={b}")?;
                     }
                 }
-                (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
+                (Bound::Included(v), Bound::Excluded(b)) => {
+                    if let Some(prefix) = PrefixMatch::from_range(lower, upper) {
+                        write!(f, "{package}{prefix}")?;
+                    } else {
+                        write!(f, "{package}>={v},<{b}")?;
+                    }
+                }
                 (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
                 (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
                 (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
@@ -1992,7 +2012,7 @@ impl<'a> DependsOn<'a> {
     /// Adds an additional dependency.
     ///
     /// Note this overwrites previous calls to `DependsOn::and`.
-    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> DependsOn<'a> {
+    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> Self {
         self.dependency2 = Some(PackageRange {
             package,
             range,

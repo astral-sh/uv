@@ -16,6 +16,12 @@ On Ubuntu and other Debian-based distributions, you can install a C compiler wit
 sudo apt install build-essential
 ```
 
+On Fedora-based distributions, you can install a C compiler with:
+
+```shell
+sudo dnf install gcc
+```
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).
@@ -163,6 +169,13 @@ After making changes to the documentation, format the markdown files with:
 
 ```shell
 npx prettier --prose-wrap always --write "**/*.md"
+```
+
+Note that the command above requires Node.js and npm to be installed on your system. As an
+alternative, you can run this command using Docker:
+
+```console
+$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --prose-wrap always --write "**/*.md"
 ```
 
 ## Releases

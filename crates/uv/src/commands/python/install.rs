@@ -1,38 +1,45 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Error, Result};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use indexmap::IndexSet;
 use itertools::{Either, Itertools};
-use owo_colors::OwoColorize;
+use owo_colors::{AnsiColors, OwoColorize};
+use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_configuration::PreviewMode;
+use uv_client::{BaseClientBuilder, retries_from_env};
 use uv_fs::Simplified;
-use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
-use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
+use uv_platform::{Arch, Libc};
+use uv_preview::{Preview, PreviewFeatures};
+use uv_python::downloads::{
+    self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
 };
-use uv_python::platform::{Arch, Libc};
+use uv_python::managed::{
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+    create_link_to_executable, python_executable_dir,
+};
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionFilePreference,
+    PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, write_error_chain};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest {
     /// The original request from the user
     request: PythonRequest,
@@ -82,11 +89,21 @@ impl InstallRequest {
     fn matches_installation(&self, installation: &ManagedPythonInstallation) -> bool {
         self.download_request.satisfied_by_key(installation.key())
     }
+
+    fn python_request(&self) -> &PythonRequest {
+        &self.request
+    }
 }
 
 impl std::fmt::Display for InstallRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.request)
+        let request = self.request.to_canonical_string();
+        let download = self.download_request.to_string();
+        if request != download {
+            write!(f, "{request} ({download})")
+        } else {
+            write!(f, "{request}")
+        }
     }
 }
 
@@ -125,6 +142,14 @@ impl Changelog {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum InstallErrorKind {
+    DownloadUnpack,
+    Bin,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Registry,
+}
+
 /// Download and install Python versions.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
@@ -132,69 +157,46 @@ pub(crate) async fn install(
     install_dir: Option<PathBuf>,
     targets: Vec<String>,
     reinstall: bool,
+    upgrade: bool,
+    bin: Option<bool>,
+    registry: Option<bool>,
     force: bool,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
-    preview: PreviewMode,
+    preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    if default && !preview.is_enabled() {
-        writeln!(
-            printer.stderr(),
-            "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`"
-        )?;
-        return Ok(ExitStatus::Failure);
+    // TODO(zanieb): We should consider marking the Python installation as the default when
+    // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
+    // surprised if `uv python find` returned the "newest" Python version rather than the one I just
+    // installed with the `--default` flag.
+    if default && !preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT) {
+        warn_user!(
+            "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeatures::PYTHON_INSTALL_DEFAULT
+        );
+    }
+
+    if upgrade && !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) {
+        warn_user!(
+            "`uv python upgrade` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeatures::PYTHON_UPGRADE
+        );
     }
 
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
 
-    // Resolve the requests
-    let mut is_default_install = false;
-    let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(
-            project_dir,
-            &VersionFileDiscoveryOptions::default()
-                .with_no_config(no_config)
-                .with_preference(VersionFilePreference::Versions),
-        )
-        .await?
-        .map(PythonVersionFile::into_versions)
-        .unwrap_or_else(|| {
-            // If no version file is found and no requests were made
-            is_default_install = true;
-            vec![if reinstall {
-                // On bare `--reinstall`, reinstall all Python versions
-                PythonRequest::Any
-            } else {
-                PythonRequest::Default
-            }]
-        })
-        .into_iter()
-        .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
-        .collect::<Result<Vec<_>>>()?
-    } else {
-        targets
-            .iter()
-            .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
-            .collect::<Result<Vec<_>>>()?
-    };
-
-    let Some(first_request) = requests.first() else {
-        return Ok(ExitStatus::Success);
-    };
-
     // Read the existing installations, lock the directory for the duration
-    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir.clone())?.init()?;
     let installations_dir = installations.root();
     let scratch_dir = installations.scratch();
     let _lock = installations.lock().await?;
@@ -202,6 +204,97 @@ pub(crate) async fn install(
         .find_all()?
         .inspect(|installation| trace!("Found existing installation {}", installation.key()))
         .collect();
+
+    // Resolve the requests
+    let mut is_default_install = false;
+    let mut is_unspecified_upgrade = false;
+    let requests: Vec<_> = if targets.is_empty() {
+        if upgrade {
+            is_unspecified_upgrade = true;
+            let mut minor_version_requests = IndexSet::<InstallRequest>::default();
+            for installation in &existing_installations {
+                let request = VersionRequest::major_minor_request_from_key(installation.key());
+                if let Ok(request) = InstallRequest::new(
+                    PythonRequest::Version(request),
+                    python_downloads_json_url.as_deref(),
+                ) {
+                    minor_version_requests.insert(request);
+                }
+            }
+            minor_version_requests.into_iter().collect::<Vec<_>>()
+        } else {
+            PythonVersionFile::discover(
+                project_dir,
+                &VersionFileDiscoveryOptions::default()
+                    .with_no_config(no_config)
+                    .with_preference(VersionFilePreference::Versions),
+            )
+            .await?
+            .inspect(|file| {
+                debug!(
+                    "Found Python version file at: {}",
+                    file.path().user_display()
+                );
+            })
+            .map(PythonVersionFile::into_versions)
+            .unwrap_or_else(|| {
+                // If no version file is found and no requests were made
+                // TODO(zanieb): We should consider differentiating between a global Python version
+                // file here, allowing a request from there to enable `is_default_install`.
+                is_default_install = true;
+                vec![if reinstall {
+                    // On bare `--reinstall`, reinstall all Python versions
+                    PythonRequest::Any
+                } else {
+                    PythonRequest::Default
+                }]
+            })
+            .into_iter()
+            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
+            .collect::<Result<Vec<_>>>()?
+        }
+    } else {
+        targets
+            .iter()
+            .map(|target| PythonRequest::parse(target.as_str()))
+            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
+            .collect::<Result<Vec<_>>>()?
+    };
+
+    let Some(first_request) = requests.first() else {
+        if upgrade {
+            writeln!(
+                printer.stderr(),
+                "There are no installed versions to upgrade"
+            )?;
+        }
+        return Ok(ExitStatus::Success);
+    };
+
+    let requested_minor_versions = requests
+        .iter()
+        .filter_map(|request| {
+            if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
+                request.python_request()
+            {
+                uv_pep440::Version::from_str(&format!("{major}.{minor}")).ok()
+            } else {
+                None
+            }
+        })
+        .collect::<IndexSet<_>>();
+
+    if upgrade
+        && requests
+            .iter()
+            .any(|request| request.request.includes_patch())
+    {
+        writeln!(
+            printer.stderr(),
+            "error: `uv python upgrade` only accepts minor versions"
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
 
     // Find requests that are already satisfied
     let mut changelog = Changelog::default();
@@ -259,15 +352,20 @@ pub(crate) async fn install(
                 }
             }
         }
-
         (vec![], unsatisfied)
     } else {
         // If we can find one existing installation that matches the request, it is satisfied
         requests.iter().partition_map(|request| {
-            if let Some(installation) = existing_installations
-                .iter()
-                .find(|installation| request.matches_installation(installation))
-            {
+            if let Some(installation) = existing_installations.iter().find(|installation| {
+                if upgrade {
+                    // If this is an upgrade, the requested version is a minor version
+                    // but the requested download is the highest patch for that minor
+                    // version. We need to install it unless an exact match is found.
+                    request.download.key() == installation.key()
+                } else {
+                    request.matches_installation(installation)
+                }
+            }) {
                 debug!(
                     "Found `{}` for request `{}`",
                     installation.key().green(),
@@ -305,12 +403,11 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
-    // Download and unpack the Python versions concurrently
-    let client = uv_client::BaseClientBuilder::new()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    // Python downloads are performing their own retries to catch stream errors, disable the
+    // default retries to avoid the middleware from performing uncontrolled retries.
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
+    let client = client_builder.retries(0).build();
+
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();
 
@@ -321,6 +418,7 @@ pub(crate) async fn install(
                 download
                     .fetch_with_retry(
                         &client,
+                        &retry_policy,
                         installations_dir,
                         &scratch_dir,
                         reinstall,
@@ -335,6 +433,7 @@ pub(crate) async fn install(
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
+    let mut requests_by_new_installation = BTreeMap::new();
     while let Some((download, result)) = tasks.next().await {
         match result {
             Ok(download_result) => {
@@ -346,21 +445,34 @@ pub(crate) async fn install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 changelog.installed.insert(installation.key().clone());
+                for request in &requests {
+                    // Take note of which installations satisfied which requests
+                    if request.matches_installation(&installation) {
+                        requests_by_new_installation
+                            .entry(installation.key().clone())
+                            .or_insert(Vec::new())
+                            .push(request);
+                    }
+                }
                 if changelog.existing.contains(installation.key()) {
                     changelog.uninstalled.insert(installation.key().clone());
                 }
-                downloaded.push(installation);
+                downloaded.push(installation.clone());
             }
             Err(err) => {
-                errors.push((download.key().clone(), anyhow::Error::new(err)));
+                errors.push((
+                    InstallErrorKind::DownloadUnpack,
+                    download.key().clone(),
+                    anyhow::Error::new(err),
+                ));
             }
         }
     }
 
-    let bin = if preview.is_enabled() {
-        Some(python_executable_dir()?)
-    } else {
+    let bin_dir = if matches!(bin, Some(false)) {
         None
+    } else {
+        Some(python_executable_dir()?)
     };
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
@@ -371,39 +483,65 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
+        installation.ensure_build_file()?;
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }
 
-        if preview.is_disabled() {
-            debug!("Skipping installation of Python executables, use `--preview` to enable.");
-            continue;
+        let upgradeable = (default || is_default_install)
+            || requested_minor_versions.contains(&installation.key().version().python_version());
+
+        if let Some(bin_dir) = bin_dir.as_ref() {
+            create_bin_links(
+                installation,
+                bin_dir,
+                reinstall,
+                force,
+                default,
+                upgradeable,
+                upgrade,
+                is_default_install,
+                first_request,
+                &existing_installations,
+                &installations,
+                &mut changelog,
+                &mut errors,
+                preview,
+            );
         }
 
-        let bin = bin
-            .as_ref()
-            .expect("We should have a bin directory with preview enabled")
-            .as_path();
-
-        create_bin_links(
-            installation,
-            bin,
-            reinstall,
-            force,
-            default,
-            is_default_install,
-            first_request,
-            &existing_installations,
-            &installations,
-            &mut changelog,
-            &mut errors,
-        )?;
-
-        if preview.is_enabled() {
+        if !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
-                uv_python::windows_registry::create_registry_entry(installation, &mut errors)?;
+                match uv_python::windows_registry::create_registry_entry(installation) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        errors.push((
+                            InstallErrorKind::Registry,
+                            installation.key().clone(),
+                            err.into(),
+                        ));
+                    }
+                }
             }
+        }
+    }
+
+    let minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            installations
+                .iter()
+                .copied()
+                .chain(existing_installations.iter()),
+        );
+
+    for installation in minor_versions.values() {
+        if upgrade {
+            // During an upgrade, update existing symlinks but avoid
+            // creating new ones.
+            installation.update_minor_version_link(preview)?;
+        } else {
+            installation.ensure_minor_version_link(preview)?;
         }
     }
 
@@ -413,13 +551,72 @@ pub(crate) async fn install(
                 printer.stderr(),
                 "Python is already installed. Use `uv python install <request>` to install another version.",
             )?;
+        } else if upgrade && requests.is_empty() {
+            writeln!(
+                printer.stderr(),
+                "There are no installed versions to upgrade"
+            )?;
         } else if requests.len() > 1 {
-            writeln!(printer.stderr(), "All requested versions already installed")?;
+            if upgrade {
+                if is_unspecified_upgrade {
+                    writeln!(
+                        printer.stderr(),
+                        "All versions already on latest supported patch release"
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "All requested versions already on latest supported patch release"
+                    )?;
+                }
+            } else {
+                writeln!(printer.stderr(), "All requested versions already installed")?;
+            }
         }
         return Ok(ExitStatus::Success);
     }
 
     if !changelog.installed.is_empty() {
+        for install_key in &changelog.installed {
+            // Make a note if the selected python is non-native for the architecture, if none of the
+            // matching user requests were explicit.
+            //
+            // Emscripten is exempted as it is always "emulated".
+            let native_arch = Arch::from_env();
+            if install_key.arch().family() != native_arch.family()
+                && !install_key.os().is_emscripten()
+            {
+                let not_explicit =
+                    requests_by_new_installation
+                        .get(install_key)
+                        .and_then(|requests| {
+                            let all_non_explicit = requests.iter().all(|request| {
+                                if let PythonRequest::Key(key) = &request.request {
+                                    !matches!(key.arch(), Some(ArchRequest::Explicit(_)))
+                                } else {
+                                    true
+                                }
+                            });
+                            if all_non_explicit {
+                                requests.iter().next()
+                            } else {
+                                None
+                            }
+                        });
+                if let Some(not_explicit) = not_explicit {
+                    let native_request =
+                        not_explicit.download_request.clone().with_arch(native_arch);
+                    writeln!(
+                        printer.stderr(),
+                        "{} uv selected a Python distribution with an emulated architecture ({}) for your platform because support for the native architecture ({}) is not yet mature; to override this behaviour, request the native architecture explicitly with: {}",
+                        "note:".bold(),
+                        install_key.arch(),
+                        native_arch,
+                        native_request
+                    )?;
+                }
+            }
+        }
         if changelog.installed.len() == 1 {
             let installed = changelog.installed.iter().next().unwrap();
             // Ex) "Installed Python 3.9.7 in 1.68s"
@@ -477,42 +674,78 @@ pub(crate) async fn install(
             }
         }
 
-        if preview.is_enabled() {
-            let bin = bin
-                .as_ref()
-                .expect("We should have a bin directory with preview enabled")
-                .as_path();
-            warn_if_not_on_path(bin);
+        if let Some(bin_dir) = bin_dir.as_ref() {
+            warn_if_not_on_path(bin_dir);
         }
     }
 
     if !errors.is_empty() {
-        for (key, err) in errors
+        // If there are only side-effect install errors and the user didn't opt-in, we're only going
+        // to warn
+        let fatal = !errors.iter().all(|(kind, _, _)| match kind {
+            InstallErrorKind::Bin => bin.is_none(),
+            InstallErrorKind::Registry => registry.is_none(),
+            InstallErrorKind::DownloadUnpack => false,
+        });
+
+        for (kind, key, err) in errors
             .into_iter()
-            .sorted_unstable_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
+            .sorted_unstable_by(|(_, key_a, _), (_, key_b, _)| key_a.cmp(key_b))
         {
-            writeln!(
-                printer.stderr(),
-                "{}: Failed to install {}",
-                "error".red().bold(),
-                key.green()
-            )?;
-            for err in err.chain() {
-                writeln!(
-                    printer.stderr(),
-                    "  {}: {}",
-                    "Caused by".red().bold(),
-                    err.to_string().trim()
-                )?;
+            match kind {
+                InstallErrorKind::DownloadUnpack => {
+                    write_error_chain(
+                        err.context(format!("Failed to install {key}")).as_ref(),
+                        printer.stderr(),
+                        "error",
+                        AnsiColors::Red,
+                    )?;
+                }
+                InstallErrorKind::Bin => {
+                    let (level, color) = match bin {
+                        None => ("warning", AnsiColors::Yellow),
+                        Some(false) => continue,
+                        Some(true) => ("error", AnsiColors::Red),
+                    };
+
+                    write_error_chain(
+                        err.context(format!("Failed to install executable for {key}"))
+                            .as_ref(),
+                        printer.stderr(),
+                        level,
+                        color,
+                    )?;
+                }
+                InstallErrorKind::Registry => {
+                    let (level, color) = match registry {
+                        None => ("warning", AnsiColors::Yellow),
+                        Some(false) => continue,
+                        Some(true) => ("error", AnsiColors::Red),
+                    };
+
+                    trace!("Error trace: {err:?}");
+                    write_error_chain(
+                        err.context(format!("Failed to create registry entry for {key}"))
+                            .as_ref(),
+                        printer.stderr(),
+                        level,
+                        color,
+                    )?;
+                }
             }
         }
-        return Ok(ExitStatus::Failure);
+
+        if fatal {
+            return Ok(ExitStatus::Failure);
+        }
     }
 
     Ok(ExitStatus::Success)
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.
+///
+/// This function is fallible, but errors are pushed to `errors` instead of being thrown.
 #[allow(clippy::fn_params_excessive_bools)]
 fn create_bin_links(
     installation: &ManagedPythonInstallation,
@@ -520,27 +753,50 @@ fn create_bin_links(
     reinstall: bool,
     force: bool,
     default: bool,
+    upgradeable: bool,
+    upgrade: bool,
     is_default_install: bool,
     first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
-    errors: &mut Vec<(PythonInstallationKey, Error)>,
-) -> Result<(), Error> {
-    let targets =
-        if (default || is_default_install) && first_request.matches_installation(installation) {
-            vec![
-                installation.key().executable_name_minor(),
-                installation.key().executable_name_major(),
-                installation.key().executable_name(),
-            ]
-        } else {
-            vec![installation.key().executable_name_minor()]
-        };
+    errors: &mut Vec<(InstallErrorKind, PythonInstallationKey, Error)>,
+    preview: Preview,
+) {
+    // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
+    // it. In particular, it may be confusing because it does not apply when versions are loaded
+    // from a `.python-version` file.
+    let targets = if (default
+        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
+        && first_request.matches_installation(installation)
+    {
+        vec![
+            installation.key().executable_name_minor(),
+            installation.key().executable_name_major(),
+            installation.key().executable_name(),
+        ]
+    } else {
+        vec![installation.key().executable_name_minor()]
+    };
 
     for target in targets {
         let target = bin.join(target);
-        match installation.create_bin_link(&target) {
+        if upgrade && !target.try_exists().unwrap_or_default() {
+            continue;
+        }
+        let executable = if upgradeable {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation, preview)
+            {
+                minor_version_link.symlink_executable.clone()
+            } else {
+                installation.executable(false)
+            }
+        } else {
+            installation.executable(false)
+        };
+
+        match create_link_to_executable(&target, &executable) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -589,13 +845,24 @@ fn create_bin_links(
                         // There's an existing executable we don't manage, require `--force`
                         if valid_link {
                             if !force {
-                                errors.push((
-                                    installation.key().clone(),
-                                    anyhow::anyhow!(
-                                        "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                        to.simplified_display()
-                                    ),
-                                ));
+                                if upgrade {
+                                    warn_user!(
+                                        "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
+                                        to.simplified_display(),
+                                        installation.key().major(),
+                                        installation.key().minor(),
+                                        installation.key().variant().suffix()
+                                    );
+                                } else {
+                                    errors.push((
+                                        InstallErrorKind::Bin,
+                                        installation.key().clone(),
+                                        anyhow::anyhow!(
+                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                                            to.simplified_display()
+                                        ),
+                                    ));
+                                }
                                 continue;
                             }
                             debug!(
@@ -664,7 +931,17 @@ fn create_bin_links(
                 }
 
                 // Replace the existing link
-                fs_err::remove_file(&to)?;
+                if let Err(err) = fs_err::remove_file(&to) {
+                    errors.push((
+                        InstallErrorKind::Bin,
+                        installation.key().clone(),
+                        anyhow::anyhow!(
+                            "Executable already exists at `{}` but could not be removed: {err}",
+                            to.simplified_display()
+                        ),
+                    ));
+                    continue;
+                }
 
                 if let Some(existing) = existing {
                     // Ensure we do not report installation of this executable for an existing
@@ -676,7 +953,18 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                installation.create_bin_link(&target)?;
+                if let Err(err) = create_link_to_executable(&target, &executable) {
+                    errors.push((
+                        InstallErrorKind::Bin,
+                        installation.key().clone(),
+                        anyhow::anyhow!(
+                            "Failed to create link at `{}`: {err}",
+                            target.simplified_display()
+                        ),
+                    ));
+                    continue;
+                }
+
                 debug!(
                     "Updated executable at `{}` to {}",
                     target.simplified_display(),
@@ -690,11 +978,14 @@ fn create_bin_links(
                     .insert(target.clone());
             }
             Err(err) => {
-                errors.push((installation.key().clone(), anyhow::Error::new(err)));
+                errors.push((
+                    InstallErrorKind::Bin,
+                    installation.key().clone(),
+                    Error::new(err),
+                ));
             }
         }
     }
-    Ok(())
 }
 
 pub(crate) fn format_executables(
@@ -724,20 +1015,29 @@ fn warn_if_not_on_path(bin: &Path) {
     if !Shell::contains_path(bin) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(bin) {
-                warn_user!(
-                    "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
-                    bin.simplified_display().cyan(),
-                    command.green(),
-                );
+                if shell.supports_update() {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed Python executables, run `{}` or `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green(),
+                        "uv python update-shell".green()
+                    );
+                } else {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed Python executables, run `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green()
+                    );
+                }
             } else {
                 warn_user!(
-                    "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                    "`{}` is not on your PATH. To use installed Python executables, add the directory to your PATH.",
                     bin.simplified_display().cyan(),
                 );
             }
         } else {
             warn_user!(
-                "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                "`{}` is not on your PATH. To use installed Python executables, add the directory to your PATH.",
                 bin.simplified_display().cyan(),
             );
         }
@@ -747,8 +1047,7 @@ fn warn_if_not_on_path(bin: &Path) {
 /// Find the [`ManagedPythonInstallation`] corresponding to an executable link installed at the
 /// given path, if any.
 ///
-/// Like [`ManagedPythonInstallation::is_bin_link`], but this method will only resolve the
-/// given path one time.
+/// Will resolve symlinks on Unix. On Windows, will resolve the target link for a trampoline.
 fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
@@ -757,13 +1056,13 @@ fn find_matching_bin_link<'a>(
         if !path.is_symlink() {
             return None;
         }
-        path.read_link().ok()?
+        fs_err::canonicalize(path).ok()?
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
-        launcher.python_path
+        dunce::canonicalize(launcher.python_path).ok()?
     } else {
         unreachable!("Only Windows and Unix are supported")
     };
