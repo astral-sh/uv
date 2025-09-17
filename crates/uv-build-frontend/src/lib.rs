@@ -597,8 +597,8 @@ impl SourceBuild {
                 != Some("uv_build")
         {
             warn_user_once!(
-                "There are settings for the `uv_build` build backend defined in \
-                `tool.uv.build-backend`, but the project does not use the `uv_build` backend: {}",
+                "There are settings for `uv_build` defined in \
+                `tool.uv.build-backend`, but `uv_build` is not used by the project at: {}",
                 source_tree.join("pyproject.toml").simplified_display()
             );
         }

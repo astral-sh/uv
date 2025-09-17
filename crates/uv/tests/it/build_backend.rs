@@ -1144,9 +1144,9 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    warning: There are settings for the `uv_build` build backend defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [TEMP_DIR]/pyproject.toml
+    warning: There are settings for `uv_build` backend defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [TEMP_DIR]/pyproject.toml
     Building wheel from source distribution...
-    warning: There are settings for the `uv_build` build backend defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [CACHE_DIR]/sdists-v9/[TMP]/pyproject.toml
+    warning: There are settings for `uv_build` backend defined in `tool.uv.build-backend`, but the project does not use the `uv_build` backend: [CACHE_DIR]/sdists-v9/[TMP]/pyproject.toml
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
