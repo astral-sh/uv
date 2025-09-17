@@ -10949,7 +10949,7 @@ fn multiple_group_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Groups `bar` and `foo` are incompatible with the declared conflicts: {`project:bar`, `project:foo`}
+    error: Groups `bar` and `foo` are incompatible with the conflicts: {`project:bar`, `project:foo`}
     ");
 
     Ok(())
@@ -10985,6 +10985,24 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
         ]
         "#,
     )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
@@ -11027,7 +11045,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `magic` and `test` are incompatible with the declared conflicts: {`example:magic`, `example:test`}
+    error: Groups `magic` and `test` are incompatible with the conflicts: {`example:magic`, `example:test`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
@@ -11037,7 +11055,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
     ");
 
     Ok(())
@@ -11124,7 +11142,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("intermediate").arg("--group").arg("magic"), @r"
@@ -11134,7 +11152,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Groups `intermediate` and `magic` are incompatible with the transitively inferred conflicts: {`example:intermediate`, `example:magic`}
+    error: Groups `intermediate` and `magic` are incompatible with the conflicts: {`example:intermediate`, `example:magic`}
     ");
 
     Ok(())
@@ -11218,7 +11236,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` (enabled by default) and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    error: Groups `dev` (enabled by default) and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("dev2"), @r"
@@ -11228,7 +11246,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    error: Groups `dev` and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
     ");
 
     Ok(())
