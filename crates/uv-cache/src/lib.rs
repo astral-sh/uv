@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, Simplified, cachedir, directories};
@@ -395,12 +395,24 @@ impl Cache {
         )?;
 
         // Block cache removal operations from interfering.
-        let lock_file =
-            LockedFile::acquire_shared_blocking(root.join(".lock"), root.simplified_display())?;
+        let lock_file = match LockedFile::acquire_shared_blocking(
+            root.join(".lock"),
+            root.simplified_display(),
+        ) {
+            Ok(lock_file) => Some(Arc::new(lock_file)),
+            Err(err) if err.kind() == io::ErrorKind::Unsupported => {
+                warn!(
+                    "Shared locking is not supported by the current platform or filesystem, \
+                    reduced parallel process safety with `uv cache clean` and `uv cache prune`."
+                );
+                None
+            }
+            Err(err) => return Err(err),
+        };
 
         Ok(Self {
             root: std::path::absolute(root)?,
-            lock_file: Some(Arc::new(lock_file)),
+            lock_file,
             ..self
         })
     }
