@@ -25,7 +25,7 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
+use uv_installer::{Plan, Planner, Preparer, SitePackages, SyncModel};
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
@@ -436,6 +436,7 @@ impl Changelog {
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
+    model: SyncModel,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
@@ -466,7 +467,7 @@ pub(crate) async fn install(
             build_options,
             hasher,
             build_dispatch.locations(),
-            build_dispatch.sources(),
+            model,
             build_dispatch.config_settings(),
             build_dispatch.config_settings_package(),
             build_dispatch.extra_build_requires(),

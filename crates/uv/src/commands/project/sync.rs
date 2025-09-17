@@ -22,7 +22,7 @@ use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::SitePackages;
+use uv_installer::{SitePackages, SyncModel};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeatures};
@@ -791,6 +791,7 @@ pub(super) async fn do_sync(
     operations::install(
         &resolution,
         site_packages,
+        SyncModel::Stateless,
         modifications,
         reinstall,
         build_options,

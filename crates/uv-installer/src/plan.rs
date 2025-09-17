@@ -23,7 +23,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
-use crate::SitePackages;
+use crate::{SitePackages, SyncModel};
 use crate::satisfies::RequirementSatisfaction;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
@@ -56,7 +56,7 @@ impl<'a> Planner<'a> {
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -126,7 +126,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
-                            source_strategy,
+                            model,
                             tags,
                             config_settings,
                             config_settings_package,

@@ -18,6 +18,8 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
+use crate::SyncModel;
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
@@ -34,7 +36,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
-        source_strategy: SourceStrategy,
+        model: SyncModel,
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
@@ -67,13 +69,22 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
-                if matches!(source_strategy, SourceStrategy::Disabled) {
-                    // Check if the installed distribution is not from registry
-                    if !matches!(distribution.kind, InstalledDistKind::Registry(_)) {
-                        trace!(
-                            "Source strategy is disabled (sync mode), rejecting non-registry installation: {:?}",
-                            distribution
-                        );
+                // If the installed distribution is _not_ from a registry, reject it if and only if
+                // we're in a stateless install.
+                //
+                // For example: the `uv pip` CLI is stateful, in that it "respects"
+                // already-installed packages in the virtual environment. So if you run `uv pip
+                // install ./path/to/idna`, and then `uv pip install anyio` (which depends on
+                // `idna`), we'll "accept" the already-installed `idna` even though it is implicitly
+                // being "required" as a registry package.
+                //
+                // The `uv sync` CLI is stateless, in that all requirements must be defined
+                // declaratively ahead-of-time. So if you `uv sync` to install `./path/to/idna` and
+                // later `uv sync` to install `anyio`, we'll know (during that second sync) if the
+                // already-installed `idna` should come from the registry or not.
+                if model == SyncModel::Stateless {
+                    if !matches!(distribution.kind, InstalledDistKind::Registry { .. }) {
+                        debug!("Distribution type mismatch for {name}: {distribution:?}");
                         return Self::Mismatch;
                     }
                 }

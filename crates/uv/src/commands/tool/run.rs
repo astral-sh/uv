@@ -25,7 +25,7 @@ use uv_distribution_types::{
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -977,7 +977,7 @@ async fn get_or_create_environment(
                             constraints.iter(),
                             overrides.iter(),
                             &markers,
-                            settings.resolver.sources,
+                            SyncModel::Stateful,
                             tags,
                             config_setting,
                             config_settings_package,
