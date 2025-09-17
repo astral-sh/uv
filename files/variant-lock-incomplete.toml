@@ -1,0 +1,12 @@
+[metadata]
+created-by = "tool-that-created-the-file" # Freeform string
+version = "0.1" # PEP 440 version
+
+# We don't have static information for the requested provider
+
+[[provider]]
+resolved = ["foo==0.0.1"]
+plugin-api = "foo"
+namespace = "foo"
+
+[provider.properties]
