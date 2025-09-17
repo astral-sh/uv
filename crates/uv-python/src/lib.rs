@@ -1337,6 +1337,36 @@ mod tests {
             "Non-base conda environment should be available for virtual environment preference"
         );
 
+        // When CONDA_PREFIX equals CONDA_DEFAULT_ENV, it should be treated as a virtual environment
+        let unnamed_env = context.tempdir.child("my-conda-env");
+        TestContext::mock_conda_prefix(&unnamed_env, "3.12.4")?;
+        let unnamed_env_path = unnamed_env.to_string_lossy().to_string();
+
+        let python = context.run_with_vars(
+            &[
+                (EnvVars::CONDA_PREFIX, Some(unnamed_env.as_os_str())),
+                (
+                    EnvVars::CONDA_DEFAULT_ENV,
+                    Some(&OsString::from(&unnamed_env_path)),
+                ),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlyVirtual,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                    Preview::default(),
+                )
+            },
+        )??;
+
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.4",
+            "We should find the unnamed conda environment"
+        );
+
         Ok(())
     }
 
