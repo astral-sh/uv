@@ -1,0 +1,30 @@
+[package]
+name = "uv-variants"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+uv-distribution-filename = { workspace = true }
+uv-once-map = { workspace = true }
+uv-pep508 = { workspace = true, features = ["serde"] }
+uv-pypi-types = { workspace = true }
+
+indexmap = { workspace = true }
+indoc = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = "1.43.1"
+itertools = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[lints]
+workspace = true

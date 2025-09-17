@@ -30,6 +30,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
+uv-variants = { workspace = true }
 uv-warnings = { workspace = true }
 
 arcstr = { workspace = true }

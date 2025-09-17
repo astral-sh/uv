@@ -5,12 +5,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -18,17 +19,22 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, SourceDist, ToUrlError,
+    Name, RegistryVariantsJson, SourceDist, ToUrlError, VariantsJson,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildStack};
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::VariantProviderOutput;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variants_json::{Provider, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -556,6 +562,122 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.builder
             .source_tree_requires_dist(path, pyproject_toml)
             .await
+    }
+
+    #[instrument(skip_all, fields(variants_json = %registry_variants_json.filename))]
+    pub async fn fetch_and_query_variants(
+        &self,
+        registry_variants_json: &RegistryVariantsJson,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<ResolvedVariants, Error> {
+        let variants_json = self.fetch_variants_json(registry_variants_json).await?;
+        let resolved_variants = self
+            .query_variant_providers(variants_json, marker_env, &registry_variants_json.filename)
+            .await?;
+        Ok(resolved_variants)
+    }
+
+    /// Fetch the variants.json contents from a URL (cached) or from a path.
+    async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        Ok(self
+            .client
+            .managed(|client| client.fetch_variants_json(variants_json))
+            .await?)
+    }
+
+    async fn query_variant_providers(
+        &self,
+        variants_json: VariantsJsonContent,
+        marker_env: &MarkerEnvironment,
+        debug_filename: &VariantsJson,
+    ) -> Result<ResolvedVariants, Error> {
+        // Query the install time provider.
+        let mut provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
+            futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
+                provider.plugin_use.unwrap_or_default().run_on_install()
+                    && provider
+                        .enable_if
+                        .evaluate(marker_env, MarkerVariantsUniversal, &[])
+            }))
+            .map(|(name, provider)| self.query_variant_provider(name, provider))
+            // TODO(konsti): Buffer size
+            .buffered(8)
+            .map_ok(|config| (config.namespace.clone(), config))
+            .try_collect()
+            .await?;
+
+        // "Query" the non-install time providers, whose properties are all in the priorities
+        for (namespace, _provider) in variants_json.providers.iter().filter(|(_, provider)| {
+            !provider.plugin_use.unwrap_or_default().run_on_install()
+                && provider
+                    .enable_if
+                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+        }) {
+            let Some(features) = variants_json.default_priorities.property.get(namespace) else {
+                warn!(
+                    "Missing namespace {namespace} in default properties for {}=={}",
+                    debug_filename.name, debug_filename.version
+                );
+                continue;
+            };
+            provider_outputs.insert(
+                namespace.clone(),
+                Arc::new(VariantProviderOutput {
+                    namespace: namespace.clone(),
+                    features: features.clone().into_iter().collect(),
+                }),
+            );
+        }
+
+        Ok(ResolvedVariants {
+            variants_json,
+            target_variants: provider_outputs,
+        })
+    }
+
+    async fn query_variant_provider(
+        &self,
+        name: &VariantNamespace,
+        provider: &Provider,
+    ) -> Result<Arc<VariantProviderOutput>, Error> {
+        let config = if self.build_context.variants().register(provider.clone()) {
+            debug!("Querying provider `{name}` for variants");
+
+            // TODO(konsti): That's not spec compliant
+            let backend_name = provider.plugin_api.clone().unwrap_or(name.to_string());
+            let builder = self
+                .build_context
+                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                .await?;
+            let config = builder.query().await?;
+            trace!(
+                "Found namespace {} with configs {:?}",
+                config.namespace, config
+            );
+
+            let config = Arc::new(config);
+            self.build_context
+                .variants()
+                .done(provider.clone(), config.clone());
+            config
+        } else {
+            debug!("Reading provider `{name}` from in-memory cache");
+            self.build_context
+                .variants()
+                .wait(provider)
+                .await
+                .expect("missing value for registered task")
+        };
+        if &config.namespace != name {
+            return Err(Error::WheelVariantNamespaceMismatch {
+                declared: name.clone(),
+                actual: config.namespace.clone(),
+            });
+        }
+        Ok(config)
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

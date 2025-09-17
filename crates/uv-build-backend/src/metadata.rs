@@ -64,20 +64,20 @@ pub enum ValidationError {
 
 /// Check if the build backend is matching the currently running uv version.
 pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
-    let pyproject_toml: PyProjectToml =
-        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
-            .map_err(|err| err.to_string())
-            .and_then(|pyproject_toml| {
-                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
-            }) {
-            Ok(pyproject_toml) => pyproject_toml,
-            Err(err) => {
-                debug!(
-                    "Not using uv build backend direct build of {name}, no pyproject.toml: {err}"
-                );
-                return false;
-            }
-        };
+    let pyproject_toml: PyProjectToml = match fs_err::read_to_string(
+        source_tree.join("pyproject.toml"),
+    )
+    .map_err(|err| err.to_string())
+    .and_then(|pyproject_toml| toml::from_str(&pyproject_toml).map_err(|err| err.to_string()))
+    {
+        Ok(pyproject_toml) => pyproject_toml,
+        Err(err) => {
+            debug!(
+                "Not using uv build backend direct build of {name}, failed to read pyproject.toml: {err}"
+            );
+            return false;
+        }
+    };
     match pyproject_toml
         .check_build_system(uv_version::version())
         .as_slice()
