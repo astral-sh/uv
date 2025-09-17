@@ -14152,14 +14152,14 @@ fn only_group_and_extra_conflict() -> Result<()> {
     Ok(())
 }
 
-/// Test for Issue #15190: `uv sync --no-sources` should consistently switch from editable to package installation
+/// `uv sync --no-sources` should consistently switch from editable to package installation.
 ///
-/// This reproduces the bug where editable → package transitions are not detected when using --no-sources
+/// See: <https://github.com/astral-sh/uv/issues/15190>
 #[test]
 fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create a local package that will be used as editable dependency
+    // Create a local package that will be used as editable dependency.
     let local_dep = context.temp_dir.child("local_dep");
     local_dep.create_dir_all()?;
 
@@ -14178,7 +14178,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         "#,
     )?;
 
-    // Create main project with editable source for the local dependency
+    // Create main project with editable source for the local dependency.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -14200,11 +14200,10 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         "#,
     )?;
 
-    // Step 1: `uv sync --no-sources` - should install anyio from PyPI
+    // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r"
     success: true
     exit_code: 0
-
     ----- stdout -----
 
     ----- stderr -----
@@ -14217,11 +14216,10 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
      + test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
-    // Step 2: `uv sync` - should switch to editable installation
+    // Step 2: `uv sync` should switch to an editable installation.
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
-
     ----- stdout -----
 
     ----- stderr -----
@@ -14235,12 +14233,10 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
      - sniffio==1.3.1
     ");
 
-    // Step 3: `uv sync --no-sources` again - should switch back to PyPI package
-    // This is the failing case from Issue #15190 - currently shows no changes
+    // Step 3: `uv sync --no-sources` again should switch back to PyPI package.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r"
     success: true
     exit_code: 0
-
     ----- stdout -----
 
     ----- stderr -----

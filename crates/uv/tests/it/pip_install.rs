@@ -12846,15 +12846,14 @@ fn switch_platform() {
     );
 }
 
-/// Test for Issue #15190: `uv pip install --no-sources` should reject non-registry installations
+/// `uv pip install --no-sources` should allow non-registry installations, for compatibility with `pip install`.
 ///
-/// This verifies that when --no-sources is used, editable installations are considered
-/// incompatible and will be replaced with registry installations
+/// See: <https://github.com/astral-sh/uv/issues/15190>
 #[test]
 fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create a simple local package
+    // Create a simple local package.
     let local_pkg = context.temp_dir.child("local_pkg");
     local_pkg.create_dir_all()?;
 
@@ -12865,6 +12864,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
         version = "2.0.0"
         description = "Local test package"
         requires-python = ">=3.7"
+
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
@@ -12878,7 +12878,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '2.0.0'")?;
 
-    // Step 1: Install as editable first
+    // Step 1: Install as editable first.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg("./local_pkg"), @r"
@@ -12894,7 +12894,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     "
     );
 
-    // Step 2: Use --no-sources to install from registry - should switch from editable to registry
+    // Step 2: Use `--no-sources`; we should retain the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--no-sources"), @r"
@@ -12903,12 +12903,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
-     + iniconfig==2.0.0
+    Audited 1 package in [TIME]
     "
     );
 
