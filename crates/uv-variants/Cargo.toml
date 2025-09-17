@@ -11,7 +11,9 @@ license.workspace = true
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-normalize = { workspace = true }
 uv-once-map = { workspace = true }
+uv-pep440 = { workspace = true, features = ["serde"] }
 uv-pep508 = { workspace = true, features = ["serde"] }
 uv-pypi-types = { workspace = true }
 
@@ -19,6 +21,7 @@ indexmap = { workspace = true }
 indoc = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

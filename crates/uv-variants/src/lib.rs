@@ -4,6 +4,7 @@ use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 
 pub mod cache;
 pub mod resolved_variants;
+pub mod variant_lock;
 pub mod variants_json;
 
 /// Wire format between with the Python shim for provider plugins.

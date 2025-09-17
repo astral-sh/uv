@@ -18,6 +18,15 @@ uv venv -c -q && UV_CPU_LEVEL_OVERRIDE=2 ${uv} pip install built-by-uv --no-inde
 echo "# Matching cpu2 variant wheel, to be preferred over the non-variant wheel and the sdist"
 uv venv -c -q && UV_CPU_LEVEL_OVERRIDE=2 RUST_LOG=uv_distribution_types=debug ${uv} pip install built-by-uv --no-index --no-cache --no-progress --find-links ./files --find-links ./files_wheel --find-links ./files_sdist
 
+echo "Valid variants lock"
+uv venv -c -q && UV_VARIANT_LOCK=files/variant-lock.toml RUST_LOG=uv_distribution_types=debug ${uv} pip install built-by-uv --no-index --no-cache --no-progress --find-links ./files
+echo "No matching variants wheel with variants lock"
+uv venv -c -q && ( ( UV_VARIANT_LOCK=files/variant-lock-none.toml RUST_LOG=uv_distribution_types=debug ${uv} pip install built-by-uv --no-index --no-cache --no-progress --find-links ./files && exit 1 ) || exit 0 )
+echo "No matching variant provider in variants lock"
+uv venv -c -q && ( ( UV_VARIANT_LOCK=files/variant-lock-incomplete.toml RUST_LOG=uv_distribution_types=debug ${uv} pip install built-by-uv --no-index --no-cache --no-progress --find-links ./files && exit 1 ) || exit 0 )
+echo "No matching variants in variants lock, but UV_VARIANT_LOCK_INCOMPLETE set"
+uv venv -c -q && UV_VARIANT_LOCK_INCOMPLETE=1 UV_VARIANT_LOCK=files/variant-lock-incomplete.toml RUST_LOG=uv_distribution_types=debug ${uv} pip install built-by-uv --no-index --no-cache --no-progress --find-links ./files
+
 echo "# sync without a compatible variant wheel (fresh)"
 ( cd scripts/packages/cpu_user && rm -f uv.lock && ( ( uv venv -c -q && UV_CPU_LEVEL_OVERRIDE=0 ${uv} sync && exit 1 ) || exit 0 ) )
 echo "# sync without a compatible variant wheel (existing lockfile)"

@@ -24,7 +24,7 @@
       "enable-if": "platform_machine == 'x86_64' or platform_machine == 'AMD64'",
       "plugin-api": "cpu_level_provider",
       "requires": [
-        "cpu_level_provider"
+        "cpu_level_provider >= 0.1, <0.2"
       ]
     }
   },
