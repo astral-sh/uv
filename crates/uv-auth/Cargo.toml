@@ -31,6 +31,7 @@ futures = { workspace = true }
 http = { workspace = true }
 jiff = { workspace = true }
 percent-encoding = { workspace = true }
+reqsign = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }

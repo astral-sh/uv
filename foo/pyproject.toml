@@ -1,0 +1,11 @@
+[project]
+name = "foo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14.0"
+dependencies = ["semantic-kernel"]
+
+
+[tool.uv.sources]
+semantic-kernel = { url = "https://astral-sh-staging-pypi-mirror.s3.us-east-1.amazonaws.com/00/00/7ff183ffc79d1abe6439fa58fcc8a92a0002b72b6bd2c25793dc65d89948/semantic_kernel-1.23.1-py3-none-any.whl" }

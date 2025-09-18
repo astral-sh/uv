@@ -886,6 +886,11 @@ impl EnvVars {
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
 
+    /// The URL to treat as an S3-compatible storage endpoint. Requests to this endpoint
+    /// will be signed using AWS Signature Version 4 based on the `AWS_ACCESS_KEY_ID`,
+    /// `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
+    pub const UV_S3_ENDPOINT: &'static str = "UV_S3_ENDPOINT";
+
     /// The URL of the pyx Simple API server.
     pub const PYX_API_URL: &'static str = "PYX_API_URL";
 
