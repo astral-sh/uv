@@ -225,155 +225,273 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
         }
 
-        // If a lockfile already exists, lock the script.
-        if !isolated
-            && let Some(target) = script
-                .as_script()
-                .map(LockTarget::from)
-                .filter(|target| target.lock_path().is_file())
-        {
-            debug!("Found existing lockfile for script");
+        match script.as_script().map(LockTarget::from) {
+            // If a lockfile already exists, lock the script.
+            Some(target) if !isolated && target.lock_path().is_file() => {
+                debug!("Found existing lockfile for script");
 
-            // Discover the interpreter for the script.
-            let environment = ScriptEnvironment::get_or_init(
-                (&script).into(),
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                no_sync,
-                no_config,
-                active.map_or(Some(false), Some),
-                cache,
-                DryRun::Disabled,
-                printer,
-                preview,
-            )
-            .await?
-            .into_environment()?;
+                // Discover the interpreter for the script.
+                let environment = ScriptEnvironment::get_or_init(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    no_sync,
+                    no_config,
+                    active.map_or(Some(false), Some),
+                    cache,
+                    DryRun::Disabled,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_environment()?;
 
-            let _lock = environment
-                .lock()
+                let _lock = environment
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
+
+                // Determine the lock mode.
+                let mode = if frozen {
+                    LockMode::Frozen
+                } else if locked {
+                    LockMode::Locked(environment.interpreter())
+                } else {
+                    LockMode::Write(environment.interpreter())
+                };
+
+                // Generate a lockfile.
+                let lock = match project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    concurrency,
+                    cache,
+                    &workspace_cache,
+                    printer,
+                    preview,
+                )
+                .execute(target)
                 .await
-                .inspect_err(|err| {
-                    warn!("Failed to acquire environment lock: {err}");
-                })
-                .ok();
+                {
+                    Ok(result) => result.into_lock(),
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::native_tls(
+                            client_builder.is_native_tls(),
+                        )
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-            // Determine the lock mode.
-            let mode = if frozen {
-                LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
-            } else {
-                LockMode::Write(environment.interpreter())
-            };
+                // Sync the environment.
+                let target = InstallTarget::Script {
+                    script: script.as_script().unwrap(),
+                    lock: &lock,
+                };
 
-            // Generate a lockfile.
-            let lock = match project::lock::LockOperation::new(
-                mode,
-                &settings.resolver,
-                &client_builder,
-                &lock_state,
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                concurrency,
-                cache,
-                &workspace_cache,
-                printer,
-                preview,
-            )
-            .execute(target)
-            .await
-            {
-                Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                let install_options = InstallOptions::default();
+
+                match project::sync::do_sync(
+                    target,
+                    &environment,
+                    &extras.with_defaults(DefaultExtras::default()),
+                    &groups.with_defaults(DefaultGroups::default()),
+                    editable,
+                    install_options,
+                    modifications,
+                    python_platform.as_ref(),
+                    (&settings).into(),
+                    &client_builder,
+                    &sync_state,
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    concurrency,
+                    cache,
+                    workspace_cache.clone(),
+                    DryRun::Disabled,
+                    printer,
+                    preview,
+                )
+                .await
+                {
+                    Ok(()) => {}
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::native_tls(
+                            client_builder.is_native_tls(),
+                        )
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    }
+                    Err(err) => return Err(err.into()),
                 }
-                Err(err) => return Err(err.into()),
-            };
 
-            // Sync the environment.
-            let target = InstallTarget::Script {
-                script: script.as_script().unwrap(),
-                lock: &lock,
-            };
+                // Respect any locked preferences when resolving `--with` dependencies downstream.
+                let install_path = target.install_path().to_path_buf();
+                base_lock = Some((lock, install_path));
 
-            let install_options = InstallOptions::default();
-
-            match project::sync::do_sync(
-                target,
-                &environment,
-                &extras.with_defaults(DefaultExtras::default()),
-                &groups.with_defaults(DefaultGroups::default()),
-                editable,
-                install_options,
-                modifications,
-                python_platform.as_ref(),
-                (&settings).into(),
-                &client_builder,
-                &sync_state,
-                if show_resolution {
-                    Box::new(DefaultInstallLogger)
-                } else {
-                    Box::new(SummaryInstallLogger)
-                },
-                installer_metadata,
-                concurrency,
-                cache,
-                workspace_cache.clone(),
-                DryRun::Disabled,
-                printer,
-                preview,
-            )
-            .await
-            {
-                Ok(()) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                Some(environment.into_interpreter())
+            }
+            _ => {
+                // If no lockfile is found or an isolated venv was requested, warn against `--locked` and `--frozen`.
+                if locked {
+                    warn_user!(
+                        "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                        "uv lock --script".green(),
+                    );
                 }
-                Err(err) => return Err(err.into()),
-            }
+                if frozen {
+                    warn_user!(
+                        "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
+                        "uv lock --script".green(),
+                    );
+                }
 
-            // Respect any locked preferences when resolving `--with` dependencies downstream.
-            let install_path = target.install_path().to_path_buf();
-            base_lock = Some((lock, install_path));
+                // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+                if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
+                    let script_extra_build_requires =
+                        script_extra_build_requires((&script).into(), &settings.resolver)?
+                            .into_inner();
+                    let environment = if isolated {
+                        let interpreter = ScriptInterpreter::discover(
+                            (&script).into(),
+                            python.as_deref().map(PythonRequest::parse),
+                            &client_builder,
+                            python_preference,
+                            python_downloads,
+                            &install_mirrors,
+                            no_sync,
+                            no_config,
+                            active.map_or(Some(false), Some),
+                            cache,
+                            printer,
+                            preview,
+                            isolated,
+                        )
+                        .await?
+                        .into_interpreter();
 
-            Some(environment.into_interpreter())
-        } else {
-            // If no lockfile is found or an isolated venv was requested, warn against `--locked` and `--frozen`.
-            if locked {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
-            }
-            if frozen {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
-            }
+                        temp_dir = cache.venv_dir()?;
+                        uv_virtualenv::create_venv(
+                            temp_dir.path(),
+                            interpreter,
+                            uv_virtualenv::Prompt::None,
+                            false,
+                            uv_virtualenv::OnExisting::Remove(
+                                uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                            ),
+                            false,
+                            false,
+                            false,
+                            preview,
+                        )?
+                    } else {
+                        ScriptEnvironment::get_or_init(
+                            (&script).into(),
+                            python.as_deref().map(PythonRequest::parse),
+                            &client_builder,
+                            python_preference,
+                            python_downloads,
+                            &install_mirrors,
+                            no_sync,
+                            no_config,
+                            active.map_or(Some(false), Some),
+                            cache,
+                            DryRun::Disabled,
+                            printer,
+                            preview,
+                        )
+                        .await?
+                        .into_environment()?
+                    };
 
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
-                let script_extra_build_requires =
-                    script_extra_build_requires((&script).into(), &settings.resolver)?.into_inner();
-                let environment = if isolated {
+                    let build_constraints = script
+                        .metadata()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| {
+                            tool.uv
+                                .as_ref()
+                                .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                        })
+                        .map(|constraints| {
+                            Constraints::from_requirements(
+                                constraints
+                                    .iter()
+                                    .map(|constraint| Requirement::from(constraint.clone())),
+                            )
+                        });
+
+                    let _lock = environment
+                        .lock()
+                        .await
+                        .inspect_err(|err| {
+                            warn!("Failed to acquire environment lock: {err}");
+                        })
+                        .ok();
+
+                    match update_environment(
+                        environment,
+                        spec,
+                        modifications,
+                        python_platform.as_ref(),
+                        build_constraints.unwrap_or_default(),
+                        script_extra_build_requires,
+                        &settings,
+                        &client_builder,
+                        &sync_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        if show_resolution {
+                            Box::new(DefaultInstallLogger)
+                        } else {
+                            Box::new(SummaryInstallLogger)
+                        },
+                        installer_metadata,
+                        concurrency,
+                        cache,
+                        workspace_cache.clone(),
+                        DryRun::Disabled,
+                        printer,
+                        preview,
+                    )
+                    .await
+                    {
+                        Ok(update) => Some(update.into_environment().into_interpreter()),
+                        Err(ProjectError::Operation(err)) => {
+                            return diagnostics::OperationDiagnostic::native_tls(
+                                client_builder.is_native_tls(),
+                            )
+                            .with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+                } else {
+                    // Create a virtual environment.
                     let interpreter = ScriptInterpreter::discover(
                         (&script).into(),
                         python.as_deref().map(PythonRequest::parse),
@@ -393,7 +511,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .into_interpreter();
 
                     temp_dir = cache.venv_dir()?;
-                    uv_virtualenv::create_venv(
+                    let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
                         interpreter,
                         uv_virtualenv::Prompt::None,
@@ -405,129 +523,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         false,
                         false,
                         preview,
-                    )?
-                } else {
-                    ScriptEnvironment::get_or_init(
-                        (&script).into(),
-                        python.as_deref().map(PythonRequest::parse),
-                        &client_builder,
-                        python_preference,
-                        python_downloads,
-                        &install_mirrors,
-                        no_sync,
-                        no_config,
-                        active.map_or(Some(false), Some),
-                        cache,
-                        DryRun::Disabled,
-                        printer,
-                        preview,
-                    )
-                    .await?
-                    .into_environment()?
-                };
+                    )?;
 
-                let build_constraints = script
-                    .metadata()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| {
-                        tool.uv
-                            .as_ref()
-                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                    })
-                    .map(|constraints| {
-                        Constraints::from_requirements(
-                            constraints
-                                .iter()
-                                .map(|constraint| Requirement::from(constraint.clone())),
-                        )
-                    });
-
-                let _lock = environment
-                    .lock()
-                    .await
-                    .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
-                    })
-                    .ok();
-
-                match update_environment(
-                    environment,
-                    spec,
-                    modifications,
-                    python_platform.as_ref(),
-                    build_constraints.unwrap_or_default(),
-                    script_extra_build_requires,
-                    &settings,
-                    &client_builder,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    concurrency,
-                    cache,
-                    workspace_cache.clone(),
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
-                .await
-                {
-                    Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
-                        )
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Some(environment.into_interpreter())
                 }
-            } else {
-                // Create a virtual environment.
-                let interpreter = ScriptInterpreter::discover(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    no_config,
-                    active.map_or(Some(false), Some),
-                    cache,
-                    printer,
-                    preview,
-                    isolated,
-                )
-                .await?
-                .into_interpreter();
-
-                temp_dir = cache.venv_dir()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
-                    ),
-                    false,
-                    false,
-                    false,
-                    preview,
-                )?;
-
-                Some(environment.into_interpreter())
             }
         }
     } else {
