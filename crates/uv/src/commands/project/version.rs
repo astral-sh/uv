@@ -56,10 +56,11 @@ pub(crate) fn self_version(
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBump>,
+    bump: Vec<VersionBump>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
+    all_packages: bool,
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
@@ -80,9 +81,143 @@ pub(crate) async fn project_version(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    // Read the metadata
-    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
+    // No workspace caching since `uv version` changes the workspace definition.
+    let discovery_options = DiscoveryOptions {
+        project: uv_workspace::ProjectDiscovery::Required,
+        ..DiscoveryOptions::default()
+    };
+    let workspace_cache = WorkspaceCache::default();
 
+    let project = find_target(
+        project_dir,
+        package.as_ref(),
+        explicit_project,
+        &discovery_options,
+        &workspace_cache,
+    )
+    .await?;
+    // Determine the version changes to apply.
+    let version_changes = if all_packages {
+        let packages = project.workspace().packages();
+        let mut version_changes: Vec<VersionChange> = Vec::with_capacity(packages.len());
+        for (_, workspace_member) in packages {
+            let project = VirtualProject::discover(
+                workspace_member.root(),
+                &discovery_options,
+                &workspace_cache,
+            )
+            .await?;
+            let version_change =
+                determine_version_change(project, value.clone(), bump.clone(), dry_run, frozen)
+                    .await?;
+            version_changes.push(version_change);
+        }
+        version_changes
+    } else {
+        let version_change =
+            determine_version_change(project, value, bump, dry_run, frozen).await?;
+        vec![version_change]
+    };
+
+    for version_change in version_changes {
+        match version_change {
+            VersionChange::Frozen(project, name) => {
+                Box::pin(print_frozen_version(
+                    project,
+                    &name,
+                    project_dir,
+                    active,
+                    python.clone(),
+                    install_mirrors.clone(),
+                    &settings,
+                    client_builder.clone(),
+                    python_preference,
+                    python_downloads,
+                    concurrency,
+                    no_config,
+                    cache,
+                    short,
+                    output_format,
+                    printer,
+                    preview,
+                ))
+                .await?;
+            }
+            VersionChange::NoChange(name, old_version, new_version) => {
+                // Report the results
+                let old_version = VersionInfo::new(Some(&name), &old_version);
+                let new_version =
+                    new_version.map(|new_version| VersionInfo::new(Some(&name), &new_version));
+                print_version(old_version, new_version, short, output_format, printer)?;
+            }
+            VersionChange::Updated {
+                name,
+                project,
+                mut toml,
+                old_version,
+                new_version,
+            } => {
+                let pyproject_path = &project.root().join("pyproject.toml");
+                let project = update_project(project, &new_version, &mut toml, pyproject_path)?;
+                Box::pin(lock_and_sync(
+                    project,
+                    project_dir,
+                    locked,
+                    frozen,
+                    active,
+                    no_sync,
+                    python.clone(),
+                    install_mirrors.clone(),
+                    &settings,
+                    client_builder.clone(),
+                    python_preference,
+                    python_downloads,
+                    installer_metadata,
+                    concurrency,
+                    no_config,
+                    cache,
+                    printer,
+                    preview,
+                ))
+                .await?;
+                // Report the results
+                let old_version = VersionInfo::new(Some(&name), &old_version);
+                let new_version = VersionInfo::new(Some(&name), &new_version);
+                print_version(
+                    old_version,
+                    Some(new_version),
+                    short,
+                    output_format,
+                    printer,
+                )?;
+            }
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+enum VersionChange {
+    Frozen(VirtualProject, PackageName),
+    NoChange(PackageName, Version, Option<Version>),
+    Updated {
+        name: PackageName,
+        toml: PyProjectTomlMut,
+        project: VirtualProject,
+        old_version: Version,
+        new_version: Version,
+    },
+}
+/// Determine the new version for a project, if any.
+#[allow(clippy::fn_params_excessive_bools)]
+async fn determine_version_change(
+    project: VirtualProject,
+    value: Option<String>,
+    mut bump: Vec<VersionBump>,
+    dry_run: bool,
+    frozen: bool,
+) -> Result<VersionChange> {
+    // Read the metadata
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
         return Err(anyhow!(
@@ -94,26 +229,7 @@ pub(crate) async fn project_version(
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
     if frozen && is_read_only {
-        return Box::pin(print_frozen_version(
-            project,
-            &name,
-            project_dir,
-            active,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_downloads,
-            concurrency,
-            no_config,
-            cache,
-            short,
-            output_format,
-            printer,
-            preview,
-        ))
-        .await;
+        return Ok(VersionChange::Frozen(project, name));
     }
 
     let mut toml = PyProjectTomlMut::from_toml(
@@ -289,43 +405,20 @@ pub(crate) async fn project_version(
         None
     };
 
-    // Update the toml and lock
-    let status = if dry_run {
-        ExitStatus::Success
-    } else if let Some(new_version) = &new_version {
-        let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
-        Box::pin(lock_and_sync(
+    if dry_run {
+        Ok(VersionChange::NoChange(name, old_version, new_version))
+    } else if let Some(new_version) = new_version {
+        Ok(VersionChange::Updated {
             project,
-            project_dir,
-            locked,
-            frozen,
-            active,
-            no_sync,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_downloads,
-            installer_metadata,
-            concurrency,
-            no_config,
-            cache,
-            printer,
-            preview,
-        ))
-        .await?
+            name,
+            toml,
+            old_version,
+            new_version,
+        })
     } else {
-        debug!("No changes to version; skipping update");
-        ExitStatus::Success
-    };
-
-    // Report the results
-    let old_version = VersionInfo::new(Some(&name), &old_version);
-    let new_version = new_version.map(|version| VersionInfo::new(Some(&name), &version));
-    print_version(old_version, new_version, short, output_format, printer)?;
-
-    Ok(status)
+        debug!("No changes to version for project {name}; skipping update");
+        Ok(VersionChange::NoChange(name, old_version, new_version))
+    }
 }
 
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
@@ -351,35 +444,22 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    discovery_options: &DiscoveryOptions,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
-    // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
         VirtualProject::Project(
-            Workspace::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    project: uv_workspace::ProjectDiscovery::Required,
-                    ..DiscoveryOptions::default()
-                },
-                &WorkspaceCache::default(),
-            )
-            .await
-            .map_err(|err| hint_uv_self_version(err, explicit_project))?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            Workspace::discover(project_dir, discovery_options, workspace_cache)
+                .await
+                .map_err(|err| hint_uv_self_version(err, explicit_project))?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
     } else {
-        VirtualProject::discover(
-            project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
-            &WorkspaceCache::default(),
-        )
-        .await
-        .map_err(|err| hint_uv_self_version(err, explicit_project))?
+        VirtualProject::discover(project_dir, discovery_options, workspace_cache)
+            .await
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?
     };
     Ok(project)
 }

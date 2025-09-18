@@ -635,8 +635,12 @@ pub struct VersionArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Update the version of all of the packages in the workspace.
+    #[arg(long, conflicts_with = "isolated", conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Update the version of a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long, conflicts_with = "isolated", conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// The Python interpreter to use for resolving and syncing.

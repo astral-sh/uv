@@ -1164,6 +1164,7 @@ uv version [OPTIONS] [VALUE]
 
 <dl class="cli-reference"><dt id="uv-version--active"><a href="#uv-version--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+</dd><dt id="uv-version--all-packages"><a href="#uv-version--all-packages"><code>--all-packages</code></a></dt><dd><p>Update the version of all of the packages in the workspace</p>
 </dd><dt id="uv-version--allow-insecure-host"><a href="#uv-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
