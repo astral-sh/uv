@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
 use netrc::Netrc;
-use reqwest::{Request, Response};
+use reqwest::{Client, Request, Response};
 use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
@@ -12,7 +12,7 @@ use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::owo_colors::OwoColorize;
 
-use crate::providers::HuggingFaceProvider;
+use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
@@ -646,9 +646,15 @@ impl AuthMiddleware {
             return credentials;
         }
 
-        // Support for known providers, like Hugging Face.
+        // Support for known providers, like Hugging Face and S3.
         if let Some(credentials) = HuggingFaceProvider::credentials_for(url).map(Arc::new) {
             debug!("Found Hugging Face credentials for {url}");
+            self.cache().fetches.done(key, Some(credentials.clone()));
+            return Some(credentials);
+        }
+
+        if let Some(credentials) = S3EndpointProvider::credentials_for(url).await.map(Arc::new) {
+            debug!("Found S3 credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
             return Some(credentials);
         }

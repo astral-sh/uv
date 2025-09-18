@@ -15,7 +15,7 @@ use url::Url;
 
 use uv_static::EnvVars;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub enum Credentials {
     Basic {
         /// The username to use for authentication.
@@ -27,6 +27,29 @@ pub enum Credentials {
         /// The token to use for authentication.
         token: Vec<u8>,
     },
+    AwsSignatureV4 {
+        aws_credential: reqsign::AwsCredential,
+    },
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Basic { username, password } => f
+                .debug_struct("Basic")
+                .field("username", username)
+                .field("password", &password)
+                .finish(),
+            Self::Bearer { token } => f
+                .debug_struct("Bearer")
+                .field("token", &"****")
+                .finish(),
+            Self::AwsSignatureV4 { aws_credential } => f
+                .debug_struct("AwsSignatureV4")
+                .field("aws_credential", &"****")
+                .finish(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
@@ -117,6 +140,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => username.as_deref(),
             Self::Bearer { .. } => None,
+            Self::AwsSignatureV4 { .. } => None,
         }
     }
 
@@ -124,6 +148,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => username.clone(),
             Self::Bearer { .. } => Username::none(),
+            Self::AwsSignatureV4 { .. } => Username::none(),
         }
     }
 
@@ -131,6 +156,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => Cow::Borrowed(username),
             Self::Bearer { .. } => Cow::Owned(Username::none()),
+            Self::AwsSignatureV4 { .. } => Cow::Owned(Username::none()),
         }
     }
 
@@ -138,6 +164,7 @@ impl Credentials {
         match self {
             Self::Basic { password, .. } => password.as_ref().map(Password::as_str),
             Self::Bearer { .. } => None,
+            Self::AwsSignatureV4 { .. } => None,
         }
     }
 
@@ -148,6 +175,7 @@ impl Credentials {
                 password,
             } => password.is_some(),
             Self::Bearer { token } => !token.is_empty(),
+            Self::AwsSignatureV4 { .. } => true,
         }
     }
 
@@ -155,6 +183,7 @@ impl Credentials {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
             Self::Bearer { token } => token.is_empty(),
+            Self::AwsSignatureV4 { .. } => false,
         }
     }
 
@@ -291,7 +320,7 @@ impl Credentials {
     /// Create an HTTP Basic Authentication header for the credentials.
     ///
     /// Panics if the username or password cannot be base64 encoded.
-    pub fn to_header_value(&self) -> HeaderValue {
+    pub fn to_header_value(&self) -> Option<HeaderValue> {
         match self {
             Self::Basic { .. } => {
                 // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
@@ -308,14 +337,15 @@ impl Credentials {
                 let mut header =
                     HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
                 header.set_sensitive(true);
-                header
+                Some(header)
             }
             Self::Bearer { token } => {
                 let mut header = HeaderValue::from_bytes(&[b"Bearer ", token.as_slice()].concat())
                     .expect("Bearer token is always valid HeaderValue");
                 header.set_sensitive(true);
-                header
+                Some(header)
             }
+            Self::AwsSignatureV4 { .. } => None,
         }
     }
 
@@ -338,9 +368,17 @@ impl Credentials {
     /// Any existing credentials will be overridden.
     #[must_use]
     pub fn authenticate(&self, mut request: Request) -> Request {
-        request
-            .headers_mut()
-            .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
+        match self {
+            Self::AwsSignatureV4 { aws_credential } => {
+                let signer = reqsign::AwsV4Signer::new("s3", "us-east-1");
+                signer.sign(&mut request, aws_credential).expect("AWS signing should succeed");
+            }
+            _ => {
+                request
+                    .headers_mut()
+                    .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self).unwrap());
+            }
+        }
         request
     }
 }

@@ -1,4 +1,5 @@
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+use reqwest::Client;
 use tracing::debug;
 use url::Url;
 
@@ -42,6 +43,33 @@ impl HuggingFaceProvider {
                 return Some(Credentials::Bearer {
                     token: token.clone(),
                 });
+            }
+        }
+        None
+    }
+}
+
+/// The [`Realm`] for the S3 endpoint, if set.
+static S3_ENDPOINT_REALM: LazyLock<Option<Realm>> = LazyLock::new(|| {
+    let s3_endpoint_url = std::env::var(EnvVars::UV_S3_ENDPOINT).ok()?;
+    let url = Url::parse(&s3_endpoint_url).expect("Failed to parse S3 endpoint URL");
+    Some(Realm::from(&url))
+});
+
+/// A provider for authentication credentials for S3 endpoints.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct S3EndpointProvider;
+
+impl S3EndpointProvider {
+    /// Returns the credentials for the S3 endpoint, if available.
+    pub(crate) async fn credentials_for(url: &Url) -> Option<Credentials> {
+        if let Some(s3_endpoint_realm) = S3_ENDPOINT_REALM.as_ref() {
+             if RealmRef::from(url) == *s3_endpoint_realm {
+                 let client = Client::new();
+                 let aws_config = reqsign::AwsConfig::default().from_profile().from_env();
+                 let aws_loader = reqsign::AwsDefaultLoader::new(client.clone(), aws_config);
+                 let aws_credential = aws_loader.load().await.unwrap().unwrap();
+                 return Some(Credentials::AwsSignatureV4 {aws_credential });
             }
         }
         None
