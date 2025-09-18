@@ -1208,8 +1208,8 @@ mod tests {
         // But not if it's a base environment
         let result = context.run_with_vars(
             &[
-                ("CONDA_PREFIX", Some(baseenv.as_os_str())),
-                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+                (EnvVars::CONDA_PREFIX, Some(baseenv.as_os_str())),
+                (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("base"))),
                 (EnvVars::CONDA_ROOT, None),
             ],
             || {
@@ -1232,8 +1232,8 @@ mod tests {
         let python = context
             .run_with_vars(
                 &[
-                    ("CONDA_PREFIX", Some(baseenv.as_os_str())),
-                    ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+                    (EnvVars::CONDA_PREFIX, Some(baseenv.as_os_str())),
+                    (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("base"))),
                     (EnvVars::CONDA_ROOT, None),
                 ],
                 || {
@@ -1258,8 +1258,11 @@ mod tests {
         let python = context
             .run_with_vars(
                 &[
-                    ("CONDA_PREFIX", Some(condaenv.as_os_str())),
-                    ("CONDA_DEFAULT_ENV", Some(&OsString::from("condaenv"))),
+                    (EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str())),
+                    (
+                        EnvVars::CONDA_DEFAULT_ENV,
+                        Some(&OsString::from("condaenv")),
+                    ),
                 ],
                 || {
                     find_python_installation(
@@ -1282,8 +1285,8 @@ mod tests {
         // When CONDA_DEFAULT_ENV is "base", it should always be treated as base environment
         let result = context.run_with_vars(
             &[
-                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
-                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+                (EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str())),
+                (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("base"))),
             ],
             || {
                 find_python_installation(
@@ -1307,8 +1310,8 @@ mod tests {
         let python = context
             .run_with_vars(
                 &[
-                    ("CONDA_PREFIX", Some(myenv_dir.as_os_str())),
-                    ("CONDA_DEFAULT_ENV", Some(&OsString::from("myenv"))),
+                    (EnvVars::CONDA_PREFIX, Some(myenv_dir.as_os_str())),
+                    (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("myenv"))),
                 ],
                 || {
                     find_python_installation(
