@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
 use netrc::Netrc;
-use reqwest::{Client, Request, Response};
+use reqwest::{Request, Response};
 use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
@@ -325,7 +325,7 @@ impl Middleware for AuthMiddleware {
             // making a failing request
             let credentials = self.cache().get_url(request.url(), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
-                request = credentials.authenticate(request);
+                request = credentials.authenticate(request).await;
 
                 // If it's fully authenticated, finish the request
                 if credentials.is_authenticated() {
@@ -422,7 +422,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if credentials.is_authenticated() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request);
+                retry_request = credentials.authenticate(retry_request).await;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -440,7 +440,7 @@ impl Middleware for AuthMiddleware {
             )
             .await
         {
-            retry_request = credentials.authenticate(retry_request);
+            retry_request = credentials.authenticate(retry_request).await;
             trace!("Retrying request for {url} with {credentials:?}");
             return self
                 .complete_request(
@@ -456,7 +456,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if !attempt_has_username {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request);
+                retry_request = credentials.authenticate(retry_request).await;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -559,7 +559,7 @@ impl AuthMiddleware {
                 .get_realm(Realm::from(request.url()), credentials.to_username())
         };
         if let Some(credentials) = maybe_cached_credentials {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             let credentials = None;
             return self
@@ -571,7 +571,7 @@ impl AuthMiddleware {
             .cache()
             .get_url(request.url(), credentials.as_username().as_ref())
         {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
@@ -583,7 +583,7 @@ impl AuthMiddleware {
             )
             .await
         {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             Some(credentials)
         } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
@@ -591,7 +591,7 @@ impl AuthMiddleware {
                 .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
             {
-                request = credentials.authenticate(request);
+                request = credentials.authenticate(request).await;
                 Some(credentials)
             } else {
                 Some(credentials)
@@ -653,7 +653,7 @@ impl AuthMiddleware {
             return Some(credentials);
         }
 
-        if let Some(credentials) = S3EndpointProvider::credentials_for(url).await.map(Arc::new) {
+        if let Some(credentials) = S3EndpointProvider::credentials_for(url).map(Arc::new) {
             debug!("Found S3 credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
             return Some(credentials);

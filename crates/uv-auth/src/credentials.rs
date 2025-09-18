@@ -1,21 +1,23 @@
+use std::borrow::Cow;
+use std::fmt;
+use std::io::Read;
+use std::io::Write;
+use std::str::FromStr;
+
 use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::fmt;
-use uv_redacted::DisplaySafeUrl;
-
+use http::Uri;
 use netrc::Netrc;
 use reqwest::Request;
 use reqwest::header::HeaderValue;
-use std::io::Read;
-use std::io::Write;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Credentials {
     Basic {
         /// The username to use for authentication.
@@ -28,29 +30,31 @@ pub enum Credentials {
         token: Vec<u8>,
     },
     AwsSignatureV4 {
-        aws_credential: reqsign::AwsCredential,
+        signer: reqsign::aws::DefaultSigner,
     },
 }
 
-impl std::fmt::Debug for Credentials {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Basic { username, password } => f
-                .debug_struct("Basic")
-                .field("username", username)
-                .field("password", &password)
-                .finish(),
-            Self::Bearer { token } => f
-                .debug_struct("Bearer")
-                .field("token", &"****")
-                .finish(),
-            Self::AwsSignatureV4 { aws_credential } => f
-                .debug_struct("AwsSignatureV4")
-                .field("aws_credential", &"****")
-                .finish(),
+impl PartialEq for Credentials {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Basic {
+                    username: u1,
+                    password: p1,
+                },
+                Self::Basic {
+                    username: u2,
+                    password: p2,
+                },
+            ) => u1 == u2 && p1 == p2,
+            (Self::Bearer { token: t1 }, Self::Bearer { token: t2 }) => t1 == t2,
+            (Self::AwsSignatureV4 { .. }, Self::AwsSignatureV4 { .. }) => true,
+            _ => false,
         }
     }
 }
+
+impl Eq for Credentials {}
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -367,16 +371,39 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub fn authenticate(&self, mut request: Request) -> Request {
+    pub async fn authenticate(&self, mut request: Request) -> Request {
         match self {
-            Self::AwsSignatureV4 { aws_credential } => {
-                let signer = reqsign::AwsV4Signer::new("s3", "us-east-1");
-                signer.sign(&mut request, aws_credential).expect("AWS signing should succeed");
+            Self::AwsSignatureV4 { signer } => {
+                // Build an `http::Request` from the `reqwest::Request`.
+                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let mut http_req = http::Request::builder()
+                    .method(request.method().clone())
+                    .uri(uri)
+                    .body(())
+                    .unwrap();
+                *http_req.headers_mut() = request.headers().clone();
+
+                // Sign the parts.
+                let (mut parts, ()) = http_req.into_parts();
+                signer
+                    .sign(&mut parts, None)
+                    .await
+                    .expect("AWS signing should succeed");
+
+                // Copy over the signed headers.
+                request.headers_mut().extend(parts.headers);
+
+                // Copy over the signed path and query, if any.
+                if let Some(path_and_query) = parts.uri.path_and_query() {
+                    request.url_mut().set_path(path_and_query.path());
+                    request.url_mut().set_query(path_and_query.query());
+                }
             }
             _ => {
-                request
-                    .headers_mut()
-                    .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self).unwrap());
+                request.headers_mut().insert(
+                    reqwest::header::AUTHORIZATION,
+                    Self::to_header_value(self).unwrap(),
+                );
             }
         }
         request
@@ -426,8 +453,8 @@ mod tests {
         assert_eq!(credentials.password(), None);
     }
 
-    #[test]
-    fn authenticated_request_from_url() {
+    #[tokio::test]
+    async fn authenticated_request_from_url() {
         let url = Url::parse("https://example.com/simple/first/").unwrap();
         let mut auth_url = url.clone();
         auth_url.set_username("user").unwrap();
@@ -435,7 +462,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request);
+        request = credentials.authenticate(request).await;
 
         let mut header = request
             .headers()
@@ -448,8 +475,8 @@ mod tests {
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
-    #[test]
-    fn authenticated_request_from_url_with_percent_encoded_user() {
+    #[tokio::test]
+    async fn authenticated_request_from_url_with_percent_encoded_user() {
         let url = Url::parse("https://example.com/simple/first/").unwrap();
         let mut auth_url = url.clone();
         auth_url.set_username("user@domain").unwrap();
@@ -457,7 +484,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request);
+        request = credentials.authenticate(request).await;
 
         let mut header = request
             .headers()
@@ -470,8 +497,8 @@ mod tests {
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
-    #[test]
-    fn authenticated_request_from_url_with_percent_encoded_password() {
+    #[tokio::test]
+    async fn authenticated_request_from_url_with_percent_encoded_password() {
         let url = Url::parse("https://example.com/simple/first/").unwrap();
         let mut auth_url = url.clone();
         auth_url.set_username("user").unwrap();
@@ -479,7 +506,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request);
+        request = credentials.authenticate(request).await;
 
         let mut header = request
             .headers()

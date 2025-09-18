@@ -913,4 +913,28 @@ impl EnvVars {
 
     /// Specifies the directory where uv stores pyx credentials.
     pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
+
+    /// The AWS region to use when signing S3 requests.
+    pub const AWS_REGION: &'static str = "AWS_REGION";
+
+    /// The default AWS region to use when signing S3 requests, if `AWS_REGION` is not set.
+    pub const AWS_DEFAULT_REGION: &'static str = "AWS_DEFAULT_REGION";
+
+    /// The AWS access key ID to use when signing S3 requests.
+    pub const AWS_ACCESS_KEY_ID: &'static str = "AWS_ACCESS_KEY_ID";
+
+    /// The AWS secret access key to use when signing S3 requests.
+    pub const AWS_SECRET_ACCESS_KEY: &'static str = "AWS_SECRET_ACCESS_KEY";
+
+    /// The AWS session token to use when signing S3 requests.
+    pub const AWS_SESSION_TOKEN: &'static str = "AWS_SESSION_TOKEN";
+
+    /// The AWS profile to use when signing S3 requests.
+    pub const AWS_PROFILE: &'static str = "AWS_PROFILE";
+
+    /// The AWS config file to use when signing S3 requests.
+    pub const AWS_CONFIG_FILE: &'static str = "AWS_CONFIG_FILE";
+
+    /// The AWS shared credentials file to use when signing S3 requests.
+    pub const AWS_SHARED_CREDENTIALS_FILE: &'static str = "AWS_SHARED_CREDENTIALS_FILE";
 }
