@@ -274,6 +274,7 @@ pub(crate) async fn remove(
                 cache,
                 printer,
                 preview,
+                false,
             )
             .await?
             .into_interpreter();
