@@ -108,14 +108,12 @@ pub(crate) async fn project_version(
             )
             .await?;
             let version_change =
-                determine_version_change(project, value.clone(), bump.clone(), dry_run, frozen)
-                    .await?;
+                determine_version_change(project, value.clone(), bump.clone(), dry_run, frozen)?;
             version_changes.push(version_change);
         }
         version_changes
     } else {
-        let version_change =
-            determine_version_change(project, value, bump, dry_run, frozen).await?;
+        let version_change = determine_version_change(project, value, bump, dry_run, frozen)?;
         vec![version_change]
     };
 
@@ -123,7 +121,7 @@ pub(crate) async fn project_version(
         match version_change {
             VersionChange::Frozen(project, name) => {
                 Box::pin(print_frozen_version(
-                    project,
+                    *project,
                     &name,
                     project_dir,
                     active,
@@ -158,7 +156,7 @@ pub(crate) async fn project_version(
                 new_version,
             } => {
                 let pyproject_path = &project.root().join("pyproject.toml");
-                let project = update_project(project, &new_version, &mut toml, pyproject_path)?;
+                let project = update_project(*project, &new_version, &mut toml, pyproject_path)?;
                 Box::pin(lock_and_sync(
                     project,
                     project_dir,
@@ -198,11 +196,11 @@ pub(crate) async fn project_version(
 }
 
 enum VersionChange {
-    Frozen(VirtualProject, PackageName),
+    Frozen(Box<VirtualProject>, PackageName),
     NoChange(PackageName, Version, Option<Version>),
     Updated {
         name: PackageName,
-        toml: PyProjectTomlMut,
+        toml: Box<PyProjectTomlMut>,
         project: Box<VirtualProject>,
         old_version: Version,
         new_version: Version,
@@ -210,7 +208,7 @@ enum VersionChange {
 }
 /// Determine the new version for a project, if any.
 #[allow(clippy::fn_params_excessive_bools)]
-async fn determine_version_change(
+fn determine_version_change(
     project: VirtualProject,
     value: Option<String>,
     mut bump: Vec<VersionBump>,
@@ -229,7 +227,7 @@ async fn determine_version_change(
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
     if frozen && is_read_only {
-        return Ok(VersionChange::Frozen(project, name));
+        return Ok(VersionChange::Frozen(Box::new(project), name));
     }
 
     let mut toml = PyProjectTomlMut::from_toml(
@@ -411,7 +409,7 @@ async fn determine_version_change(
         Ok(VersionChange::Updated {
             project: Box::new(project),
             name,
-            toml,
+            toml: Box::new(toml),
             old_version,
             new_version,
         })
@@ -466,7 +464,7 @@ async fn find_target(
 
 /// Update the pyproject.toml on-disk and in-memory with a new version
 fn update_project(
-    project: Box<VirtualProject>,
+    project: VirtualProject,
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
     pyproject_path: &Path,
