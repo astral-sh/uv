@@ -6094,3 +6094,75 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_isolated_pep723_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig<2",
+        #   "typing-extensions==4.10.0",
+        # ]
+        # ///
+
+        import iniconfig
+        import typing_extensions
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // run the script without --isolated
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==1.1.1
+     + typing-extensions==4.10.0
+    ");
+
+    // remove typing-extensions and run in an --isolated environment, it should fail
+    // because it would not be using the previous environment which already has typing-extensions
+    // installed.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig<2",
+        # ]
+        # ///
+
+        import iniconfig
+        import typing_extensions
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("--script").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.1.1
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 9, in <module>
+        import typing_extensions
+    ModuleNotFoundError: No module named 'typing_extensions'
+
+    "###);
+    Ok(())
+}
