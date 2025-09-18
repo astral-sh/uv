@@ -98,9 +98,9 @@ pub(crate) async fn project_version(
     .await?;
     // Determine the version changes to apply.
     let version_changes = if all_packages {
-        let packages = project.workspace().packages();
-        let mut version_changes: Vec<VersionChange> = Vec::with_capacity(packages.len());
-        for (_, workspace_member) in packages {
+        let workspace_members = project.workspace().packages().values();
+        let mut version_changes: Vec<VersionChange> = Vec::with_capacity(workspace_members.len());
+        for workspace_member in workspace_members {
             let project = VirtualProject::discover(
                 workspace_member.root(),
                 &discovery_options,
@@ -203,7 +203,7 @@ enum VersionChange {
     Updated {
         name: PackageName,
         toml: PyProjectTomlMut,
-        project: VirtualProject,
+        project: Box<VirtualProject>,
         old_version: Version,
         new_version: Version,
     },
@@ -409,7 +409,7 @@ async fn determine_version_change(
         Ok(VersionChange::NoChange(name, old_version, new_version))
     } else if let Some(new_version) = new_version {
         Ok(VersionChange::Updated {
-            project,
+            project: Box::new(project),
             name,
             toml,
             old_version,
@@ -466,7 +466,7 @@ async fn find_target(
 
 /// Update the pyproject.toml on-disk and in-memory with a new version
 fn update_project(
-    project: VirtualProject,
+    project: Box<VirtualProject>,
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
     pyproject_path: &Path,

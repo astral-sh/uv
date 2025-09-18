@@ -7710,6 +7710,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -7822,6 +7823,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -7934,6 +7936,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -8046,6 +8049,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -8158,6 +8162,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -8272,6 +8277,7 @@ fn preview_features() {
         frozen: false,
         active: None,
         no_sync: false,
+        all_packages: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
