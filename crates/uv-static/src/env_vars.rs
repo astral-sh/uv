@@ -662,6 +662,18 @@ impl EnvVars {
     #[attr_hidden]
     pub const CI: &'static str = "CI";
 
+    /// Azure DevOps build identifier, used to detect CI environments.
+    #[attr_hidden]
+    pub const BUILD_BUILDID: &'static str = "BUILD_BUILDID";
+
+    /// Generic build identifier, used to detect CI environments.
+    #[attr_hidden]
+    pub const BUILD_ID: &'static str = "BUILD_ID";
+
+    /// Pip environment variable to indicate CI environment.
+    #[attr_hidden]
+    pub const PIP_IS_CI: &'static str = "PIP_IS_CI";
+
     /// Use to set the .netrc file location.
     pub const NETRC: &'static str = "NETRC";
 
