@@ -570,6 +570,7 @@ pub enum Error {
 pub struct EnvironmentOptions {
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
+    pub install_mirrors: PythonInstallMirrors,
 }
 
 impl EnvironmentOptions {
@@ -580,6 +581,11 @@ impl EnvironmentOptions {
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
+            install_mirrors: PythonInstallMirrors{
+                python_install_mirror: std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok(),
+                pypy_install_mirror: std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok(),
+                python_downloads_json_url: std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok(),
+            }
         })
     }
 }

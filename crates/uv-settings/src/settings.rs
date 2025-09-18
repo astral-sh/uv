@@ -1009,24 +1009,22 @@ pub struct PythonInstallMirrors {
 
 impl Default for PythonInstallMirrors {
     fn default() -> Self {
-        Self::resolve(None, None, None)
+        Self {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        }
     }
 }
 
 impl PythonInstallMirrors {
-    pub fn resolve(
-        python_mirror: Option<String>,
-        pypy_mirror: Option<String>,
-        python_downloads_json_url: Option<String>,
-    ) -> Self {
-        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
-        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
-        let python_downloads_json_url_env =
-            std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
+    pub fn merge_with(self, other: PythonInstallMirrors) -> Self {
         Self {
-            python_install_mirror: python_mirror_env.or(python_mirror),
-            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
-            python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
+            python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
+            pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .or(other.python_downloads_json_url),
         }
     }
 }
@@ -2270,11 +2268,11 @@ impl From<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
-            install_mirrors: PythonInstallMirrors::resolve(
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
                 python_downloads_json_url,
-            ),
+            },
             conflicts,
             publish: PublishOptions {
                 publish_url,
