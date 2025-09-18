@@ -663,7 +663,7 @@ impl ScriptInterpreter {
         cache: &Cache,
         printer: Printer,
         preview: Preview,
-        isolated: bool
+        isolated: bool,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;

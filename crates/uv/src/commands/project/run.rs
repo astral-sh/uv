@@ -226,10 +226,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         }
 
         // If a lockfile already exists, lock the script.
-        if !isolated && let Some(target) = script
-            .as_script()
-            .map(LockTarget::from)
-            .filter(|target| target.lock_path().is_file())
+        if !isolated
+            && let Some(target) = script
+                .as_script()
+                .map(LockTarget::from)
+                .filter(|target| target.lock_path().is_file())
         {
             debug!("Found existing lockfile for script");
 
@@ -386,7 +387,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         cache,
                         printer,
                         preview,
-                        isolated
+                        isolated,
                     )
                     .await?
                     .into_interpreter();
@@ -506,7 +507,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     printer,
                     preview,
-                    isolated
+                    isolated,
                 )
                 .await?
                 .into_interpreter();
