@@ -889,16 +889,12 @@ async fn build_upload_request<'a>(
         Credentials::Basic { password, .. } => {
             if password.is_some() {
                 debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value().unwrap());
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
             }
         }
         Credentials::Bearer { .. } => {
             debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value().unwrap());
-        }
-        Credentials::AwsSignatureV4 { .. } => {
-            // Signing is done in the middleware.
-            debug!("Using AWS Signature V4 authentication");
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
         }
     }
 
@@ -950,14 +946,13 @@ fn build_validation_request<'a>(
         Credentials::Basic { password, .. } => {
             if password.is_some() {
                 debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value().unwrap());
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
             }
         }
         Credentials::Bearer { .. } => {
             debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value().unwrap());
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
         }
-        Credentials::AwsSignatureV4 { .. } => {}
     }
 
     request

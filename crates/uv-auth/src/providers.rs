@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
+use reqsign::aws::DefaultSigner;
 use tracing::debug;
 use url::Url;
 
@@ -63,8 +64,10 @@ pub(crate) struct S3EndpointProvider;
 
 impl S3EndpointProvider {
     /// Returns the credentials for the S3 endpoint, if available.
-    pub(crate) fn credentials_for(url: &Url) -> Option<Credentials> {
+    pub(crate) fn credentials_for(url: &Url) -> Option<DefaultSigner> {
         if let Some(s3_endpoint_url) = S3_ENDPOINT_URL.as_ref() {
+            // Treat any URL on the same domain or subdomain (plus scheme and port) of the endpoint
+            // URL as available for signing.
             if url.scheme() == s3_endpoint_url.scheme()
                 && url.port() == s3_endpoint_url.port()
                 && url.domain().is_some_and(|subdomain| {
@@ -76,15 +79,17 @@ impl S3EndpointProvider {
                     })
                 })
             {
+                // TODO(charlie): Can `reqsign` infer the region for us? Profiles, for example,
+                // often have a region set already.
                 let region = std::env::var(EnvVars::AWS_REGION)
                     .map(Cow::Owned)
                     .unwrap_or_else(|_| {
-                        std::env::var("AWS_DEFAULT_REGION")
+                        std::env::var(EnvVars::AWS_DEFAULT_REGION)
                             .map(Cow::Owned)
                             .unwrap_or_else(|_| Cow::Borrowed("us-east-1"))
                     });
                 let signer = reqsign::aws::default_signer("s3", &region);
-                return Some(Credentials::AwsSignatureV4 { signer });
+                return Some(signer);
             }
         }
         None

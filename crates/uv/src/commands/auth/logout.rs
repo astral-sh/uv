@@ -122,7 +122,7 @@ async fn pyx_logout(
 
     // Build a basic request first, then authenticate it
     let request = reqwest::Request::new(reqwest::Method::GET, url.into());
-    let request = Credentials::from(tokens).authenticate(request).await;
+    let request = Credentials::from(tokens).authenticate(request);
 
     // Hit the logout endpoint using the client's execute method
     let response = client.execute(request).await?;

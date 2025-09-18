@@ -144,9 +144,6 @@ impl From<TomlCredential> for TomlCredentialWire {
                 password: None,
                 token: Some(String::from_utf8(token).expect("Token is valid UTF-8")),
             },
-            Credentials::AwsSignatureV4 { .. } => {
-                panic!("AWS Signature V4 credentials are not supported in TOML storage")
-            }
         }
     }
 }
@@ -257,7 +254,6 @@ impl TextCredentialStore {
                 let username = match &credential.credentials {
                     Credentials::Basic { username, .. } => username.clone(),
                     Credentials::Bearer { .. } => Username::none(),
-                    Credentials::AwsSignatureV4 { .. } => Username::none(),
                 };
                 (
                     (credential.service.clone(), username),
@@ -372,7 +368,6 @@ impl TextCredentialStore {
         let username = match &credentials {
             Credentials::Basic { username, .. } => username.clone(),
             Credentials::Bearer { .. } => Username::none(),
-            Credentials::AwsSignatureV4 { .. } => Username::none(),
         };
         self.credentials.insert((service, username), credentials)
     }
