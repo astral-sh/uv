@@ -145,6 +145,7 @@ pub(crate) async fn export(
                 cache,
                 printer,
                 preview,
+                false,
             )
             .await?
             .into_interpreter(),
