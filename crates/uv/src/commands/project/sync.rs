@@ -900,11 +900,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
             if let Some(root_url) = index.root_url() {
                 uv_auth::store_credentials(&root_url, credentials.clone());
             }
+            uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
 
