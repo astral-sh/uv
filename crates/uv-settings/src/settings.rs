@@ -22,7 +22,6 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
-use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -958,7 +957,7 @@ pub struct ResolverInstallerSchema {
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -1007,18 +1006,9 @@ pub struct PythonInstallMirrors {
     pub python_downloads_json_url: Option<String>,
 }
 
-impl Default for PythonInstallMirrors {
-    fn default() -> Self {
-        Self {
-            python_install_mirror: None,
-            pypy_install_mirror: None,
-            python_downloads_json_url: None,
-        }
-    }
-}
-
 impl PythonInstallMirrors {
-    pub fn merge_with(self, other: PythonInstallMirrors) -> Self {
+    #[must_use]
+    pub fn merge_with(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
