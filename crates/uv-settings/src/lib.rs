@@ -581,11 +581,12 @@ impl EnvironmentOptions {
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
-            install_mirrors: PythonInstallMirrors{
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok(),
                 pypy_install_mirror: std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok(),
-                python_downloads_json_url: std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok(),
-            }
+                python_downloads_json_url: std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)
+                    .ok(),
+            },
         })
     }
 }
