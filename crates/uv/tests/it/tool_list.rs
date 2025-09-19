@@ -586,7 +586,7 @@ fn tool_list_show_python() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 [3.12.[X]]
+    black v24.2.0 [CPython 3.12.[X]]
     - black
     - blackd
 
@@ -632,10 +632,10 @@ fn tool_list_show_all() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 [required: ==24.2.0] [3.12.[X]] ([TEMP_DIR]/tools/black)
+    black v24.2.0 [required: ==24.2.0] [CPython 3.12.[X]] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [extras: async, dotenv] [with: requests] [3.12.[X]] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [extras: async, dotenv] [with: requests] [CPython 3.12.[X]] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----
