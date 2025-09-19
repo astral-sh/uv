@@ -61,8 +61,8 @@ overridden via the `UV_INSTALL_DIR` environment variable.
 uv uses a local cache to avoid re-downloading and re-building dependencies.
 
 By default, the cache is stored in the [cache home](#cache), which can be overridden via command
-line arguments, environment variables, or settings as detailed in [the cache
-documentation](../concepts/cache.md#cache-directory).
+line arguments, environment variables, or settings as detailed in
+[the cache documentation](../concepts/cache.md#cache-directory).
 
 Use `uv cache dir` to show the current cache directory path.
 

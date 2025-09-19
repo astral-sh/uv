@@ -111,9 +111,9 @@ $ uv tool install ruff@0.6.0
 
 ## Tools directory
 
-By default, the uv tools directory is named `tools` and is in the uv [data directory](../reference/storage.md#data),
-e.g., `~/.local/share/uv/tools`. The location may be customized with the `UV_TOOL_DIR` environment
-variable.
+By default, the uv tools directory is named `tools` and is in the uv
+[data directory](../reference/storage.md#data), e.g., `~/.local/share/uv/tools`. The location may be
+customized with the `UV_TOOL_DIR` environment variable.
 
 To display the path to the tool installation directory:
 
@@ -265,8 +265,8 @@ Windows.
 ### The `bin` directory
 
 Executables are installed into the [user `bin` directory](../reference/storage.md#executables),
-e.g., `~/.local/bin`. This can be overridden by setting [the `UV_TOOL_BIN_DIR` environment
-variable](../reference/storage.md#tool-executables).
+e.g., `~/.local/bin`. This can be overridden by setting
+[the `UV_TOOL_BIN_DIR` environment variable](../reference/storage.md#tool-executables).
 
 Executables provided by dependencies of tool packages are not installed.
 
