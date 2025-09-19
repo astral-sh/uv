@@ -370,7 +370,9 @@ before uploading artifacts.
 
 ## Cloudsmith
 
-uv can install packages from Cloudsmith by using a [API token](https://docs.cloudsmith.com/accounts-and-teams/api-key#getting-your-api-key) authentication.
+uv can install packages from Cloudsmith by using a
+[API token](https://docs.cloudsmith.com/accounts-and-teams/api-key#getting-your-api-key)
+authentication.
 
 To use it, add the index to your project:
 
@@ -391,9 +393,8 @@ $ export UV_PIP_NO_INDEX=1 # optional: forbid fallback to PyPI
 $ uv publish --index cloudsmith
 ```
 
-uv will use them to authenticate against your Cloudsmith repository. Now, execute
-the next command to fetch and install all the required dependencies in your active
-virtual environment.
+uv will use them to authenticate against your Cloudsmith repository. Now, execute the next command
+to fetch and install all the required dependencies in your active virtual environment.
 
 Set these environmental variables to push packages:
 
@@ -402,23 +403,23 @@ $ export UV_PUBLISH_USERNAME=token
 $ export UV_PUBLISH_PASSWORD=<API-KEY>
 ```
 
-Once you are happy with your project, just run the next command to build your wheel
-package and the source distribution (`.tar.gz`) file, including your Python "source code"
-and everything required to run it:
+Once you are happy with your project, just run the next command to build your wheel package and the
+source distribution (`.tar.gz`) file, including your Python "source code" and everything required to
+run it:
 
 ```console
 $ python -m build
 ```
 
-Once those assets are ready, just publish both artifacts to Cloudsmith. Remember to
-specify your `cloudsmith` index as defined in the `[[tool.uv.index.name]]` field in 
-your project definition:
+Once those assets are ready, just publish both artifacts to Cloudsmith. Remember to specify your
+`cloudsmith` index as defined in the `[[tool.uv.index.name]]` field in your project definition:
 
 ```console
 $ uv publish --index cloudsmith dist/*
 ```
 
-Browse to your Cloudsmith [web app](https://app.cloudsmith.com/) to see the newly-published packages.
+Browse to your Cloudsmith [web app](https://app.cloudsmith.com/) to see the newly-published
+packages.
 
 ## JFrog Artifactory
 
