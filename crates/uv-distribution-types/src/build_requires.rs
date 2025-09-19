@@ -13,6 +13,14 @@ pub enum ExtraBuildRequiresError {
         "`{0}` was declared as an extra build dependency with `match-runtime = true`, but was not found in the resolution"
     )]
     NotFound(PackageName),
+    #[error(
+        "Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `{0}{1}`"
+    )]
+    VersionSpecifiersNotAllowed(PackageName, Box<RequirementSource>),
+    #[error(
+        "Dependencies marked with `match-runtime = true` cannot include URL constraints, but found: `{0}{1}`"
+    )]
+    UrlNotAllowed(PackageName, Box<RequirementSource>),
 }
 
 /// Lowered extra build dependencies with source resolution applied.
@@ -50,7 +58,7 @@ impl FromIterator<(PackageName, Vec<ExtraBuildRequirement>)> for ExtraBuildRequi
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtraBuildRequirement {
     /// The underlying [`Requirement`] for the build requirement.
     pub requirement: Requirement,
@@ -75,6 +83,8 @@ impl ExtraBuildRequires {
     /// Apply runtime constraints from a resolution to the extra build requirements.
     pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .filter(|(name, _)| resolution.distributions().any(|dist| dist.name() == name))
             .map(|(name, requirements)| {
                 let requirements = requirements
                     .into_iter()
@@ -83,6 +93,26 @@ impl ExtraBuildRequires {
                             requirement,
                             match_runtime: true,
                         } => {
+                            // Reject requirements with `match-runtime = true` that include any form
+                            // of constraint.
+                            if let RequirementSource::Registry { specifier, .. } =
+                                &requirement.source
+                            {
+                                if !specifier.is_empty() {
+                                    return Err(
+                                        ExtraBuildRequiresError::VersionSpecifiersNotAllowed(
+                                            requirement.name.clone(),
+                                            Box::new(requirement.source.clone()),
+                                        ),
+                                    );
+                                }
+                            } else {
+                                return Err(ExtraBuildRequiresError::VersionSpecifiersNotAllowed(
+                                    requirement.name.clone(),
+                                    Box::new(requirement.source.clone()),
+                                ));
+                            }
+
                             let dist = resolution
                                 .distributions()
                                 .find(|dist| dist.name() == &requirement.name)

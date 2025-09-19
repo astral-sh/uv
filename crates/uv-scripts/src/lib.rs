@@ -10,11 +10,11 @@ use thiserror::Error;
 use url::Url;
 
 use uv_configuration::SourceStrategy;
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
-use uv_settings::{GlobalOptions, ResolverInstallerOptions};
+use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
 
@@ -424,7 +424,7 @@ pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
-    pub top_level: ResolverInstallerOptions,
+    pub top_level: ResolverInstallerSchema,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,

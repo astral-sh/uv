@@ -42,6 +42,16 @@ fn python_find() {
     ----- stderr -----
     "###);
 
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.12.*"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
     // Request Python 3.11
     uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r###"
     success: true
@@ -404,6 +414,180 @@ fn python_find_project() {
 }
 
 #[test]
+fn virtual_empty() {
+    // testing how `uv python find` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})
+        .unwrap();
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--no-project"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Create a pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn virtual_dependency_group() {
+    // testing basic `uv python find` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`, but `[dependency-groups]` defined,
+    // which really shouldn't matter)
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})
+        .unwrap();
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--no-project"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Create a pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
 fn python_find_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         // Enable additional filters for Windows compatibility
@@ -412,13 +596,13 @@ fn python_find_venv() {
         .with_filtered_virtualenv_bin();
 
     // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12").arg("-q"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12").arg("-q"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     // We should find it first
     // TODO(zanieb): On Windows, this has in a different display path for virtual environments which
@@ -449,28 +633,28 @@ fn python_find_venv() {
     child_dir.create_dir_all().unwrap();
 
     // Unless the system flag is passed
-    uv_snapshot!(context.filters(), context.python_find().arg("--system"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--system"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Or, `UV_SYSTEM_PYTHON` is set
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Unless, `--no-system` is included
     // TODO(zanieb): Report this as a bug upstream — this should be allowed.
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -481,7 +665,7 @@ fn python_find_venv() {
     Usage: uv python find --cache-dir [CACHE_DIR] [REQUEST]
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // We should find virtual environments from a child directory
     #[cfg(not(windows))]
@@ -495,13 +679,13 @@ fn python_find_venv() {
     ");
 
     // A virtual environment in the child directory takes precedence over the parent
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11").arg("-q").current_dir(&child_dir), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11").arg("-q").current_dir(&child_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r"
@@ -706,26 +890,26 @@ fn python_find_venv_invalid() {
     ");
 
     // Unless the virtual environment is not active
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // If there's not a `pyvenv.cfg` file, it's also non-fatal, we ignore the environment
     fs_err::remove_file(context.venv.join("pyvenv.cfg")).unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
@@ -857,14 +1041,14 @@ fn python_find_script() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    uv_snapshot!(context.filters(), context.init().arg("--script").arg("foo.py"), @r###"
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Initialized script at `foo.py`
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @r"
     success: true

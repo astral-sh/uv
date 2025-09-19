@@ -34,9 +34,10 @@ use crate::{
 };
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
+use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -59,6 +60,7 @@ pub struct Interpreter {
     pointer_size: PointerSize,
     gil_disabled: bool,
     real_executable: PathBuf,
+    debug_enabled: bool,
 }
 
 impl Interpreter {
@@ -82,6 +84,7 @@ impl Interpreter {
             sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
+            debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
@@ -106,6 +109,7 @@ impl Interpreter {
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
+            site_packages: vec![],
             ..self
         }
     }
@@ -211,7 +215,13 @@ impl Interpreter {
 
     pub fn variant(&self) -> PythonVariant {
         if self.gil_disabled() {
-            PythonVariant::Freethreaded
+            if self.debug_enabled() {
+                PythonVariant::FreethreadedDebug
+            } else {
+                PythonVariant::Freethreaded
+            }
+        } else if self.debug_enabled() {
+            PythonVariant::Debug
         } else {
             PythonVariant::default()
         }
@@ -507,6 +517,12 @@ impl Interpreter {
         self.gil_disabled
     }
 
+    /// Return whether this is a debug build of Python, as specified by the sysconfig var
+    /// `Py_DEBUG`.
+    pub fn debug_enabled(&self) -> bool {
+        self.debug_enabled
+    }
+
     /// Return the `--target` directory for this interpreter, if any.
     pub fn target(&self) -> Option<&Target> {
         self.target.as_ref()
@@ -796,6 +812,12 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("Failed to query Python interpreter at `{path}`")]
+    PermissionDenied {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -870,6 +892,7 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -888,6 +911,7 @@ struct InterpreterInfo {
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    debug_enabled: bool,
 }
 
 impl InterpreterInfo {
@@ -909,23 +933,35 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(
-                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
-                    // These error codes are returned if the Python interpreter is a corrupt MSIX
-                    // package, which we want to differentiate from a typical spawn failure.
-                    #[cfg(windows)]
-                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
-                        Error::CorruptWindowsPackage {
+            .map_err(|err| {
+                match err.kind() {
+                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::PermissionDenied => {
+                        return Error::PermissionDenied {
                             path: interpreter.to_path_buf(),
                             err,
-                        }
+                        };
                     }
-                    _ => Error::SpawnFailed {
+                    _ => {}
+                }
+                #[cfg(windows)]
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                    .raw_os_error()
+                    .and_then(|code| u32::try_from(code).ok())
+                    .map(WIN32_ERROR)
+                {
+                    // These error codes are returned if the Python interpreter is a corrupt MSIX
+                    // package, which we want to differentiate from a typical spawn failure.
+                    return Error::CorruptWindowsPackage {
                         path: interpreter.to_path_buf(),
                         err,
-                    },
-                },
-            )?;
+                    };
+                }
+                Error::SpawnFailed {
+                    path: interpreter.to_path_buf(),
+                    err,
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1280,7 +1316,8 @@ mod tests {
                 "scripts": "bin"
             },
             "pointer_size": "64",
-            "gil_disabled": true
+            "gil_disabled": true,
+            "debug_enabled": false
         }
     "##};
 

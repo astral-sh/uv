@@ -53,7 +53,7 @@ impl DerivationChainBuilder {
                                 path.push(DerivationStep::new(
                                     name.clone(),
                                     p1.extra().cloned(),
-                                    p1.dev().cloned(),
+                                    p1.group().cloned(),
                                     Some(version.clone()),
                                     v2.clone(),
                                 ));

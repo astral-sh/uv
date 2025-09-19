@@ -6,13 +6,6 @@ fn process_json(data: &serde_json::Value) -> serde_json::Value {
 
     if let Some(obj) = data.as_object() {
         for (key, value) in obj {
-            if let Some(variant) = value.get("variant") {
-                // Exclude debug variants for now, we don't support them
-                if variant == "debug" {
-                    continue;
-                }
-            }
-
             out_data.insert(key.clone(), value.clone());
         }
     }

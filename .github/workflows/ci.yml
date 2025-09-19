@@ -87,7 +87,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+        uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -116,7 +116,7 @@ jobs:
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         env:
           # renovate: datasource=github-tags depName=koalaman/shellcheck
-          SHELLCHECK_VERSION: "v0.10.0"
+          SHELLCHECK_VERSION: "v0.11.0"
           SHELLCHECK_OPTS: --shell bash
         with:
           version: ${{ env.SHELLCHECK_VERSION }}
@@ -137,7 +137,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@30f817c6f72275c6d54dc744fbca09ebc958599f # v2.0.12
+        uses: EmbarkStudios/cargo-deny-action@f2ba7abc2abebaf185c833c3961145a3c275caad # v2.0.13
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -221,14 +221,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
       - name: "Install required Python versions"
         run: uv python install
 
@@ -254,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch,keyring-tests,secret-service \
+            --features python-patch,native-auth,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -263,21 +263,21 @@ jobs:
     needs: determine_changes
     # Only run macOS tests on main without opt-in
     if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
-    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
+    runs-on: depot-macos-14
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
       - name: "Install required Python versions"
         run: uv python install
 
@@ -293,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
+            --features python,python-managed,pypi,git,performance,crates-io,native-auth,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -316,7 +316,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
       - name: "Install required Python versions"
         run: uv python install
 
@@ -345,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed,keyring-tests,windows-native \
+            --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -465,7 +465,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@392b78fe18a52790c53f42456e46124f77346842 # v1.34.0
+      - uses: crate-ci/typos@85f62a8a84f939ae994ab3763f01a0296d61a7ee # v1.36.2
 
   docs:
     timeout-minutes: 10
@@ -478,7 +478,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -504,7 +504,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -531,7 +531,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -558,7 +558,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - name: "Setup musl"
         run: |
@@ -590,7 +590,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -616,7 +616,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -727,7 +727,7 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
+        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - run: cargo +${MSRV} build
         env:
@@ -756,7 +756,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@136ca0bce2adade21e526ceb07db643ad23dd2dd # v0.5.1
+        uses: acj/freebsd-firecracker-action@a5a3fc1709c5b5368141a5699f10259aca3cd965 # v0.6.0
         with:
           verbose: false
           checkout: false
@@ -1010,6 +1010,54 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+  integration-test-nushell:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | activate nushell venv"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install nushell
+        env:
+          # This token only needs read access to the GitHub repository nushell/nushell.
+          # This token is used (via gh-cli) to avoid hitting GitHub REST API rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |-
+          # get latest nushell tag name
+          nu_latest=$(gh release list --repo nushell/nushell --limit 1 --exclude-pre-releases --exclude-drafts --json "tagName" --jq '.[0].tagName')
+          # trim any trailing whitespace from output
+          nu_tag=${nu_latest%%[[:space:]]*}
+
+          # download binary for x86_64-unknown-linux-gnu target
+          gh release download ${nu_tag} --repo nushell/nushell --pattern "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+
+          # extract nu binary from tar.gz
+          tar -xf "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+          # make the binary executable
+          chmod +x "./nu-${nu_tag}-x86_64-unknown-linux-gnu/nu"
+          # add it to PATH
+          echo "${{ github.workspace }}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "${GITHUB_PATH}"
+
+      - name: Download binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: Prepare binary
+        run: chmod +x ./uv
+
+      - name: Create venv
+        # The python version is arbitrary for this test.
+        # We only want to ensure the activation script behaves properly
+        run: ./uv venv
+
+      - name: Activate venv
+        shell: nu {0}
+        run: overlay use ${{ github.workspace }}/.venv/bin/activate.nu
 
   integration-test-conda:
     timeout-minutes: 10
@@ -1502,7 +1550,7 @@ jobs:
           ./uv venv venv-native -p 3.12
           # We use features added in 0.30.3 but there is no known breakage in
           # newer versions.
-          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.7 pip
 
       - name: "Install Pyodide interpreter"
         run: |
@@ -1629,6 +1677,58 @@ jobs:
         run: |
           .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
+  integration-test-wsl:
+    timeout-minutes: 15
+    needs: build-binary-linux-musl
+    name: "integration test | pyenv on wsl x86-64"
+    runs-on: windows-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ github.sha }}
+
+      - name: "Setup WSL"
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6
+        with:
+          distribution: Ubuntu-22.04
+
+      - name: "Install pyenv-win"
+        shell: pwsh
+        run: |
+          Write-Host "Installing pyenv-win..."
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"
+          .\install-pyenv-win.ps1
+
+          # Add pyenv-win to PATH for this session
+          $env:PYENV = "$env:USERPROFILE\.pyenv\pyenv-win"
+          $env:PATH = "$env:PYENV\bin;$env:PYENV\shims;$env:PATH"
+
+          # Add to GITHUB_PATH so WSL can find the shims
+          echo "$env:PYENV\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:PYENV\shims" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+          Write-Host "Installing Python 3.11.9 via pyenv-win..."
+          & "$env:PYENV\bin\pyenv.bat" install 3.11.9
+          & "$env:PYENV\bin\pyenv.bat" global 3.11.9
+
+          Write-Host "Verifying pyenv-win installation..."
+          & "$env:PYENV\bin\pyenv.bat" versions
+
+      - name: "Test uv"
+        shell: wsl-bash {0}
+        run: |
+          set -x
+          chmod +x ./uv
+
+          # Check that we don't fail on `pyenv-win` shims
+          ./uv python list -v
+
   integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -1694,7 +1794,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@a159d7bb5354cf786f855f2f5d1d8d768d9a08d1
+        uses: aws-actions/configure-aws-credentials@351d894493fd3289754a5471c0892ba92fa0abe2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -1713,12 +1813,12 @@ jobs:
 
       - name: "Authenticate with GCP"
         id: "auth"
-        uses: "google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5"
+        uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
       - name: "Set up GCP SDK"
-        uses: "google-github-actions/setup-gcloud@cb1e50a9932213ecece00a606661ae9ca44f3397"
+        uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db"
 
       - name: "Get GCP Artifact Registry token"
         id: get_token
@@ -1727,8 +1827,32 @@ jobs:
           echo "::add-mask::$UV_TEST_GCP_TOKEN"
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
-      - name: "Run registry tests"
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all
+      - name: "Run registry tests with environment variable backend"
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+          UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+          UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
+          UV_TEST_AWS_USERNAME: aws
+          UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
+          UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
+          UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
+          UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
+          UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
+          UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
+          UV_TEST_GCP_USERNAME: oauth2accesstoken
+          UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
+          UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
+          UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
+          UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
+          UV_TEST_GITLAB_USERNAME: token
+
+      - name: "Run registry tests with text store backend"
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -1796,7 +1920,7 @@ jobs:
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@db8f07d3871a0a180efa06b95d467625c19d5d5f # release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
@@ -1812,6 +1936,12 @@ jobs:
           echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
         env:
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
+
+      - name: "Add password to uv text store"
+        run: |
+          ./uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token ${UV_TEST_PUBLISH_TEXT_STORE}
+        env:
+          UV_TEST_PUBLISH_TEXT_STORE: ${{ secrets.UV_TEST_PUBLISH_TEXT_STORE }}
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
@@ -2223,8 +2353,6 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
-      # This should be the macOS system Python
-      # We'd like to test with Homebrew but this Python takes precedence in system Python discovery
       - name: "Print Python path"
         run: echo $(which python3)
 
@@ -2243,6 +2371,35 @@ jobs:
 
       - name: "Install Python"
         run: brew install python3
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  system-test-macos-aarch64-emulated:
+    timeout-minutes: 10
+    needs: build-binary-macos-aarch64
+    name: "check system | x86-64 python on macos aarch64"
+    runs-on: macos-14 # github-macos-14-aarch64-3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: 3.13
+          architecture: x64
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0

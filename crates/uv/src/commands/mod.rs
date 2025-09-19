@@ -1,12 +1,18 @@
-use anstream::AutoStream;
-use anyhow::Context;
-use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
+use anstream::AutoStream;
+use anyhow::Context;
+use owo_colors::OwoColorize;
+use tracing::debug;
+
+pub(crate) use auth::dir::dir as auth_dir;
+pub(crate) use auth::login::login as auth_login;
+pub(crate) use auth::logout::logout as auth_logout;
+pub(crate) use auth::token::token as auth_token;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -23,6 +29,7 @@ pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
 pub(crate) use project::export::export;
+pub(crate) use project::format::format;
 pub(crate) use project::init::{InitKind, InitProjectKind, init};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
@@ -51,6 +58,7 @@ pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
+pub(crate) use uv_console::human_readable_bytes;
 use uv_distribution_types::InstalledMetadata;
 use uv_fs::{CWD, Simplified};
 use uv_installer::compile_tree;
@@ -61,6 +69,7 @@ pub(crate) use venv::venv;
 
 use crate::printer::Printer;
 
+mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
 mod cache_clean;
@@ -157,6 +166,13 @@ pub(super) async fn compile_bytecode(
     let mut files = 0;
     for site_packages in venv.site_packages() {
         let site_packages = CWD.join(site_packages);
+        if !site_packages.exists() {
+            debug!(
+                "Skipping non-existent site-packages directory: {}",
+                site_packages.display()
+            );
+            continue;
+        }
         files += compile_tree(
             &site_packages,
             venv.python_executable(),
@@ -183,22 +199,6 @@ pub(super) async fn compile_bytecode(
         .dimmed()
     )?;
     Ok(())
-}
-
-/// Formats a number of bytes into a human readable SI-prefixed size.
-///
-/// Returns a tuple of `(quantity, units)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
-pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
-    static UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    let bytes = bytes as f32;
-    let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
-    (bytes / 1024_f32.powi(i as i32), UNITS[i])
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

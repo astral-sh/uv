@@ -4,7 +4,7 @@ use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
+    BuildInfo, CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
     GitSourceDist, Hashed, PathSourceDist,
 };
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
@@ -46,16 +46,24 @@ pub struct CachedWheel {
     pub hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
     pub cache_info: CacheInfo,
+    /// The [`BuildInfo`] for the wheel, if it was built.
+    pub build_info: Option<BuildInfo>,
 }
 
 impl CachedWheel {
     /// Create a [`CachedWheel`] from a [`ResolvedWheel`].
-    pub fn from_entry(wheel: ResolvedWheel, hashes: HashDigests, cache_info: CacheInfo) -> Self {
+    pub fn from_entry(
+        wheel: ResolvedWheel,
+        hashes: HashDigests,
+        cache_info: CacheInfo,
+        build_info: BuildInfo,
+    ) -> Self {
         Self {
             filename: wheel.filename,
             entry: wheel.entry,
             hashes,
             cache_info,
+            build_info: Some(build_info),
         }
     }
 
@@ -66,6 +74,7 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
+        let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
 
         // Ignore stale pointers.
@@ -82,6 +91,7 @@ impl CachedWheel {
             entry,
             hashes,
             cache_info,
+            build_info,
         })
     }
 
@@ -92,6 +102,7 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
+        let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
 
         // Ignore stale pointers.
@@ -108,6 +119,7 @@ impl CachedWheel {
             entry,
             hashes,
             cache_info,
+            build_info,
         })
     }
 
@@ -118,6 +130,7 @@ impl CachedWheel {
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
+            build_info: self.build_info,
         }
     }
 
@@ -133,6 +146,7 @@ impl CachedWheel {
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
+            build_info: self.build_info,
         }
     }
 
@@ -148,6 +162,7 @@ impl CachedWheel {
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
+            build_info: self.build_info,
         }
     }
 
@@ -163,6 +178,7 @@ impl CachedWheel {
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
+            build_info: self.build_info,
         }
     }
 
@@ -178,6 +194,7 @@ impl CachedWheel {
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
+            build_info: self.build_info,
         }
     }
 }

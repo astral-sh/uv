@@ -1,6 +1,7 @@
 pub use workspace::{
-    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, RequiresPythonSources, VirtualProject,
-    Workspace, WorkspaceCache, WorkspaceError, WorkspaceMember,
+    DiscoveryOptions, Editability, MemberDiscovery, ProjectDiscovery, ProjectWorkspace,
+    RequiresPythonSources, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
+    WorkspaceMember,
 };
 
 pub mod dependency_groups;

@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.11"
+version = "0.8.18"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 uv-auth = { workspace = true }
+uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
@@ -34,12 +35,14 @@ uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
+uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
@@ -66,6 +69,7 @@ axoupdater = { workspace = true, features = [
     "github_releases",
     "tokio",
 ], optional = true }
+base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
@@ -80,16 +84,18 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 h2 = { workspace = true }
-jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
+open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tar = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
@@ -99,10 +105,11 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true, features = ["json"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
@@ -112,11 +119,13 @@ zip = { workspace = true }
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
 windows = { workspace = true }
-windows-result = { workspace = true }
 
 [dev-dependencies]
+uv-publish = { workspace = true, features = ["test"] }
+
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }
@@ -127,6 +136,7 @@ insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+sha2 = { workspace = true }
 similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
@@ -146,6 +156,7 @@ ignored = [
 
 [features]
 default = ["performance", "uv-distribution/static", "default-tests"]
+native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]

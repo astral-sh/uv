@@ -30,7 +30,6 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 
 use uv_cache_key::cache_digest;
-use uv_configuration::Preview;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
@@ -39,8 +38,9 @@ use uv_distribution_types::{
 };
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
@@ -359,7 +359,9 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -1159,8 +1161,16 @@ impl PythonRunner {
             .envs(environment_variables)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
-            .env(EnvVars::CLICOLOR_FORCE, "1")
+            // NOTE: it would be nice to get colored output from build backends,
+            // but setting CLICOLOR_FORCE=1 changes the output of underlying
+            // tools, which might mess with wrappers trying to parse their
+            // output.
             .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
+            // Remove potentially-sensitive environment variables.
+            .env_remove(EnvVars::PYX_API_KEY)
+            .env_remove(EnvVars::UV_API_KEY)
+            .env_remove(EnvVars::PYX_AUTH_TOKEN)
+            .env_remove(EnvVars::UV_AUTH_TOKEN)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

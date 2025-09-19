@@ -1642,17 +1642,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
           And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())

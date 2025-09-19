@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use clap::Parser;
 
 use uv_cache::{Cache, CacheArgs};
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
 use uv_pep508::VerbatimUrl;
@@ -20,7 +20,7 @@ pub(crate) struct WheelMetadataArgs {
 
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
     let capabilities = IndexCapabilities::default();
 
     let filename = WheelFilename::from_str(&args.url.filename()?)?;

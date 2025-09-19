@@ -11,12 +11,14 @@ use futures::stream::FuturesUnordered;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
+use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_configuration::{Preview, PreviewFeatures};
+use uv_client::{BaseClientBuilder, retries_from_env};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
 };
@@ -36,7 +38,6 @@ use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest {
@@ -163,7 +164,7 @@ pub(crate) async fn install(
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -311,7 +312,7 @@ pub(crate) async fn install(
                 .peekable();
 
             if matching_installations.peek().is_none() {
-                debug!("No installation found for request `{}`", request.cyan());
+                debug!("No installation found for request `{}`", request);
                 unsatisfied.push(Cow::Borrowed(request));
             }
 
@@ -324,7 +325,7 @@ pub(crate) async fn install(
                         python_downloads_json_url.as_deref(),
                     ) {
                         Ok(request) => {
-                            debug!("Will reinstall `{}`", installation.key().green());
+                            debug!("Will reinstall `{}`", installation.key());
                             unsatisfied.push(Cow::Owned(request));
                         }
                         Err(err) => {
@@ -343,8 +344,8 @@ pub(crate) async fn install(
                     // If we have real requests, just ignore the existing installation
                     debug!(
                         "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
-                        installation.key().green(),
-                        request.cyan()
+                        installation.key(),
+                        request
                     );
                     unsatisfied.push(Cow::Borrowed(request));
                     break;
@@ -365,14 +366,10 @@ pub(crate) async fn install(
                     request.matches_installation(installation)
                 }
             }) {
-                debug!(
-                    "Found `{}` for request `{}`",
-                    installation.key().green(),
-                    request.cyan(),
-                );
+                debug!("Found `{}` for request `{}`", installation.key(), request);
                 Either::Left(installation)
             } else {
-                debug!("No installation found for request `{}`", request.cyan());
+                debug!("No installation found for request `{}`", request);
                 Either::Right(Cow::Borrowed(request))
             }
         })
@@ -393,8 +390,7 @@ pub(crate) async fn install(
         .inspect(|request| {
             debug!(
                 "Found download `{}` for request `{}`",
-                request.download,
-                request.cyan(),
+                request.download, request,
             );
         })
         .map(|request| request.download)
@@ -402,13 +398,11 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
-    // Download and unpack the Python versions concurrently
-    let client = uv_client::BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    // Python downloads are performing their own retries to catch stream errors, disable the
+    // default retries to avoid the middleware from performing uncontrolled retries.
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
+    let client = client_builder.retries(0).build();
+
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();
 
@@ -419,6 +413,7 @@ pub(crate) async fn install(
                 download
                     .fetch_with_retry(
                         &client,
+                        &retry_policy,
                         installations_dir,
                         &scratch_dir,
                         reinstall,
@@ -483,6 +478,7 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
+        installation.ensure_build_file()?;
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }

@@ -21,27 +21,28 @@ use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+    default_on_request_error,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::Credentials;
-use uv_auth::{AuthMiddleware, Indexes};
+use uv_auth::{AuthMiddleware, Credentials, Indexes, PyxTokenStore};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
-use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
+use crate::{Connectivity, WrappedReqwestError};
 
 /// Do not use this value directly outside tests, use [`retries_from_env`] instead.
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -68,6 +69,7 @@ pub enum AuthIntegration {
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
+    preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     built_in_root_certs: bool,
@@ -123,14 +125,9 @@ impl Debug for ExtraMiddleware {
 
 impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl BaseClientBuilder<'_> {
-    pub fn new() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
+            preview: Preview::default(),
             allow_insecure_host: vec![],
             native_tls: false,
             built_in_root_certs: false,
@@ -150,6 +147,23 @@ impl BaseClientBuilder<'_> {
     }
 }
 
+impl BaseClientBuilder<'_> {
+    pub fn new(
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: Vec<TrustedHost>,
+        preview: Preview,
+    ) -> Self {
+        Self {
+            preview,
+            allow_insecure_host,
+            native_tls,
+            connectivity,
+            ..Self::default()
+        }
+    }
+}
+
 impl<'a> BaseClientBuilder<'a> {
     /// Use a custom reqwest client instead of creating a new one.
     ///
@@ -157,7 +171,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// Note that some configuration options from this builder will still be applied
     /// to the client via middleware.
     #[must_use]
-    pub fn with_custom_client(mut self, client: Client) -> Self {
+    pub fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
         self
     }
@@ -265,6 +279,10 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
+    }
+
+    pub fn is_native_tls(&self) -> bool {
+        self.native_tls
     }
 
     pub fn is_offline(&self) -> bool {
@@ -456,6 +474,30 @@ impl<'a> BaseClientBuilder<'a> {
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
+                // Create a base client to using in the authentication middleware.
+                let base_client = {
+                    let mut client = reqwest_middleware::ClientBuilder::new(client.clone());
+
+                    // Avoid uncloneable errors with a streaming body during publish.
+                    if self.retries > 0 {
+                        // Initialize the retry strategy.
+                        let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                            self.retry_policy(),
+                            UvRetryableStrategy,
+                        );
+                        client = client.with(retry_strategy);
+                    }
+
+                    // When supplied, add the extra middleware.
+                    if let Some(extra_middleware) = &self.extra_middleware {
+                        for middleware in &extra_middleware.0 {
+                            client = client.with_arc(middleware.clone());
+                        }
+                    }
+
+                    client.build()
+                };
+
                 let mut client = reqwest_middleware::ClientBuilder::new(client);
 
                 // Avoid uncloneable errors with a streaming body during publish.
@@ -468,31 +510,40 @@ impl<'a> BaseClientBuilder<'a> {
                     client = client.with(retry_strategy);
                 }
 
+                // When supplied, add the extra middleware.
+                if let Some(extra_middleware) = &self.extra_middleware {
+                    for middleware in &extra_middleware.0 {
+                        client = client.with_arc(middleware.clone());
+                    }
+                }
+
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let auth_middleware = AuthMiddleware::new()
+                        let mut auth_middleware = AuthMiddleware::new()
+                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider());
+                            .with_keyring(self.keyring.to_provider())
+                            .with_preview(self.preview);
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let auth_middleware = AuthMiddleware::new()
+                        let mut auth_middleware = AuthMiddleware::new()
+                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
+                            .with_preview(self.preview)
                             .with_only_authenticated(true);
-
+                        if let Ok(token_store) = PyxTokenStore::from_settings() {
+                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
-                    }
-                }
-
-                // When supplied add the extra middleware
-                if let Some(extra_middleware) = &self.extra_middleware {
-                    for middleware in &extra_middleware.0 {
-                        client = client.with_arc(middleware.clone());
                     }
                 }
 
@@ -903,7 +954,7 @@ impl RetryableStrategy for UvRetryableStrategy {
             None | Some(Retryable::Fatal)
                 if res
                     .as_ref()
-                    .is_err_and(|err| is_extended_transient_error(err)) =>
+                    .is_err_and(|err| is_transient_network_error(err)) =>
             {
                 Some(Retryable::Transient)
             }
@@ -931,12 +982,15 @@ impl RetryableStrategy for UvRetryableStrategy {
     }
 }
 
-/// Check for additional transient error kinds not supported by the default retry strategy in `reqwest_retry`.
+/// Whether the error looks like a network error that should be retried.
 ///
-/// These cases should be safe to retry with [`Retryable::Transient`].
-pub fn is_extended_transient_error(err: &dyn Error) -> bool {
+/// There are two cases that the default retry strategy is missing:
+/// * Inside the reqwest or reqwest-middleware error is an `io::Error` such as a broken pipe
+/// * When streaming a response, a reqwest error may be hidden several layers behind errors
+///   of different crates processing the stream, including `io::Error` layers.
+pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     // First, try to show a nice trace log
-    if let Some((Some(status), Some(url))) = find_source::<crate::WrappedReqwestError>(&err)
+    if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
         trace!("Considering retry of response HTTP {status} for {url}");
@@ -944,36 +998,86 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
         trace!("Considering retry of error: {err:?}");
     }
 
-    // IO Errors may be nested through custom IO errors.
-    let mut has_io_error = false;
-    for io_err in find_sources::<io::Error>(&err) {
-        has_io_error = true;
-        let retryable_io_err_kinds = [
-            // https://github.com/astral-sh/uv/issues/12054
-            io::ErrorKind::BrokenPipe,
-            // From reqwest-middleware
-            io::ErrorKind::ConnectionAborted,
-            // https://github.com/astral-sh/uv/issues/3514
-            io::ErrorKind::ConnectionReset,
-            // https://github.com/astral-sh/uv/issues/14699
-            io::ErrorKind::InvalidData,
-            // https://github.com/astral-sh/uv/issues/9246
-            io::ErrorKind::UnexpectedEof,
-        ];
-        if retryable_io_err_kinds.contains(&io_err.kind()) {
-            trace!("Retrying error: `{}`", io_err.kind());
-            return true;
+    let mut has_known_error = false;
+    // IO Errors or reqwest errors may be nested through custom IO errors or stream processing
+    // crates
+    let mut current_source = Some(err);
+    while let Some(source) = current_source {
+        if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
+            has_known_error = true;
+            if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
+                if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+                    trace!("Retrying nested reqwest middleware error");
+                    return true;
+                }
+                if is_retryable_status_error(reqwest_err) {
+                    trace!("Retrying nested reqwest middleware status code error");
+                    return true;
+                }
+            }
+
+            trace!("Cannot retry nested reqwest middleware error");
+        } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+            has_known_error = true;
+            if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+                trace!("Retrying nested reqwest error");
+                return true;
+            }
+            if is_retryable_status_error(reqwest_err) {
+                trace!("Retrying nested reqwest status code error");
+                return true;
+            }
+
+            trace!("Cannot retry nested reqwest error");
+        } else if let Some(io_err) = source.downcast_ref::<io::Error>().or_else(|| {
+            // h2 may hide an IO error inside.
+            source
+                .downcast_ref::<h2::Error>()
+                .and_then(|err| err.get_io())
+        }) {
+            has_known_error = true;
+            let retryable_io_err_kinds = [
+                // https://github.com/astral-sh/uv/issues/12054
+                io::ErrorKind::BrokenPipe,
+                // From reqwest-middleware
+                io::ErrorKind::ConnectionAborted,
+                // https://github.com/astral-sh/uv/issues/3514
+                io::ErrorKind::ConnectionReset,
+                // https://github.com/astral-sh/uv/issues/14699
+                io::ErrorKind::InvalidData,
+                // https://github.com/astral-sh/uv/issues/9246
+                io::ErrorKind::UnexpectedEof,
+            ];
+            if retryable_io_err_kinds.contains(&io_err.kind()) {
+                trace!("Retrying error: `{}`", io_err.kind());
+                return true;
+            }
+
+            trace!(
+                "Cannot retry IO error `{}`, not a retryable IO error kind",
+                io_err.kind()
+            );
         }
-        trace!(
-            "Cannot retry IO error `{}`, not a retryable IO error kind",
-            io_err.kind()
-        );
+
+        current_source = source.source();
     }
 
-    if !has_io_error {
-        trace!("Cannot retry error: not an extended IO error");
+    if !has_known_error {
+        trace!("Cannot retry error: Neither an IO error nor a reqwest error");
     }
     false
+}
+
+/// Whether the error is a status code error that is retryable.
+///
+/// Port of `reqwest_retry::default_on_request_success`.
+fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
+    let Some(status) = reqwest_err.status() else {
+        return false;
+    };
+    status.is_server_error()
+        || status == StatusCode::REQUEST_TIMEOUT
+        || status == StatusCode::TOO_MANY_REQUESTS
 }
 
 /// Find the first source error of a specific type.
@@ -988,15 +1092,6 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
         cause = err.source();
     }
     None
-}
-
-/// Return all errors in the chain of a specific type.
-///
-/// This handles cases such as nested `io::Error`s.
-///
-/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
-fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
-    iter::successors(find_source::<E>(orig), |&err| find_source(err))
 }
 
 // TODO(konsti): Remove once we find a native home for `retries_from_env`
@@ -1022,10 +1117,11 @@ pub fn retries_from_env() -> Result<u32, RetryParsingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
 
+    use anyhow::Result;
+    use insta::assert_debug_snapshot;
     use reqwest::{Client, Method};
-    use wiremock::matchers::method;
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::base_client::request_into_redirect;
@@ -1215,6 +1311,73 @@ mod tests {
 
             assert!(!redirect_request.headers().contains_key(REFERER));
         }
+
+        Ok(())
+    }
+
+    /// Enumerate which status codes we are retrying.
+    #[tokio::test]
+    async fn retried_status_codes() -> Result<()> {
+        let server = MockServer::start().await;
+        let client = Client::default();
+        let middleware_client = ClientWithMiddleware::default();
+        let mut retried = Vec::new();
+        for status in 100..599 {
+            // Test all standard status codes and and example for a non-RFC code used in the wild.
+            if StatusCode::from_u16(status)?.canonical_reason().is_none() && status != 420 {
+                continue;
+            }
+
+            Mock::given(path(format!("/{status}")))
+                .respond_with(ResponseTemplate::new(status))
+                .mount(&server)
+                .await;
+
+            let response = middleware_client
+                .get(format!("{}/{}", server.uri(), status))
+                .send()
+                .await;
+
+            let middleware_retry =
+                DefaultRetryableStrategy.handle(&response) == Some(Retryable::Transient);
+
+            let response = client
+                .get(format!("{}/{}", server.uri(), status))
+                .send()
+                .await?;
+
+            let uv_retry = match response.error_for_status() {
+                Ok(_) => false,
+                Err(err) => is_transient_network_error(&err),
+            };
+
+            // Ensure we're retrying the same status code as the reqwest_retry crate. We may choose
+            // to deviate from this later.
+            assert_eq!(middleware_retry, uv_retry);
+            if uv_retry {
+                retried.push(status);
+            }
+        }
+
+        assert_debug_snapshot!(retried, @r"
+        [
+            100,
+            102,
+            408,
+            429,
+            500,
+            501,
+            502,
+            503,
+            504,
+            505,
+            506,
+            507,
+            508,
+            510,
+            511,
+        ]
+        ");
 
         Ok(())
     }

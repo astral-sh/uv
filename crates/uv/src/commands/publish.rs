@@ -7,13 +7,15 @@ use console::Term;
 use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::Credentials;
+use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
-use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_pep508::VerbatimUrl;
 use uv_publish::{
-    CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
+    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
+    files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::{warn_user_once, write_error_chain};
@@ -21,29 +23,88 @@ use uv_warnings::{warn_user_once, write_error_chain};
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
+    index: Option<String>,
+    index_locations: IndexLocations,
+    dry_run: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if network_settings.connectivity.is_offline() {
+    if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
+
+    let token_store = PyxTokenStore::from_settings()?;
+
+    let (publish_url, check_url) = if let Some(index_name) = index {
+        // If the user provided an index by name, look it up.
+        debug!("Publishing with index {index_name}");
+        let index = index_locations
+            .simple_indexes()
+            .find(|index| {
+                index
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.as_ref() == index_name)
+            })
+            .with_context(|| {
+                let mut index_names: Vec<String> = index_locations
+                    .simple_indexes()
+                    .filter_map(|index| index.name.as_ref())
+                    .map(ToString::to_string)
+                    .collect();
+                index_names.sort();
+                if index_names.is_empty() {
+                    format!("No indexes were found, can't use index: `{index_name}`")
+                } else {
+                    let index_names = index_names.join("`, `");
+                    format!("Index not found: `{index_name}`. Found indexes: `{index_names}`")
+                }
+            })?;
+        let publish_url = index
+            .publish_url
+            .clone()
+            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
+        let check_url = index.url.clone();
+        (publish_url, Some(check_url))
+    } else if token_store.is_known_url(&publish_url) {
+        // If the user is publishing to a known index, construct the check URL from the publish
+        // URL.
+        let check_url = check_url.or_else(|| {
+            infer_check_url(&publish_url)
+                .inspect(|check_url| debug!("Inferred check URL: {check_url}"))
+        });
+        (publish_url, check_url)
+    } else {
+        (publish_url, check_url)
+    };
 
     let files = files_for_publishing(paths)?;
     match files.len() {
         0 => bail!("No files found to publish"),
-        1 => writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?,
-        n => writeln!(printer.stderr(), "Publishing {n} files {publish_url}")?,
+        1 => {
+            if dry_run {
+                writeln!(printer.stderr(), "Checking 1 file against {publish_url}")?;
+            } else {
+                writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?;
+            }
+        }
+        n => {
+            if dry_run {
+                writeln!(printer.stderr(), "Checking {n} files against {publish_url}")?;
+            } else {
+                writeln!(printer.stderr(), "Publishing {n} files to {publish_url}")?;
+            }
+        }
     }
 
     // * For the uploads themselves, we roll our own retries due to
@@ -56,30 +117,34 @@ pub(crate) async fn publish(
     //   shouldn't try cloning the request to make an unauthenticated request first, but we want
     //   keyring integration. For trusted publishing, we use an OIDC auth routine without keyring
     //   or other auth integration.
-    let upload_client = BaseClientBuilder::new()
+    let upload_client = client_builder
+        .clone()
         .retries(0)
         .keyring(keyring_provider)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
         // download. 15 min is taken from the time a trusted publishing token is valid.
         .default_timeout(Duration::from_secs(15 * 60))
         .build();
-    let oidc_client = BaseClientBuilder::new()
+    let oidc_client = client_builder
+        .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
+
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
+    // Load credentials.
     let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
         password,
         trusted_publishing,
         keyring_provider,
+        &token_store,
         &oidc_client,
+        &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
@@ -88,18 +153,10 @@ pub(crate) async fn publish(
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
-        let index_locations = IndexLocations::new(
-            vec![Index::from_index_url(index_url.clone())],
-            Vec::new(),
-            false,
-        );
-        let registry_client_builder = RegistryClientBuilder::new(cache.clone())
-            .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .index_locations(&index_locations)
-            .keyring(keyring_provider);
+        let registry_client_builder =
+            RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                .index_locations(index_locations)
+                .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),
             registry_client_builder,
@@ -123,15 +180,47 @@ pub(crate) async fn publish(
 
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
-        writeln!(
-            printer.stderr(),
-            "{} {filename} {}",
-            "Uploading".bold().green(),
-            format!("({bytes:.1}{unit})").dimmed()
-        )?;
+        if dry_run {
+            writeln!(
+                printer.stderr(),
+                "{} {filename} {}",
+                "Checking".bold().cyan(),
+                format!("({bytes:.1}{unit})").dimmed()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{} {filename} {}",
+                "Uploading".bold().green(),
+                format!("({bytes:.1}{unit})").dimmed()
+            )?;
+        }
+
+        // Collect the metadata for the file.
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .map_err(|err| PublishError::PublishPrepare(file.clone(), Box::new(err)))?;
+
+        // Run validation checks on the file, but don't upload it (if possible).
+        uv_publish::validate(
+            &file,
+            &form_metadata,
+            &raw_filename,
+            &publish_url,
+            &token_store,
+            &upload_client,
+            &credentials,
+        )
+        .await?;
+
+        if dry_run {
+            continue;
+        }
+
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
+            &form_metadata,
             &raw_filename,
             &filename,
             &publish_url,
@@ -144,6 +233,7 @@ pub(crate) async fn publish(
         )
         .await?; // Filename and/or URL are already attached, if applicable.
         info!("Upload succeeded");
+
         if !uploaded {
             writeln!(
                 printer.stderr(),
@@ -201,7 +291,9 @@ async fn gather_credentials(
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
+    base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
@@ -225,6 +317,22 @@ async fn gather_credentials(
         publish_url
             .set_username("")
             .expect("Failed to clear publish URL username");
+    }
+
+    // If the user is publishing to pyx, load the credentials from the store.
+    if username.is_none() && password.is_none() {
+        if token_store.is_known_url(&publish_url) {
+            if let Some(token) = token_store
+                .access_token(
+                    base_client.for_host(token_store.api()).raw_client(),
+                    DEFAULT_TOLERANCE_SECS,
+                )
+                .await?
+            {
+                debug!("Using authentication token from the store");
+                return Ok((publish_url, Credentials::from(token)));
+            }
+        }
     }
 
     // If applicable, attempt obtaining a token for trusted publishing.
@@ -288,11 +396,11 @@ async fn gather_credentials(
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
     // missing keyring entries later.
-    if let Some(keyring_provider) = keyring_provider.to_provider() {
+    if let Some(provider) = keyring_provider.to_provider() {
         if password.is_none() {
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
-                if let Some(keyring_password) = keyring_provider
+                if let Some(keyring_password) = provider
                     .fetch(DisplaySafeUrl::ref_cast(&publish_url), Some(username))
                     .await
                     .as_ref()
@@ -332,6 +440,50 @@ fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
     Ok((Some(username), Some(password)))
 }
 
+/// Construct a Simple Index URL from a publish URL, if possible.
+///
+/// Matches against a publish URL of the form `/v1/upload/{workspace}/{registry}` and returns
+/// `/simple/{workspace}/{registry}`.
+fn infer_check_url(publish_url: &DisplaySafeUrl) -> Option<IndexUrl> {
+    let mut segments = publish_url.path_segments()?;
+
+    let v1 = segments.next()?;
+    if v1 != "v1" {
+        return None;
+    }
+
+    let upload = segments.next()?;
+    if upload != "upload" {
+        return None;
+    }
+
+    let workspace = segments.next()?;
+    if workspace.is_empty() {
+        return None;
+    }
+
+    let registry = segments.next()?;
+    if registry.is_empty() {
+        return None;
+    }
+
+    // Skip any empty segments (trailing slash handling)
+    for remaining in segments {
+        if !remaining.is_empty() {
+            return None;
+        }
+    }
+
+    // Reconstruct the URL with `/simple/{workspace}/{registry}`.
+    let mut check_url = publish_url.clone();
+    {
+        let mut segments = check_url.path_segments_mut().ok()?;
+        segments.clear();
+        segments.push("simple").push(workspace).push(registry);
+    }
+    Some(IndexUrl::from(VerbatimUrl::from(check_url)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,13 +499,16 @@ mod tests {
         username: Option<String>,
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
-        let client = BaseClientBuilder::new().build();
+        let client = BaseClientBuilder::default().build();
+        let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,
             username,
             password,
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
+            &token_store,
+            &client,
             &client,
             None,
             Prompt::Disabled,
@@ -440,5 +595,34 @@ mod tests {
             err.to_string(),
             @"The password can't be set both in the publish URL and in the CLI"
         );
+    }
+
+    #[test]
+    fn test_infer_check_url() {
+        let url =
+            DisplaySafeUrl::from_str("https://example.com/v1/upload/workspace/registry").unwrap();
+        let check_url = infer_check_url(&url);
+        assert_eq!(
+            check_url,
+            Some(IndexUrl::from_str("https://example.com/simple/workspace/registry").unwrap())
+        );
+
+        let url =
+            DisplaySafeUrl::from_str("https://example.com/v1/upload/workspace/registry/").unwrap();
+        let check_url = infer_check_url(&url);
+        assert_eq!(
+            check_url,
+            Some(IndexUrl::from_str("https://example.com/simple/workspace/registry").unwrap())
+        );
+
+        let url =
+            DisplaySafeUrl::from_str("https://example.com/upload/workspace/registry").unwrap();
+        let check_url = infer_check_url(&url);
+        assert_eq!(check_url, None);
+
+        let url = DisplaySafeUrl::from_str("https://example.com/upload/workspace/registry/package")
+            .unwrap();
+        let check_url = infer_check_url(&url);
+        assert_eq!(check_url, None);
     }
 }

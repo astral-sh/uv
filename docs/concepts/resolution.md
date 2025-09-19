@@ -139,7 +139,7 @@ bounds on `requires-python` often leads to formally correct but practically inco
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
-### Limited resolution environments
+## Limited resolution environments
 
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
@@ -172,7 +172,7 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
 
-### Required environments
+## Required environments
 
 In the Python ecosystem, packages can be published as source distributions, built distributions
 (wheels), or both; but to install a package, a built distribution is required. If a package lacks a
@@ -413,12 +413,14 @@ requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 ```
 
 These declarations are intended for cases in which a package does _not_ declare static metadata
-upfront, though they are also useful for packages that require disabling build isolation. In such
-cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
-environment prior to resolving the package.
+upfront, though they are also useful for packages that require
+[disabling build isolation](./projects/config.md#build-isolation) In such cases, it may be easier to
+declare the package metadata upfront, rather than creating a custom build environment prior to
+resolving the package.
 
-For example, you can declare the metadata for `flash-attn`, allowing uv to resolve without building
-the package from source (which itself requires installing `torch`):
+For example, past versions of `flash-attn` did not declare static metadata. By declaring metadata
+for `flash-attn` upfront, uv can resolve `flash-attn` without building the package from source
+(which itself requires installing `torch`):
 
 ```toml
 [project]
@@ -609,4 +611,4 @@ versions of uv to error.
 ## Learn more
 
 For more details about the internals of the resolver, see the
-[resolver reference](../reference/resolver-internals.md) documentation.
+[resolver reference](../reference/internals/resolver.md) documentation.

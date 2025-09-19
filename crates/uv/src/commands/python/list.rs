@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
-use uv_configuration::Preview;
 use uv_pep440::Version;
+use uv_preview::Preview;
 
 use anyhow::Result;
 use itertools::Either;
@@ -109,7 +109,9 @@ pub(crate) async fn list(
             .map(|a| PythonDownloadRequest::iter_downloads(a, python_downloads_json_url.as_deref()))
             .transpose()?
             .into_iter()
-            .flatten();
+            .flatten()
+            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
+            .filter(|download| download.key().variant() != &uv_python::PythonVariant::Debug);
 
         for download in downloads {
             output.insert((

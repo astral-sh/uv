@@ -1,7 +1,8 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -9,7 +10,7 @@ use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
@@ -103,7 +104,7 @@ fn source_dist_matcher(
         .and_then(|readme| readme.path())
     {
         let readme = uv_fs::normalize_path(readme);
-        trace!("Including readme at: `{}`", readme.user_display());
+        trace!("Including readme at: {}", readme.user_display());
         let readme = readme.portable_display().to_string();
         let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
         include_globs.push(glob);
@@ -111,7 +112,7 @@ fn source_dist_matcher(
 
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: `{license_files}`");
+        trace!("Including license files at: {license_files}`");
         let glob = PortableGlobParser::Pep639
             .parse(license_files)
             .map_err(|err| Error::PortableGlob {
@@ -123,12 +124,18 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let directory = uv_fs::normalize_path(Path::new(directory));
-        trace!(
-            "Including data ({}) at: `{}`",
-            name,
-            directory.user_display()
-        );
+        let directory = uv_fs::normalize_path(directory);
+        trace!("Including data ({}) at: {}", name, directory.user_display());
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(&directory)))
@@ -140,7 +147,7 @@ fn source_dist_matcher(
     }
 
     debug!(
-        "Source distribution includes: `{:?}`",
+        "Source distribution includes: {:?}",
         include_globs
             .iter()
             .map(ToString::to_string)
@@ -252,9 +259,11 @@ fn write_source_dist(
             .expect("walkdir starts with root");
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding from sdist: `{}`", relative.user_display());
+            trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
+
+        error_on_venv(entry.file_name(), entry.path())?;
 
         let entry_path = Path::new(&top_level)
             .join(relative)

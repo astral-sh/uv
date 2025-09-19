@@ -5,13 +5,14 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use ref_cast::RefCast;
+use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_configuration::Preview;
+use uv_client::{BaseClientBuilder, retries_from_env};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
+use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -228,12 +229,17 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let client = client_builder.build();
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware from performing uncontrolled retries.
+        let retry_policy =
+            ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
+        let client = client_builder.clone().retries(0).build();
 
         info!("Fetching requested Python...");
         let result = download
             .fetch_with_retry(
                 &client,
+                &retry_policy,
                 installations_dir,
                 &scratch_dir,
                 false,
@@ -252,6 +258,7 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        installed.ensure_build_file()?;
 
         let minor_version = installed.minor_version_key();
         let highest_patch = installations
@@ -484,7 +491,7 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.variant),
+            _ => format!("+{}", self.variant),
         };
         write!(
             f,
@@ -625,7 +632,7 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         // and prerelease (with special formatting for the variant).
         let variant = match self.0.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+            _ => format!("+{}", self.0.variant),
         };
         write!(
             f,

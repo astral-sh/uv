@@ -9,8 +9,8 @@ use tracing::{Level, debug, enabled, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,9 +22,9 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
-use uv_pep508::PackageName;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
@@ -35,8 +35,8 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
-use uv_torch::{TorchMode, TorchStrategy};
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_torch::{TorchMode, TorchSource, TorchStrategy};
+use uv_types::HashStrategy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -47,7 +47,6 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -70,7 +69,7 @@ pub(crate) async fn pip_install(
     torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -78,8 +77,7 @@ pub(crate) async fn pip_install(
     installer_metadata: bool,
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
-    no_build_isolation: bool,
-    no_build_isolation_package: Vec<PackageName>,
+    build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
@@ -112,12 +110,7 @@ pub(crate) async fn pip_install(
         );
     }
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -216,6 +209,11 @@ pub(crate) async fn pip_install(
         environment
     };
 
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
@@ -261,13 +259,18 @@ pub(crate) async fn pip_install(
         })
         .ok();
 
-    // Determine the markers to use for the resolution.
+    // Determine the markers and tags to use for the resolution.
     let interpreter = environment.interpreter();
     let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
     );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -282,7 +285,18 @@ pub(crate) async fn pip_install(
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            InstallationStrategy::Permissive,
+            &marker_env,
+            &tags,
+            config_settings,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -315,13 +329,6 @@ pub(crate) async fn pip_install(
     } else {
         PythonRequirement::from_interpreter(interpreter)
     };
-
-    // Determine the tags to use for the resolution.
-    let tags = resolution_tags(
-        python_version.as_ref(),
-        python_platform.as_ref(),
-        interpreter,
-    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -356,13 +363,19 @@ pub(crate) async fn pip_install(
         no_index,
     );
 
-    index_locations.cache_index_credentials();
-
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
             TorchStrategy::from_mode(
                 mode,
+                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -373,9 +386,8 @@ pub(crate) async fn pip_install(
         .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(&index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
@@ -395,12 +407,12 @@ pub(crate) async fn pip_install(
     };
 
     // Determine whether to enable build isolation.
-    let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => uv_types::BuildIsolation::Shared(&environment),
+        BuildIsolation::SharedPackage(ref packages) => {
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
@@ -426,11 +438,6 @@ pub(crate) async fn pip_install(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Lower the extra build dependencies, if any.
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -444,7 +451,7 @@ pub(crate) async fn pip_install(
         index_strategy,
         config_settings,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,
@@ -552,9 +559,11 @@ pub(crate) async fn pip_install(
         {
             Ok(graph) => Resolution::from(graph),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -577,7 +586,7 @@ pub(crate) async fn pip_install(
         index_strategy,
         config_settings,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,
@@ -594,6 +603,7 @@ pub(crate) async fn pip_install(
     match operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         &reinstall,
         &build_options,
@@ -617,7 +627,7 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -628,7 +638,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
     }
 
     Ok(ExitStatus::Success)

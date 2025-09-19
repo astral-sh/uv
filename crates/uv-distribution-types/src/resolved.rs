@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
 
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
 
 use crate::{
@@ -139,6 +139,15 @@ impl ResolvedDistRef<'_> {
             Self::Installed { dist } => ResolvedDist::Installed {
                 dist: Arc::new((*dist).clone()),
             },
+        }
+    }
+
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Self::InstallableRegistrySourceDist { sdist, .. } => Some(&sdist.index),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => Some(&wheel.index),
+            Self::Installed { .. } => None,
         }
     }
 }

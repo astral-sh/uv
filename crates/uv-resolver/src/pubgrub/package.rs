@@ -53,7 +53,7 @@ pub enum PubGrubPackageInner {
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
-        dev: Option<GroupName>,
+        group: Option<GroupName>,
         marker: MarkerTree,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
@@ -74,14 +74,14 @@ pub enum PubGrubPackageInner {
         extra: ExtraName,
         marker: MarkerTree,
     },
-    /// A proxy package to represent an enabled "dependency group" (e.g., development dependencies).
+    /// A proxy package to represent an enabled dependency group.
     ///
     /// This is similar in spirit to [PEP 735](https://peps.python.org/pep-0735/) and similar in
     /// implementation to the `Extra` variant. The main difference is that we treat groups as
     /// enabled globally, rather than on a per-requirement basis.
-    Dev {
+    Group {
         name: PackageName,
-        dev: GroupName,
+        group: GroupName,
         marker: MarkerTree,
     },
     /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
@@ -115,15 +115,19 @@ impl PubGrubPackage {
                 extra,
                 marker,
             }))
-        } else if let Some(dev) = group {
-            Self(Arc::new(PubGrubPackageInner::Dev { name, dev, marker }))
+        } else if let Some(group) = group {
+            Self(Arc::new(PubGrubPackageInner::Group {
+                name,
+                group,
+                marker,
+            }))
         } else if !marker.is_true() {
             Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
-                dev: None,
+                group: None,
                 marker,
             }))
         }
@@ -139,7 +143,7 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(name)
             | PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Marker { name, .. } => Some(name),
         }
     }
@@ -153,7 +157,7 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(_) => None,
             PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Marker { name, .. } => Some(name),
         }
     }
@@ -169,7 +173,7 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
-            | PubGrubPackageInner::Dev { marker, .. } => *marker,
+            | PubGrubPackageInner::Group { marker, .. } => *marker,
             PubGrubPackageInner::Marker { marker, .. } => *marker,
         }
     }
@@ -186,7 +190,7 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package { extra: None, .. }
-            | PubGrubPackageInner::Dev { .. }
+            | PubGrubPackageInner::Group { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
                 extra: Some(extra), ..
@@ -195,22 +199,24 @@ impl PubGrubPackage {
         }
     }
 
-    /// Returns the dev (aka "group") name associated with this PubGrub
+    /// Returns the dependency group name associated with this PubGrub
     /// package, if it has one.
     ///
     /// Note that if this returns `Some`, then `extra` must return `None`.
-    pub(crate) fn dev(&self) -> Option<&GroupName> {
+    pub(crate) fn group(&self) -> Option<&GroupName> {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
-            | PubGrubPackageInner::Package { dev: None, .. }
+            | PubGrubPackageInner::Package { group: None, .. }
             | PubGrubPackageInner::Extra { .. }
             | PubGrubPackageInner::Marker { .. } => None,
-            PubGrubPackageInner::Package { dev: Some(dev), .. }
-            | PubGrubPackageInner::Dev { dev, .. } => Some(dev),
+            PubGrubPackageInner::Package {
+                group: Some(group), ..
+            }
+            | PubGrubPackageInner::Group { group, .. } => Some(group),
         }
     }
 
@@ -220,7 +226,7 @@ impl PubGrubPackage {
     /// this returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         let package = self.name_no_root()?;
-        match (self.extra(), self.dev()) {
+        match (self.extra(), self.group()) {
             (None, None) => Some(ConflictItemRef::from(package)),
             (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
             (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
@@ -244,7 +250,7 @@ impl PubGrubPackage {
         matches!(
             &**self,
             PubGrubPackageInner::Extra { .. }
-                | PubGrubPackageInner::Dev { .. }
+                | PubGrubPackageInner::Group { .. }
                 | PubGrubPackageInner::Marker { .. }
         )
     }
@@ -267,7 +273,7 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(_) => {}
             PubGrubPackageInner::Package { ref mut marker, .. }
             | PubGrubPackageInner::Extra { ref mut marker, .. }
-            | PubGrubPackageInner::Dev { ref mut marker, .. }
+            | PubGrubPackageInner::Group { ref mut marker, .. }
             | PubGrubPackageInner::Marker { ref mut marker, .. } => {
                 *marker = python_requirement.simplify_markers(*marker);
             }
@@ -283,7 +289,7 @@ impl PubGrubPackage {
             PubGrubPackageInner::System(_) => "system",
             PubGrubPackageInner::Package { .. } => "package",
             PubGrubPackageInner::Extra { .. } => "extra",
-            PubGrubPackageInner::Dev { .. } => "dev",
+            PubGrubPackageInner::Group { .. } => "group",
             PubGrubPackageInner::Marker { .. } => "marker",
         }
     }
@@ -318,7 +324,7 @@ impl std::fmt::Display for PubGrubPackageInner {
                 name,
                 extra: None,
                 marker,
-                dev: None,
+                group: None,
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}{{{marker}}}")
@@ -330,7 +336,7 @@ impl std::fmt::Display for PubGrubPackageInner {
                 name,
                 extra: Some(extra),
                 marker,
-                dev: None,
+                group: None,
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}[{extra}]{{{marker}}}")
@@ -342,7 +348,7 @@ impl std::fmt::Display for PubGrubPackageInner {
                 name,
                 extra: None,
                 marker,
-                dev: Some(dev),
+                group: Some(dev),
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}:{dev}{{{marker}}}")
@@ -358,13 +364,15 @@ impl std::fmt::Display for PubGrubPackageInner {
                 }
             }
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
-            Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
+            Self::Group {
+                name, group: dev, ..
+            } => write!(f, "{name}:{dev}"),
             // It is guaranteed that `extra` and `dev` are never set at the same time.
             Self::Package {
                 name: _,
                 extra: Some(_),
                 marker: _,
-                dev: Some(_),
+                group: Some(_),
             } => unreachable!(),
         }
     }

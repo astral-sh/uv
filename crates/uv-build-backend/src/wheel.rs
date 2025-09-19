@@ -1,10 +1,11 @@
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -18,7 +19,8 @@ use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -175,9 +177,11 @@ fn write_wheel(
                 .strip_prefix(&src_root)
                 .expect("walkdir starts with root");
             if exclude_matcher.is_match(match_path) {
-                trace!("Excluding from module: `{}`", match_path.user_display());
+                trace!("Excluding from module: {}", match_path.user_display());
                 continue;
             }
+
+            error_on_venv(entry.file_name(), entry.path())?;
 
             let entry_path = entry_path.portable_display().to_string();
             debug!("Adding to wheel: {entry_path}");
@@ -206,7 +210,20 @@ fn write_wheel(
 
     // Add the data files
     for (name, directory) in settings.data.iter() {
-        debug!("Adding {name} data files from: `{directory}`");
+        debug!(
+            "Adding {name} data files from: {}",
+            directory.user_display()
+        );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let data_dir = format!(
             "{}-{}.data/{}/",
             pyproject_toml.name().as_dist_info_name(),
@@ -285,7 +302,7 @@ pub fn build_editable(
         src_root.as_os_str().as_encoded_bytes(),
     )?;
 
-    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
+    debug!("Adding metadata files to: {}", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
@@ -346,7 +363,7 @@ struct RecordEntry {
     ///
     /// While the spec would allow backslashes, we always use portable paths with forward slashes.
     path: String,
-    /// The SHA256 of the files.
+    /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
     size: usize,
@@ -381,7 +398,7 @@ fn write_hashed(
     }
     Ok(RecordEntry {
         path: path.to_string(),
-        hash: format!("{:x}", hasher.finalize()),
+        hash: base64.encode(hasher.finalize()),
         size,
     })
 }
@@ -511,15 +528,17 @@ fn wheel_subdir_from_globs(
             .expect("walkdir starts with root");
 
         if !matcher.match_path(relative) {
-            trace!("Excluding {}: `{}`", globs_field, relative.user_display());
+            trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }
+
+        error_on_venv(entry.file_name(), entry.path())?;
 
         let license_path = Path::new(target)
             .join(relative)
             .portable_display()
             .to_string();
-        debug!("Adding for {}: `{}`", globs_field, relative.user_display());
+        debug!("Adding for {}: {}", globs_field, relative.user_display());
         wheel_writer.write_dir_entry(&entry, &license_path)?;
     }
     Ok(())
@@ -641,7 +660,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -719,7 +738,7 @@ impl FilesystemWriter {
 impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -795,14 +814,14 @@ mod test {
     fn test_record() {
         let record = vec![RecordEntry {
             path: "built_by_uv/__init__.py".to_string(),
-            hash: "89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865".to_string(),
+            hash: "ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU".to_string(),
             size: 37,
         }];
 
         let mut writer = Vec::new();
         write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
         assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            built_by_uv/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
+            built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
             built_by_uv-0.1.0/RECORD,,
         ");
     }
@@ -861,9 +880,9 @@ mod test {
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=f883bac9aabac7a1d297ecd61fdeab666818bdfc87947d342f9590a02a73f982,50
-        built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
         "###);
 

@@ -3,6 +3,8 @@
 
 pub(crate) mod common;
 
+mod auth;
+
 mod branching_urls;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -25,6 +27,9 @@ mod edit;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod export;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod format;
 
 mod help;
 

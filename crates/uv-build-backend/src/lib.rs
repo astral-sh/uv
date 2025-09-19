@@ -9,6 +9,7 @@ pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
+use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -34,14 +35,14 @@ pub enum Error {
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
-    #[error("Unsupported glob expression in: `{field}`")]
+    #[error("Unsupported glob expression in: {field}")]
     PortableGlob {
         field: String,
         #[source]
         source: PortableGlobError,
     },
     /// <https://github.com/BurntSushi/ripgrep/discussions/2927>
-    #[error("Glob expressions caused to large regex in: `{field}`")]
+    #[error("Glob expressions caused to large regex in: {field}")]
     GlobSetTooLarge {
         field: String,
         #[source]
@@ -49,7 +50,7 @@ pub enum Error {
     },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
-    #[error("Failed to walk source tree: `{}`", root.user_display())]
+    #[error("Failed to walk source tree: {}", root.user_display())]
     WalkDir {
         root: PathBuf,
         #[source]
@@ -59,14 +60,19 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error("Expected a Python module at: `{}`", _0.user_display())]
+    #[error("Expected a Python module at: {}", _0.user_display())]
     MissingInitPy(PathBuf),
-    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: `{}`", _0.user_display())]
+    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: {}", _0.user_display())]
     NotANamespace(PathBuf),
     /// Either an absolute path or a parent path through `..`.
-    #[error("Module root must be inside the project: `{}`", _0.user_display())]
+    #[error("Module root must be inside the project: {}", _0.user_display())]
     InvalidModuleRoot(PathBuf),
-    #[error("Inconsistent metadata between prepare and build step: `{0}`")]
+    /// Either an absolute path or a parent path through `..`.
+    #[error("The path for the data directory {} must be inside the project: {}", name, path.user_display())]
+    InvalidDataRoot { name: String, path: PathBuf },
+    #[error("Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: {}", _0.user_display())]
+    VenvInSourceTree(PathBuf),
+    #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
@@ -209,8 +215,10 @@ fn find_roots(
     namespace: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
-    let src_root = source_tree.join(&relative_module_root);
-    if !src_root.starts_with(source_tree) {
+    // Check that even if a path contains `..`, we only include files below the module root.
+    if !uv_fs::normalize_path(&source_tree.join(&relative_module_root))
+        .starts_with(uv_fs::normalize_path(source_tree))
+    {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
     let src_root = source_tree.join(&relative_module_root);
@@ -345,6 +353,27 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     }
 
     Ok(module_relative)
+}
+
+/// Error if we're adding a venv to a distribution.
+pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error> {
+    // On 64-bit Unix, `lib64` is a (compatibility) symlink to lib. If we traverse `lib64` before
+    // `pyvenv.cfg`, we show a generic error for symlink directories instead.
+    if !(file_name == "pyvenv.cfg" || file_name == "lib64") {
+        return Ok(());
+    }
+
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+
+    if parent.join("bin").join("python").is_symlink()
+        || parent.join("Scripts").join("python.exe").is_file()
+    {
+        return Err(Error::VenvInSourceTree(parent.to_path_buf()));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -622,7 +651,7 @@ mod tests {
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
-            @"342bf60c8406144f459358cde92408686c1631fe22389d042ce80379e589d6ec"
+            @"319afb04e87caf894b1362b508ec745253c6d241423ea59021694d2015e821da"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @r"
         built_by_uv-0.1.0.data/data/
@@ -665,6 +694,31 @@ mod tests {
         built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
+
+        let mut wheel = zip::ZipArchive::new(File::open(wheel_path).unwrap()).unwrap();
+        let mut record = String::new();
+        wheel
+            .by_name("built_by_uv-0.1.0.dist-info/RECORD")
+            .unwrap()
+            .read_to_string(&mut record)
+            .unwrap();
+        assert_snapshot!(record, @r###"
+        built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
+        built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
+        built_by_uv/arithmetic/circle.py,sha256=FYZkv6KwrF9nJcwGOKigjke1dm1Fkie7qW1lWJoh3AE,287
+        built_by_uv/arithmetic/pi.txt,sha256=-4HqoLoIrSKGf0JdTrM8BTTiIz8rq-MSCDL6LeF0iuU,8
+        built_by_uv/cli.py,sha256=Jcm3PxSb8wTAN3dGm5vKEDQwCgoUXkoeggZeF34QyKM,44
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE,sha256=QwcOLU5TJoTeUhuIXzhdCEEDDvorGiC6-3YTOl4TecE,11356
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT,sha256=F5Z0Cpu8QWyblXwXhrSo0b9WmYXQxd1LwLjVLJZwbiI,1077
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt,sha256=KN-KAx829G2saLjVmByc08RFFtIDWvHulqPyD0qEBZI,270
+        built_by_uv-0.1.0.data/headers/built_by_uv.h,sha256=p5-HBunJ1dY-xd4dMn03PnRClmGyRosScIp8rT46kg4,144
+        built_by_uv-0.1.0.data/scripts/whoami.sh,sha256=T2cmhuDFuX-dTkiSkuAmNyIzvv8AKopjnuTCcr9o-eE,20
+        built_by_uv-0.1.0.data/data/data.csv,sha256=7z7u-wXu7Qr2eBZFVpBILlNUiGSngv_1vYqZHVWOU94,265
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
+        built_by_uv-0.1.0.dist-info/RECORD,,
+        "###);
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
@@ -915,7 +969,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Expected a Python module at: `[TEMP_PATH]/src/camel_case/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/camel_case/__init__.py"
         );
     }
 
@@ -980,7 +1034,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Expected a Python module at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+            @"Expected a Python module at: [TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi"
         );
 
         // Create the correct file
@@ -1046,7 +1100,7 @@ mod tests {
 
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part/__init__.py"
         );
 
         // Create the correct file
@@ -1068,7 +1122,7 @@ mod tests {
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
             build_err(src.path()),
-            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
@@ -1288,7 +1342,7 @@ mod tests {
         // The first module is missing an `__init__.py`.
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/foo/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/foo/__init__.py"
         );
 
         // Create the first correct `__init__.py` file
@@ -1297,7 +1351,7 @@ mod tests {
         // The second module, a namespace, is missing an `__init__.py`.
         assert_snapshot!(
             build_err(src.path()),
-            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part_a/__init__.py`"
+            @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part_a/__init__.py"
         );
 
         // Create the other two correct `__init__.py` files
@@ -1327,7 +1381,7 @@ mod tests {
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
             build_err(src.path()),
-            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 

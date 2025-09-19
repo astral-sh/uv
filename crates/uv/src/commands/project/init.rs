@@ -1,24 +1,25 @@
-use anyhow::{Context, Result, anyhow};
-use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
-use uv_distribution_types::RequiresPython;
 
+use anyhow::{Context, Result, anyhow};
+use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
+
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
-    VersionControlSystem,
+    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
+use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -35,7 +36,6 @@ use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -56,7 +56,7 @@ pub(crate) async fn init(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -74,7 +74,7 @@ pub(crate) async fn init(
                 path,
                 python,
                 install_mirrors,
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 cache,
@@ -144,7 +144,7 @@ pub(crate) async fn init(
                 python,
                 install_mirrors,
                 no_workspace,
-                network_settings,
+                client_builder,
                 python_preference,
                 python_downloads,
                 no_config,
@@ -190,7 +190,7 @@ async fn init_script(
     script_path: &Path,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -215,11 +215,6 @@ async fn init_script(
     if package {
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -256,7 +251,7 @@ async fn init_script(
         python_preference,
         python_downloads,
         no_config,
-        &client_builder,
+        client_builder,
         cache,
         &reporter,
         preview,
@@ -290,7 +285,7 @@ async fn init_project(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -346,11 +341,6 @@ async fn init_project(
     };
 
     let reporter = PythonDownloadReporter::single(printer);
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {
@@ -431,7 +421,7 @@ async fn init_project(
                         EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
-                        &client_builder,
+                        client_builder,
                         cache,
                         Some(&reporter),
                         install_mirrors.python_install_mirror.as_deref(),
@@ -459,7 +449,7 @@ async fn init_project(
                     EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
-                    &client_builder,
+                    client_builder,
                     cache,
                     Some(&reporter),
                     install_mirrors.python_install_mirror.as_deref(),
@@ -526,7 +516,7 @@ async fn init_project(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
-                &client_builder,
+                client_builder,
                 cache,
                 Some(&reporter),
                 install_mirrors.python_install_mirror.as_deref(),
@@ -554,7 +544,7 @@ async fn init_project(
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -769,6 +759,10 @@ impl InitProjectKind {
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
+
         // Do no fill in `authors` for non-packaged applications unless explicitly requested.
         let author_from = author_from.unwrap_or_else(|| {
             if package {
@@ -828,9 +822,6 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
-
         Ok(())
     }
 
@@ -854,6 +845,10 @@ impl InitProjectKind {
         }
 
         fs_err::create_dir_all(path)?;
+
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
 
         let author = get_author_info(path, author_from.unwrap_or_default());
 
@@ -879,9 +874,6 @@ impl InitProjectKind {
         if !bare {
             generate_package_scripts(name, path, build_backend, true)?;
         }
-
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
 
         Ok(())
     }
@@ -997,6 +989,9 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 python-packages = ["{module_name}"]
                 python-source = "src"
 
+                [tool.uv]
+                cache-keys = [{{ file = "pyproject.toml" }}, {{ file = "src/**/*.rs" }}, {{ file = "Cargo.toml" }}, {{ file = "Cargo.lock" }}]
+
                 [build-system]
                 requires = ["maturin>=1.0,<2.0"]
                 build-backend = "maturin"
@@ -1005,6 +1000,9 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 [tool.scikit-build]
                 minimum-version = "build-system.requires"
                 build-dir = "build/{wheel_tag}"
+
+                [tool.uv]
+                cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
                 [build-system]
                 requires = ["scikit-build-core>=0.10", "pybind11"]

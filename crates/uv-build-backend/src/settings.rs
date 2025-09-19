@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uv_macros::OptionsMetadata;
 
 /// Settings for the uv build backend (`uv_build`).
@@ -204,16 +204,16 @@ pub enum ModuleName {
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct WheelDataIncludes {
-    purelib: Option<String>,
-    platlib: Option<String>,
-    headers: Option<String>,
-    scripts: Option<String>,
-    data: Option<String>,
+    purelib: Option<PathBuf>,
+    platlib: Option<PathBuf>,
+    headers: Option<PathBuf>,
+    scripts: Option<PathBuf>,
+    data: Option<PathBuf>,
 }
 
 impl WheelDataIncludes {
     /// Yield all data directories name and corresponding paths.
-    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &Path)> {
         [
             ("purelib", self.purelib.as_deref()),
             ("platlib", self.platlib.as_deref()),

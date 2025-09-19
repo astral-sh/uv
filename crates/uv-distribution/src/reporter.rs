@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use uv_distribution_types::BuildableSource;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
 pub trait Reporter: Send + Sync {

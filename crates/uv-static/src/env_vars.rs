@@ -45,6 +45,9 @@ impl EnvVars {
     /// directory for caching instead of the default cache directory.
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
 
+    /// The directory for storage of credentials when using a plain text backend.
+    pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";
+
     /// Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
     /// cache for any operations.
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
@@ -135,6 +138,10 @@ impl EnvVars {
     /// any configuration files from the current directory, parent directories, or user configuration
     /// directories.
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
+
+    /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+    /// a `pyproject.toml` or `uv.toml` file.
+    pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
 
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
     /// exclude distributions published after the specified date.
@@ -328,6 +335,26 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
+    /// Pin managed CPython versions to a specific build version.
+    ///
+    /// For CPython, this should be the build date (e.g., "20250814").
+    pub const UV_PYTHON_CPYTHON_BUILD: &'static str = "UV_PYTHON_CPYTHON_BUILD";
+
+    /// Pin managed PyPy versions to a specific build version.
+    ///
+    /// For PyPy, this should be the PyPy version (e.g., "7.3.20").
+    pub const UV_PYTHON_PYPY_BUILD: &'static str = "UV_PYTHON_PYPY_BUILD";
+
+    /// Pin managed GraalPy versions to a specific build version.
+    ///
+    /// For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
+    pub const UV_PYTHON_GRAALPY_BUILD: &'static str = "UV_PYTHON_GRAALPY_BUILD";
+
+    /// Pin managed Pyodide versions to a specific build version.
+    ///
+    /// For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
+    pub const UV_PYTHON_PYODIDE_BUILD: &'static str = "UV_PYTHON_PYODIDE_BUILD";
+
     /// Equivalent to the `--clear` command-line argument. If set, uv will remove any
     /// existing files or directories at the target path.
     pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
@@ -447,6 +474,9 @@ impl EnvVars {
     /// General proxy for all network requests.
     pub const ALL_PROXY: &'static str = "ALL_PROXY";
 
+    /// Comma-separated list of hostnames (e.g., `example.com`) and/or patterns (e.g., `192.168.1.0/24`) that should bypass the proxy.
+    pub const NO_PROXY: &'static str = "NO_PROXY";
+
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
 
@@ -467,11 +497,14 @@ impl EnvVars {
     /// Used to detect an activated virtual environment.
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
 
-    /// Used to detect an activated Conda environment.
+    /// Used to detect the path of an active Conda environment.
     pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
 
-    /// Used to determine if an active Conda environment is the base environment or not.
+    /// Used to determine the name of the active Conda environment.
     pub const CONDA_DEFAULT_ENV: &'static str = "CONDA_DEFAULT_ENV";
+
+    /// Used to determine the root install path of Conda.
+    pub const CONDA_ROOT: &'static str = "_CONDA_ROOT";
 
     /// If set to `1` before a virtual environment is activated, then the
     /// virtual environment name will not be prepended to the terminal prompt.
@@ -503,6 +536,18 @@ impl EnvVars {
     ///
     /// Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
+
+    /// Used with `--python-platform arm64-apple-ios` and related variants to set the
+    /// deployment target (i.e., the minimum supported iOS version).
+    ///
+    /// Defaults to `13.0`.
+    pub const IPHONEOS_DEPLOYMENT_TARGET: &'static str = "IPHONEOS_DEPLOYMENT_TARGET";
+
+    /// Used with `--python-platform aarch64-linux-android` and related variants to set the
+    /// Android API level. (i.e., the minimum supported Android API level).
+    ///
+    /// Defaults to `24`.
+    pub const ANDROID_API_LEVEL: &'static str = "ANDROID_API_LEVEL";
 
     /// Disables colored output (takes precedence over `FORCE_COLOR`).
     ///
@@ -582,14 +627,17 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
-    /// Used for trusted publishing via `uv publish`.
+    /// Indicates that the current process is running in GitHub Actions.
+    ///
+    /// `uv publish` may attempt trusted publishing flows when set
+    /// to `true`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
-    /// Used for trusted publishing via `uv publish`. Contains the oidc token url.
-    pub const ACTIONS_ID_TOKEN_REQUEST_URL: &'static str = "ACTIONS_ID_TOKEN_REQUEST_URL";
-
-    /// Used for trusted publishing via `uv publish`. Contains the oidc request token.
-    pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &'static str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
+    /// Indicates that the current process is running in GitLab CI.
+    ///
+    /// `uv publish` may attempt trusted publishing flows when set
+    /// to `true`.
+    pub const GITLAB_CI: &'static str = "GITLAB_CI";
 
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
@@ -613,6 +661,18 @@ impl EnvVars {
     /// Typically set by CI runners, used to detect a CI runner.
     #[attr_hidden]
     pub const CI: &'static str = "CI";
+
+    /// Azure DevOps build identifier, used to detect CI environments.
+    #[attr_hidden]
+    pub const BUILD_BUILDID: &'static str = "BUILD_BUILDID";
+
+    /// Generic build identifier, used to detect CI environments.
+    #[attr_hidden]
+    pub const BUILD_ID: &'static str = "BUILD_ID";
+
+    /// Pip environment variable to indicate CI environment.
+    #[attr_hidden]
+    pub const PIP_IS_CI: &'static str = "PIP_IS_CI";
 
     /// Use to set the .netrc file location.
     pub const NETRC: &'static str = "NETRC";
@@ -726,16 +786,12 @@ impl EnvVars {
     #[attr_hidden]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
 
-    /// Used to set the vendor links url for tests.
-    #[attr_hidden]
-    pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
-
     /// Used to disable delay for HTTP retries in tests.
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// Used to set an index url for tests.
+    /// Used to set a packse index url for tests.
     #[attr_hidden]
-    pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
 
     /// Used for testing named indexes in tests.
     #[attr_hidden]
@@ -829,4 +885,27 @@ impl EnvVars {
 
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
+
+    /// The URL of the pyx Simple API server.
+    pub const PYX_API_URL: &'static str = "PYX_API_URL";
+
+    /// The domain of the pyx CDN.
+    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
+
+    /// The pyx API key (e.g., `sk-pyx-...`).
+    pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
+
+    /// The pyx API key, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_API_KEY: &'static str = "UV_API_KEY";
+
+    /// The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
+    pub const PYX_AUTH_TOKEN: &'static str = "PYX_AUTH_TOKEN";
+
+    /// The pyx authentication token, for backwards compatibility.
+    #[attr_hidden]
+    pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
+
+    /// Specifies the directory where uv stores pyx credentials.
+    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 }

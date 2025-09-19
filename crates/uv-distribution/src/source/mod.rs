@@ -25,15 +25,15 @@ use zip::ZipArchive;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl, ExtraBuildRequirement,
-    GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist, SourceUrl,
+    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
+    ExtraBuildRequirement, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist,
+    SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
@@ -462,18 +462,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -485,6 +479,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 file,
                 revision.into_hashes(),
                 cache_info,
+                build_info,
             ));
         }
 
@@ -549,6 +544,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename: wheel_filename,
             hashes: revision.into_hashes(),
             cache_info,
+            build_info,
         })
     }
 
@@ -687,18 +683,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         let task = self
             .reporter
@@ -873,18 +863,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -896,6 +880,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 file,
                 revision.into_hashes(),
                 cache_info,
+                build_info,
             ));
         }
 
@@ -940,6 +925,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename,
             hashes: revision.into_hashes(),
             cache_info,
+            build_info,
         })
     }
 
@@ -1048,18 +1034,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1199,18 +1179,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -1222,6 +1196,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 file,
                 revision.into_hashes(),
                 cache_info,
+                build_info,
             ));
         }
 
@@ -1259,6 +1234,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename,
             hashes: revision.into_hashes(),
             cache_info,
+            build_info,
         })
     }
 
@@ -1400,18 +1376,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1499,7 +1469,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 }
                 Ok(None) => {}
                 Err(err) => {
-                    debug!("Failed to deserialize cached revision for: {source} ({err})",);
+                    debug!("Failed to deserialize cached revision for: {source} ({err})");
                 }
             }
         }
@@ -1518,18 +1488,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn source_tree_requires_dist(
         &self,
-        source_tree: &Path,
+        path: &Path,
+        pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_requires_dist(source_tree).await {
+        match uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml.clone()) {
             Ok(requires_dist) => {
-                debug!(
-                    "Found static `requires-dist` for: {}",
-                    source_tree.display()
-                );
+                debug!("Found static `requires-dist` for: {}", path.display());
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    source_tree,
+                    path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
@@ -1539,21 +1507,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(requires_dist))
             }
             Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
+                err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                | uv_pypi_types::MetadataError::DynamicField(_)
+                | uv_pypi_types::MetadataError::FieldNotFound(_)
+                | uv_pypi_types::MetadataError::PoetrySyntax),
             ) => {
                 debug!(
                     "No static `requires-dist` available for: {} ({err:?})",
-                    source_tree.display()
+                    path.display()
                 );
                 Ok(None)
             }
-            Err(err) => Err(err),
+            Err(err) => Err(Error::PyprojectToml(err)),
         }
     }
 
@@ -1622,18 +1587,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -1641,7 +1600,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .flatten()
             .filter(|file| file.matches(source.name(), source.version()))
         {
-            return Ok(BuiltWheelMetadata::from_file(file, hashes, cache_info));
+            return Ok(BuiltWheelMetadata::from_file(
+                file, hashes, cache_info, build_info,
+            ));
         }
 
         let task = self
@@ -1676,6 +1637,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename,
             hashes,
             cache_info,
+            build_info,
         })
     }
 
@@ -1934,18 +1896,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let cache_shard = if config_settings.is_empty()
-            && extra_build_deps.is_empty()
-            && extra_build_variables.is_none()
-        {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(
-                &config_settings,
-                extra_build_deps,
-                extra_build_variables,
-            )))
-        };
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -3062,25 +3018,6 @@ async fn read_pyproject_toml(
     let pyproject_toml = PyProjectToml::from_toml(&content)?;
 
     Ok(pyproject_toml)
-}
-
-/// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::RequiresDist, Error> {
-    // Read the `pyproject.toml` file.
-    let pyproject_toml = project_root.join("pyproject.toml");
-    let content = match fs::read_to_string(pyproject_toml).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPyprojectToml);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(&content)
-        .map_err(Error::PyprojectToml)?;
-
-    Ok(requires_dist)
 }
 
 /// Wheel metadata stored in the source distribution cache.

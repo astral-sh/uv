@@ -4,7 +4,7 @@ use std::str::FromStr;
 use uv_cache::CacheShard;
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::Hashed;
+use uv_distribution_types::{BuildInfo, Hashed};
 use uv_fs::files;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -24,6 +24,8 @@ pub(crate) struct BuiltWheelMetadata {
     pub(crate) hashes: HashDigests,
     /// The cache information for the underlying source distribution.
     pub(crate) cache_info: CacheInfo,
+    /// The build information for the wheel.
+    pub(crate) build_info: BuildInfo,
 }
 
 impl BuiltWheelMetadata {
@@ -32,6 +34,7 @@ impl BuiltWheelMetadata {
         file: BuiltWheelFile,
         hashes: HashDigests,
         cache_info: CacheInfo,
+        build_info: BuildInfo,
     ) -> Self {
         Self {
             path: file.path,
@@ -39,6 +42,7 @@ impl BuiltWheelMetadata {
             filename: file.filename,
             hashes,
             cache_info,
+            build_info,
         }
     }
 }

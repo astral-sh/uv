@@ -3,7 +3,7 @@ mod trusted_publishing;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use std::{env, fmt, io};
+use std::{fmt, io};
 
 use fs_err::tokio::File;
 use futures::TryStreamExt;
@@ -21,10 +21,9 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
-use trusted_publishing::TrustedPublishingToken;
 use url::Url;
 
-use uv_auth::Credentials;
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
@@ -38,10 +37,9 @@ use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::DisplaySafeUrl;
-use uv_static::EnvVars;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 
-use crate::trusted_publishing::TrustedPublishingError;
+use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -60,6 +58,8 @@ pub enum PublishError {
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
+    #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
+    Validate(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -322,26 +322,20 @@ pub async fn check_trusted_publishing(
             {
                 return Ok(TrustedPublishResult::Skipped);
             }
-            // If we aren't in GitHub Actions, we can't use trusted publishing.
-            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
-                return Ok(TrustedPublishResult::Skipped);
-            }
-            // We could check for credentials from the keyring or netrc the auth middleware first, but
-            // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!(
-                "Running on GitHub Actions without explicit credentials, checking for trusted publishing"
-            );
+
+            debug!("Attempting to get a token for trusted publishing");
+            // Attempt to get a token for trusted publishing.
             match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
                 .await
             {
-                Ok(token) => Ok(TrustedPublishResult::Configured(token)),
-                Err(err) => {
-                    // TODO(konsti): It would be useful if we could differentiate between actual errors
-                    // such as connection errors and warn for them while ignoring errors from trusted
-                    // publishing not being configured.
-                    debug!("Could not obtain trusted publishing credentials, skipping: {err}");
-                    Ok(TrustedPublishResult::Ignored(err))
-                }
+                // Success: we have a token for trusted publishing.
+                Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
+                // Failed to discover an ambient OIDC token.
+                Ok(None) => Ok(TrustedPublishResult::Ignored(
+                    TrustedPublishingError::NoToken,
+                )),
+                // Hard failure during OIDC discovery or token exchange.
+                Err(err) => Ok(TrustedPublishResult::Ignored(err)),
             }
         }
         TrustedPublishing::Always => {
@@ -361,15 +355,15 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
-                warn_user_once!(
-                    "Trusted publishing was requested, but you're not in GitHub Actions."
-                );
-            }
-
-            let token =
+            let Some(token) =
                 trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await?;
+                    .await?
+            else {
+                return Err(PublishError::TrustedPublishing(
+                    TrustedPublishingError::NoToken,
+                ));
+            };
+
             Ok(TrustedPublishResult::Configured(token))
         }
         TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
@@ -383,6 +377,7 @@ pub async fn check_trusted_publishing(
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
     file: &Path,
+    form_metadata: &FormMetadata,
     raw_filename: &str,
     filename: &DistFilename,
     registry: &DisplaySafeUrl,
@@ -392,23 +387,19 @@ pub async fn upload(
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    let form_metadata = FormMetadata::read_from_file(file, filename)
-        .await
-        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
-
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
-    // N.B. We cannot use the client policy here because it is set to zero retries
+    // N.B. We cannot use the client policy here because it is set to zero retries.
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     loop {
-        let (request, idx) = build_request(
+        let (request, idx) = build_upload_request(
             file,
             raw_filename,
             filename,
             registry,
             client,
             credentials,
-            &form_metadata,
+            form_metadata,
             reporter.clone(),
         )
         .await
@@ -465,6 +456,51 @@ pub async fn upload(
             }
         };
     }
+}
+
+/// Validate a file against a registry.
+pub async fn validate(
+    file: &Path,
+    form_metadata: &FormMetadata,
+    raw_filename: &str,
+    registry: &DisplaySafeUrl,
+    store: &PyxTokenStore,
+    client: &BaseClient,
+    credentials: &Credentials,
+) -> Result<(), PublishError> {
+    if store.is_known_url(registry) {
+        debug!("Performing validation request for {registry}");
+
+        let mut validation_url = registry.clone();
+        validation_url
+            .path_segments_mut()
+            .expect("URL must have path segments")
+            .push("validate");
+
+        let request = build_validation_request(
+            raw_filename,
+            &validation_url,
+            client,
+            credentials,
+            form_metadata,
+        );
+
+        let response = request.send().await.map_err(|err| {
+            PublishError::Validate(
+                file.to_path_buf(),
+                registry.clone(),
+                PublishSendError::ReqwestMiddleware(err),
+            )
+        })?;
+
+        handle_response(&validation_url, response)
+            .await
+            .map_err(|err| PublishError::Validate(file.to_path_buf(), registry.clone(), err))?;
+    } else {
+        debug!("Skipping validation request for unsupported publish URL: {registry}");
+    }
+
+    Ok(())
 }
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
@@ -548,14 +584,14 @@ pub async fn check_url(
     if let Some(remote_hash) = archived_file.hashes.first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
-        let local_hash = hash_file(file, Hasher::from(remote_hash.algorithm))
+        let local_hash = &hash_file(file, vec![Hasher::from(remote_hash.algorithm)])
             .await
             .map_err(|err| {
                 PublishError::PublishPrepare(
                     file.to_path_buf(),
                     Box::new(PublishPrepareError::Io(err)),
                 )
-            })?;
+            })?[0];
         if local_hash.digest == remote_hash.digest {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
@@ -575,13 +611,20 @@ pub async fn check_url(
     }
 }
 
-/// Calculate the SHA256 of a file.
-async fn hash_file(path: impl AsRef<Path>, hasher: Hasher) -> Result<HashDigest, io::Error> {
+/// Calculate the requested hashes of a file.
+async fn hash_file(
+    path: impl AsRef<Path>,
+    hashers: Vec<Hasher>,
+) -> Result<Vec<HashDigest>, io::Error> {
     debug!("Hashing {}", path.as_ref().display());
     let file = BufReader::new(File::open(path.as_ref()).await?);
-    let mut hashers = vec![hasher];
+    let mut hashers = hashers;
     HashReader::new(file, &mut hashers).finish().await?;
-    Ok(HashDigest::from(hashers.remove(0)))
+
+    Ok(hashers
+        .into_iter()
+        .map(HashDigest::from)
+        .collect::<Vec<_>>())
 }
 
 // Not in `uv-metadata` because we only support tar files here.
@@ -647,17 +690,34 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
 }
 
 #[derive(Debug, Clone)]
-struct FormMetadata(Vec<(&'static str, String)>);
+pub struct FormMetadata(Vec<(&'static str, String)>);
 
 impl FormMetadata {
     /// Collect the non-file fields for the multipart request from the package METADATA.
     ///
     /// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
-    async fn read_from_file(
+    pub async fn read_from_file(
         file: &Path,
         filename: &DistFilename,
     ) -> Result<Self, PublishPrepareError> {
-        let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
+        let hashes = hash_file(
+            file,
+            vec![
+                Hasher::from(HashAlgorithm::Sha256),
+                Hasher::from(HashAlgorithm::Blake2b),
+            ],
+        )
+        .await?;
+
+        let sha256_hash = hashes
+            .iter()
+            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
+            .unwrap();
+
+        let blake2b_hash = hashes
+            .iter()
+            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
+            .unwrap();
 
         let Metadata23 {
             metadata_version,
@@ -686,13 +746,14 @@ impl FormMetadata {
             requires_python,
             requires_external,
             project_urls,
-            provides_extras,
+            provides_extra,
             dynamic,
         } = metadata(file, filename).await?;
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", hash_hex.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest.to_string()),
+            ("blake2_256_digest", blake2b_hash.digest.to_string()),
             ("protocol_version", "1".to_string()),
             ("metadata_version", metadata_version.clone()),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
@@ -747,7 +808,7 @@ impl FormMetadata {
         add_vec("platform", platforms);
         add_vec("project_urls", project_urls);
         add_vec("provides_dist", provides_dist);
-        add_vec("provides_extra", provides_extras);
+        add_vec("provides_extra", provides_extra);
         add_vec("requires_dist", requires_dist);
         add_vec("requires_external", requires_external);
 
@@ -770,8 +831,8 @@ impl<'a> IntoIterator for &'a FormMetadata {
 
 /// Build the upload request.
 ///
-/// Returns the request and the reporter progress bar id.
-async fn build_request<'a>(
+/// Returns the [`RequestBuilder`] and the reporter progress bar ID.
+async fn build_upload_request<'a>(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
@@ -838,6 +899,63 @@ async fn build_request<'a>(
     }
 
     Ok((request, idx))
+}
+
+/// Build the validation request, to validate the upload without actually uploading the file.
+///
+/// Returns the [`RequestBuilder`].
+fn build_validation_request<'a>(
+    raw_filename: &str,
+    registry: &DisplaySafeUrl,
+    client: &'a BaseClient,
+    credentials: &Credentials,
+    form_metadata: &FormMetadata,
+) -> RequestBuilder<'a> {
+    let mut form = reqwest::multipart::Form::new();
+    for (key, value) in form_metadata.iter() {
+        form = form.text(*key, value.clone());
+    }
+    form = form.text("filename", raw_filename.to_owned());
+
+    // If we have a username but no password, attach the username to the URL so the authentication
+    // middleware can find the matching password.
+    let url = if let Some(username) = credentials
+        .username()
+        .filter(|_| credentials.password().is_none())
+    {
+        let mut url = registry.clone();
+        let _ = url.set_username(username);
+        url
+    } else {
+        registry.clone()
+    };
+
+    let mut request = client
+        .for_host(&url)
+        .post(Url::from(url))
+        .multipart(form)
+        // Ask PyPI for a structured error messages instead of HTML-markup error messages.
+        // For other registries, we ask them to return plain text over HTML. See
+        // [`PublishSendError::extract_remote_error`].
+        .header(
+            reqwest::header::ACCEPT,
+            "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+        );
+
+    match credentials {
+        Credentials::Basic { password, .. } => {
+            if password.is_some() {
+                debug!("Using HTTP Basic authentication");
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
+            }
+        }
+        Credentials::Bearer { .. } => {
+            debug!("Using Bearer token authentication");
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
+        }
+    }
+
+    request
 }
 
 /// Log response information and map response to an error variant if not successful.
@@ -919,7 +1037,7 @@ mod tests {
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{FormMetadata, Reporter, build_request};
+    use crate::{FormMetadata, Reporter, build_upload_request};
 
     struct DummyReporter;
 
@@ -947,9 +1065,10 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
+        assert_snapshot!(&formatted_metadata, @r"
         :action: file_upload
         sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+        blake2_256_digest: 40ab79b48c4e289e4990f7e689177adae4096c07a634034eb1d10c0b6700e4d2
         protocol_version: 1
         metadata_version: 2.3
         name: tqdm
@@ -995,10 +1114,10 @@ mod tests {
         project_urls: Documentation, https://github.com/unknown/tqdm#readme
         project_urls: Issues, https://github.com/unknown/tqdm/issues
         project_urls: Source, https://github.com/unknown/tqdm
-        "###);
+        ");
 
-        let client = BaseClientBuilder::new().build();
-        let (request, _) = build_request(
+        let client = BaseClientBuilder::default().build();
+        let (request, _) = build_upload_request(
             &file,
             raw_filename,
             &filename,
@@ -1035,7 +1154,7 @@ mod tests {
                     },
                     headers: {
                         "content-type": "multipart/form-data; boundary=[...]",
-                        "content-length": "6803",
+                        "content-length": "7000",
                         "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                         "authorization": Sensitive,
                     },
@@ -1061,9 +1180,10 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
+        assert_snapshot!(&formatted_metadata, @r#"
         :action: file_upload
         sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
+        blake2_256_digest: 33d4e92517a16e3fa0c0893de0c7e4d46a2c38adab148dd2ff66eb47481d19cd
         protocol_version: 1
         metadata_version: 2.1
         name: tqdm
@@ -1147,10 +1267,10 @@ mod tests {
         requires_dist: ipywidgets >=6 ; extra == 'notebook'
         requires_dist: slack-sdk ; extra == 'slack'
         requires_dist: requests ; extra == 'telegram'
-        "###);
+        "#);
 
-        let client = BaseClientBuilder::new().build();
-        let (request, _) = build_request(
+        let client = BaseClientBuilder::default().build();
+        let (request, _) = build_upload_request(
             &file,
             raw_filename,
             &filename,
@@ -1187,7 +1307,7 @@ mod tests {
                     },
                     headers: {
                         "content-type": "multipart/form-data; boundary=[...]",
-                        "content-length": "19330",
+                        "content-length": "19527",
                         "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                         "authorization": Sensitive,
                     },

@@ -14,8 +14,9 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints, DependencyGroupsWithDefaults,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, Preview, SourceStrategy,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -30,6 +31,7 @@ use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -38,7 +40,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -47,7 +49,7 @@ use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 enum Error {
@@ -112,7 +114,7 @@ pub(crate) async fn build_frontend(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -137,7 +139,7 @@ pub(crate) async fn build_frontend(
         python.as_deref(),
         install_mirrors,
         settings,
-        network_settings,
+        client_builder,
         no_config,
         python_preference,
         python_downloads,
@@ -180,7 +182,7 @@ async fn build_impl(
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -200,8 +202,7 @@ async fn build_impl(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -210,12 +211,6 @@ async fn build_impl(
         build_options,
         sources,
     } = settings;
-
-    let client_builder = BaseClientBuilder::default()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -348,8 +343,7 @@ async fn build_impl(
             build_logs,
             force_pep517,
             build_constraints,
-            *no_build_isolation,
-            no_build_isolation_package,
+            build_isolation,
             extra_build_dependencies,
             extra_build_variables,
             *index_strategy,
@@ -390,11 +384,33 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            err.to_string().ends_with("outside of the target directory")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 
@@ -428,8 +444,7 @@ async fn build_package(
     build_logs: bool,
     force_pep517: bool,
     build_constraints: &[RequirementsSource],
-    no_build_isolation: bool,
-    no_build_isolation_package: &[PackageName],
+    build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
@@ -506,8 +521,6 @@ async fn build_package(
     .await?
     .into_interpreter();
 
-    index_locations.cache_index_credentials();
-
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
@@ -533,9 +546,8 @@ async fn build_package(
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
@@ -544,14 +556,16 @@ async fn build_package(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Resolve the flat indexes from `--find-links`.
@@ -584,7 +598,7 @@ async fn build_package(
         index_strategy,
         config_setting,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,

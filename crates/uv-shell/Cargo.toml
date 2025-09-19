@@ -15,11 +15,18 @@ uv-fs = { workspace = true }
 uv-static = { workspace = true }
 
 anyhow = { workspace = true }
+fs-err = { workspace = true }
 home = { workspace = true }
 same-file = { workspace = true }
 tracing = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
 windows-registry = { workspace = true }
-windows-result = { workspace = true }
-windows-sys = { workspace = true }
+
+[dev-dependencies]
+fs-err = { workspace = true }
+tempfile = { workspace = true }

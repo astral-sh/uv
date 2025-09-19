@@ -17,6 +17,8 @@ bitflags::bitflags! {
         const PACKAGE_CONFLICTS = 1 << 5;
         const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
         const DETECT_MODULE_CONFLICTS = 1 << 7;
+        const FORMAT = 1 << 8;
+        const NATIVE_AUTH = 1 << 9;
     }
 }
 
@@ -34,6 +36,8 @@ impl PreviewFeatures {
             Self::PACKAGE_CONFLICTS => "package-conflicts",
             Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
             Self::DETECT_MODULE_CONFLICTS => "detect-module-conflicts",
+            Self::FORMAT => "format",
+            Self::NATIVE_AUTH => "native-auth",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -79,6 +83,8 @@ impl FromStr for PreviewFeatures {
                 "package-conflicts" => Self::PACKAGE_CONFLICTS,
                 "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
                 "detect-module-conflicts" => Self::DETECT_MODULE_CONFLICTS,
+                "format" => Self::FORMAT,
+                "native-auth" => Self::NATIVE_AUTH,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -253,6 +259,7 @@ mod tests {
             PreviewFeatures::DETECT_MODULE_CONFLICTS.flag_as_str(),
             "detect-module-conflicts"
         );
+        assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
     }
 
     #[test]

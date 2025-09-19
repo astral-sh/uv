@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    PreviewFeatures, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -22,21 +22,23 @@ use uv_distribution_types::{
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
+use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -47,7 +49,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -85,7 +87,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -98,11 +100,6 @@ pub(crate) async fn lock(
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
-            let client_builder = BaseClientBuilder::new()
-                .retries_from_env()?
-                .connectivity(network_settings.connectivity)
-                .native_tls(network_settings.native_tls)
-                .allow_insecure_host(network_settings.allow_insecure_host.clone());
             let reporter = PythonDownloadReporter::single(printer);
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
@@ -148,7 +145,7 @@ pub(crate) async fn lock(
                 // Don't enable any groups' requires-python for interpreter discovery
                 &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -164,7 +161,7 @@ pub(crate) async fn lock(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -195,7 +192,7 @@ pub(crate) async fn lock(
     match LockOperation::new(
         mode,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -239,7 +236,7 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -264,7 +261,7 @@ pub(super) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &'env ResolverSettings,
-    network_settings: &'env NetworkSettings,
+    client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -279,7 +276,7 @@ impl<'env> LockOperation<'env> {
     pub(super) fn new(
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
-        network_settings: &'env NetworkSettings,
+        client_builder: &'env BaseClientBuilder<'env>,
         state: &'env UniversalState,
         logger: Box<dyn ResolveLogger>,
         concurrency: Concurrency,
@@ -292,7 +289,7 @@ impl<'env> LockOperation<'env> {
             mode,
             constraints: vec![],
             settings,
-            network_settings,
+            client_builder,
             state,
             logger,
             concurrency,
@@ -338,7 +335,7 @@ impl<'env> LockOperation<'env> {
                     Some(existing),
                     self.constraints,
                     self.settings,
-                    self.network_settings,
+                    self.client_builder,
                     self.state,
                     self.logger,
                     self.concurrency,
@@ -380,7 +377,7 @@ impl<'env> LockOperation<'env> {
                     existing,
                     self.constraints,
                     self.settings,
-                    self.network_settings,
+                    self.client_builder,
                     self.state,
                     self.logger,
                     self.concurrency,
@@ -411,7 +408,7 @@ async fn do_lock(
     existing_lock: Option<Lock>,
     external: Vec<NameRequirementSpecification>,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -433,8 +430,7 @@ async fn do_lock(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -621,14 +617,7 @@ async fn do_lock(
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Initialize the client.
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
-    index_locations.cache_index_credentials();
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -641,9 +630,8 @@ async fn do_lock(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -651,14 +639,16 @@ async fn do_lock(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if *no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::Shared(&environment)
+        }
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     let options = OptionsBuilder::new()
@@ -954,7 +944,7 @@ impl ValidatedLock {
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -1198,6 +1188,18 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedEditable(name, expected) => {
+                if expected {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
@@ -1205,7 +1207,7 @@ impl ValidatedLock {
                     );
                 } else {
                     debug!(
-                        "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                        "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
                     );
                 }
                 Ok(Self::Preferable(lock))
@@ -1354,28 +1356,56 @@ impl ValidatedLock {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct LockEventVersion<'lock> {
+    /// The version of the package, or `None` if the package has a dynamic version.
+    version: Option<&'lock Version>,
+    /// The short Git SHA of the package, if it was installed from a Git repository.
+    sha: Option<&'lock str>,
+}
+
+impl<'lock> From<&'lock Package> for LockEventVersion<'lock> {
+    fn from(value: &'lock Package) -> Self {
+        Self {
+            version: value.version(),
+            sha: value.git_sha().map(GitOid::as_tiny_str),
+        }
+    }
+}
+
+impl std::fmt::Display for LockEventVersion<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.version, self.sha) {
+            (Some(version), Some(sha)) => write!(f, "v{version} ({sha})"),
+            (Some(version), None) => write!(f, "v{version}"),
+            (None, Some(sha)) => write!(f, "(dynamic) ({sha})"),
+            (None, None) => write!(f, "(dynamic)"),
+        }
+    }
+}
+
 /// A modification to a lockfile.
 #[derive(Debug, Clone)]
-pub(crate) enum LockEvent<'lock> {
+enum LockEvent<'lock> {
     Update(
         DryRun,
         PackageName,
-        BTreeSet<Option<&'lock Version>>,
-        BTreeSet<Option<&'lock Version>>,
+        BTreeSet<LockEventVersion<'lock>>,
+        BTreeSet<LockEventVersion<'lock>>,
     ),
-    Add(DryRun, PackageName, BTreeSet<Option<&'lock Version>>),
-    Remove(DryRun, PackageName, BTreeSet<Option<&'lock Version>>),
+    Add(DryRun, PackageName, BTreeSet<LockEventVersion<'lock>>),
+    Remove(DryRun, PackageName, BTreeSet<LockEventVersion<'lock>>),
 }
 
 impl<'lock> LockEvent<'lock> {
     /// Detect the change events between an (optional) existing and updated lockfile.
-    pub(crate) fn detect_changes(
+    fn detect_changes(
         existing_lock: Option<&'lock Lock>,
         new_lock: &'lock Lock,
         dry_run: DryRun,
     ) -> impl Iterator<Item = Self> {
         // Identify the package-versions in the existing lockfile.
-        let mut existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
+        let mut existing_packages: FxHashMap<&PackageName, BTreeSet<LockEventVersion>> =
             if let Some(existing_lock) = existing_lock {
                 existing_lock.packages().iter().fold(
                     FxHashMap::with_capacity_and_hasher(
@@ -1385,7 +1415,7 @@ impl<'lock> LockEvent<'lock> {
                     |mut acc, package| {
                         acc.entry(package.name())
                             .or_default()
-                            .insert(package.version());
+                            .insert(LockEventVersion::from(package));
                         acc
                     },
                 )
@@ -1394,13 +1424,13 @@ impl<'lock> LockEvent<'lock> {
             };
 
         // Identify the package-versions in the updated lockfile.
-        let mut new_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
+        let mut new_packages: FxHashMap<&PackageName, BTreeSet<LockEventVersion>> =
             new_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
                     acc.entry(package.name())
                         .or_default()
-                        .insert(package.version());
+                        .insert(LockEventVersion::from(package));
                     acc
                 },
             );
@@ -1434,23 +1464,16 @@ impl<'lock> LockEvent<'lock> {
 
 impl std::fmt::Display for LockEvent<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        /// Format a version for inclusion in the upgrade report.
-        fn format_version(version: Option<&Version>) -> String {
-            version
-                .map(|version| format!("v{version}"))
-                .unwrap_or_else(|| "(dynamic)".to_string())
-        }
-
         match self {
             Self::Update(dry_run, name, existing_versions, new_versions) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(|version| format_version(*version))
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", ");
                 let new_versions = new_versions
                     .iter()
-                    .map(|version| format_version(*version))
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -1469,7 +1492,7 @@ impl std::fmt::Display for LockEvent<'_> {
             Self::Add(dry_run, name, new_versions) => {
                 let new_versions = new_versions
                     .iter()
-                    .map(|version| format_version(*version))
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -1484,7 +1507,7 @@ impl std::fmt::Display for LockEvent<'_> {
             Self::Remove(dry_run, name, existing_versions) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(|version| format_version(*version))
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", ");
 

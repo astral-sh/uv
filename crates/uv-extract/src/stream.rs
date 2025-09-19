@@ -126,7 +126,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         let is_dir = entry.reader().entry().dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
-                fs_err::tokio::create_dir_all(path).await?;
+                fs_err::tokio::create_dir_all(path)
+                    .await
+                    .map_err(Error::Io)?;
             }
 
             // If this is a directory, we expect the CRC32 to be 0.
@@ -159,7 +161,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         } else {
             if let Some(parent) = path.parent() {
                 if directories.insert(parent.to_path_buf()) {
-                    fs_err::tokio::create_dir_all(parent).await?;
+                    fs_err::tokio::create_dir_all(parent)
+                        .await
+                        .map_err(Error::Io)?;
                 }
             }
 
@@ -176,7 +180,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                         tokio::io::BufWriter::new(file)
                     };
                     let mut reader = entry.reader_mut().compat();
-                    let bytes_read = tokio::io::copy(&mut reader, &mut writer).await?;
+                    let bytes_read = tokio::io::copy(&mut reader, &mut writer)
+                        .await
+                        .map_err(Error::io_or_compression)?;
                     let reader = reader.into_inner();
 
                     (bytes_read, reader)
@@ -188,23 +194,28 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                     );
 
                     // Read the existing file into memory.
-                    let existing_contents = fs_err::tokio::read(&path).await?;
+                    let existing_contents = fs_err::tokio::read(&path).await.map_err(Error::Io)?;
 
                     // Read the entry into memory.
                     let mut expected_contents = Vec::with_capacity(existing_contents.len());
                     let entry_reader = entry.reader_mut();
-                    let bytes_read = entry_reader.read_to_end(&mut expected_contents).await?;
+                    let bytes_read = entry_reader
+                        .read_to_end(&mut expected_contents)
+                        .await
+                        .map_err(Error::io_or_compression)?;
 
                     // Verify that the existing file contents match the expected contents.
                     if existing_contents != expected_contents {
-                        return Err(Error::DuplicateLocalFileHeader {
-                            path: relpath.clone(),
-                        });
+                        if !skip_validation {
+                            return Err(Error::DuplicateLocalFileHeader {
+                                path: relpath.clone(),
+                            });
+                        }
                     }
 
                     (bytes_read as u64, entry_reader)
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(Error::Io(err)),
             };
 
             // Validate the uncompressed size.
@@ -446,9 +457,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                         }
                         std::collections::hash_map::Entry::Occupied(entry) => {
                             if mode != *entry.get() {
-                                return Err(Error::DuplicateExecutableFileHeader {
-                                    path: relpath.clone(),
-                                });
+                                if !skip_validation {
+                                    return Err(Error::DuplicateExecutableFileHeader {
+                                        path: relpath.clone(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -458,13 +471,17 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
                         let path = target.join(relpath);
-                        let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+                        let permissions = fs_err::tokio::metadata(&path)
+                            .await
+                            .map_err(Error::Io)?
+                            .permissions();
                         if permissions.mode() & 0o111 != 0o111 {
                             fs_err::tokio::set_permissions(
                                 &path,
                                 Permissions::from_mode(permissions.mode() | 0o111),
                             )
-                            .await?;
+                            .await
+                            .map_err(Error::Io)?;
                         }
                     }
                 }
@@ -519,19 +536,25 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    // Determine whether the reader is exhausted.
+    // Determine whether the reader is exhausted, but allow trailing null bytes, which some zip
+    // implementations incorrectly include.
     if !skip_validation {
-        let mut buffer = [0; 1];
-        if reader.read(&mut buffer).await? > 0 {
-            // If the buffer contains a single null byte, ignore it.
-            if buffer[0] == 0 {
-                if reader.read(&mut buffer).await? > 0 {
+        let mut has_trailing_bytes = false;
+        let mut buf = [0u8; 256];
+        loop {
+            let n = reader.read(&mut buf).await.map_err(Error::Io)?;
+            if n == 0 {
+                if has_trailing_bytes {
+                    warn!("Ignoring trailing null bytes in ZIP archive");
+                }
+                break;
+            }
+            for &b in &buf[..n] {
+                if b == 0 {
+                    has_trailing_bytes = true;
+                } else {
                     return Err(Error::TrailingContents);
                 }
-
-                warn!("Ignoring trailing null byte in ZIP archive");
-            } else {
-                return Err(Error::TrailingContents);
             }
         }
     }
@@ -618,7 +641,9 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_permissions(false)
     .set_allow_external_symlinks(false)
     .build();
-    Ok(untar_in(archive, target.as_ref()).await?)
+    untar_in(archive, target.as_ref())
+        .await
+        .map_err(Error::io_or_compression)
 }
 
 /// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
@@ -638,7 +663,9 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_permissions(false)
     .set_allow_external_symlinks(false)
     .build();
-    Ok(untar_in(archive, target.as_ref()).await?)
+    untar_in(archive, target.as_ref())
+        .await
+        .map_err(Error::io_or_compression)
 }
 
 /// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
@@ -658,7 +685,19 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_permissions(false)
     .set_allow_external_symlinks(false)
     .build();
-    Ok(untar_in(archive, target.as_ref()).await?)
+    untar_in(archive, target.as_ref())
+        .await
+        .map_err(Error::io_or_compression)
+}
+
+/// Unpack a `.tar.zst` archive from a file on disk into the target directory.
+pub fn untar_zst_file<R: std::io::Read>(reader: R, target: impl AsRef<Path>) -> Result<(), Error> {
+    let reader = std::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
+    let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
+    let mut archive = tar::Archive::new(decompressed);
+    archive.set_preserve_mtime(false);
+    archive.unpack(target).map_err(Error::io_or_compression)?;
+    Ok(())
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -678,7 +717,9 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_permissions(false)
     .set_allow_external_symlinks(false)
     .build();
-    untar_in(archive, target.as_ref()).await?;
+    untar_in(archive, target.as_ref())
+        .await
+        .map_err(Error::io_or_compression)?;
     Ok(())
 }
 
@@ -697,7 +738,9 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
             .set_preserve_permissions(false)
             .set_allow_external_symlinks(false)
             .build();
-    untar_in(archive, target.as_ref()).await?;
+    untar_in(archive, target.as_ref())
+        .await
+        .map_err(Error::io_or_compression)?;
     Ok(())
 }
 

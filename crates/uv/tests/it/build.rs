@@ -1442,7 +1442,7 @@ fn build_fast_path() -> Result<()> {
     uv_snapshot!(context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
-        .arg(context.temp_dir.join("output1")), @r###"
+        .arg(context.temp_dir.join("output1")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1452,7 +1452,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel from source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1487,7 +1487,7 @@ fn build_fast_path() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1495,7 +1495,7 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
     Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output3")
@@ -1507,7 +1507,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1517,7 +1517,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel (uv build backend)...
     Successfully built output4/built_by_uv-0.1.0.tar.gz
     Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output4")
@@ -2006,7 +2006,7 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
+      ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
@@ -2021,6 +2021,65 @@ fn force_pep517() -> Result<()> {
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
           hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    Ok(())
+}
+
+/// Check that we show a hint when there's a venv in the source distribution.
+///
+/// <https://github.com/astral-sh/uv/issues/15096>
+// Windows uses trampolines instead of symlinks. You don't want those in your source distribution
+// either, but that's for the build backend to catch, we're only checking for the unix error hint
+// in uv here.
+#[cfg(unix)]
+#[test]
+fn venv_included_in_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--name")
+        .arg("project")
+        .arg("--build-backend")
+        .arg("hatchling")
+        .assert()
+        .success();
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+
+        [tool.hatch.build.targets.sdist.force-include]
+        ".venv" = ".venv"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#};
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    context.venv().assert().success();
+
+    // context.filters()
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid tar file
+      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      ╰─▶ symlink destination for [PYTHON-3.12] is outside of the target directory
+      help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
     Ok(())

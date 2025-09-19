@@ -16,6 +16,7 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -25,6 +26,7 @@ fn help() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -96,6 +98,7 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -105,6 +108,7 @@ fn help_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -174,6 +178,7 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -183,6 +188,7 @@ fn help_short_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -871,6 +877,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -880,6 +887,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -898,6 +906,7 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -907,6 +916,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -954,6 +964,7 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -963,6 +974,7 @@ fn help_with_global_option() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1075,6 +1087,7 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -1084,6 +1097,7 @@ fn help_with_no_pager() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface

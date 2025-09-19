@@ -178,6 +178,7 @@ def run_test(
     verbosity: int,
     timeout: int,
     requires_python: str,
+    auth_method: str,
 ) -> bool:
     print(uv)
     """Attempt to install a package from this registry."""
@@ -189,19 +190,32 @@ def run_test(
             f"** Using default test package name: {package}. To choose a different package, set UV_TEST_{registry_name.upper()}_PKG"
         )
     print(f"\nAttempting to install {package}")
-    env[f"UV_INDEX_{registry_name.upper()}_USERNAME"] = username
-    env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
+
+    if auth_method == "env":
+        env[f"UV_INDEX_{registry_name.upper()}_USERNAME"] = username
+        env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
+    elif auth_method == "text-store":
+        # Use uv's text store for authentication
+        subprocess.check_call(
+            [
+                uv,
+                "auth",
+                "login",
+                f"{registry_url}",
+                "--username",
+                username,
+                "--password",
+                token,
+            ],
+            env=env,
+        )
+    else:
+        raise ValueError(f"Unknown authentication method: {auth_method}")
 
     with tempfile.TemporaryDirectory() as project_dir:
         setup_test_project(registry_name, registry_url, project_dir, requires_python)
 
-        cmd = [
-            uv,
-            "add",
-            package,
-            "--directory",
-            project_dir,
-        ]
+        cmd = [uv, "add", package, "--directory", project_dir, "--no-cache"]
         if verbosity:
             cmd.extend(["-" + "v" * verbosity])
 
@@ -297,6 +311,11 @@ def parse_args() -> argparse.Namespace:
         default="3.12",
         help="minimum Python version for tests (default: 3.12)",
     )
+    parser.add_argument(
+        "--auth-method",
+        choices=["env", "text-store"],
+        default="env",
+    )
     parser.add_argument("--color", choices=["always", "auto", "never"], default="auto")
     return parser.parse_args()
 
@@ -371,6 +390,7 @@ def main() -> None:
             args.verbose,
             args.timeout,
             args.required_python,
+            args.auth_method,
         ):
             passed.append(registry_name)
         else:
