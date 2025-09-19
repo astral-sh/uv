@@ -399,7 +399,7 @@ pub(crate) async fn install(
                 let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                 // Check if the installed packages meet the requirements.
-                let site_packages = SitePackages::from_environment(environment)?;
+                let site_packages = SitePackages::from_environment(environment.environment())?;
                 if matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
