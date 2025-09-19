@@ -19,16 +19,18 @@ fn clean_all() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @r###"
+    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Clearing cache at: [CACHE_DIR]/
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
     Removed [N] files ([SIZE])
-    "###);
+    ");
 
     Ok(())
 }
@@ -73,16 +75,18 @@ fn clean_package_pypi() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r###"
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
     assert!(
@@ -91,16 +95,18 @@ fn clean_package_pypi() -> Result<()> {
     );
 
     // Running `uv cache prune` should have no effect.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     Ok(())
 }
@@ -148,16 +154,18 @@ fn clean_package_index() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r###"
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
     assert!(

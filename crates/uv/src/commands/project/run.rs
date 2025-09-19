@@ -104,7 +104,7 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
     env_file: EnvFile,
     preview: Preview,
@@ -244,7 +244,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
-                cache,
+                &cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -281,7 +281,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryResolveLogger)
                 },
                 concurrency,
-                cache,
+                &cache,
                 &workspace_cache,
                 printer,
                 preview,
@@ -328,7 +328,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
@@ -382,7 +382,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -437,7 +437,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -468,7 +468,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     printer,
                     preview,
                 )
@@ -656,7 +656,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -705,7 +705,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active,
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -758,7 +758,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryResolveLogger)
                     },
                     concurrency,
-                    cache,
+                    &cache,
                     &workspace_cache,
                     printer,
                     preview,
@@ -846,7 +846,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -896,7 +896,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -1002,7 +1002,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 printer,
                 preview,
             )
@@ -1308,6 +1308,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
+
+    // Unblock cache removal operations.
+    drop(cache);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited

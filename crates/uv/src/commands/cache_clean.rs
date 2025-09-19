@@ -14,7 +14,7 @@ use crate::printer::Printer;
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) fn cache_clean(
     packages: &[PackageName],
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
@@ -25,6 +25,7 @@ pub(crate) fn cache_clean(
         )?;
         return Ok(ExitStatus::Success);
     }
+    let cache = cache.with_exclusive_lock()?;
 
     let summary = if packages.is_empty() {
         writeln!(
@@ -36,9 +37,10 @@ pub(crate) fn cache_clean(
         let num_paths = walkdir::WalkDir::new(cache.root()).into_iter().count();
         let reporter = CleaningDirectoryReporter::new(printer, num_paths);
 
+        let root = cache.root().to_path_buf();
         cache
             .clear(Box::new(reporter))
-            .with_context(|| format!("Failed to clear cache at: {}", cache.root().user_display()))?
+            .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, packages.len());
         let mut summary = Removal::default();

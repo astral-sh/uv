@@ -7,11 +7,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::debug;
+use tracing::{debug, warn};
 
-pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, cachedir, directories};
+use uv_fs::{LockedFile, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -22,6 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
+pub use archive::ArchiveId;
 
 mod archive;
 mod by_timestamp;
@@ -135,6 +135,8 @@ impl Deref for CacheShard {
 }
 
 /// The main cache abstraction.
+///
+/// While the cache is active, it holds a read (shared) lock that prevents cache cleaning
 #[derive(Debug, Clone)]
 pub struct Cache {
     /// The cache directory.
@@ -146,6 +148,9 @@ pub struct Cache {
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
     temp_dir: Option<Arc<tempfile::TempDir>>,
+    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
+    /// uv process.
+    lock_file: Option<Arc<LockedFile>>,
 }
 
 impl Cache {
@@ -155,6 +160,7 @@ impl Cache {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
+            lock_file: None,
         }
     }
 
@@ -165,6 +171,7 @@ impl Cache {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
+            lock_file: None,
         })
     }
 
@@ -172,6 +179,34 @@ impl Cache {
     #[must_use]
     pub fn with_refresh(self, refresh: Refresh) -> Self {
         Self { refresh, ..self }
+    }
+
+    /// Acquire a lock that allows removing entries from the cache.
+    pub fn with_exclusive_lock(self) -> Result<Self, io::Error> {
+        let Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file,
+        } = self;
+
+        // Release the existing lock, avoid deadlocks from a cloned cache.
+        if let Some(lock_file) = lock_file {
+            drop(
+                Arc::try_unwrap(lock_file).expect(
+                    "cloning the cache before acquiring an exclusive lock causes a deadlock",
+                ),
+            );
+        }
+        let lock_file =
+            LockedFile::acquire_blocking(root.join(".lock"), root.simplified_display())?;
+
+        Ok(Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file: Some(Arc::new(lock_file)),
+        })
     }
 
     /// Return the root of the cache.
@@ -359,15 +394,43 @@ impl Cache {
                 .join(".git"),
         )?;
 
+        // Block cache removal operations from interfering.
+        let lock_file = match LockedFile::acquire_shared_blocking(
+            root.join(".lock"),
+            root.simplified_display(),
+        ) {
+            Ok(lock_file) => Some(Arc::new(lock_file)),
+            Err(err) if err.kind() == io::ErrorKind::Unsupported => {
+                warn!(
+                    "Shared locking is not supported by the current platform or filesystem, \
+                    reduced parallel process safety with `uv cache clean` and `uv cache prune`."
+                );
+                None
+            }
+            Err(err) => return Err(err),
+        };
+
         Ok(Self {
             root: std::path::absolute(root)?,
+            lock_file,
             ..self
         })
     }
 
     /// Clear the cache, removing all entries.
-    pub fn clear(&self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        Remover::new(reporter).rm_rf(&self.root)
+    pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+        // Remove everything but `.lock`, for Windows locked file special cases.
+        let mut removal = Remover::new(reporter).rm_rf(&self.root, true)?;
+        let Self {
+            root, lock_file, ..
+        } = self;
+        // Unlock `.lock`
+        drop(lock_file);
+        fs_err::remove_file(root.join(".lock"))?;
+        removal.num_files += 1;
+        fs_err::remove_dir(root)?;
+        removal.num_dirs += 1;
+        Ok(removal)
     }
 
     /// Remove a package from the cache.
@@ -407,6 +470,7 @@ impl Cache {
             if entry.file_name() == "CACHEDIR.TAG"
                 || entry.file_name() == ".gitignore"
                 || entry.file_name() == ".git"
+                || entry.file_name() == ".lock"
             {
                 continue;
             }

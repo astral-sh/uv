@@ -1010,13 +1010,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, &cache, printer)
+            commands::cache_clean(&args.package, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, &cache, printer)
+            commands::cache_prune(args.ci, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
@@ -1836,7 +1836,7 @@ async fn run_project(
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                &cache,
+                cache,
                 printer,
                 args.env_file,
                 globals.preview,

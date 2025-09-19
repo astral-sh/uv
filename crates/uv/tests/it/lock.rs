@@ -17704,6 +17704,7 @@ fn lock_explicit_default_index() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired shared lock for `[CACHE_DIR]/`
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding root workspace member: `[TEMP_DIR]/`
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
@@ -17728,6 +17729,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
     "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
