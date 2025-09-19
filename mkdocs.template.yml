@@ -237,6 +237,7 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Environment variables: reference/environment.md
+      - Storage: reference/storage.md
       - Installer options: reference/installer.md
       - Troubleshooting:
           - reference/troubleshooting/index.md

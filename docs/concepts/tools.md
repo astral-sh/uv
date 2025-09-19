@@ -111,7 +111,7 @@ $ uv tool install ruff@0.6.0
 
 ## Tools directory
 
-By default, the uv tools directory is named `tools` and is in the uv application state directory,
+By default, the uv tools directory is named `tools` and is in the uv [data directory](../reference/storage.md#data),
 e.g., `~/.local/share/uv/tools`. The location may be customized with the `UV_TOOL_DIR` environment
 variable.
 
@@ -264,16 +264,9 @@ Windows.
 
 ### The `bin` directory
 
-Executables are installed into the user `bin` directory following the XDG standard, e.g.,
-`~/.local/bin`. Unlike other directory schemes in uv, the XDG standard is used on _all platforms_
-notably including Windows and macOS — there is no clear alternative location to place executables on
-these platforms. The installation directory is determined from the first available environment
-variable:
-
-- `$UV_TOOL_BIN_DIR`
-- `$XDG_BIN_HOME`
-- `$XDG_DATA_HOME/../bin`
-- `$HOME/.local/bin`
+Executables are installed into the [user `bin` directory](../reference/storage.md#executables),
+e.g., `~/.local/bin`. This can be overridden by setting [the `UV_TOOL_BIN_DIR` environment
+variable](../reference/storage.md#tool-executables).
 
 Executables provided by dependencies of tool packages are not installed.
 

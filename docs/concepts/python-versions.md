@@ -17,6 +17,10 @@ installations and all other Python installations as _system_ Python installation
     installed and managed by other tools. For example, if a Python installation is managed with
     `pyenv`, it would still be considered a _system_ Python version in uv.
 
+Managed Python versions are stored in a local directory, which can be configured using the
+`UV_PYTHON_INSTALL_DIR` environment variable. See the [storage
+documentation](../reference/storage.md#python-versions) for more information.
+
 ## Requesting a version
 
 A specific Python version can be requested with the `--python` flag in most uv commands. For
@@ -123,8 +127,9 @@ present, uv will install all the Python versions listed in the file.
 
 ### Installing Python executables
 
-uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
-install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., on Unix `uv python install 3.12`
+will install a Python executable into `~/.local/bin`, e.g., as `python3.12`. See the [storage
+documentation](../reference/storage.md#python-executables) on how to configure this directory.
 
 !!! tip
 
