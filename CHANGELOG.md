@@ -3,6 +3,22 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.19
+
+Released on 2025-09-19.
+
+### Python
+
+- Add CPython 3.14.0rc3
+- Upgrade OpenSSL to 3.5.3
+
+See the [python-build-standalone release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250918) for more details.
+
+### Bug fixes
+
+- Make `uv cache clean` parallel process safe ([#15888](https://github.com/astral-sh/uv/pull/15888))
+- Fix implied `platform_machine` marker for `win_arm64` platform tag ([#15921](https://github.com/astral-sh/uv/pull/15921))
+
 ## 0.8.18
 
 Released on 2025-09-17.
