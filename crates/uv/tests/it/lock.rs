@@ -11259,7 +11259,7 @@ fn lock_find_links_relative_path_preserved() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "tqdm", index = "file://[TEMP_DIR]/local_packages" }]
+        requires-dist = [{ name = "tqdm", index = "../local_packages" }]
 
         [[package]]
         name = "tqdm"
