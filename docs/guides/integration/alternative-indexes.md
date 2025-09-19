@@ -368,6 +368,58 @@ $ uv publish
 Note this method is not preferable because uv cannot check if the package is already published
 before uploading artifacts.
 
+## Cloudsmith
+
+uv can install packages from Cloudsmith by using a [API token](https://docs.cloudsmith.com/accounts-and-teams/api-key#getting-your-api-key) authentication.
+
+To use it, add the index to your project:
+
+```toml title="pyproject.toml"
+[[tool.uv.index]]
+name = "cloudsmith"
+url  = "https://dl.cloudsmith.io/basic/WORKSPACE/REPOSITORY/python/simple/"
+# optional, but recommended for publish:
+publish-url = "https://python.cloudsmith.io/WORKSPACE/REPOSITORY/"
+```
+
+Set environment variables to pull packages or dependencies:
+
+```console
+$ export UV_INDEX_CLOUDSMITH_USERNAME=token
+$ export UV_INDEX_CLOUDSMITH_PASSWORD=<API-KEY>
+$ export UV_PIP_NO_INDEX=1 # optional: forbid fallback to PyPI
+$ uv publish --index cloudsmith
+```
+
+uv will use them to authenticate against your Cloudsmith repository. Now, execute
+the next command to fetch and install all the required dependencies in your active
+virtual environment.
+
+Set these environmental variables to push packages:
+
+```console
+$ export UV_PUBLISH_USERNAME=token
+$ export UV_PUBLISH_PASSWORD=<API-KEY>
+```
+
+Once you are happy with your project, just run the next command to build your wheel
+package and the source distribution (`.tar.gz`) file, including your Python "source code"
+and everything required to run it:
+
+```console
+$ python -m build
+```
+
+Once those assets are ready, just publish both artifacts to Cloudsmith. Remember to
+specify your `cloudsmith` index as defined in the `[[tool.uv.index.name]]` field in 
+your project definition:
+
+```console
+$ uv publish --index cloudsmith dist/*
+```
+
+Browse to your Cloudsmith [web app](https://app.cloudsmith.com/) to see the newly-published packages.
+
 ## JFrog Artifactory
 
 uv can install packages from JFrog Artifactory, either by using a username and password or a JWT
