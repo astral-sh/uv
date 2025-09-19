@@ -28,8 +28,8 @@ fn clean_all() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Acquired lock for `[CACHE_DIR]/`
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
+    Removed [N] files ([SIZE])
     ");
 
     Ok(())

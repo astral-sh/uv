@@ -418,8 +418,19 @@ impl Cache {
     }
 
     /// Clear the cache, removing all entries.
-    pub fn clear(&self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        Remover::new(reporter).rm_rf(&self.root)
+    pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+        // Remove everything but `.lock`, for Windows locked file special cases.
+        let mut removal = Remover::new(reporter).rm_rf(&self.root, true)?;
+        let Self {
+            root, lock_file, ..
+        } = self;
+        // Unlock `.lock`
+        drop(lock_file);
+        fs_err::remove_file(root.join(".lock"))?;
+        removal.num_files += 1;
+        fs_err::remove_dir(root)?;
+        removal.num_dirs += 1;
+        Ok(removal)
     }
 
     /// Remove a package from the cache.

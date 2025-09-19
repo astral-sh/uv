@@ -37,9 +37,10 @@ pub(crate) fn cache_clean(
         let num_paths = walkdir::WalkDir::new(cache.root()).into_iter().count();
         let reporter = CleaningDirectoryReporter::new(printer, num_paths);
 
+        let root = cache.root().to_path_buf();
         cache
             .clear(Box::new(reporter))
-            .with_context(|| format!("Failed to clear cache at: {}", cache.root().user_display()))?
+            .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, packages.len());
         let mut summary = Removal::default();
