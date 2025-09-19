@@ -54,20 +54,12 @@ impl ToolEnvironment {
     }
 
     /// Get the underlying [`PythonEnvironment`].
-    pub fn into_inner(self) -> PythonEnvironment {
+    pub fn into_environment(self) -> PythonEnvironment {
         self.environment
     }
 
     /// Get a reference to the underlying [`PythonEnvironment`].
     pub fn environment(&self) -> &PythonEnvironment {
-        &self.environment
-    }
-}
-
-impl std::ops::Deref for ToolEnvironment {
-    type Target = PythonEnvironment;
-
-    fn deref(&self) -> &Self::Target {
         &self.environment
     }
 }
@@ -336,14 +328,6 @@ impl InstalledTools {
         Ok(Self::from_path(
             StateStore::temp()?.bucket(StateBucket::Tools),
         ))
-    }
-
-    /// Return the [`Version`] of an installed tool.
-    pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let tool_env = self
-            .get_environment(name, cache)?
-            .ok_or_else(|| Error::ToolEnvironmentNotFound(name.clone(), self.tool_dir(name)))?;
-        tool_env.version()
     }
 
     /// Initialize the tools directory.

@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
+use uv_python::LenientImplementationName;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
@@ -74,10 +75,14 @@ pub(crate) async fn list(
         let version = match tool_env.version() {
             Ok(version) => version,
             Err(e) => {
-                warn_user!(
-                    "{e} (run `{}` to reinstall)",
-                    format!("uv tool install {name} --reinstall").green()
-                );
+                if let uv_tool::Error::EnvironmentError(e) = e {
+                    warn_user!(
+                        "{e} (run `{}` to reinstall)",
+                        format!("uv tool install {name} --reinstall").green()
+                    );
+                } else {
+                    writeln!(printer.stderr(), "{e}")?;
+                }
                 continue;
             }
         };
@@ -114,8 +119,13 @@ pub(crate) async fn list(
             .unwrap_or_default();
 
         let python_version = if show_python {
-            let interpreter = tool_env.interpreter();
-            format!(" [{}]", interpreter.python_full_version())
+            let interpreter = tool_env.environment().interpreter();
+            let implementation = LenientImplementationName::from(interpreter.implementation_name());
+            format!(
+                " [{} {}]",
+                implementation.pretty(),
+                interpreter.python_full_version()
+            )
         } else {
             String::new()
         };

@@ -452,8 +452,10 @@ async fn show_help(
         .filter_map(|(name, tool)| {
             tool.ok().and_then(|_| {
                 installed_tools
-                    .version(&name, cache)
+                    .get_environment(&name, cache)
                     .ok()
+                    .flatten()
+                    .and_then(|tool_env| tool_env.version().ok())
                     .map(|version| (name, version))
             })
         })
@@ -933,7 +935,7 @@ async fn get_or_create_environment(
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
                     python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.interpreter(), cache)
+                        python_request.satisfied(environment.environment().interpreter(), cache)
                     })
                 });
 
@@ -946,7 +948,7 @@ async fn get_or_create_environment(
                     .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
                 {
                     // Check if the installed packages meet the requirements.
-                    let site_packages = SitePackages::from_environment(&environment)?;
+                    let site_packages = SitePackages::from_environment(environment.environment())?;
                     if matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
@@ -957,7 +959,7 @@ async fn get_or_create_environment(
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
                         debug!("Using existing tool `{}`", requirement.name);
-                        return Ok((from, environment.into_inner()));
+                        return Ok((from, environment.into_environment()));
                     }
                 }
             }
