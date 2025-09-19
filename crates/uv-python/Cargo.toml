@@ -37,6 +37,7 @@ uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+byteorder = { workspace = true }
 clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 dunce = { workspace = true }
@@ -47,6 +48,7 @@ indexmap = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 ref-cast = { workspace = true }
+reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -57,6 +59,8 @@ same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
 sys-info = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
