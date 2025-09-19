@@ -823,7 +823,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                             }
                         }
                     }
-                    
+
                     // Default behavior for absolute paths and non-path URLs
                     let mut url = index.url.into_url();
                     url.remove_credentials();
@@ -942,7 +942,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                         IndexMetadata::from(IndexUrl::from(verbatim_url.with_given(&index_str)))
                     } else {
                         // provide a fallback
-                        IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(DisplaySafeUrl::parse(&index_str).unwrap())))
+                        IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(
+                            DisplaySafeUrl::parse(&index_str).unwrap(),
+                        )))
                     }
                 }),
                 conflict,
