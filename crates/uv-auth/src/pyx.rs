@@ -368,9 +368,9 @@ impl PyxTokenStore {
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
         // Decode the access token.
-        let jwt = Jwt::decode(match &tokens {
-            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token.as_str(),
-            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token.as_str(),
+        let jwt = PyxJwt::decode(match &tokens {
+            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
+            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
         })?;
 
         // If the access token is expired, refresh it.
@@ -503,14 +503,20 @@ impl TokenStoreError {
 
 /// The payload of the JWT.
 #[derive(Debug, serde::Deserialize)]
-struct Jwt {
-    exp: Option<i64>,
+pub struct PyxJwt {
+    /// The expiration time of the JWT, as a Unix timestamp.
+    pub exp: Option<i64>,
+    /// The issuer of the JWT.
+    pub iss: Option<String>,
+    /// The name of the organization, if any.
+    #[serde(rename = "urn:pyx:org_name")]
+    pub name: Option<String>,
 }
 
-impl Jwt {
+impl PyxJwt {
     /// Decode the JWT from the access token.
-    fn decode(access_token: &str) -> Result<Self, JwtError> {
-        let mut token_segments = access_token.splitn(3, '.');
+    pub fn decode(access_token: &AccessToken) -> Result<Self, JwtError> {
+        let mut token_segments = access_token.as_str().splitn(3, '.');
 
         let _header = token_segments.next().ok_or(JwtError::MissingHeader)?;
         let payload = token_segments.next().ok_or(JwtError::MissingPayload)?;

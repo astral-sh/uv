@@ -312,7 +312,7 @@ pub(crate) async fn install(
                 .peekable();
 
             if matching_installations.peek().is_none() {
-                debug!("No installation found for request `{}`", request.cyan());
+                debug!("No installation found for request `{}`", request);
                 unsatisfied.push(Cow::Borrowed(request));
             }
 
@@ -325,7 +325,7 @@ pub(crate) async fn install(
                         python_downloads_json_url.as_deref(),
                     ) {
                         Ok(request) => {
-                            debug!("Will reinstall `{}`", installation.key().green());
+                            debug!("Will reinstall `{}`", installation.key());
                             unsatisfied.push(Cow::Owned(request));
                         }
                         Err(err) => {
@@ -344,8 +344,8 @@ pub(crate) async fn install(
                     // If we have real requests, just ignore the existing installation
                     debug!(
                         "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
-                        installation.key().green(),
-                        request.cyan()
+                        installation.key(),
+                        request
                     );
                     unsatisfied.push(Cow::Borrowed(request));
                     break;
@@ -366,14 +366,10 @@ pub(crate) async fn install(
                     request.matches_installation(installation)
                 }
             }) {
-                debug!(
-                    "Found `{}` for request `{}`",
-                    installation.key().green(),
-                    request.cyan(),
-                );
+                debug!("Found `{}` for request `{}`", installation.key(), request);
                 Either::Left(installation)
             } else {
-                debug!("No installation found for request `{}`", request.cyan());
+                debug!("No installation found for request `{}`", request);
                 Either::Right(Cow::Borrowed(request))
             }
         })
@@ -394,8 +390,7 @@ pub(crate) async fn install(
         .inspect(|request| {
             debug!(
                 "Found download `{}` for request `{}`",
-                request.download,
-                request.cyan(),
+                request.download, request,
             );
         })
         .map(|request| request.download)

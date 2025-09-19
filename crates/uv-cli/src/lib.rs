@@ -2754,6 +2754,18 @@ pub struct VenvArgs {
     #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
     pub clear: bool,
 
+    /// Fail without prompting if any existing files or directories are present at the target path.
+    ///
+    /// By default, when a TTY is available, `uv venv` will prompt to clear a non-empty directory.
+    /// When `--no-clear` is used, the command will exit with an error instead of prompting.
+    #[clap(
+        long,
+        overrides_with = "clear",
+        conflicts_with = "allow_existing",
+        hide = true
+    )]
+    pub no_clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
     /// By default, `uv venv` will exit with an error if the given path is non-empty. The
@@ -6665,14 +6677,15 @@ pub struct PublishArgs {
     /// Check an index URL for existing files to skip duplicate uploads.
     ///
     /// This option allows retrying publishing that failed after only some, but not all files have
-    /// been uploaded, and handles error due to parallel uploads of the same file.
+    /// been uploaded, and handles errors due to parallel uploads of the same file.
     ///
     /// Before uploading, the index is checked. If the exact same file already exists in the index,
     /// the file will not be uploaded. If an error occurred during the upload, the index is checked
     /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
     /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
-    /// file succeeds even without `--check-url`, while most other indexes error.
+    /// file succeeds even without `--check-url`, while most other indexes error. When uploading to
+    /// pyx, the index URL can be inferred automatically from the publish URL.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
     #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]

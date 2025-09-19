@@ -61,6 +61,7 @@ impl RequiresDist {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
+            ..DiscoveryOptions::default()
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
@@ -459,7 +460,8 @@ mod test {
             &WorkspaceCache::default(),
         )
         .await?;
-        let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
+        let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents)?;
+        let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,

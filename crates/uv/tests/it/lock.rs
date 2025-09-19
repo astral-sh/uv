@@ -11444,10 +11444,10 @@ fn lock_find_links_http_wheel() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/links.html" }
-        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -11535,10 +11535,10 @@ fn lock_find_links_http_sdist() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/links.html" }
-        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -29611,6 +29611,79 @@ fn windows_amd64_required() -> Result<()> {
 }
 
 #[test]
+fn windows_arm64_required() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pywin32-prj"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = ["pywin32; sys_platform == 'win32'"]
+
+        [tool.uv]
+        required-environments = [
+            "sys_platform == 'win32' and platform_machine == 'ARM64'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = "==3.12.*"
+        required-markers = [
+            "platform_machine == 'ARM64' and sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[package]]
+        name = "pywin32"
+        version = "308"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/00/7c/d00d6bdd96de4344e06c4afbf218bc86b54436a94c01c71a8701f613aa56/pywin32-308-cp312-cp312-win32.whl", hash = "sha256:587f3e19696f4bf96fde9d8a57cec74a57021ad5f204c9e627e15c33ff568897", size = 5939729, upload-time = "2024-10-12T20:42:12.001Z" },
+            { url = "https://files.pythonhosted.org/packages/21/27/0c8811fbc3ca188f93b5354e7c286eb91f80a53afa4e11007ef661afa746/pywin32-308-cp312-cp312-win_amd64.whl", hash = "sha256:00b3e11ef09ede56c6a43c71f2d31857cf7c54b0ab6e78ac659497abd2834f47", size = 6543015, upload-time = "2024-10-12T20:42:14.044Z" },
+            { url = "https://files.pythonhosted.org/packages/9d/0f/d40f8373608caed2255781a3ad9a51d03a594a1248cd632d6a298daca693/pywin32-308-cp312-cp312-win_arm64.whl", hash = "sha256:9b4de86c8d909aed15b7011182c8cab38c8850de36e6afb1f0db22b8959e3091", size = 7976033, upload-time = "2024-10-12T20:42:16.215Z" },
+        ]
+
+        [[package]]
+        name = "pywin32-prj"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "pywin32", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "pywin32", marker = "sys_platform == 'win32'" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
 fn lock_empty_extra() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -31625,111 +31698,6 @@ fn lock_android() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     "###);
-
-    Ok(())
-}
-
-/// See: <https://github.com/astral-sh/uv/issues/9832#issuecomment-2539121761>
-#[test]
-fn lock_git_change_log() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "foo"
-        version = "0.1.0"
-        requires-python = ">=3.12.0"
-        dependencies = [
-            "typing-extensions",
-        ]
-
-        [tool.uv.sources]
-        typing-extensions = { git = "https://github.com/python/typing_extensions" }
-        "#,
-    )?;
-
-    // Write a stale commit.
-    context.temp_dir.child("uv.lock").write_str(
-        r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12.0"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "foo"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "typing-extensions" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "typing-extensions", git = "https://github.com/python/typing_extensions?rev=4f42e6bf0052129bc6dae5e71699a409652d2091" }]
-
-        [[package]]
-        name = "typing-extensions"
-        version = "4.15.0"
-        source = { git = "https://github.com/python/typing_extensions?rev=4f42e6bf0052129bc6dae5e71699a409652d2091#4f42e6bf0052129bc6dae5e71699a409652d2091" }
-    "#,
-    )?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Update typing-extensions v4.15.0 (4f42e6bf) -> v4.15.0 (9215c953)
-    ");
-
-    uv_snapshot!(context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Updated typing-extensions v4.15.0 (4f42e6bf) -> v4.15.0 (9215c953)
-    ");
-
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12.[X]"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "foo"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "typing-extensions" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "typing-extensions", git = "https://github.com/python/typing_extensions" }]
-
-        [[package]]
-        name = "typing-extensions"
-        version = "4.15.0"
-        source = { git = "https://github.com/python/typing_extensions#9215c953610ca4e4ce7ae840a0a804505da70a05" }
-        "#
-        );
-    });
 
     Ok(())
 }

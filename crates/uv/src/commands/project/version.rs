@@ -358,7 +358,10 @@ async fn find_target(
         VirtualProject::Project(
             Workspace::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    project: uv_workspace::ProjectDiscovery::Required,
+                    ..DiscoveryOptions::default()
+                },
                 &WorkspaceCache::default(),
             )
             .await
@@ -369,7 +372,10 @@ async fn find_target(
     } else {
         VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                project: uv_workspace::ProjectDiscovery::Required,
+                ..DiscoveryOptions::default()
+            },
             &WorkspaceCache::default(),
         )
         .await

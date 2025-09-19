@@ -152,8 +152,10 @@ impl BaseClientBuilder<'_> {
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: Vec<TrustedHost>,
+        preview: Preview,
     ) -> Self {
         Self {
+            preview,
             allow_insecure_host,
             native_tls,
             connectivity,
