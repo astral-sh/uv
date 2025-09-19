@@ -52,10 +52,10 @@ impl HuggingFaceProvider {
 }
 
 /// The [`Url`] for the S3 endpoint, if set.
-static S3_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
+static S3_ENDPOINT_REALM: LazyLock<Option<Realm>> = LazyLock::new(|| {
     let s3_endpoint_url = std::env::var(EnvVars::UV_S3_ENDPOINT).ok()?;
     let url = Url::parse(&s3_endpoint_url).expect("Failed to parse S3 endpoint URL");
-    Some(url)
+    Some(Realm::from(&url))
 });
 
 /// A provider for authentication credentials for S3 endpoints.
@@ -65,20 +65,10 @@ pub(crate) struct S3EndpointProvider;
 impl S3EndpointProvider {
     /// Returns the credentials for the S3 endpoint, if available.
     pub(crate) fn credentials_for(url: &Url) -> Option<DefaultSigner> {
-        if let Some(s3_endpoint_url) = S3_ENDPOINT_URL.as_ref() {
-            // Treat any URL on the same domain or subdomain (plus scheme and port) of the endpoint
-            // URL as available for signing.
-            if url.scheme() == s3_endpoint_url.scheme()
-                && url.port() == s3_endpoint_url.port()
-                && url.domain().is_some_and(|subdomain| {
-                    s3_endpoint_url.domain().is_some_and(|domain| {
-                        subdomain == domain
-                            || subdomain
-                                .strip_suffix(domain)
-                                .is_some_and(|prefix| prefix.ends_with('.'))
-                    })
-                })
-            {
+        if let Some(s3_endpoint_realm) = S3_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
+            // Treat any URL on the same domain or subdomain as available for S3 signing.
+            let realm = RealmRef::from(url);
+            if realm == s3_endpoint_realm || realm.is_subdomain_of(s3_endpoint_realm) {
                 // TODO(charlie): Can `reqsign` infer the region for us? Profiles, for example,
                 // often have a region set already.
                 let region = std::env::var(EnvVars::AWS_REGION)
