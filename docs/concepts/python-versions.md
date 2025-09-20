@@ -385,14 +385,15 @@ The following alternative options are available:
 
 ## Python implementation support
 
-uv supports the CPython, PyPy, and GraalPy Python implementations. If a Python implementation is not
-supported, uv will fail to discover its interpreter.
+uv supports the CPython, PyPy, Pyodide, and GraalPy Python implementations. If a Python
+implementation is not supported, uv will fail to discover its interpreter.
 
 The implementations may be requested with either the long or short name:
 
 - CPython: `cpython`, `cp`
 - PyPy: `pypy`, `pp`
 - GraalPy: `graalpy`, `gp`
+- Pyodide: `pyodide`
 
 Implementation name requests are not case-sensitive.
 
@@ -401,7 +402,7 @@ supported formats.
 
 ## Managed Python distributions
 
-uv supports downloading and installing CPython and PyPy distributions.
+uv supports downloading and installing CPython, PyPy, and Pyodide distributions.
 
 ### CPython distributions
 
@@ -423,7 +424,13 @@ are not yet available for musl Linux on ARM).
 
 ### PyPy distributions
 
-PyPy distributions are provided by the PyPy project.
+PyPy distributions are provided by the [PyPy project](https://pypy.org).
+
+### Pyodide distributions
+
+Pyodide distributions are provided by the [Pyodide project](https://github.com/pyodide/pyodide).
+
+Pyodide is a port of CPython for the WebAssembly / Emscripten platform.
 
 ## Registration in the Windows registry
 
