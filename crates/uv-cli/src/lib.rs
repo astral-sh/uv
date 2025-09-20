@@ -28,6 +28,7 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -5485,6 +5486,17 @@ pub struct PythonInstallArgs {
     pub default: bool,
 }
 
+impl PythonInstallArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct PythonUpgradeArgs {
     /// The directory Python installations are stored in.
@@ -5535,6 +5547,18 @@ pub struct PythonUpgradeArgs {
     #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
     pub python_downloads_json_url: Option<String>,
 }
+
+impl PythonUpgradeArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
+}
+
 
 #[derive(Args)]
 pub struct PythonUninstallArgs {

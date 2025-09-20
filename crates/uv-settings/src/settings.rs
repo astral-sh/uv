@@ -1008,7 +1008,7 @@ pub struct PythonInstallMirrors {
 
 impl PythonInstallMirrors {
     #[must_use]
-    pub fn merge_with(self, other: Self) -> Self {
+    pub fn combine(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),

@@ -320,7 +320,7 @@ impl InitSettings {
             python: python.and_then(Maybe::into_option),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -473,7 +473,7 @@ impl RunSettings {
             env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
@@ -610,7 +610,7 @@ impl ToolRunSettings {
             options,
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
             env_file,
             no_env_file,
         }
@@ -722,7 +722,7 @@ impl ToolInstallSettings {
             settings,
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -831,7 +831,7 @@ impl ToolUpgradeSettings {
             filesystem: top_level,
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1014,19 +1014,20 @@ impl PythonInstallSettings {
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> Self {
-        let options = filesystem.map(FilesystemOptions::into_options);
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
-        let install_mirrors = match options {
-            Some(options) => environment
-                .install_mirrors
-                .merge_with(options.install_mirrors),
-            None => environment.install_mirrors.clone(),
-        };
-        let python_mirror = args.mirror.or(install_mirrors.python_install_mirror);
-        let pypy_mirror = args.pypy_mirror.or(install_mirrors.pypy_install_mirror);
-        let python_downloads_json_url = args
-            .python_downloads_json_url
-            .or(install_mirrors.python_downloads_json_url);
+        let install_mirrors = args
+            .install_mirrors()
+            .combine(environment.install_mirrors)
+            .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror,
+            pypy_install_mirror,
+            python_downloads_json_url,
+        } = install_mirrors;
 
         let PythonInstallArgs {
             install_dir,
@@ -1051,8 +1052,8 @@ impl PythonInstallSettings {
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
             registry: flag(registry, no_registry, "registry")
                 .or(environment.python_install_registry),
-            python_install_mirror: python_mirror,
-            pypy_install_mirror: pypy_mirror,
+            python_install_mirror,
+            pypy_install_mirror,
             python_downloads_json_url,
             default,
         }
@@ -1086,15 +1087,18 @@ impl PythonUpgradeSettings {
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
-        let install_mirrors = environment
-            .install_mirrors
-            .merge_with(filesystem_install_mirrors);
 
-        let python_mirror = args.mirror.or(install_mirrors.python_install_mirror);
-        let pypy_mirror = args.pypy_mirror.or(install_mirrors.pypy_install_mirror);
-        let python_downloads_json_url = args
-            .python_downloads_json_url
-            .or(install_mirrors.python_downloads_json_url);
+        let install_mirrors = args
+            .install_mirrors()
+            .combine(environment.install_mirrors)
+            .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror,
+            pypy_install_mirror,
+            python_downloads_json_url,
+        } = install_mirrors;
+
         let force = false;
         let default = false;
         let bin = None;
@@ -1114,8 +1118,8 @@ impl PythonUpgradeSettings {
             targets,
             force,
             registry,
-            python_install_mirror: python_mirror,
-            pypy_install_mirror: pypy_mirror,
+            python_install_mirror,
+            pypy_install_mirror,
             reinstall,
             python_downloads_json_url,
             default,
@@ -1224,7 +1228,7 @@ impl PythonPinSettings {
             rm,
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1362,7 +1366,7 @@ impl SyncSettings {
             settings,
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1415,7 +1419,7 @@ impl LockSettings {
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1607,7 +1611,7 @@ impl AddSettings {
             ),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1693,7 +1697,7 @@ impl RemoveSettings {
             ),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1768,7 +1772,7 @@ impl VersionSettings {
             ),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1857,7 +1861,7 @@ impl TreeSettings {
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1981,7 +1985,7 @@ impl ExportSettings {
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -2842,7 +2846,7 @@ impl BuildSettings {
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -3531,7 +3535,7 @@ impl PipSettings {
             ),
             install_mirrors: environment
                 .install_mirrors
-                .merge_with(filesystem_install_mirrors),
+                .combine(filesystem_install_mirrors),
         }
     }
 }
