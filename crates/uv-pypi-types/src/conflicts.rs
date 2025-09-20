@@ -95,16 +95,14 @@ impl Conflicts {
         let mut substitutions: FxHashMap<Rc<ConflictItem>, FxHashSet<Rc<ConflictItem>>> =
             FxHashMap::default();
 
-        // Conflict sets that were directly defined in configuration.
-        let mut direct_conflict_sets: FxHashSet<&ConflictSet> = FxHashSet::default();
-        // Conflict sets that we will transitively infer in this method.
-        let mut transitive_conflict_sets: FxHashSet<ConflictSet> = FxHashSet::default();
+        // Track all existing conflict sets to avoid duplicates.
+        let mut conflict_sets: FxHashSet<ConflictSet> = FxHashSet::default();
 
         // Add groups in directly defined conflict sets to the graph.
         let mut seen: FxHashSet<&GroupName> = FxHashSet::default();
 
         for set in &self.0 {
-            direct_conflict_sets.insert(set);
+            conflict_sets.insert(set.clone());
             for item in set.iter() {
                 let ConflictKind::Group(group) = &item.kind else {
                     // TODO(john): Do we also want to handle extras here?
@@ -183,28 +181,30 @@ impl Conflicts {
         // at the end of each iteration.
         for (canonical_item, subs) in substitutions {
             let mut new_conflict_sets = FxHashSet::default();
-            for conflict_set in direct_conflict_sets
+            for conflict_set in conflict_sets
                 .iter()
-                .copied()
-                .chain(transitive_conflict_sets.iter())
                 .filter(|set| set.contains_item(&canonical_item))
+                .cloned()
+                .collect::<Vec<_>>()
             {
                 for sub in &subs {
-                    let mut new_set = conflict_set
+                    let new_set = conflict_set
                         .replaced_item(&canonical_item, (**sub).clone())
                         .expect("`ConflictItem` should be in `ConflictSet`");
-                    if !direct_conflict_sets.contains(&new_set) {
-                        new_set = new_set.with_inferred_conflict();
-                        if !transitive_conflict_sets.contains(&new_set) {
-                            new_conflict_sets.insert(new_set);
-                        }
+                    if !conflict_sets.contains(&new_set) {
+                        new_conflict_sets.insert(new_set);
                     }
                 }
             }
-            transitive_conflict_sets.extend(new_conflict_sets.into_iter());
+            conflict_sets.extend(new_conflict_sets.into_iter());
         }
 
-        self.0.extend(transitive_conflict_sets);
+        // Add all newly discovered conflict sets (excluding the originals already in self.0)
+        for set in conflict_sets {
+            if !self.0.contains(&set) {
+                self.0.push(set);
+            }
+        }
     }
 }
 
@@ -220,7 +220,6 @@ impl Conflicts {
 #[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 pub struct ConflictSet {
     set: BTreeSet<ConflictItem>,
-    is_inferred_conflict: bool,
 }
 
 impl ConflictSet {
@@ -228,7 +227,6 @@ impl ConflictSet {
     pub fn pair(item1: ConflictItem, item2: ConflictItem) -> Self {
         Self {
             set: BTreeSet::from_iter(vec![item1, item2]),
-            is_inferred_conflict: false,
         }
     }
 
@@ -255,11 +253,6 @@ impl ConflictSet {
         self.set.contains(conflict_item)
     }
 
-    /// This [`ConflictSet`] was inferred from directly defined conflicts.
-    pub fn is_inferred_conflict(&self) -> bool {
-        self.is_inferred_conflict
-    }
-
     /// Replace an old [`ConflictItem`] with a new one.
     pub fn replaced_item(
         &self,
@@ -272,17 +265,7 @@ impl ConflictSet {
         }
         new_set.remove(old);
         new_set.insert(new);
-        Ok(Self {
-            set: new_set,
-            is_inferred_conflict: false,
-        })
-    }
-
-    /// Mark this [`ConflictSet`] as being inferred from directly
-    /// defined conflicts.
-    fn with_inferred_conflict(mut self) -> Self {
-        self.is_inferred_conflict = true;
-        self
+        Ok(Self { set: new_set })
     }
 }
 
@@ -307,7 +290,6 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
         }
         Ok(Self {
             set: BTreeSet::from_iter(items),
-            is_inferred_conflict: false,
         })
     }
 }
