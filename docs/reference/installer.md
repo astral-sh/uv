@@ -4,7 +4,8 @@
 
 By default, uv is installed to `~/.local/bin`. If `XDG_BIN_HOME` is set, it will be used instead.
 Similarly, if `XDG_DATA_HOME` is set, the target directory will be inferred as
-`XDG_DATA_HOME/../bin`.
+`XDG_DATA_HOME/../bin`. See [storage reference](./storage.md#Executables) for details on these
+locations and how to customize them.
 
 To change the installation path, use `UV_INSTALL_DIR`:
 
@@ -19,6 +20,12 @@ To change the installation path, use `UV_INSTALL_DIR`:
     ```pwsh-session
     PS> powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
     ```
+
+!!! note
+
+    Changing the installation path only affects where the uv binary is installed. uv will still store
+    its data (cache, Python installations, tools, etc.) in the default locations. See the
+    [storage reference](./storage.md) for details on these locations and how to customize them.
 
 ## Disabling shell modifications
 
