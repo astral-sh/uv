@@ -12,7 +12,7 @@ use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::Realm;
-use crate::credentials::{Credentials, Username};
+use crate::credentials::{Authentication, Username};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -35,11 +35,11 @@ impl Display for FetchUrl {
 
 pub struct CredentialsCache {
     /// A cache per realm and username
-    realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
+    realms: RwLock<FxHashMap<(Realm, Username), Arc<Authentication>>>,
     /// A cache tracking the result of realm or index URL fetches from external services
-    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Credentials>>>,
+    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Authentication>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
-    urls: RwLock<UrlTrie>,
+    urls: RwLock<UrlTrie<Arc<Authentication>>>,
 }
 
 impl Default for CredentialsCache {
@@ -59,7 +59,11 @@ impl CredentialsCache {
     }
 
     /// Return the credentials that should be used for a realm and username, if any.
-    pub(crate) fn get_realm(&self, realm: Realm, username: Username) -> Option<Arc<Credentials>> {
+    pub(crate) fn get_realm(
+        &self,
+        realm: Realm,
+        username: Username,
+    ) -> Option<Arc<Authentication>> {
         let realms = self.realms.read().unwrap();
         let given_username = username.is_some();
         let key = (realm, username);
@@ -93,7 +97,7 @@ impl CredentialsCache {
     /// Note we do not cache per username, but if a username is passed we will confirm that the
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
-    pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Credentials>> {
+    pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Authentication>> {
         let urls = self.urls.read().unwrap();
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
@@ -112,7 +116,7 @@ impl CredentialsCache {
     }
 
     /// Update the cache with the given credentials.
-    pub(crate) fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
+    pub(crate) fn insert(&self, url: &Url, credentials: Arc<Authentication>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -139,8 +143,8 @@ impl CredentialsCache {
     fn insert_realm(
         &self,
         key: (Realm, Username),
-        credentials: &Arc<Credentials>,
-    ) -> Option<Arc<Credentials>> {
+        credentials: &Arc<Authentication>,
+    ) -> Option<Arc<Authentication>> {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return None;
@@ -166,24 +170,33 @@ impl CredentialsCache {
 }
 
 #[derive(Debug)]
-struct UrlTrie {
-    states: Vec<TrieState>,
+struct UrlTrie<T> {
+    states: Vec<TrieState<T>>,
 }
 
-#[derive(Debug, Default)]
-struct TrieState {
+#[derive(Debug)]
+struct TrieState<T> {
     children: Vec<(String, usize)>,
-    value: Option<Arc<Credentials>>,
+    value: Option<T>,
 }
 
-impl UrlTrie {
+impl<T> Default for TrieState<T> {
+    fn default() -> Self {
+        Self {
+            children: vec![],
+            value: None,
+        }
+    }
+}
+
+impl<T> UrlTrie<T> {
     fn new() -> Self {
         let mut trie = Self { states: vec![] };
         trie.alloc();
         trie
     }
 
-    fn get(&self, url: &Url) -> Option<&Arc<Credentials>> {
+    fn get(&self, url: &Url) -> Option<&T> {
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
@@ -198,7 +211,7 @@ impl UrlTrie {
         self.states[state].value.as_ref()
     }
 
-    fn insert(&mut self, url: &Url, value: Arc<Credentials>) {
+    fn insert(&mut self, url: &Url, value: T) {
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
@@ -226,7 +239,7 @@ impl UrlTrie {
     }
 }
 
-impl TrieState {
+impl<T> TrieState<T> {
     fn get(&self, component: &str) -> Option<usize> {
         let i = self.index(component).ok()?;
         Some(self.children[i].1)
@@ -260,28 +273,21 @@ impl From<(Realm, Username)> for RealmUsername {
 
 #[cfg(test)]
 mod tests {
+    use crate::Credentials;
     use crate::credentials::Password;
 
     use super::*;
 
     #[test]
     fn test_trie() {
-        let credentials1 = Arc::new(Credentials::basic(
-            Some("username1".to_string()),
-            Some("password1".to_string()),
-        ));
-        let credentials2 = Arc::new(Credentials::basic(
-            Some("username2".to_string()),
-            Some("password2".to_string()),
-        ));
-        let credentials3 = Arc::new(Credentials::basic(
-            Some("username3".to_string()),
-            Some("password3".to_string()),
-        ));
-        let credentials4 = Arc::new(Credentials::basic(
-            Some("username4".to_string()),
-            Some("password4".to_string()),
-        ));
+        let credentials1 =
+            Credentials::basic(Some("username1".to_string()), Some("password1".to_string()));
+        let credentials2 =
+            Credentials::basic(Some("username2".to_string()), Some("password2".to_string()));
+        let credentials3 =
+            Credentials::basic(Some("username3".to_string()), Some("password3".to_string()));
+        let credentials4 =
+            Credentials::basic(Some("username4".to_string()), Some("password4".to_string()));
 
         let mut trie = UrlTrie::new();
         trie.insert(
@@ -339,10 +345,10 @@ mod tests {
     fn test_url_with_credentials() {
         let username = Username::new(Some(String::from("username")));
         let password = Password::new(String::from("password"));
-        let credentials = Arc::new(Credentials::Basic {
+        let credentials = Arc::new(Authentication::from(Credentials::Basic {
             username: username.clone(),
             password: Some(password),
-        });
+        }));
         let cache = CredentialsCache::default();
         // Insert with URL with credentials and get with redacted URL.
         let url = Url::parse("https://username:password@example.com/foobar").unwrap();

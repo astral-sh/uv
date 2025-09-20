@@ -12,7 +12,8 @@ use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::owo_colors::OwoColorize;
 
-use crate::providers::HuggingFaceProvider;
+use crate::credentials::Authentication;
+use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
@@ -21,7 +22,6 @@ use crate::{
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
-
 use crate::{Index, TextCredentialStore, TomlCredentialError};
 
 /// Strategy for loading netrc files.
@@ -292,7 +292,7 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         // Check for credentials attached to the request already
-        let request_credentials = Credentials::from_request(&request);
+        let request_credentials = Credentials::from_request(&request).map(Authentication::from);
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
@@ -301,7 +301,7 @@ impl Middleware for AuthMiddleware {
         let auth_policy = self.indexes.auth_policy_for(request.url());
         trace!("Handling request for {url} with authentication policy {auth_policy}");
 
-        let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
+        let credentials: Option<Arc<Authentication>> = if matches!(auth_policy, AuthPolicy::Never) {
             None
         } else {
             if let Some(request_credentials) = request_credentials {
@@ -325,7 +325,7 @@ impl Middleware for AuthMiddleware {
             // making a failing request
             let credentials = self.cache().get_url(request.url(), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
-                request = credentials.authenticate(request);
+                request = credentials.authenticate(request).await;
 
                 // If it's fully authenticated, finish the request
                 if credentials.is_authenticated() {
@@ -422,7 +422,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if credentials.is_authenticated() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request);
+                retry_request = credentials.authenticate(retry_request).await;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -440,7 +440,7 @@ impl Middleware for AuthMiddleware {
             )
             .await
         {
-            retry_request = credentials.authenticate(retry_request);
+            retry_request = credentials.authenticate(retry_request).await;
             trace!("Retrying request for {url} with {credentials:?}");
             return self
                 .complete_request(
@@ -456,7 +456,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if !attempt_has_username {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request);
+                retry_request = credentials.authenticate(retry_request).await;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -492,7 +492,7 @@ impl AuthMiddleware {
     /// If credentials are present, insert them into the cache on success.
     async fn complete_request(
         &self,
-        credentials: Option<Arc<Credentials>>,
+        credentials: Option<Arc<Authentication>>,
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
@@ -524,7 +524,7 @@ impl AuthMiddleware {
     /// Use known request credentials to complete the request.
     async fn complete_request_with_request_credentials(
         &self,
-        credentials: Credentials,
+        credentials: Authentication,
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
@@ -559,7 +559,7 @@ impl AuthMiddleware {
                 .get_realm(Realm::from(request.url()), credentials.to_username())
         };
         if let Some(credentials) = maybe_cached_credentials {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             let credentials = None;
             return self
@@ -571,7 +571,7 @@ impl AuthMiddleware {
             .cache()
             .get_url(request.url(), credentials.as_username().as_ref())
         {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
@@ -583,7 +583,7 @@ impl AuthMiddleware {
             )
             .await
         {
-            request = credentials.authenticate(request);
+            request = credentials.authenticate(request).await;
             Some(credentials)
         } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
@@ -591,7 +591,7 @@ impl AuthMiddleware {
                 .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
             {
-                request = credentials.authenticate(request);
+                request = credentials.authenticate(request).await;
                 Some(credentials)
             } else {
                 Some(credentials)
@@ -610,11 +610,11 @@ impl AuthMiddleware {
     /// Supports netrc file and keyring lookups.
     async fn fetch_credentials(
         &self,
-        credentials: Option<&Credentials>,
+        credentials: Option<&Authentication>,
         url: &DisplaySafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
-    ) -> Option<Arc<Credentials>> {
+    ) -> Option<Arc<Authentication>> {
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
@@ -646,9 +646,21 @@ impl AuthMiddleware {
             return credentials;
         }
 
-        // Support for known providers, like Hugging Face.
-        if let Some(credentials) = HuggingFaceProvider::credentials_for(url).map(Arc::new) {
+        // Support for known providers, like Hugging Face and S3.
+        if let Some(credentials) = HuggingFaceProvider::credentials_for(url)
+            .map(Authentication::from)
+            .map(Arc::new)
+        {
             debug!("Found Hugging Face credentials for {url}");
+            self.cache().fetches.done(key, Some(credentials.clone()));
+            return Some(credentials);
+        }
+
+        if let Some(credentials) = S3EndpointProvider::credentials_for(url, self.preview)
+            .map(Authentication::from)
+            .map(Arc::new)
+        {
+            debug!("Found S3 credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
             return Some(credentials);
         }
@@ -682,7 +694,7 @@ impl AuthMiddleware {
 
                     let credentials = token.map(|token| {
                         trace!("Using credentials from token store for {url}");
-                        Arc::new(Credentials::from(token))
+                        Arc::new(Authentication::from(Credentials::from(token)))
                     });
 
                     // Register the fetch for this key
@@ -778,6 +790,7 @@ impl AuthMiddleware {
         } else {
             None
         }
+        .map(Authentication::from)
         .map(Arc::new);
 
         // Register the fetch for this key
@@ -787,9 +800,9 @@ impl AuthMiddleware {
     }
 }
 
-fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> DisplaySafeUrl {
+fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> DisplaySafeUrl {
     let mut url = DisplaySafeUrl::from(request.url().clone());
-    if let Some(creds) = credentials {
+    if let Some(Authentication::Credentials(creds)) = credentials {
         if let Some(username) = creds.username() {
             let _ = url.set_username(username);
         }
@@ -930,10 +943,10 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::basic(
+            Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
-            )),
+            ))),
         );
 
         let client = test_client_builder()
@@ -984,7 +997,10 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::basic(Some(username.to_string()), None)),
+            Arc::new(Authentication::from(Credentials::basic(
+                Some(username.to_string()),
+                None,
+            ))),
         );
 
         let client = test_client_builder()
@@ -1377,7 +1393,10 @@ mod tests {
         // URL.
         cache.insert(
             &base_url,
-            Arc::new(Credentials::basic(Some(username.to_string()), None)),
+            Arc::new(Authentication::from(Credentials::basic(
+                Some(username.to_string()),
+                None,
+            ))),
         );
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
@@ -1426,17 +1445,17 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::basic(
+            Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
-            )),
+            ))),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::basic(
+            Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
-            )),
+            ))),
         );
 
         let client = test_client_builder()
@@ -1621,17 +1640,17 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::basic(
+            Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
-            )),
+            ))),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::basic(
+            Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
-            )),
+            ))),
         );
 
         let client = test_client_builder()
@@ -2334,20 +2353,20 @@ mod tests {
             DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        let creds = Credentials::Basic {
+        let creds = Authentication::from(Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: None,
-        };
+        });
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
             DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        let creds = Credentials::Basic {
+        let creds = Authentication::from(Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: Some(Password::new(String::from("password"))),
-        };
+        });
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
@@ -2368,7 +2387,7 @@ mod tests {
         let mut store = TextCredentialStore::default();
         let service = crate::Service::try_from(base_url.to_string()).unwrap();
         let credentials =
-            crate::Credentials::basic(Some(username.to_string()), Some(password.to_string()));
+            Credentials::basic(Some(username.to_string()), Some(password.to_string()));
         store.insert(service.clone(), credentials);
 
         let client = test_client_builder()

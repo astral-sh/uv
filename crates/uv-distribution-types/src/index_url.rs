@@ -445,11 +445,10 @@ impl<'a> IndexLocations {
                         .map(ToString::to_string)
                         .unwrap_or_else(|| index.url.to_string())
                 );
-                let credentials = Arc::new(credentials);
-                uv_auth::store_credentials(index.raw_url(), credentials.clone());
                 if let Some(root_url) = index.root_url() {
                     uv_auth::store_credentials(&root_url, credentials.clone());
                 }
+                uv_auth::store_credentials(index.raw_url(), credentials);
             }
         }
     }
