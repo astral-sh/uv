@@ -1646,6 +1646,7 @@ pub(crate) struct VersionSettings {
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
+    pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1671,6 +1672,7 @@ impl VersionSettings {
             installer,
             build,
             refresh,
+            all_packages,
             package,
             python,
         } = args;
@@ -1690,6 +1692,7 @@ impl VersionSettings {
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
+            all_packages,
             package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
