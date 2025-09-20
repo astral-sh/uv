@@ -11075,6 +11075,24 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
         "#,
     )?;
 
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
@@ -11126,7 +11144,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the declared conflicts: {`example:dev`, `example:magic`}
     ");
 
     Ok(())
