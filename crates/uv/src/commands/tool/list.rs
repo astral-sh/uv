@@ -19,6 +19,7 @@ pub(crate) async fn list(
     show_version_specifiers: bool,
     show_with: bool,
     show_extras: bool,
+    show_python: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -97,6 +98,19 @@ pub(crate) async fn list(
             })
             .unwrap_or_default();
 
+        let python_version = if show_python {
+            match installed_tools.get_environment(&name, cache) {
+                Ok(Some(env)) => {
+                    let interpreter = env.interpreter();
+                    format!(" [{}]", interpreter.markers().implementation_version())
+                }
+                Ok(None) => String::from(" [python: not found]"),
+                Err(e) => format!(" [python: error: {e}]"),
+            }
+        } else {
+            String::new()
+        };
+
         let with_requirements = show_with
             .then(|| {
                 tool.requirements()
@@ -118,7 +132,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{} ({})",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
@@ -128,7 +142,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{}",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold()
             )?;
