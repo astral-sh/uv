@@ -257,6 +257,10 @@ impl PlatformTag {
             } | Self::Win32
         )
     }
+
+    pub fn is_pyodide(&self) -> bool {
+        matches!(self, Self::Pyodide { .. })
+    }
 }
 
 impl std::fmt::Display for PlatformTag {
