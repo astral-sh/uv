@@ -272,6 +272,8 @@ fn help_subcommand() {
 
     - `<version>` e.g. `3`, `3.12`, `3.12.3`
     - `<version-specifier>` e.g. `>=3.12,<3.13`
+    - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     - `<implementation>` e.g. `cpython` or `cp`
     - `<implementation>@<version>` e.g. `cpython@3.12`
     - `<implementation><version>` e.g. `cpython3.12` or `cp312`
