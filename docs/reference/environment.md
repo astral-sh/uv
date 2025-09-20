@@ -493,7 +493,7 @@ uv will require that all dependencies have a hash specified in the requirements 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 
-### `UV_S3_ENDPOINT`
+### `UV_S3_ENDPOINT_URL`
 
 The URL to treat as an S3-compatible storage endpoint. Requests to this endpoint
 will be signed using AWS Signature Version 4 based on the `AWS_ACCESS_KEY_ID`,
