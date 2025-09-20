@@ -5559,7 +5559,6 @@ impl PythonUpgradeArgs {
     }
 }
 
-
 #[derive(Args)]
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
