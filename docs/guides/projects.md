@@ -160,7 +160,7 @@ version, while keeping the rest of the lockfile intact.
 See the documentation on [managing dependencies](../concepts/projects/dependencies.md) for more
 details.
 
-## Managing version
+## Viewing your version
 
 The `uv version` command can be used to read your package's version.
 
