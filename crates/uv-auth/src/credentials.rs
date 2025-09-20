@@ -439,6 +439,7 @@ impl Authentication {
             Self::Credentials(credentials) => credentials.authenticate(request),
             Self::Signer(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
+                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
                 let uri = Uri::from_str(request.url().as_str()).unwrap();
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())

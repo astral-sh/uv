@@ -7686,7 +7686,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT,
             ),
         },
         python_preference: Managed,
@@ -7910,7 +7910,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT,
             ),
         },
         python_preference: Managed,

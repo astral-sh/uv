@@ -656,7 +656,7 @@ impl AuthMiddleware {
             return Some(credentials);
         }
 
-        if let Some(credentials) = S3EndpointProvider::credentials_for(url)
+        if let Some(credentials) = S3EndpointProvider::credentials_for(url, self.preview)
             .map(Authentication::from)
             .map(Arc::new)
         {
