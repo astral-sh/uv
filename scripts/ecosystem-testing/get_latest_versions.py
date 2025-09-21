@@ -1,45 +1,58 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # NB: LLM code ahead
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["httpx", "orjson", "tqdm"]
+# dependencies = [
+#     "httpx>=0.28,<0.29",
+#     "orjson>=3,<4",
+#     "tqdm>=4,<5"
+# ]
 # ///
 
+import argparse
 import asyncio
 import csv
 from pathlib import Path
 
-import httpx
 import orjson
+from httpx import AsyncClient, HTTPError
 from tqdm.asyncio import tqdm
 
 
 async def get_latest_version(
-    client: httpx.AsyncClient, package_name: str
+    client: AsyncClient, package_name: str
 ) -> tuple[str, str | None]:
     try:
         response = await client.get(f"https://pypi.org/pypi/{package_name}/json")
-        if response.status_code == 200:
-            data = orjson.loads(response.content)
-            return package_name, data["info"]["version"]
-        else:
-            return package_name, None
-    except Exception:
+        response.raise_for_status()
+        data = orjson.loads(response.content)
+        return package_name, data["info"]["version"]
+    except HTTPError as e:
+        print(f"Error fetching latest version for {package_name}: {e}")
         return package_name, None
 
 
 async def main() -> None:
-    input_file = Path("scripts/ecosystem-testing/top-pypi-packages.csv")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-file",
+        type=Path,
+        default=Path("scripts/ecosystem-testing/top-pypi-packages.csv"),
+    )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=Path("package_versions.csv"),
+    )
+    args = parser.parse_args()
 
-    # Read package names
-    with open(input_file) as f:
-        package_names: list[str] = [row["project"] for row in csv.DictReader(f)]
+    with args.input_file.open() as f:
+        package_names = [row["project"] for row in csv.DictReader(f)]
 
-    print(f"Processing {len(package_names)} packages...")
+    print(f"Fetching latest versions for {len(package_names)} packages")
 
-    # Fetch versions concurrently
-    results: dict[str, str | None] = {}
-    async with httpx.AsyncClient() as client:
+    versions: dict[str, str | None] = {}
+    async with AsyncClient() as client:
         semaphore = asyncio.Semaphore(50)
 
         async def fetch(pkg: str) -> tuple[str, str | None]:
@@ -50,17 +63,16 @@ async def main() -> None:
 
         for future in tqdm(asyncio.as_completed(tasks), total=len(package_names)):
             name, version = await future
-            results[name] = version
+            versions[name] = version
 
-    # Write results
-    with open("package_versions.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["package_name", "latest_version"])
-        for name in package_names:
-            writer.writerow([name, results.get(name, "")])
+    with args.output_file.open("w") as f:
+        writer = csv.DictWriter(f, ["package_name", "latest_version"])
+        writer.writeheader()
+        for name, version in versions.items():
+            writer.writerow({"package_name": name, "latest_version": version})
 
-    success_count = sum(1 for v in results.values() if v)
-    print(f"Completed: {success_count}/{len(package_names)} successful")
+    success_count = sum(v is not None for v in versions.values())
+    print(f"Found version for {success_count}/{len(package_names)} packages")
 
 
 asyncio.run(main())

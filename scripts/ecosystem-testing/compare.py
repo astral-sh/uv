@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# ///
+
 import argparse
 import difflib
 import json
@@ -10,26 +15,28 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", type=Path)
     parser.add_argument("branch", type=Path)
+    parser.add_argument("--project", action="store_true")
     parser.add_argument(
         "--markdown",
         action="store_true",
-        help="Output in markdown format with collapsible sections",
     )
     parser.add_argument(
-        "--show-failed",
-        action="store_true",
-        help="Show failed packages",
+        "--limit",
+        type=int,
+        default=None,
     )
     args = parser.parse_args()
 
-    redact_time = re.compile(r"(0\.)?(\d+)ms")
+    # Supress noise from fluctuations in execution time
+    redact_time = re.compile(r"(0\.)?(\d+)ms|(\d+).(\d+)s")
+
+    parameters = json.loads(args.base.joinpath("parameters.json").read_text())
 
     total = 0
     successful = 0
     differences = []
-    for package_dir in args.base.iterdir():
-        if not package_dir.is_dir():
-            continue
+    files = sorted(dir for dir in args.base.iterdir() if dir.is_dir())
+    for package_dir in files[: args.limit]:
         package = package_dir.name
         package_branch = args.branch.joinpath(package)
         if not package_branch.is_dir():
@@ -38,45 +45,74 @@ def main():
 
         total += 1
 
-        stdout = package_dir.joinpath("stdout.txt").read_text()
+        summary = package_dir.joinpath("summary.json").read_text()
+        if json.loads(summary)["exit_code"] == 0:
+            successful += 1
+        else:
+            # Don't show differences in the error messages,
+            # also `uv.lock` doesn't exist for failed resolutions
+            continue
+
+        if args.project:
+            resolution = package_dir.joinpath("uv.lock").read_text()
+            if package_dir.joinpath("stdout.txt").read_text().strip():
+                raise RuntimeError(f"Stdout not empty (base): {package}")
+        else:
+            resolution = package_dir.joinpath("stdout.txt").read_text()
         stderr = package_dir.joinpath("stderr.txt").read_text()
         stderr = redact_time.sub(r"[TIME]", stderr)
-        summary = package_dir.joinpath("summary.json").read_text()
-        stdout_branch = package_branch.joinpath("stdout.txt").read_text()
+
+        if args.project:
+            resolution_branch = package_branch.joinpath("uv.lock").read_text()
+            if package_branch.joinpath("stdout.txt").read_text().strip():
+                raise RuntimeError(f"Stdout not empty (branch): {package}")
+        else:
+            resolution_branch = package_branch.joinpath("stdout.txt").read_text()
         stderr_branch = package_branch.joinpath("stderr.txt").read_text()
         stderr_branch = redact_time.sub(r"[TIME]", stderr_branch)
 
-        if json.loads(summary)["exit_code"] == 0:
-            successful += 1
-        elif not args.show_failed:
-            # Don't show differences in the error messages by default
-            continue
-
-        if stdout != stdout_branch or stderr != stderr_branch:
-            differences.append((package, stdout, stdout_branch, stderr, stderr_branch))
+        if resolution != resolution_branch or stderr != stderr_branch:
+            differences.append(
+                (package, resolution, resolution_branch, stderr, stderr_branch)
+            )
 
     if args.markdown:
         print("# Ecosystem testing report")
         print(
-            "Dataset: `uv pip compile` on each of the top 15k PyPI packages on Python 3.13 with `--no-build`, "
-            "a handful of pathological cases filtered. "
+            f"Dataset: "
+            f"`{'uv pip compile' if not parameters['project'] else 'uv lock'}` with `--no-build` "
+            f"on each of the top 15k PyPI packages on Python {parameters['python']} "
+            "pinned to the latest package version. "
+            if parameters["latest"]
+            else ". "
+            "A handful of pathological cases were filtered out. "
             "Only success resolutions can be compared.\n"
         )
         print(f"Successfully resolved packages: {successful}/{total}\n")
         print(f"Different packages: {len(differences)}/{total}\n")
 
-        for package, stdout, stdout_branch, stderr, stderr_branch in differences:
+        for (
+            package,
+            resolution,
+            resolution_branch,
+            stderr,
+            stderr_branch,
+        ) in differences:
+            if args.project:
+                context_window = 3
+            else:
+                context_window = 999999
             print(f"\n<details>\n<summary>{package}</summary>\n")
-            if stdout != stdout_branch:
+            if resolution != resolution_branch:
                 print("```diff")
                 sys.stdout.writelines(
                     difflib.unified_diff(
-                        stdout.splitlines(keepends=True),
-                        stdout_branch.splitlines(keepends=True),
+                        resolution.splitlines(keepends=True),
+                        resolution_branch.splitlines(keepends=True),
                         fromfile="base",
                         tofile="branch",
                         # Show the dependencies in full
-                        n=999999,
+                        n=context_window,
                     )
                 )
                 print("```")
@@ -89,20 +125,26 @@ def main():
                         fromfile="base",
                         tofile="branch",
                         # Show the log in full
-                        n=999999,
+                        n=context_window,
                     )
                 )
                 print("```")
             print("</details>")
     else:
-        for package, stdout, stdout_branch, stderr, stderr_branch in differences:
+        for (
+            package,
+            resolution,
+            resolution_branch,
+            stderr,
+            stderr_branch,
+        ) in differences:
             print("--------------------------------")
             print(f"Package {package}")
-            if stdout != stdout_branch:
+            if resolution != resolution_branch:
                 sys.stdout.writelines(
                     difflib.unified_diff(
-                        stdout.splitlines(keepends=True),
-                        stdout_branch.splitlines(keepends=True),
+                        resolution.splitlines(keepends=True),
+                        resolution_branch.splitlines(keepends=True),
                         fromfile="base",
                         tofile="branch",
                     )
@@ -116,7 +158,9 @@ def main():
                         tofile="branch",
                     )
                 )
-        print(f"Successfully resolved packages: {successful}/{total}")
+        print(
+            f"Successfully resolved packages: {successful}/{total} ({successful}/{total}:.0%)"
+        )
         print(f"Different packages: {len(differences)}/{total}")
 
 

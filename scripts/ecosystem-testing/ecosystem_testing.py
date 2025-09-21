@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # NB: LLM code ahead
 # /// script
-# requires-python = ">=3.14"
+# requires-python = ">=3.13"
 # dependencies = [
-#     "tqdm",
+#     "tqdm>=4,<5",
 # ]
 # ///
 
@@ -12,6 +12,7 @@ import concurrent.futures
 import csv
 import json
 import os
+import platform
 import shutil
 import subprocess
 import time
@@ -34,7 +35,14 @@ class Summary:
 
 
 def run_uv(
-    cmd: list[str], package: str, output_dir: Path, version: str | None
+    uv: Path,
+    project: bool,
+    python: str,
+    cache: Path,
+    offline: bool,
+    package: str,
+    output_dir: Path,
+    version: str | None,
 ) -> Summary:
     """Run a uv subprocess.
 
@@ -44,17 +52,54 @@ def run_uv(
 
     start = time.time()
 
+    requirement = f"{package}=={version}" if version else package
+    shared_args = [
+        "--no-build",
+        "--cache-dir",
+        cache,
+        "--color",
+        "never",
+    ]
+    if offline:
+        shared_args.append("--offline")
+    package_dir = output_dir.joinpath(package)
+    package_dir.mkdir(parents=True, exist_ok=True)
+    if project:
+        package_dir.joinpath("pyproject.toml").write_text(
+            f"""
+            [project]
+            name = "testing"
+            version = "0.1.0"
+            requires-python = ">={python}"
+            dependencies = ["{requirement}"]
+            """
+        )
+        cmd = [uv, "lock", *shared_args]
+    else:
+        cmd = [
+            uv,
+            "pip",
+            "compile",
+            "-",
+            "-p",
+            python,
+            # The results are more reproducible if they are platform independent
+            "--universal",
+            "--no-header",
+            "--no-annotate",
+            *shared_args,
+        ]
+
     process = subprocess.Popen(
         cmd,
+        cwd=package_dir,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
 
-    stdin = f"{package}=={version}" if version else package
-
-    stdout, stderr = communicate(process, stdin)
+    stdout, stderr = communicate(process, requirement if not project else None)
 
     # At this point, the process is a zombie, so has called `exit()`, but we haven't reaped it with `wait4` yet.
 
@@ -68,8 +113,6 @@ def run_uv(
 
     max_rss = rusage.ru_maxrss if rusage else 0
 
-    package_dir = output_dir.joinpath(package)
-    package_dir.mkdir(parents=True, exist_ok=True)
     package_dir.joinpath("stdout.txt").write_text(stdout)
     package_dir.joinpath("stderr.txt").write_text(stderr)
     summary = Summary(
@@ -79,13 +122,14 @@ def run_uv(
     return summary
 
 
-def communicate(process: subprocess.Popen, stdin: str) -> tuple[str, str]:
+def communicate(process: subprocess.Popen, stdin: str | None) -> tuple[str, str]:
     """Like `Popen.communicate`, but without the `os.wait` call.
 
     Start threads to drain the pipes to avoid blocking on full pipes, but don't use
     libc's `wait` so we can use `os.wait4` later.
     """
-    process.stdin.write(stdin)
+    if stdin:
+        process.stdin.write(stdin)
     process.stdin.close()
 
     # Mutable objects to communicate across threads
@@ -112,6 +156,11 @@ def communicate(process: subprocess.Popen, stdin: str) -> tuple[str, str]:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--project",
+        action="store_true",
+        help="Use `uv lock` instead of `uv pip compile`",
+    )
     parser.add_argument("--python", "-p", type=str, default="3.13")
     parser.add_argument("--output-dir", type=Path, default="output")
     parser.add_argument("--uv", type=Path, default=Path("uv"))
@@ -147,30 +196,17 @@ def main():
     for package in excluded_packages:
         top_15k_pypi.remove(package)
 
-    output_dir = cwd.joinpath(args.output_dir)
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.joinpath(".gitignore").write_text("*")
+    if args.output_dir.exists():
+        shutil.rmtree(args.output_dir)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    args.output_dir.joinpath(".gitignore").write_text("*")
+    parameters = {
+        "project": args.project,
+        "python": args.python,
+        "latest": args.latest,
+    }
+    args.output_dir.joinpath("parameters.json").write_text(json.dumps(parameters))
 
-    cmd = [
-        args.uv,
-        "pip",
-        "compile",
-        "-",
-        "-p",
-        args.python,
-        "--universal",
-        "--no-build",
-        "--cache-dir",
-        args.cache,
-        "--color",
-        "never",
-        "--no-header",
-        "--no-annotate",
-    ]
-    if args.offline:
-        cmd.append("--offline")
     success = 0
     all_results = []  # Track all results for analysis
     max_package_len = max(len(package) for package in top_15k_pypi[: args.limit])
@@ -188,7 +224,19 @@ def main():
             else:
                 version = None
             packages_pending.append(package)
-            tasks.append(executor.submit(run_uv, cmd, package, output_dir, version))
+            tasks.append(
+                executor.submit(
+                    run_uv,
+                    args.uv,
+                    args.project,
+                    args.python,
+                    args.cache,
+                    args.offline,
+                    package,
+                    args.output_dir,
+                    version,
+                )
+            )
         total = len(packages_pending)
 
         with tqdm(total=total) as progress_bar:
@@ -220,9 +268,15 @@ def main():
         print("\n# top 5 max RSS for successes")
         largest_rss = sorted(successes, key=lambda x: x.max_rss, reverse=True)[:5]
         for summary in largest_rss:
-            # Only linux, max RSS is in KB
+            # On linux, max RSS is in KB, on macOS, it is in bytes
+            if platform.system() == "Linux":
+                max_rss = summary.max_rss / 1024
+            elif platform.system() == "Darwin":
+                max_rss = summary.max_rss / 1024 / 1024
+            else:
+                raise NotImplementedError(f"Unknown platform: {platform.system()}")
             print(
-                f"{summary.package}: {summary.max_rss / 1024:.1f} MB (exit code: {summary.exit_code})"
+                f"{summary.package}: {max_rss:.1f} MB (exit code: {summary.exit_code})"
             )
 
 
