@@ -3,7 +3,6 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
-#     "psutil",
 #     "tqdm",
 # ]
 # ///
@@ -82,7 +81,7 @@ def run_uv(
             stderr_lines.append(line)
         process.stderr.close()
 
-    # Start threads to drain the pipes
+    # Start threads to drain the pipes to avoid deadlocks on full pipes
     stdout_thread = Thread(target=read_stdout)
     stderr_thread = Thread(target=read_stderr)
     stdout_thread.daemon = True
