@@ -8,18 +8,13 @@
 # ///
 
 import argparse
-import concurrent
+import concurrent.futures
 import csv
-import functools
 import json
-import multiprocessing
 import os
 import shutil
-import signal
 import subprocess
-import sys
 import time
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +31,37 @@ class Summary:
     exit_code: int
     max_rss: int
     time: float
+
+
+def communicate(process: subprocess.Popen, stdin: str) -> tuple[str, str]:
+    """We have `Popen.communicate` at home.
+
+    Start threads to drain the pipes to avoid deadlocks on full pipes, but don't use
+    libc's `wait` so we can use `os.wait4` later.
+    """
+    process.stdin.write(stdin)
+    process.stdin.close()
+
+    # Mutable objects to communicate across threads
+    stdout = []
+    stderr = []
+
+    def read_stdout():
+        stdout.append(process.stdout.read())
+        process.stdout.close()
+
+    def read_stderr():
+        stderr.append(process.stderr.read())
+        process.stderr.close()
+
+    stdout_thread = Thread(target=read_stdout, daemon=True)
+    stderr_thread = Thread(target=read_stderr, daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    stdout_thread.join()
+    stderr_thread.join()
+
+    return stdout[0], stderr[0]
 
 
 def run_uv(
@@ -56,39 +82,14 @@ def run_uv(
         text=True,
     )
 
-    process.stdin.write(f"{package}=={version}" if version else package)
-    process.stdin.close()
+    stdin = f"{package}=={version}" if version else package
 
-    # Use thread-safe deques to collect output from threads
-    stdout_lines = deque()
-    stderr_lines = deque()
+    stdout, stderr = communicate(process, stdin)
 
-    def read_stdout():
-        for line in iter(process.stdout.readline, ""):
-            stdout_lines.append(line)
-        process.stdout.close()
-
-    def read_stderr():
-        for line in iter(process.stderr.readline, ""):
-            stderr_lines.append(line)
-        process.stderr.close()
-
-    # Start threads to drain the pipes to avoid deadlocks on full pipes
-    stdout_thread = Thread(target=read_stdout)
-    stderr_thread = Thread(target=read_stderr)
-    stdout_thread.daemon = True
-    stderr_thread.daemon = True
-    stdout_thread.start()
-    stderr_thread.start()
+    # At this point, the process is a zombie, so has called `exit()`, but we haven't reaped it with `wait4` yet.
 
     # Wait for process and get resource usage
     _pid, exit_code, rusage = os.wait4(process.pid, 0)
-
-    stdout_thread.join()
-    stderr_thread.join()
-
-    stdout = "".join(stdout_lines)
-    stderr = "".join(stderr_lines)
 
     max_rss = rusage.ru_maxrss
 
@@ -101,14 +102,6 @@ def run_uv(
     )
     package_dir.joinpath("summary.json").write_text(json.dumps(summary.__dict__))
     return summary
-
-
-def signal_handler(executor: ThreadPoolExecutor, signum, frame):
-    """Handle Ctrl+C gracefully."""
-    print(f"Stopping for SIGINT (signal {signum})")
-    executor.shutdown(wait=False, cancel_futures=True)
-    print("Stopped.")
-    sys.exit(1)
 
 
 def main():
@@ -177,11 +170,6 @@ def main():
     max_package_len = max(len(package) for package in top_15k_pypi[: args.limit])
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() * 2) as executor:
-        # Shutdown executor on ctrl+c
-        previous_sigint_handler = signal.signal(
-            signal.SIGINT, functools.partial(signal_handler, executor)
-        )
-
         tasks = []
         packages_pending = []
         for package in top_15k_pypi[: args.limit]:
@@ -210,7 +198,6 @@ def main():
                     )
                 if summary.exit_code == 0:
                     success += 1
-    signal.signal(signal.SIGINT, previous_sigint_handler)
 
     print(f"Success: {success}/{total}")
 
