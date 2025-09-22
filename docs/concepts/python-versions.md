@@ -330,7 +330,7 @@ Python version instead.
 
 ## Free-threaded Python
 
-uv supports discovering and installing free-threaded Python variants in CPython 3.13+.
+uv supports discovering and installing [free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in CPython 3.13+.
 
 Free-threaded Python versions will not be selected by default. Free-threaded Python versions will
 only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
