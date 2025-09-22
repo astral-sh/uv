@@ -350,6 +350,9 @@ pub(crate) async fn export(
             }
             write!(writer, "{}", export.to_toml()?)?;
         }
+        ExportFormat::CycloneDX1_5 => {
+            write!(writer, "{{}}")?;
+        }
     }
 
     writer.commit().await?;

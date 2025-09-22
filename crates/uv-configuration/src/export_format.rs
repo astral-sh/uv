@@ -15,4 +15,11 @@ pub enum ExportFormat {
     #[serde(rename = "pylock.toml", alias = "pylock-toml")]
     #[cfg_attr(feature = "clap", clap(name = "pylock.toml", alias = "pylock-toml"))]
     PylockToml,
+    /// Export in `CycloneDX` v1.5 JSON format.
+    #[serde(rename = "cyclonedx1.5")]
+    #[cfg_attr(
+        feature = "clap",
+        clap(name = "cyclonedx1.5", alias = "cyclonedx1.5+json")
+    )]
+    CycloneDX1_5,
 }
