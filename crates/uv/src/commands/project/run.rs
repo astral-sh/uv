@@ -1309,9 +1309,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
-    // Unblock cache removal operations.
-    drop(cache);
-
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
