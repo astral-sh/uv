@@ -1565,7 +1565,15 @@ impl std::fmt::Display for PubGrubHint {
                 custom_message,
             } => {
                 if let Some(message) = custom_message {
-                    write!(f, "{}{} {}", "hint".bold().cyan(), ":".bold(), message,)
+                    write!(
+                        f,
+                        "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}). Details: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        index.without_credentials().cyan(),
+                        "401 Unauthorized".red(),
+                        message
+                    )
                 } else {
                     write!(
                         f,
@@ -1582,7 +1590,15 @@ impl std::fmt::Display for PubGrubHint {
                 custom_message,
             } => {
                 if let Some(message) = custom_message {
-                    write!(f, "{}{} {}", "hint".bold().cyan(), ":".bold(), message,)
+                    write!(
+                        f,
+                        "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}). Details: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        index.without_credentials().cyan(),
+                        "403 Forbidden".red(),
+                        message
+                    )
                 } else {
                     write!(
                         f,
