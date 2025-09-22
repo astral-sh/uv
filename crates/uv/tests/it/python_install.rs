@@ -22,6 +22,7 @@ fn python_install() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
         .with_python_download_cache();
 
     // Install the latest version
