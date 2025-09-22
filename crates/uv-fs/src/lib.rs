@@ -693,6 +693,28 @@ impl LockedFile {
         }
     }
 
+    /// Inner implementation for [`LockedFile::acquire_no_wait`].
+    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        match file.file().try_lock_exclusive() {
+            Ok(()) => {
+                debug!("Acquired lock for `{resource}`");
+                Some(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
+                debug!("Lock is busy for `{resource}`");
+                None
+            }
+        }
+    }
+
     /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
     /// [`LockedFile::acquire_blocking`].
     fn lock_file_shared_blocking(
@@ -780,6 +802,17 @@ impl LockedFile {
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
             .await?
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path
+    ///
+    /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
+    ///
+    /// If the lock is not immediately available, [`None`] is returned.
+    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
+        let file = Self::create(path).ok()?;
+        let resource = resource.to_string();
+        Self::lock_file_no_wait(file, &resource)
     }
 
     #[cfg(unix)]

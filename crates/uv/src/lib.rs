@@ -1010,7 +1010,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, cache, printer)
+            commands::cache_clean(&args.package, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),

@@ -209,6 +209,33 @@ impl Cache {
         })
     }
 
+    /// Acquire a lock that allows removing entries from the cache, if available.
+    ///
+    /// If the lock is not immediately available, returns [`Err`] with self.
+    pub fn with_exclusive_lock_no_wait(self) -> Result<Self, Self> {
+        let Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file,
+        } = self;
+
+        match LockedFile::acquire_no_wait(root.join(".lock"), root.simplified_display()) {
+            Some(lock_file) => Ok(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file: Some(Arc::new(lock_file)),
+            }),
+            None => Err(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file,
+            }),
+        }
+    }
+
     /// Return the root of the cache.
     pub fn root(&self) -> &Path {
         &self.root

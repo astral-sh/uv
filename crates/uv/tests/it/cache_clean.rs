@@ -35,6 +35,59 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn clean_force() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("typing-extensions\niniconfig")?;
+
+    // Install a requirement, to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    // When unlocked, `--force` should still take a lock
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
+    Clearing cache at: [CACHE_DIR]/
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    Removed [N] files ([SIZE])
+    ");
+
+    // Install a requirement, to re-populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    // When locked, `--force` should proceed without blocking
+    let _cache = uv_cache::Cache::from_path(context.cache_dir.path()).with_exclusive_lock();
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Lock is busy for `[CACHE_DIR]/`
+    DEBUG Cache is currently in use, proceeding due to `--force`
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    Ok(())
+}
+
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_pypi() -> Result<()> {
