@@ -848,6 +848,37 @@ fn tool_run_cache() {
 }
 
 #[test]
+fn tool_run_no_cache_exec_on_path() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run using a temporary cache (no-cache) and ensure the installed executable is available
+    // on the PATH for the child process. This reproduces the bug where a temporary cache's
+    // directory could be removed before the child was spawned.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-cache")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    "###);
+}
+
+#[test]
 fn tool_run_url() {
     let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");

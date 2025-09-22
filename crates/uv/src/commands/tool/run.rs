@@ -386,8 +386,16 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    // Unblock cache removal operations.
-    drop(cache);
+    // Unblock cache removal operations. For a persistent cache we can drop it entirely.
+    // For a temporary cache (`--no-cache`), we need to keep the directory alive so the
+    // executable remains on disk, but we can still release the lock to allow other
+    // processes to proceed.
+    if cache.is_temporary() {
+        let mut cache = cache;
+        cache.release_lock();
+    } else {
+        drop(cache);
+    }
 
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
