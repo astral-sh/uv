@@ -345,6 +345,17 @@ impl Cache {
         self.temp_dir.is_some()
     }
 
+    /// Release (unlock) the cache's lock file without dropping the cache itself.
+    ///
+    /// This is useful when we need to keep a temporary cache directory alive
+    /// but want to allow other processes to perform cache maintenance
+    /// operations
+    pub fn release_lock(&mut self) {
+        if let Some(lock_file) = self.lock_file.take() {
+            drop(lock_file);
+        }
+    }
+
     /// Initialize the [`Cache`].
     pub fn init(self) -> Result<Self, io::Error> {
         let root = &self.root;
