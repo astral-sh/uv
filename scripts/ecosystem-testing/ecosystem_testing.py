@@ -3,7 +3,8 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "tqdm>=4,<5",
+#     "tomli-w>=1.2.0,<2.0.0",
+#     "tqdm>=4.67.1,<5.0.0",
 # ]
 # ///
 
@@ -16,11 +17,13 @@ import platform
 import shutil
 import subprocess
 import time
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Thread
 
+import tomli_w
 from tqdm.auto import tqdm
 
 cwd = Path(__file__).parent
@@ -35,63 +38,36 @@ class Summary:
 
 
 def run_uv(
+    package: str,
+    specification: str,
     uv: Path,
-    project: bool,
+    mode: str,
     python: str,
     cache: Path,
     offline: bool,
-    package: str,
-    output_dir: Path,
-    version: str | None,
+    output: Path,
 ) -> Summary:
-    """Run a uv subprocess.
+    """Resolve in a uv subprocess.
 
     The logic captures the max RSS from the process and avoids deadlocks from full
     pipes.
     """
+    package_dir = output.joinpath(package)
+    package_dir.mkdir()
+    command = prepare_uv_command(
+        specification,
+        uv,
+        mode,
+        cache,
+        offline,
+        package_dir,
+        python,
+    )
 
     start = time.time()
 
-    requirement = f"{package}=={version}" if version else package
-    shared_args = [
-        "--no-build",
-        "--cache-dir",
-        cache,
-        "--color",
-        "never",
-    ]
-    if offline:
-        shared_args.append("--offline")
-    package_dir = output_dir.joinpath(package)
-    package_dir.mkdir(parents=True, exist_ok=True)
-    if project:
-        package_dir.joinpath("pyproject.toml").write_text(
-            f"""
-            [project]
-            name = "testing"
-            version = "0.1.0"
-            requires-python = ">={python}"
-            dependencies = ["{requirement}"]
-            """
-        )
-        cmd = [uv, "lock", *shared_args]
-    else:
-        cmd = [
-            uv,
-            "pip",
-            "compile",
-            "-",
-            "-p",
-            python,
-            # The results are more reproducible if they are platform independent
-            "--universal",
-            "--no-header",
-            "--no-annotate",
-            *shared_args,
-        ]
-
     process = subprocess.Popen(
-        cmd,
+        command,
         cwd=package_dir,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -99,7 +75,7 @@ def run_uv(
         text=True,
     )
 
-    stdout, stderr = communicate(process, requirement if not project else None)
+    stdout, stderr = communicate(process, specification if mode == "compile" else None)
 
     # At this point, the process is a zombie, so has called `exit()`, but we haven't reaped it with `wait4` yet.
 
@@ -120,6 +96,57 @@ def run_uv(
     )
     package_dir.joinpath("summary.json").write_text(json.dumps(summary.__dict__))
     return summary
+
+
+def prepare_uv_command(
+    specification: str,
+    uv: Path,
+    mode: str,
+    cache: Path,
+    offline: bool,
+    package_dir: Path,
+    python: str,
+) -> list[Path | str]:
+    shared_args = [
+        "--no-build",
+        "--cache-dir",
+        cache,
+        "--color",
+        "never",
+    ]
+    if offline:
+        shared_args.append("--offline")
+    if mode == "pyproject-toml":
+        package_dir.joinpath("pyproject.toml").write_text(specification)
+        command = [uv, "lock", *shared_args]
+    elif mode == "lock":
+        package_dir.joinpath("pyproject.toml").write_text(
+            f"""
+            [project]
+            name = "testing"
+            version = "0.1.0"
+            requires-python = ">={python}"
+            dependencies = ["{specification}"]
+            """
+        )
+        command = [uv, "lock", *shared_args]
+    elif mode == "compile":
+        command = [
+            uv,
+            "pip",
+            "compile",
+            "-",
+            "-p",
+            python,
+            # The results are more reproducible if they are platform independent
+            "--universal",
+            "--no-header",
+            "--no-annotate",
+            *shared_args,
+        ]
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+    return command
 
 
 def communicate(process: subprocess.Popen, stdin: str | None) -> tuple[str, str]:
@@ -157,12 +184,18 @@ def communicate(process: subprocess.Popen, stdin: str | None) -> tuple[str, str]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--project",
-        action="store_true",
-        help="Use `uv lock` instead of `uv pip compile`",
+        "--input", type=Path, default=cwd.joinpath("top-pypi-packages.json")
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["compile", "lock", "pyproject-toml"],
+        default="compile",
+        help="`compile`: `uv pip compile`, "
+             "`lock`: `uv lock` from a single requirement"
+             "`pyproject-toml`: `uv lock` from a directory of `pyproject.toml` files",
     )
     parser.add_argument("--python", "-p", type=str, default="3.13")
-    parser.add_argument("--output-dir", type=Path, default="output")
+    parser.add_argument("--output", type=Path, default="output")
     parser.add_argument("--uv", type=Path, default=Path("uv"))
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--cache", type=Path, default=cwd.joinpath("cache"))
@@ -170,16 +203,62 @@ def main():
     parser.add_argument("--latest", action="store_true")
     args = parser.parse_args()
 
-    top_15k_pypi = json.loads(cwd.joinpath("top-pypi-packages.json").read_text())
-    top_15k_pypi = [pkg["project"] for pkg in top_15k_pypi["rows"]]
+    if args.mode == "pyproject-toml":
+        project_tomls = sorted((file.stem, file) for file in args.input.iterdir())
+        jobs = {}
+        no_project = 0
+        dynamic_dependencies = 0
+        for package, file in project_tomls:
+            if len(jobs) >= args.limit:
+                break
+            if file.suffix != ".toml":
+                continue
+            project_toml = file.read_text()
+            data = tomllib.loads(project_toml)
+            project = data.get("project")
+            if not project:
+                no_project += 1
+                continue
+            if dynamic := project.get("dynamic"):
+                if "dependencies" in dynamic:
+                    dynamic_dependencies += 1
+                    continue
+                if "version" in dynamic:
+                    dynamic.remove("version")
+                # Usually there are no cycles back to the current project, so any version works
+                project["version"] = "1.0.0"
 
-    if args.latest:
-        with cwd.joinpath("package_versions.csv").open() as f:
-            latest_versions = {
-                row["package_name"]: row["latest_version"] for row in csv.DictReader(f)
-            }
+            jobs[package] = tomli_w.dumps(data)
+
+        print(f"`pyproject.toml`s without `[project]`: {no_project}")
+        print(
+            f"`pyproject.toml`s with `dynamic = ['dependencies']`: {dynamic_dependencies}"
+        )
+        if args.latest:
+            raise ValueError("Latest versions are not supported in pyproject-toml mode")
     else:
-        latest_versions = None
+        project_names = json.loads(args.input.read_text())
+        project_names = sorted(pkg["project"] for pkg in project_names["rows"])
+
+        if args.latest:
+            with cwd.joinpath("package_versions.csv").open() as f:
+                latest_versions = {
+                    row["package_name"]: row["latest_version"]
+                    for row in csv.DictReader(f)
+                }
+        else:
+            latest_versions = None
+
+        jobs = {}
+        for package in project_names[: args.limit]:
+            if latest_versions:
+                if version := latest_versions.get(package):
+                    jobs[package] = f"{package}=={version}"
+                else:
+                    tqdm.write(f"Missing version: {package}")
+                    continue
+            else:
+                jobs[package] = package
 
     excluded_packages = [
         # 5000 releases, no solution
@@ -188,53 +267,47 @@ def main():
         "tf-models-nightly",
         "mtmtrain",
         "llm-dialog-manager",
+        "python-must",
         # Slow and have no solution
         "edx-enterprise",
         "kcli",
         "emmet-api",
     ]
     for package in excluded_packages:
-        top_15k_pypi.remove(package)
+        jobs.pop(package, None)
 
-    if args.output_dir.exists():
-        shutil.rmtree(args.output_dir)
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    args.output_dir.joinpath(".gitignore").write_text("*")
+    if args.output.exists():
+        shutil.rmtree(args.output)
+    args.output.mkdir(parents=True)
+    args.output.joinpath(".gitignore").write_text("*")
     parameters = {
-        "project": args.project,
+        "mode": args.mode,
         "python": args.python,
         "latest": args.latest,
     }
-    args.output_dir.joinpath("parameters.json").write_text(json.dumps(parameters))
+    args.output.joinpath("parameters.json").write_text(json.dumps(parameters))
 
     success = 0
     all_results = []  # Track all results for analysis
-    max_package_len = max(len(package) for package in top_15k_pypi[: args.limit])
+    max_package_len = max(len(package) for package in jobs)
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() * 2) as executor:
         tasks = []
         packages_pending = []
-        for package in top_15k_pypi[: args.limit]:
-            if latest_versions:
-                if version := latest_versions.get(package):
-                    pass
-                else:
-                    tqdm.write(f"Missing version: {package}")
-                    continue
-            else:
-                version = None
+        for package, specification in jobs.items():
             packages_pending.append(package)
+
             tasks.append(
                 executor.submit(
                     run_uv,
+                    package,
+                    specification,
                     args.uv,
-                    args.project,
+                    args.mode,
                     args.python,
                     args.cache,
                     args.offline,
-                    package,
-                    args.output_dir,
-                    version,
+                    args.output,
                 )
             )
         total = len(packages_pending)

@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", type=Path)
     parser.add_argument("branch", type=Path)
-    parser.add_argument("--project", action="store_true")
+    parser.add_argument("--mode", choices=["compile", "lock", "pyproject-toml"])
     parser.add_argument(
         "--markdown",
         action="store_true",
@@ -53,21 +53,21 @@ def main():
             # also `uv.lock` doesn't exist for failed resolutions
             continue
 
-        if args.project:
+        if args.mode == "compile":
+            resolution = package_dir.joinpath("stdout.txt").read_text()
+        else:
             resolution = package_dir.joinpath("uv.lock").read_text()
             if package_dir.joinpath("stdout.txt").read_text().strip():
                 raise RuntimeError(f"Stdout not empty (base): {package}")
-        else:
-            resolution = package_dir.joinpath("stdout.txt").read_text()
         stderr = package_dir.joinpath("stderr.txt").read_text()
         stderr = redact_time.sub(r"[TIME]", stderr)
 
-        if args.project:
+        if args.mode == "compile":
+            resolution_branch = package_branch.joinpath("stdout.txt").read_text()
+        else:
             resolution_branch = package_branch.joinpath("uv.lock").read_text()
             if package_branch.joinpath("stdout.txt").read_text().strip():
                 raise RuntimeError(f"Stdout not empty (branch): {package}")
-        else:
-            resolution_branch = package_branch.joinpath("stdout.txt").read_text()
         stderr_branch = package_branch.joinpath("stderr.txt").read_text()
         stderr_branch = redact_time.sub(r"[TIME]", stderr_branch)
 
@@ -77,19 +77,34 @@ def main():
             )
 
     if args.markdown:
-        print("# Ecosystem testing report")
         print(
-            f"Dataset: "
-            f"`{'uv pip compile' if not parameters['project'] else 'uv lock'}` with `--no-build` "
-            f"on each of the top 15k PyPI packages on Python {parameters['python']} "
-            "pinned to the latest package version. "
-            if parameters["latest"]
-            else ". "
-            "A handful of pathological cases were filtered out. "
-            "Only success resolutions can be compared.\n"
+            "## Ecosystem testing report "
+            f"({args.mode.replace('pyproject-toml', 'pyproject.toml')})"
         )
-        print(f"Successfully resolved packages: {successful}/{total}\n")
-        print(f"Different packages: {len(differences)}/{total}\n")
+        if args.mode == "pyproject-toml":
+            print(
+                " * Dataset: A set of top level `pyproject.toml` from GitHub projects popular in 2025. "
+                + "Only `pyproject.toml` files with a `[project]` section and static dependencies are included."
+            )
+        else:
+            print(
+                " * Dataset: The top 15k PyPI packages. A handful of pathological cases were filtered out."
+            )
+        print(
+            " * Command: "
+            + f"`{'uv pip compile' if args.mode == 'compile' else 'uv lock'}` with `--no-build` "
+            + f"on Python {parameters['python']} "
+            + (
+                "pinned to the latest package version. "
+                if parameters["latest"]
+                else ". "
+            )
+        )
+        print(
+            f" * Successfully resolved packages: {successful}/{total} ({successful / total:.0%}). "
+            + "Only success resolutions can be compared."
+        )
+        print(f" * Different packages: {len(differences)}/{successful}")
 
         for (
             package,
@@ -98,10 +113,10 @@ def main():
             stderr,
             stderr_branch,
         ) in differences:
-            if args.project:
-                context_window = 3
-            else:
+            if args.mode == "compile":
                 context_window = 999999
+            else:
+                context_window = 3
             print(f"\n<details>\n<summary>{package}</summary>\n")
             if resolution != resolution_branch:
                 print("```diff")
@@ -129,7 +144,7 @@ def main():
                     )
                 )
                 print("```")
-            print("</details>")
+            print("</details>\n")
     else:
         for (
             package,
@@ -159,9 +174,9 @@ def main():
                     )
                 )
         print(
-            f"Successfully resolved packages: {successful}/{total} ({successful}/{total}:.0%)"
+            f"Successfully resolved packages: {successful}/{total} ({successful / total:.0%})"
         )
-        print(f"Different packages: {len(differences)}/{total}")
+        print(f"Different packages: {len(differences)}/{successful}")
 
 
 if __name__ == "__main__":
