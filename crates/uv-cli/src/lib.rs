@@ -775,6 +775,13 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache clean` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache clean` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

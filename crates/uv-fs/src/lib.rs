@@ -652,6 +652,20 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Whether the error is due to a lock being held.
+fn is_known_already_locked_error(err: &std::io::Error) -> bool {
+    if matches!(err.kind(), std::io::ErrorKind::WouldBlock) {
+        return true;
+    }
+
+    // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
+    if cfg!(windows) && err.raw_os_error() == Some(33) {
+        return true;
+    }
+
+    false
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 #[must_use]
@@ -671,7 +685,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -689,6 +703,28 @@ impl LockedFile {
 
                 debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
+            }
+        }
+    }
+
+    /// Inner implementation for [`LockedFile::acquire_no_wait`].
+    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        match file.file().try_lock_exclusive() {
+            Ok(()) => {
+                debug!("Acquired lock for `{resource}`");
+                Some(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
+                    debug!("Try lock error: {err:?}");
+                }
+                debug!("Lock is busy for `{resource}`");
+                None
             }
         }
     }
@@ -711,7 +747,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -780,6 +816,17 @@ impl LockedFile {
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
             .await?
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path
+    ///
+    /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
+    ///
+    /// If the lock is not immediately available, [`None`] is returned.
+    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
+        let file = Self::create(path).ok()?;
+        let resource = resource.to_string();
+        Self::lock_file_no_wait(file, &resource)
     }
 
     #[cfg(unix)]

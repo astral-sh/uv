@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, Simplified, cachedir, directories};
@@ -207,6 +207,33 @@ impl Cache {
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
         })
+    }
+
+    /// Acquire a lock that allows removing entries from the cache, if available.
+    ///
+    /// If the lock is not immediately available, returns [`Err`] with self.
+    pub fn with_exclusive_lock_no_wait(self) -> Result<Self, Self> {
+        let Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file,
+        } = self;
+
+        match LockedFile::acquire_no_wait(root.join(".lock"), root.simplified_display()) {
+            Some(lock_file) => Ok(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file: Some(Arc::new(lock_file)),
+            }),
+            None => Err(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file,
+            }),
+        }
     }
 
     /// Return the root of the cache.
@@ -419,17 +446,32 @@ impl Cache {
 
     /// Clear the cache, removing all entries.
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        // Remove everything but `.lock`, for Windows locked file special cases.
+        // Remove everything but `.lock`, Windows does not allow removal of a locked file
         let mut removal = Remover::new(reporter).rm_rf(&self.root, true)?;
         let Self {
             root, lock_file, ..
         } = self;
-        // Unlock `.lock`
-        drop(lock_file);
-        fs_err::remove_file(root.join(".lock"))?;
+
+        // Remove the `.lock` file, unlocking it first
+        if let Some(lock) = lock_file {
+            drop(lock);
+            fs_err::remove_file(root.join(".lock"))?;
+        }
         removal.num_files += 1;
-        fs_err::remove_dir(root)?;
-        removal.num_dirs += 1;
+
+        // Remove the root directory
+        match fs_err::remove_dir(root) {
+            Ok(()) => {
+                removal.num_dirs += 1;
+            }
+            // On Windows, when `--force` is used, the `.lock` file can exist and be unremovable,
+            // so we make this non-fatal
+            Err(err) if err.kind() == io::ErrorKind::DirectoryNotEmpty => {
+                trace!("Failed to remove root cache directory: not empty");
+            }
+            Err(err) => return Err(err),
+        }
+
         Ok(removal)
     }
 
