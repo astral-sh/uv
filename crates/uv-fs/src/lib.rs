@@ -652,6 +652,20 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Whether the error is due to a lock being held.
+fn is_known_already_locked_error(err: &std::io::Error) -> bool {
+    if matches!(err.kind(), std::io::ErrorKind::WouldBlock) {
+        return true;
+    }
+
+    // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
+    if cfg!(windows) && err.raw_os_error() == Some(33) {
+        return true;
+    }
+
+    false
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 #[must_use]
@@ -671,7 +685,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -706,7 +720,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 debug!("Lock is busy for `{resource}`");
@@ -733,7 +747,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
