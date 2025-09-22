@@ -924,13 +924,17 @@ impl PubGrubReportFormatter<'_> {
         // Add hints due to an index returning an unauthorized response.
         for index in index_locations.allowed_indexes() {
             if index_capabilities.unauthorized(&index.url) {
+                let custom_message = index_capabilities.custom_message(&index.url);
                 hints.insert(PubGrubHint::UnauthorizedIndex {
                     index: index.url.clone(),
+                    custom_message,
                 });
             }
             if index_capabilities.forbidden(&index.url) {
+                let custom_message = index_capabilities.custom_message(&index.url);
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
+                    custom_message,
                 });
             }
         }
@@ -1115,9 +1119,15 @@ pub(crate) enum PubGrubHint {
         option: NoBinary,
     },
     /// An index returned an Unauthorized (401) response.
-    UnauthorizedIndex { index: IndexUrl },
+    UnauthorizedIndex {
+        index: IndexUrl,
+        custom_message: Option<String>,
+    },
     /// An index returned a Forbidden (403) response.
-    ForbiddenIndex { index: IndexUrl },
+    ForbiddenIndex {
+        index: IndexUrl,
+        custom_message: Option<String>,
+    },
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
@@ -1200,9 +1210,11 @@ enum PubGrubHintCore {
     },
     UnauthorizedIndex {
         index: IndexUrl,
+        custom_message: Option<String>,
     },
     ForbiddenIndex {
         index: IndexUrl,
+        custom_message: Option<String>,
     },
     NoBuild {
         package: PackageName,
@@ -1272,8 +1284,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 Self::DependsOnItself { package, workspace }
             }
             PubGrubHint::UncheckedIndex { name: package, .. } => Self::UncheckedIndex { package },
-            PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
-            PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
+            PubGrubHint::UnauthorizedIndex { index, custom_message } => Self::UnauthorizedIndex { index, custom_message },
+            PubGrubHint::ForbiddenIndex { index, custom_message } => Self::ForbiddenIndex { index, custom_message },
             PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
             PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
@@ -1536,25 +1548,45 @@ impl std::fmt::Display for PubGrubHint {
                     "--index-strategy unsafe-best-match".green(),
                 )
             }
-            Self::UnauthorizedIndex { index } => {
-                write!(
-                    f,
-                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    index.without_credentials().cyan(),
-                    "401 Unauthorized".red(),
-                )
+            Self::UnauthorizedIndex { index, custom_message } => {
+                if let Some(message) = custom_message {
+                    write!(
+                        f,
+                        "{}{} {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        message,
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        index.without_credentials().cyan(),
+                        "401 Unauthorized".red(),
+                    )
+                }
             }
-            Self::ForbiddenIndex { index } => {
-                write!(
-                    f,
-                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    index.without_credentials().cyan(),
-                    "403 Forbidden".red(),
-                )
+            Self::ForbiddenIndex { index, custom_message } => {
+                if let Some(message) = custom_message {
+                    write!(
+                        f,
+                        "{}{} {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        message,
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        index.without_credentials().cyan(),
+                        "403 Forbidden".red(),
+                    )
+                }
             }
             Self::NoBuild { package, option } => {
                 let option = match option {

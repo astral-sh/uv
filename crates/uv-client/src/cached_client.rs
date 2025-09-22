@@ -544,9 +544,13 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
-            .error_for_status()
-            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+
+        // Check for status errors and extract custom error message for 403/401
+        if let Err(status_error) = response.error_for_status_ref() {
+            let error_kind = Self::maybe_generate_error_message(&url, &mut response, status_error);
+            return Err(error_kind.into());
+        }
 
         // If the user set a custom `Cache-Control` header, override it.
         if let CacheControl::Override(header) = cache_control {
@@ -581,6 +585,19 @@ impl CachedClient {
         }
     }
 
+    fn maybe_generate_error_message(url: &DisplaySafeUrl, response: &mut Response, status_error: reqwest::Error) -> ErrorKind {
+        let error_kind = if matches!(response.status(), http::StatusCode::FORBIDDEN | http::StatusCode::UNAUTHORIZED) {
+            if let Some(custom_message) = crate::error::extract_custom_error_message(&response) {
+                ErrorKind::from_reqwest_with_custom_message(url.clone(), status_error, custom_message)
+            } else {
+                ErrorKind::from_reqwest(url.clone(), status_error)
+            }
+        } else {
+            ErrorKind::from_reqwest(url.clone(), status_error)
+        };
+        error_kind
+    }
+
     #[instrument(skip_all, fields(url = req.url().as_str()))]
     async fn fresh_request(
         &self,
@@ -611,9 +628,10 @@ impl CachedClient {
             .map(|retries| retries.value());
 
         if let Err(status_error) = response.error_for_status_ref() {
+            let error_kind = Self::maybe_generate_error_message(&url, &mut response, status_error);
             return Err(CachedClientError::<Error>::Client {
                 retries: retry_count,
-                err: ErrorKind::from_reqwest(url, status_error).into(),
+                err: error_kind.into(),
             }
             .into());
         }

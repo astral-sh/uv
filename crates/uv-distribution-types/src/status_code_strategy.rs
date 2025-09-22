@@ -67,15 +67,35 @@ impl IndexStatusCodeStrategy {
         index_url: &IndexUrl,
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
+        self.handle_status_code_with_message(status_code, index_url, capabilities, None)
+    }
+
+    /// Based on the strategy, decide whether to continue searching the next index
+    /// based on the status code returned by this one, with an optional custom error message.
+    pub fn handle_status_code_with_message(
+        &self,
+        status_code: StatusCode,
+        index_url: &IndexUrl,
+        capabilities: &IndexCapabilities,
+        custom_message: Option<String>,
+    ) -> IndexStatusCodeDecision {
         match self {
             Self::Default => match status_code {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
                 StatusCode::UNAUTHORIZED => {
-                    capabilities.set_unauthorized(index_url.clone());
+                    if let Some(message) = custom_message {
+                        capabilities.set_unauthorized_with_message(index_url.clone(), message);
+                    } else {
+                        capabilities.set_unauthorized(index_url.clone());
+                    }
                     IndexStatusCodeDecision::Fail(status_code)
                 }
                 StatusCode::FORBIDDEN => {
-                    capabilities.set_forbidden(index_url.clone());
+                    if let Some(message) = custom_message {
+                        capabilities.set_forbidden_with_message(index_url.clone(), message);
+                    } else {
+                        capabilities.set_forbidden(index_url.clone());
+                    }
                     IndexStatusCodeDecision::Fail(status_code)
                 }
                 _ => IndexStatusCodeDecision::Fail(status_code),
@@ -84,7 +104,7 @@ impl IndexStatusCodeStrategy {
                 if status_codes.contains(&status_code) {
                     IndexStatusCodeDecision::Ignore
                 } else {
-                    Self::Default.handle_status_code(status_code, index_url, capabilities)
+                    Self::Default.handle_status_code_with_message(status_code, index_url, capabilities, custom_message)
                 }
             }
         }
