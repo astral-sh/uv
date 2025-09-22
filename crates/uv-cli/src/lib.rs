@@ -11,8 +11,8 @@ use clap::{Args, Parser, Subcommand};
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
-    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -1306,7 +1306,7 @@ pub struct PipCompileArgs {
     /// uv will infer the output format from the file extension of the output file, if
     /// provided. Otherwise, defaults to `requirements.txt`.
     #[arg(long, value_enum)]
-    pub format: Option<ExportFormat>,
+    pub format: Option<PipCompileFormat>,
 
     /// Include extras in the output file.
     ///
