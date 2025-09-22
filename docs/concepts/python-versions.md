@@ -341,8 +341,7 @@ only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethre
 
 uv supports discovering and installing
 [debug builds](https://docs.python.org/3.14/using/configure.html#debug-build) of Python, i.e., with
-debug assertions enabled. These builds also do not have debug symbols stripped, which can be useful
-when debugging a Python process with a C-level debugger.
+debug assertions enabled.
 
 !!! important
 
@@ -354,6 +353,12 @@ will be used. Similarly, if the path to a debug Python executable is provided th
 version matches the request and the debug version will be used.
 
 Debug builds of Python can be explicitly requested with, e.g., `3.13d` or `3.13+debug`.
+
+!!! note
+
+    CPython versions installed by uv usually have debug symbols stripped to reduce the distribution
+    size. These debug builds do not have debug symbols stripped, which can be useful when debugging
+    Python processes with a C-level debugger.
 
 ## Disabling automatic Python downloads
 
