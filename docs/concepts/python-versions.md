@@ -337,7 +337,7 @@ only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethre
 
 ## Debug Python variants
 
-uv supports discovering and installing debug builds of Python, i.e., with debug assertions enabled.
+uv supports discovering and installing [debug builds](https://docs.python.org/3.14/using/configure.html#debug-build) of Python, i.e., with debug assertions enabled.
 
 Debug builds of Python are slower and are not appropriate for general use.
 
