@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use either::Either;
 use thiserror::Error;
@@ -230,7 +229,6 @@ impl LoweredRequirement {
                                 ));
                             };
                             if let Some(credentials) = index.credentials() {
-                                let credentials = Arc::new(credentials);
                                 uv_auth::store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {
@@ -464,7 +462,6 @@ impl LoweredRequirement {
                                 ));
                             };
                             if let Some(credentials) = index.credentials() {
-                                let credentials = Arc::new(credentials);
                                 uv_auth::store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {

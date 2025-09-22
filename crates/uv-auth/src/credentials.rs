@@ -1,21 +1,24 @@
+use std::borrow::Cow;
+use std::fmt;
+use std::io::Read;
+use std::io::Write;
+use std::str::FromStr;
+
 use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::fmt;
-use uv_redacted::DisplaySafeUrl;
-
+use http::Uri;
 use netrc::Netrc;
+use reqsign::aws::DefaultSigner;
 use reqwest::Request;
 use reqwest::header::HeaderValue;
-use std::io::Read;
-use std::io::Write;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
     Basic {
         /// The username to use for authentication.
@@ -342,6 +345,127 @@ impl Credentials {
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
         request
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Authentication {
+    /// HTTP Basic or Bearer Authentication credentials.
+    Credentials(Credentials),
+
+    /// AWS Signature Version 4 signing.
+    Signer(DefaultSigner),
+}
+
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Credentials(a), Self::Credentials(b)) => a == b,
+            (Self::Signer(..), Self::Signer(..)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Authentication {}
+
+impl From<Credentials> for Authentication {
+    fn from(credentials: Credentials) -> Self {
+        Self::Credentials(credentials)
+    }
+}
+
+impl From<DefaultSigner> for Authentication {
+    fn from(signer: DefaultSigner) -> Self {
+        Self::Signer(signer)
+    }
+}
+
+impl Authentication {
+    /// Return the password used for authentication, if any.
+    pub(crate) fn password(&self) -> Option<&str> {
+        match self {
+            Self::Credentials(credentials) => credentials.password(),
+            Self::Signer(..) => None,
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn username(&self) -> Option<&str> {
+        match self {
+            Self::Credentials(credentials) => credentials.username(),
+            Self::Signer(..) => None,
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn as_username(&self) -> Cow<'_, Username> {
+        match self {
+            Self::Credentials(credentials) => credentials.as_username(),
+            Self::Signer(..) => Cow::Owned(Username::none()),
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn to_username(&self) -> Username {
+        match self {
+            Self::Credentials(credentials) => credentials.to_username(),
+            Self::Signer(..) => Username::none(),
+        }
+    }
+
+    /// Return `true` if the object contains a means of authenticating.
+    pub(crate) fn is_authenticated(&self) -> bool {
+        match self {
+            Self::Credentials(credentials) => credentials.is_authenticated(),
+            Self::Signer(..) => true,
+        }
+    }
+
+    /// Return `true` if the object contains no credentials.
+    pub(crate) fn is_empty(&self) -> bool {
+        match self {
+            Self::Credentials(credentials) => credentials.is_empty(),
+            Self::Signer(..) => false,
+        }
+    }
+
+    /// Apply the authentication to the given request.
+    ///
+    /// Any existing credentials will be overridden.
+    #[must_use]
+    pub(crate) async fn authenticate(&self, mut request: Request) -> Request {
+        match self {
+            Self::Credentials(credentials) => credentials.authenticate(request),
+            Self::Signer(signer) => {
+                // Build an `http::Request` from the `reqwest::Request`.
+                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
+                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let mut http_req = http::Request::builder()
+                    .method(request.method().clone())
+                    .uri(uri)
+                    .body(())
+                    .unwrap();
+                *http_req.headers_mut() = request.headers().clone();
+
+                // Sign the parts.
+                let (mut parts, ()) = http_req.into_parts();
+                signer
+                    .sign(&mut parts, None)
+                    .await
+                    .expect("AWS signing should succeed");
+
+                // Copy over the signed headers.
+                request.headers_mut().extend(parts.headers);
+
+                // Copy over the signed path and query, if any.
+                if let Some(path_and_query) = parts.uri.path_and_query() {
+                    request.url_mut().set_path(path_and_query.path());
+                    request.url_mut().set_query(path_and_query.query());
+                }
+                request
+            }
+        }
     }
 }
 
