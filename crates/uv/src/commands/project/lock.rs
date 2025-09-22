@@ -759,9 +759,7 @@ async fn do_lock(
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = if force {
-        None
-    } else if let Some(existing_lock) = existing_lock {
+    let existing_lock = if let Some(existing_lock) = existing_lock {
         match ValidatedLock::validate(
             existing_lock,
             target.install_path(),
@@ -786,6 +784,7 @@ async fn do_lock(
             state.index(),
             &database,
             printer,
+            force,
         )
         .await
         {
@@ -1000,7 +999,11 @@ impl ValidatedLock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
+        force: bool,
     ) -> Result<Self, ProjectError> {
+        if force {
+            return Ok(Self::Preferable(lock));
+        }
         // Start with the most severe condition: a fundamental option changed between resolutions.
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
