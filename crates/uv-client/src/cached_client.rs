@@ -585,17 +585,27 @@ impl CachedClient {
         }
     }
 
-    fn maybe_generate_error_message(url: &DisplaySafeUrl, response: &mut Response, status_error: reqwest::Error) -> ErrorKind {
-        let error_kind = if matches!(response.status(), http::StatusCode::FORBIDDEN | http::StatusCode::UNAUTHORIZED) {
+    fn maybe_generate_error_message(
+        url: &DisplaySafeUrl,
+        response: &mut Response,
+        status_error: reqwest::Error,
+    ) -> ErrorKind {
+        if matches!(
+            response.status(),
+            http::StatusCode::FORBIDDEN | http::StatusCode::UNAUTHORIZED
+        ) {
             if let Some(custom_message) = crate::error::extract_custom_error_message(&response) {
-                ErrorKind::from_reqwest_with_custom_message(url.clone(), status_error, custom_message)
+                ErrorKind::from_reqwest_with_custom_message(
+                    url.clone(),
+                    status_error,
+                    custom_message,
+                )
             } else {
                 ErrorKind::from_reqwest(url.clone(), status_error)
             }
         } else {
             ErrorKind::from_reqwest(url.clone(), status_error)
-        };
-        error_kind
+        }
     }
 
     #[instrument(skip_all, fields(url = req.url().as_str()))]

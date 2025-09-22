@@ -531,13 +531,13 @@ impl RegistryClient {
                     };
 
                     // Extract custom error message if available
-                    let custom_message = reqwest_err.custom_message().map(|s| s.to_string());
+                    let custom_message = reqwest_err.custom_message().map(ToString::to_string);
 
                     let decision = status_code_strategy.handle_status_code_with_message(
                         status_code,
                         index,
                         capabilities,
-                        custom_message
+                        custom_message,
                     );
                     if let IndexStatusCodeDecision::Fail(status_code) = decision {
                         if !matches!(

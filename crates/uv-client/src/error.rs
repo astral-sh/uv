@@ -325,7 +325,10 @@ impl ErrorKind {
         error: reqwest::Error,
         custom_message: String,
     ) -> Self {
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(error).with_custom_message(custom_message))
+        Self::WrappedReqwestError(
+            url,
+            WrappedReqwestError::from(error).with_custom_message(custom_message),
+        )
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
@@ -341,21 +344,6 @@ impl ErrorKind {
 
         Self::WrappedReqwestError(url, WrappedReqwestError::from(err))
     }
-
-    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`] with a custom error message.
-    pub(crate) fn from_reqwest_middleware_with_custom_message(
-        url: DisplaySafeUrl,
-        err: reqwest_middleware::Error,
-        custom_message: String,
-    ) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
-            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return Self::Offline(err.url().to_string());
-            }
-        }
-
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(err).with_custom_message(custom_message))
-    }
 }
 
 /// Extract custom error message from response headers.
@@ -366,9 +354,8 @@ pub(crate) fn extract_custom_error_message(response: &reqwest::Response) -> Opti
         .headers()
         .get("X-Error-Message")
         .and_then(|value| value.to_str().ok())
-        .map(|s| s.to_string())
+        .map(ToString::to_string)
 }
-
 
 /// Handle the case with no internet by explicitly telling the user instead of showing an obscure
 /// DNS error.
@@ -448,7 +435,8 @@ impl WrappedReqwestError {
         self.custom_message.as_deref()
     }
 
-    /// Create a new WrappedReqwestError with a custom message.
+    /// Create a new `WrappedReqwestError` with a custom message.
+    #[must_use]
     pub fn with_custom_message(mut self, message: String) -> Self {
         self.custom_message = Some(message);
         self
@@ -484,7 +472,7 @@ impl Deref for WrappedReqwestError {
 impl Display for WrappedReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(ref custom_msg) = self.custom_message {
-            write!(f, "{}", custom_msg)
+            write!(f, "{custom_msg}")
         } else if self.is_likely_offline() {
             // Insert an extra hint, we'll show the wrapped error through `source`
             f.write_str("Could not connect, are you offline?")
@@ -518,9 +506,13 @@ mod tests {
     fn test_extract_custom_error_message() {
         // Create a mock response with X-Error-Message header
         let mut headers = HeaderMap::new();
-        headers.insert("X-Error-Message", "Custom error from server".parse().unwrap());
+        headers.insert(
+            "X-Error-Message",
+            "Custom error from server".parse().unwrap(),
+        );
 
-        let custom_msg = headers.get("X-Error-Message")
+        let custom_msg = headers
+            .get("X-Error-Message")
             .and_then(|value| value.to_str().ok())
             .map(|s| s.to_string());
 
@@ -531,7 +523,8 @@ mod tests {
     fn test_extract_custom_error_message_missing() {
         let headers = HeaderMap::new();
 
-        let custom_msg = headers.get("X-Error-Message")
+        let custom_msg = headers
+            .get("X-Error-Message")
             .and_then(|value| value.to_str().ok())
             .map(|s| s.to_string());
 

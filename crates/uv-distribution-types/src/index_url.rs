@@ -749,11 +749,7 @@ impl IndexCapabilities {
 
     /// Get the custom error message for an [`IndexUrl`] if available.
     pub fn custom_message(&self, index_url: &IndexUrl) -> Option<String> {
-        self.custom_messages
-            .read()
-            .unwrap()
-            .get(index_url)
-            .cloned()
+        self.custom_messages.read().unwrap().get(index_url).cloned()
     }
 }
 

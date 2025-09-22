@@ -1284,8 +1284,20 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 Self::DependsOnItself { package, workspace }
             }
             PubGrubHint::UncheckedIndex { name: package, .. } => Self::UncheckedIndex { package },
-            PubGrubHint::UnauthorizedIndex { index, custom_message } => Self::UnauthorizedIndex { index, custom_message },
-            PubGrubHint::ForbiddenIndex { index, custom_message } => Self::ForbiddenIndex { index, custom_message },
+            PubGrubHint::UnauthorizedIndex {
+                index,
+                custom_message,
+            } => Self::UnauthorizedIndex {
+                index,
+                custom_message,
+            },
+            PubGrubHint::ForbiddenIndex {
+                index,
+                custom_message,
+            } => Self::ForbiddenIndex {
+                index,
+                custom_message,
+            },
             PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
             PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
@@ -1548,15 +1560,12 @@ impl std::fmt::Display for PubGrubHint {
                     "--index-strategy unsafe-best-match".green(),
                 )
             }
-            Self::UnauthorizedIndex { index, custom_message } => {
+            Self::UnauthorizedIndex {
+                index,
+                custom_message,
+            } => {
                 if let Some(message) = custom_message {
-                    write!(
-                        f,
-                        "{}{} {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                        message,
-                    )
+                    write!(f, "{}{} {}", "hint".bold().cyan(), ":".bold(), message,)
                 } else {
                     write!(
                         f,
@@ -1568,15 +1577,12 @@ impl std::fmt::Display for PubGrubHint {
                     )
                 }
             }
-            Self::ForbiddenIndex { index, custom_message } => {
+            Self::ForbiddenIndex {
+                index,
+                custom_message,
+            } => {
                 if let Some(message) = custom_message {
-                    write!(
-                        f,
-                        "{}{} {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                        message,
-                    )
+                    write!(f, "{}{} {}", "hint".bold().cyan(), ":".bold(), message,)
                 } else {
                     write!(
                         f,

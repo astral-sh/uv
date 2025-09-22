@@ -104,7 +104,12 @@ impl IndexStatusCodeStrategy {
                 if status_codes.contains(&status_code) {
                     IndexStatusCodeDecision::Ignore
                 } else {
-                    Self::Default.handle_status_code_with_message(status_code, index_url, capabilities, custom_message)
+                    Self::Default.handle_status_code_with_message(
+                        status_code,
+                        index_url,
+                        capabilities,
+                        custom_message,
+                    )
                 }
             }
         }
