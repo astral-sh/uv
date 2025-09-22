@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_cache::{Cache, Refresh};
+use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
@@ -84,7 +84,6 @@ pub(crate) async fn lock(
     locked: bool,
     frozen: bool,
     dry_run: DryRun,
-    refresh: Refresh,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -202,7 +201,6 @@ pub(crate) async fn lock(
         printer,
         preview,
     )
-    .with_refresh(&refresh)
     .execute(target)
     .await
     {
@@ -262,7 +260,6 @@ pub(super) enum LockMode<'env> {
 pub(super) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
-    refresh: Option<&'env Refresh>,
     settings: &'env ResolverSettings,
     client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
@@ -291,7 +288,6 @@ impl<'env> LockOperation<'env> {
         Self {
             mode,
             constraints: vec![],
-            refresh: None,
             settings,
             client_builder,
             state,
@@ -311,13 +307,6 @@ impl<'env> LockOperation<'env> {
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
         self.constraints = constraints;
-        self
-    }
-
-    /// Set the refresh strategy for the [`LockOperation`].
-    #[must_use]
-    pub(super) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
-        self.refresh = Some(refresh);
         self
     }
 
@@ -345,7 +334,6 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     Some(existing),
                     self.constraints,
-                    self.refresh,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -388,7 +376,6 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     existing,
                     self.constraints,
-                    self.refresh,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -420,7 +407,6 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     external: Vec<NameRequirementSpecification>,
-    refresh: Option<&Refresh>,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
@@ -758,7 +744,6 @@ async fn do_lock(
             &requires_python,
             index_locations,
             upgrade,
-            refresh,
             &options,
             &hasher,
             state.index(),
@@ -973,7 +958,6 @@ impl ValidatedLock {
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
         upgrade: &Upgrade,
-        refresh: Option<&Refresh>,
         options: &Options,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1157,12 +1141,6 @@ impl ValidatedLock {
                 lock.conflicts(),
             );
             return Ok(Self::Versions(lock));
-        }
-
-        // If the user specified `--refresh`, then we have to re-resolve.
-        if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
-            debug!("Resolving despite existing lockfile due to `--refresh`");
-            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
