@@ -514,7 +514,7 @@ mod tests {
         let custom_msg = headers
             .get("X-Error-Message")
             .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+            .map(ToString::to_string);
 
         assert_eq!(custom_msg, Some("Custom error from server".to_string()));
     }
@@ -526,7 +526,7 @@ mod tests {
         let custom_msg = headers
             .get("X-Error-Message")
             .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+            .map(ToString::to_string);
 
         assert_eq!(custom_msg, None);
     }

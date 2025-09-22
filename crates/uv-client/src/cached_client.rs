@@ -594,7 +594,7 @@ impl CachedClient {
             response.status(),
             http::StatusCode::FORBIDDEN | http::StatusCode::UNAUTHORIZED
         ) {
-            if let Some(custom_message) = crate::error::extract_custom_error_message(&response) {
+            if let Some(custom_message) = crate::error::extract_custom_error_message(response) {
                 ErrorKind::from_reqwest_with_custom_message(
                     url.clone(),
                     status_error,
