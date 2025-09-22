@@ -1902,6 +1902,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
                 args.refresh
+                    .clone()
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
@@ -1923,6 +1924,7 @@ async fn run_project(
                 args.locked,
                 args.frozen,
                 args.dry_run,
+                args.refresh,
                 args.python,
                 args.install_mirrors,
                 args.settings,
