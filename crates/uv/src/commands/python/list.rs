@@ -111,7 +111,7 @@ pub(crate) async fn list(
             .into_iter()
             .flatten()
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
-            .filter(|download| download.key().variant() != &uv_python::PythonVariant::Debug);
+            .filter(|download| !download.key().variant().is_debug());
 
         for download in downloads {
             output.insert((
