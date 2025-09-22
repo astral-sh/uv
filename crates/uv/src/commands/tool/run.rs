@@ -386,8 +386,13 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    // Unblock cache removal operations.
-    drop(cache);
+    // Unblock cache removal operations for persistent caches. If the cache is temporary
+    // (used when `--no-cache` was requested), we must keep it alive until the child
+    // process has been spawned and finished; otherwise the temporary directory will be
+    // deleted and the child's executable may not be present on disk.
+    if !cache.is_temporary() {
+        drop(cache);
+    }
 
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
