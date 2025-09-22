@@ -330,16 +330,23 @@ Python version instead.
 
 ## Free-threaded Python
 
-uv supports discovering and installing [free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in CPython 3.13+.
+uv supports discovering and installing
+[free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in
+CPython 3.13+.
 
 Free-threaded Python versions will not be selected by default. Free-threaded Python versions will
 only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
 
 ## Debug Python variants
 
-uv supports discovering and installing [debug builds](https://docs.python.org/3.14/using/configure.html#debug-build) of Python, i.e., with debug assertions enabled.
+uv supports discovering and installing
+[debug builds](https://docs.python.org/3.14/using/configure.html#debug-build) of Python, i.e., with
+debug assertions enabled. These builds also do not have debug symbols stripped, which can be useful
+when debugging a Python process with a C-level debugger.
 
-Debug builds of Python are slower and are not appropriate for general use.
+!!! important
+
+    Debug builds of Python are slower and are not appropriate for general use.
 
 Debug builds will be used if there is no other available installation matching the request. For
 example, if only a debug version is available it will be used but otherwise a stable release version
