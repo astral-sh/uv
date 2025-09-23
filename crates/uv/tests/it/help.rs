@@ -527,8 +527,6 @@ fn help_subsubcommand() {
               `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYTHON_INSTALL_MIRROR=]
 
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations.
@@ -537,15 +535,11 @@ fn help_subsubcommand() {
               `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYPY_INSTALL_MIRROR=]
 
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations.
               
               Note that currently, only local paths are supported.
-              
-              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
