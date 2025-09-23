@@ -2078,7 +2078,7 @@ fn venv_included_in_sdist() -> Result<()> {
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid tar file
       ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
-      ╰─▶ symlink destination for [PYTHON-3.12] is outside of the target directory
+      ╰─▶ symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
       help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
