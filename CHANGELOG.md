@@ -3,6 +3,18 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.21
+
++Released on 2025-09-23.
+
+### Enhancements
+
+- Refresh lockfile when `--refresh` is provided ([#15994](https://github.com/astral-sh/uv/pull/15994))
+
+### Preview features
+
+Add support for S3 request signing ([#15925](https://github.com/astral-sh/uv/pull/15925))
+
 ## 0.8.20
 
 Released on 2025-09-22.
