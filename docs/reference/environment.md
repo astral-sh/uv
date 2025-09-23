@@ -463,6 +463,10 @@ Distributions can be read from a local directory by using the `file://` URL sche
 
 Whether to install the Python executable into the Windows registry.
 
+### `UV_PYTHON_PLATFORM`
+
+Used to set the deploymen target.
+
 ### `UV_PYTHON_PREFERENCE`
 
 Whether uv should prefer system or managed Python versions.

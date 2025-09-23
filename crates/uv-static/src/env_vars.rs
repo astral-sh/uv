@@ -531,6 +531,9 @@ impl EnvVars {
     /// Used to detect Ksh shell usage.
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
 
+    /// Used to set the deploymen target.
+    pub const UV_PYTHON_PLATFORM: &'static str = "UV_PYTHON_PLATFORM";
+
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
     ///
