@@ -470,7 +470,7 @@ impl TestContext {
     pub fn with_empty_python_install_mirror(mut self) -> Self {
         self.extra_env.push((
             EnvVars::UV_PYTHON_INSTALL_MIRROR.into(),
-            String::from("").into(),
+            String::new().into(),
         ));
         self
     }
