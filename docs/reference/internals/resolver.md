@@ -207,6 +207,11 @@ numpy==2.0.0; python_version >= "3.9" and python_version < "3.10"
 numpy==2.1.0; python_version >= "3.10"
 ```
 
+There's one case where uv does consider the upper bound: When the project uses an upper on requires
+Python, such as `requires-python = "==3.13.*"` for an application that only deploys to Python 3.13,
+uv prunes wheels from the lockfile that are outside the range (e.g., `cp312` and `cp314`). This is
+post-processing step and does not influence the resolution itself.
+
 ## URL dependencies
 
 In uv, a dependency can either be a registry dependency, a package with a version specifier or the
