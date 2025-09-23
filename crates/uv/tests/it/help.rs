@@ -810,13 +810,11 @@ fn help_flag_subsubcommand() {
           --no-registry
               Do not register the Python installation in the Windows registry
           --mirror <MIRROR>
-              Set the URL to use as the source for downloading Python installations [env:
-              UV_PYTHON_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading Python installations
           --pypy-mirror <PYPY_MIRROR>
-              Set the URL to use as the source for downloading PyPy installations [env:
-              UV_PYPY_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading PyPy installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+              URL pointing to JSON of custom Python installations
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed
       -f, --force

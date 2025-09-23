@@ -5500,9 +5500,7 @@ impl PythonInstallArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
-            python_downloads_json_url: self
-                .python_downloads_json_url
-                .clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
 }
@@ -5570,9 +5568,7 @@ impl PythonUpgradeArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
-            python_downloads_json_url: self
-                .python_downloads_json_url
-                .clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
 }
