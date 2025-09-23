@@ -99,12 +99,24 @@ fn generate() -> String {
 }
 
 /// Render an environment variable and its documentation.
-fn render(var: &str, doc: &str, since: Option<&str>) -> String {
-    if let Some(since) = since {
-        format!("### `{var}`\n<small>Since `{since}`</small>\n\n{doc}\n\n")
-    } else {
-        format!("### `{var}`\n\n{doc}\n\n")
+fn render(var: &str, doc: &str, added_in: Option<&str>) -> String {
+    let mut output = String::new();
+
+    output.push_str(&format!("<h3 id=\"{}\">\n", var.to_lowercase(),));
+    output.push_str(&format!(
+        "<a class=\"toclink\" href=\"#{}\"><code>{var}</code></a>",
+        var.to_lowercase()
+    ));
+    if let Some(added_in) = added_in {
+        output.push_str(&format!(
+            " <small class=\"env-reference\">added in v{added_in}</small>"
+        ));
     }
+    output.push_str("</h3>\n");
+    output.push_str("\n\n");
+    output.push_str(doc);
+    output.push_str("\n\n");
+    output
 }
 
 #[cfg(test)]

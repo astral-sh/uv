@@ -202,9 +202,8 @@ because the nav is in a hamburger menu anyway
 .cli-reference ul {
   margin-bottom: 0.1em;
 }
-h3.cli-reference {
-  font-size: 1.1em;
-  margin: 0 0 0 0;
+small.env-reference {
+  font-size: 60%;
 }
 
 /* Styling for anchor link headers */

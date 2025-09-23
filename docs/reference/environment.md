@@ -2,8 +2,9 @@
 
 uv defines and respects the following environment variables:
 
-### `UV_BREAK_SYSTEM_PACKAGES`
-<small>Since `0.1.32`</small>
+<h3 id="uv_break_system_packages">
+<a class="toclink" href="#uv_break_system_packages"><code>UV_BREAK_SYSTEM_PACKAGES</code></a> <small class="env-reference">added in v0.1.32</small></h3>
+
 
 Equivalent to the `--break-system-packages` command-line argument. If set to `true`,
 uv will allow the installation of packages that conflict with system-installed packages.
@@ -12,66 +13,77 @@ WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integ
 (CI) or containerized environments and should be used with caution, as modifying the system
 Python can lead to unexpected behavior.
 
-### `UV_BUILD_CONSTRAINT`
-<small>Since `0.2.34`</small>
+<h3 id="uv_build_constraint">
+<a class="toclink" href="#uv_build_constraint"><code>UV_BUILD_CONSTRAINT</code></a> <small class="env-reference">added in v0.2.34</small></h3>
+
 
 Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
 as constraints for any source distribution builds. Uses space-separated list of files.
 
-### `UV_CACHE_DIR`
-<small>Since `0.0.5`</small>
+<h3 id="uv_cache_dir">
+<a class="toclink" href="#uv_cache_dir"><code>UV_CACHE_DIR</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
 directory for caching instead of the default cache directory.
 
-### `UV_COMPILE_BYTECODE`
-<small>Since `0.3.3`</small>
+<h3 id="uv_compile_bytecode">
+<a class="toclink" href="#uv_compile_bytecode"><code>UV_COMPILE_BYTECODE</code></a> <small class="env-reference">added in v0.3.3</small></h3>
+
 
 Equivalent to the `--compile-bytecode` command-line argument. If set, uv
 will compile Python source files to bytecode after installation.
 
-### `UV_COMPILE_BYTECODE_TIMEOUT`
-<small>Since `0.7.22`</small>
+<h3 id="uv_compile_bytecode_timeout">
+<a class="toclink" href="#uv_compile_bytecode_timeout"><code>UV_COMPILE_BYTECODE_TIMEOUT</code></a> <small class="env-reference">added in v0.7.22</small></h3>
+
 
 Timeout (in seconds) for bytecode compilation.
 
-### `UV_CONCURRENT_BUILDS`
-<small>Since `0.1.43`</small>
+<h3 id="uv_concurrent_builds">
+<a class="toclink" href="#uv_concurrent_builds"><code>UV_CONCURRENT_BUILDS</code></a> <small class="env-reference">added in v0.1.43</small></h3>
+
 
 Sets the maximum number of source distributions that uv will build
 concurrently at any given time.
 
-### `UV_CONCURRENT_DOWNLOADS`
-<small>Since `0.1.43`</small>
+<h3 id="uv_concurrent_downloads">
+<a class="toclink" href="#uv_concurrent_downloads"><code>UV_CONCURRENT_DOWNLOADS</code></a> <small class="env-reference">added in v0.1.43</small></h3>
+
 
 Sets the maximum number of in-flight concurrent downloads that uv will
 perform at any given time.
 
-### `UV_CONCURRENT_INSTALLS`
-<small>Since `0.1.45`</small>
+<h3 id="uv_concurrent_installs">
+<a class="toclink" href="#uv_concurrent_installs"><code>UV_CONCURRENT_INSTALLS</code></a> <small class="env-reference">added in v0.1.45</small></h3>
+
 
 Controls the number of threads used when installing and unzipping
 packages.
 
-### `UV_CONFIG_FILE`
-<small>Since `0.1.34`</small>
+<h3 id="uv_config_file">
+<a class="toclink" href="#uv_config_file"><code>UV_CONFIG_FILE</code></a> <small class="env-reference">added in v0.1.34</small></h3>
+
 
 Equivalent to the `--config-file` command-line argument. Expects a path to a
 local `uv.toml` file to use as the configuration file.
 
-### `UV_CONSTRAINT`
-<small>Since `0.1.36`</small>
+<h3 id="uv_constraint">
+<a class="toclink" href="#uv_constraint"><code>UV_CONSTRAINT</code></a> <small class="env-reference">added in v0.1.36</small></h3>
+
 
 Equivalent to the `--constraint` command-line argument. If set, uv will use this
 file as the constraints file. Uses space-separated list of files.
 
-### `UV_CREDENTIALS_DIR`
-<small>Since `0.8.15`</small>
+<h3 id="uv_credentials_dir">
+<a class="toclink" href="#uv_credentials_dir"><code>UV_CREDENTIALS_DIR</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 The directory for storage of credentials when using a plain text backend.
 
-### `UV_CUSTOM_COMPILE_COMMAND`
-<small>Since `0.1.23`</small>
+<h3 id="uv_custom_compile_command">
+<a class="toclink" href="#uv_custom_compile_command"><code>UV_CUSTOM_COMPILE_COMMAND</code></a> <small class="env-reference">added in v0.1.23</small></h3>
+
 
 Equivalent to the `--custom-compile-command` command-line argument.
 
@@ -79,89 +91,104 @@ Used to override uv in the output header of the `requirements.txt` files generat
 `uv pip compile`. Intended for use-cases in which `uv pip compile` is called from within a wrapper
 script, to include the name of the wrapper script in the output file.
 
-### `UV_DEFAULT_INDEX`
-<small>Since `0.4.23`</small>
+<h3 id="uv_default_index">
+<a class="toclink" href="#uv_default_index"><code>UV_DEFAULT_INDEX</code></a> <small class="env-reference">added in v0.4.23</small></h3>
+
 
 Equivalent to the `--default-index` command-line argument. If set, uv will use
 this URL as the default index when searching for packages.
 
-### `UV_DEV`
-<small>Since `0.8.7`</small>
+<h3 id="uv_dev">
+<a class="toclink" href="#uv_dev"><code>UV_DEV</code></a> <small class="env-reference">added in v0.8.7</small></h3>
+
 
 Equivalent to the `--dev` command-line argument. If set, uv will include
 development dependencies.
 
-### `UV_DOWNLOAD_URL`
-<small>Since `0.8.4`</small>
+<h3 id="uv_download_url">
+<a class="toclink" href="#uv_download_url"><code>UV_DOWNLOAD_URL</code></a> <small class="env-reference">added in v0.8.4</small></h3>
+
 
 The URL from which to download uv using the standalone installer. By default, installs from
 uv's GitHub Releases. `INSTALLER_DOWNLOAD_URL` is also supported as an alias, for backwards
 compatibility.
 
-### `UV_ENV_FILE`
-<small>Since `0.4.30`</small>
+<h3 id="uv_env_file">
+<a class="toclink" href="#uv_env_file"><code>UV_ENV_FILE</code></a> <small class="env-reference">added in v0.4.30</small></h3>
+
 
 `.env` files from which to load environment variables when executing `uv run` commands.
 
-### `UV_EXCLUDE_NEWER`
-<small>Since `0.2.12`</small>
+<h3 id="uv_exclude_newer">
+<a class="toclink" href="#uv_exclude_newer"><code>UV_EXCLUDE_NEWER</code></a> <small class="env-reference">added in v0.2.12</small></h3>
+
 
 Equivalent to the `--exclude-newer` command-line argument. If set, uv will
 exclude distributions published after the specified date.
 
-### `UV_EXTRA_INDEX_URL`
-<small>Since `0.1.3`</small>
+<h3 id="uv_extra_index_url">
+<a class="toclink" href="#uv_extra_index_url"><code>UV_EXTRA_INDEX_URL</code></a> <small class="env-reference">added in v0.1.3</small></h3>
+
 
 Equivalent to the `--extra-index-url` command-line argument. If set, uv will
 use this space-separated list of URLs as additional indexes when searching for packages.
 (Deprecated: use `UV_INDEX` instead.)
 
-### `UV_FIND_LINKS`
-<small>Since `0.4.19`</small>
+<h3 id="uv_find_links">
+<a class="toclink" href="#uv_find_links"><code>UV_FIND_LINKS</code></a> <small class="env-reference">added in v0.4.19</small></h3>
+
 
 Equivalent to the `--find-links` command-line argument. If set, uv will use this
 comma-separated list of additional locations to search for packages.
 
-### `UV_FORK_STRATEGY`
-<small>Since `0.5.9`</small>
+<h3 id="uv_fork_strategy">
+<a class="toclink" href="#uv_fork_strategy"><code>UV_FORK_STRATEGY</code></a> <small class="env-reference">added in v0.5.9</small></h3>
+
 
 Equivalent to the `--fork-strategy` argument. Controls version selection during universal
 resolution.
 
-### `UV_FROZEN`
-<small>Since `0.4.25`</small>
+<h3 id="uv_frozen">
+<a class="toclink" href="#uv_frozen"><code>UV_FROZEN</code></a> <small class="env-reference">added in v0.4.25</small></h3>
+
 
 Equivalent to the `--frozen` command-line argument. If set, uv will run without
 updating the `uv.lock` file.
 
-### `UV_GITHUB_TOKEN`
-<small>Since `0.4.10`</small>
+<h3 id="uv_github_token">
+<a class="toclink" href="#uv_github_token"><code>UV_GITHUB_TOKEN</code></a> <small class="env-reference">added in v0.4.10</small></h3>
+
 
 Equivalent to the `--token` argument for self update. A GitHub token for authentication.
 
-### `UV_GIT_LFS`
-<small>Since `0.5.19`</small>
+<h3 id="uv_git_lfs">
+<a class="toclink" href="#uv_git_lfs"><code>UV_GIT_LFS</code></a> <small class="env-reference">added in v0.5.19</small></h3>
+
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.
 
-### `UV_HTTP_RETRIES`
-<small>Since `0.7.21`</small>
+<h3 id="uv_http_retries">
+<a class="toclink" href="#uv_http_retries"><code>UV_HTTP_RETRIES</code></a> <small class="env-reference">added in v0.7.21</small></h3>
+
 
 The number of retries for HTTP requests. (default: 3)
 
-### `UV_HTTP_TIMEOUT`
-<small>Since `0.1.7`</small>
+<h3 id="uv_http_timeout">
+<a class="toclink" href="#uv_http_timeout"><code>UV_HTTP_TIMEOUT</code></a> <small class="env-reference">added in v0.1.7</small></h3>
+
 
 Timeout (in seconds) for HTTP requests. (default: 30 s)
 
-### `UV_INDEX`
-<small>Since `0.4.23`</small>
+<h3 id="uv_index">
+<a class="toclink" href="#uv_index"><code>UV_INDEX</code></a> <small class="env-reference">added in v0.4.23</small></h3>
+
 
 Equivalent to the `--index` command-line argument. If set, uv will use this
 space-separated list of URLs as additional indexes when searching for packages.
 
-### `UV_INDEX_STRATEGY`
-<small>Since `0.1.29`</small>
+<h3 id="uv_index_strategy">
+<a class="toclink" href="#uv_index_strategy"><code>UV_INDEX_STRATEGY</code></a> <small class="env-reference">added in v0.1.29</small></h3>
+
 
 Equivalent to the `--index-strategy` command-line argument.
 
@@ -169,42 +196,48 @@ For example, if set to `unsafe-best-match`, uv will consider versions of a given
 available across all index URLs, rather than limiting its search to the first index URL
 that contains the package.
 
-### `UV_INDEX_URL`
-<small>Since `0.0.5`</small>
+<h3 id="uv_index_url">
+<a class="toclink" href="#uv_index_url"><code>UV_INDEX_URL</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Equivalent to the `--index-url` command-line argument. If set, uv will use this
 URL as the default index when searching for packages.
 (Deprecated: use `UV_DEFAULT_INDEX` instead.)
 
-### `UV_INDEX_{name}_PASSWORD`
-<small>Since `0.4.23`</small>
+<h3 id="uv_index_{name}_password">
+<a class="toclink" href="#uv_index_{name}_password"><code>UV_INDEX_{name}_PASSWORD</code></a> <small class="env-reference">added in v0.4.23</small></h3>
+
 
 Provides the HTTP Basic authentication password for a named index.
 
 The `name` parameter is the name of the index. For example, given an index named `foo`,
 the environment variable key would be `UV_INDEX_FOO_PASSWORD`.
 
-### `UV_INDEX_{name}_USERNAME`
-<small>Since `0.4.23`</small>
+<h3 id="uv_index_{name}_username">
+<a class="toclink" href="#uv_index_{name}_username"><code>UV_INDEX_{name}_USERNAME</code></a> <small class="env-reference">added in v0.4.23</small></h3>
+
 
 Provides the HTTP Basic authentication username for a named index.
 
 The `name` parameter is the name of the index. For example, given an index named `foo`,
 the environment variable key would be `UV_INDEX_FOO_USERNAME`.
 
-### `UV_INIT_BUILD_BACKEND`
-<small>Since `0.8.2`</small>
+<h3 id="uv_init_build_backend">
+<a class="toclink" href="#uv_init_build_backend"><code>UV_INIT_BUILD_BACKEND</code></a> <small class="env-reference">added in v0.8.2</small></h3>
+
 
 Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
 to use when creating a new project.
 
-### `UV_INSECURE_HOST`
-<small>Since `0.3.5`</small>
+<h3 id="uv_insecure_host">
+<a class="toclink" href="#uv_insecure_host"><code>UV_INSECURE_HOST</code></a> <small class="env-reference">added in v0.3.5</small></h3>
+
 
 Equivalent to the `--allow-insecure-host` argument.
 
-### `UV_INSECURE_NO_ZIP_VALIDATION`
-<small>Since `0.8.6`</small>
+<h3 id="uv_insecure_no_zip_validation">
+<a class="toclink" href="#uv_insecure_no_zip_validation"><code>UV_INSECURE_NO_ZIP_VALIDATION</code></a> <small class="env-reference">added in v0.8.6</small></h3>
+
 
 Disable ZIP validation for streamed wheels and ZIP-based source distributions.
 
@@ -213,261 +246,305 @@ integrity checks and allowing uv to install potentially malicious ZIP files. If 
 a ZIP file due to failing validation, it is likely that the file is malformed; consider
 filing an issue with the package maintainer.
 
-### `UV_INSTALLER_GHE_BASE_URL`
-<small>Since `0.5.0`</small>
+<h3 id="uv_installer_ghe_base_url">
+<a class="toclink" href="#uv_installer_ghe_base_url"><code>UV_INSTALLER_GHE_BASE_URL</code></a> <small class="env-reference">added in v0.5.0</small></h3>
+
 
 The URL from which to download uv using the standalone installer and `self update` feature,
 in lieu of the default GitHub Enterprise URL.
 
-### `UV_INSTALLER_GITHUB_BASE_URL`
-<small>Since `0.5.0`</small>
+<h3 id="uv_installer_github_base_url">
+<a class="toclink" href="#uv_installer_github_base_url"><code>UV_INSTALLER_GITHUB_BASE_URL</code></a> <small class="env-reference">added in v0.5.0</small></h3>
+
 
 The URL from which to download uv using the standalone installer and `self update` feature,
 in lieu of the default GitHub URL.
 
-### `UV_INSTALL_DIR`
-<small>Since `0.5.0`</small>
+<h3 id="uv_install_dir">
+<a class="toclink" href="#uv_install_dir"><code>UV_INSTALL_DIR</code></a> <small class="env-reference">added in v0.5.0</small></h3>
+
 
 The directory in which to install uv using the standalone installer and `self update` feature.
 Defaults to `~/.local/bin`.
 
-### `UV_ISOLATED`
-<small>Since `0.8.14`</small>
+<h3 id="uv_isolated">
+<a class="toclink" href="#uv_isolated"><code>UV_ISOLATED</code></a> <small class="env-reference">added in v0.8.14</small></h3>
+
 
 Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
 a `pyproject.toml` or `uv.toml` file.
 
-### `UV_KEYRING_PROVIDER`
-<small>Since `0.1.19`</small>
+<h3 id="uv_keyring_provider">
+<a class="toclink" href="#uv_keyring_provider"><code>UV_KEYRING_PROVIDER</code></a> <small class="env-reference">added in v0.1.19</small></h3>
+
 
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
 will use this value as the keyring provider.
 
-### `UV_LIBC`
-<small>Since `0.7.22`</small>
+<h3 id="uv_libc">
+<a class="toclink" href="#uv_libc"><code>UV_LIBC</code></a> <small class="env-reference">added in v0.7.22</small></h3>
+
 
 Overrides the environment-determined libc on linux systems when filling in the current platform
 within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
 
-### `UV_LINK_MODE`
-<small>Since `0.1.40`</small>
+<h3 id="uv_link_mode">
+<a class="toclink" href="#uv_link_mode"><code>UV_LINK_MODE</code></a> <small class="env-reference">added in v0.1.40</small></h3>
+
 
 Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
 a link mode.
 
-### `UV_LOCKED`
-<small>Since `0.4.25`</small>
+<h3 id="uv_locked">
+<a class="toclink" href="#uv_locked"><code>UV_LOCKED</code></a> <small class="env-reference">added in v0.4.25</small></h3>
+
 
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
-### `UV_LOG_CONTEXT`
-<small>Since `0.6.4`</small>
+<h3 id="uv_log_context">
+<a class="toclink" href="#uv_log_context"><code>UV_LOG_CONTEXT</code></a> <small class="env-reference">added in v0.6.4</small></h3>
+
 
 Add additional context and structure to log messages.
 
 If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
 
-### `UV_MANAGED_PYTHON`
-<small>Since `0.6.8`</small>
+<h3 id="uv_managed_python">
+<a class="toclink" href="#uv_managed_python"><code>UV_MANAGED_PYTHON</code></a> <small class="env-reference">added in v0.6.8</small></h3>
+
 
 Require use of uv-managed Python versions.
 
-### `UV_NATIVE_TLS`
-<small>Since `0.1.19`</small>
+<h3 id="uv_native_tls">
+<a class="toclink" href="#uv_native_tls"><code>UV_NATIVE_TLS</code></a> <small class="env-reference">added in v0.1.19</small></h3>
+
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
 use the system's trust store instead of the bundled `webpki-roots` crate.
 
-### `UV_NO_BINARY`
-<small>Since `0.5.30`</small>
+<h3 id="uv_no_binary">
+<a class="toclink" href="#uv_no_binary"><code>UV_NO_BINARY</code></a> <small class="env-reference">added in v0.5.30</small></h3>
+
 
 Equivalent to the `--no-binary` command-line argument. If set, uv will install
 all packages from source. The resolver will still use pre-built wheels to
 extract package metadata, if available.
 
-### `UV_NO_BINARY_PACKAGE`
-<small>Since `0.5.30`</small>
+<h3 id="uv_no_binary_package">
+<a class="toclink" href="#uv_no_binary_package"><code>UV_NO_BINARY_PACKAGE</code></a> <small class="env-reference">added in v0.5.30</small></h3>
+
 
 Equivalent to the `--no-binary-package` command line argument. If set, uv will
 not use pre-built wheels for the given space-delimited list of packages.
 
-### `UV_NO_BUILD`
-<small>Since `0.1.40`</small>
+<h3 id="uv_no_build">
+<a class="toclink" href="#uv_no_build"><code>UV_NO_BUILD</code></a> <small class="env-reference">added in v0.1.40</small></h3>
+
 
 Equivalent to the `--no-build` command-line argument. If set, uv will not build
 source distributions.
 
-### `UV_NO_BUILD_ISOLATION`
-<small>Since `0.1.40`</small>
+<h3 id="uv_no_build_isolation">
+<a class="toclink" href="#uv_no_build_isolation"><code>UV_NO_BUILD_ISOLATION</code></a> <small class="env-reference">added in v0.1.40</small></h3>
+
 
 Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
 skip isolation when building source distributions.
 
-### `UV_NO_BUILD_PACKAGE`
-<small>Since `0.6.5`</small>
+<h3 id="uv_no_build_package">
+<a class="toclink" href="#uv_no_build_package"><code>UV_NO_BUILD_PACKAGE</code></a> <small class="env-reference">added in v0.6.5</small></h3>
+
 
 Equivalent to the `--no-build-package` command line argument. If set, uv will
 not build source distributions for the given space-delimited list of packages.
 
-### `UV_NO_CACHE`
-<small>Since `0.1.2`</small>
+<h3 id="uv_no_cache">
+<a class="toclink" href="#uv_no_cache"><code>UV_NO_CACHE</code></a> <small class="env-reference">added in v0.1.2</small></h3>
+
 
 Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
 cache for any operations.
 
-### `UV_NO_CONFIG`
-<small>Since `0.2.30`</small>
+<h3 id="uv_no_config">
+<a class="toclink" href="#uv_no_config"><code>UV_NO_CONFIG</code></a> <small class="env-reference">added in v0.2.30</small></h3>
+
 
 Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
-### `UV_NO_DEV`
-<small>Since `0.8.7`</small>
+<h3 id="uv_no_dev">
+<a class="toclink" href="#uv_no_dev"><code>UV_NO_DEV</code></a> <small class="env-reference">added in v0.8.7</small></h3>
+
 
 Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
 development dependencies.
 
-### `UV_NO_EDITABLE`
-<small>Since `0.6.15`</small>
+<h3 id="uv_no_editable">
+<a class="toclink" href="#uv_no_editable"><code>UV_NO_EDITABLE</code></a> <small class="env-reference">added in v0.6.15</small></h3>
+
 
 Equivalent to the `--no-editable` command-line argument. If set, uv
 installs or exports any editable dependencies, including the project and any workspace
 members, as non-editable.
 
-### `UV_NO_ENV_FILE`
-<small>Since `0.4.30`</small>
+<h3 id="uv_no_env_file">
+<a class="toclink" href="#uv_no_env_file"><code>UV_NO_ENV_FILE</code></a> <small class="env-reference">added in v0.4.30</small></h3>
+
 
 Ignore `.env` files when executing `uv run` commands.
 
-### `UV_NO_GITHUB_FAST_PATH`
-<small>Since `0.7.13`</small>
+<h3 id="uv_no_github_fast_path">
+<a class="toclink" href="#uv_no_github_fast_path"><code>UV_NO_GITHUB_FAST_PATH</code></a> <small class="env-reference">added in v0.7.13</small></h3>
+
 
 Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
 
-### `UV_NO_HF_TOKEN`
-<small>Since `0.8.1`</small>
+<h3 id="uv_no_hf_token">
+<a class="toclink" href="#uv_no_hf_token"><code>UV_NO_HF_TOKEN</code></a> <small class="env-reference">added in v0.8.1</small></h3>
+
 
 Disable Hugging Face authentication, even if `HF_TOKEN` is set.
 
-### `UV_NO_INSTALLER_METADATA`
-<small>Since `0.5.7`</small>
+<h3 id="uv_no_installer_metadata">
+<a class="toclink" href="#uv_no_installer_metadata"><code>UV_NO_INSTALLER_METADATA</code></a> <small class="env-reference">added in v0.5.7</small></h3>
+
 
 Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
 
-### `UV_NO_MANAGED_PYTHON`
-<small>Since `0.6.8`</small>
+<h3 id="uv_no_managed_python">
+<a class="toclink" href="#uv_no_managed_python"><code>UV_NO_MANAGED_PYTHON</code></a> <small class="env-reference">added in v0.6.8</small></h3>
+
 
 Disable use of uv-managed Python versions.
 
-### `UV_NO_MODIFY_PATH`
-<small>Since `0.8.4`</small>
+<h3 id="uv_no_modify_path">
+<a class="toclink" href="#uv_no_modify_path"><code>UV_NO_MODIFY_PATH</code></a> <small class="env-reference">added in v0.8.4</small></h3>
+
 
 Avoid modifying the `PATH` environment variable when installing uv using the standalone
 installer and `self update` feature. `INSTALLER_NO_MODIFY_PATH` is also supported as an
 alias, for backwards compatibility.
 
-### `UV_NO_PROGRESS`
-<small>Since `0.2.28`</small>
+<h3 id="uv_no_progress">
+<a class="toclink" href="#uv_no_progress"><code>UV_NO_PROGRESS</code></a> <small class="env-reference">added in v0.2.28</small></h3>
+
 
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
 
-### `UV_NO_SYNC`
-<small>Since `0.4.18`</small>
+<h3 id="uv_no_sync">
+<a class="toclink" href="#uv_no_sync"><code>UV_NO_SYNC</code></a> <small class="env-reference">added in v0.4.18</small></h3>
+
 
 Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
 the environment.
 
-### `UV_NO_VERIFY_HASHES`
-<small>Since `0.5.3`</small>
+<h3 id="uv_no_verify_hashes">
+<a class="toclink" href="#uv_no_verify_hashes"><code>UV_NO_VERIFY_HASHES</code></a> <small class="env-reference">added in v0.5.3</small></h3>
+
 
 Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
 `requirements.txt` files.
 
-### `UV_NO_WRAP`
-<small>Since `0.0.5`</small>
+<h3 id="uv_no_wrap">
+<a class="toclink" href="#uv_no_wrap"><code>UV_NO_WRAP</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Use to disable line wrapping for diagnostics.
 
-### `UV_OFFLINE`
-<small>Since `0.5.9`</small>
+<h3 id="uv_offline">
+<a class="toclink" href="#uv_offline"><code>UV_OFFLINE</code></a> <small class="env-reference">added in v0.5.9</small></h3>
+
 
 Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
 
-### `UV_OVERRIDE`
-<small>Since `0.2.22`</small>
+<h3 id="uv_override">
+<a class="toclink" href="#uv_override"><code>UV_OVERRIDE</code></a> <small class="env-reference">added in v0.2.22</small></h3>
+
 
 Equivalent to the `--override` command-line argument. If set, uv will use this file
 as the overrides file. Uses space-separated list of files.
 
-### `UV_PRERELEASE`
-<small>Since `0.1.16`</small>
+<h3 id="uv_prerelease">
+<a class="toclink" href="#uv_prerelease"><code>UV_PRERELEASE</code></a> <small class="env-reference">added in v0.1.16</small></h3>
+
 
 Equivalent to the `--prerelease` command-line argument. For example, if set to
 `allow`, uv will allow pre-release versions for all dependencies.
 
-### `UV_PREVIEW`
-<small>Since `0.1.37`</small>
+<h3 id="uv_preview">
+<a class="toclink" href="#uv_preview"><code>UV_PREVIEW</code></a> <small class="env-reference">added in v0.1.37</small></h3>
+
 
 Equivalent to the `--preview` argument. Enables preview mode.
 
-### `UV_PREVIEW_FEATURES`
-<small>Since `0.8.4`</small>
+<h3 id="uv_preview_features">
+<a class="toclink" href="#uv_preview_features"><code>UV_PREVIEW_FEATURES</code></a> <small class="env-reference">added in v0.8.4</small></h3>
+
 
 Equivalent to the `--preview-features` argument. Enables specific preview features.
 
-### `UV_PROJECT`
-<small>Since `0.4.4`</small>
+<h3 id="uv_project">
+<a class="toclink" href="#uv_project"><code>UV_PROJECT</code></a> <small class="env-reference">added in v0.4.4</small></h3>
+
 
 Equivalent to the `--project` command-line argument.
 
-### `UV_PROJECT_ENVIRONMENT`
-<small>Since `0.4.4`</small>
+<h3 id="uv_project_environment">
+<a class="toclink" href="#uv_project_environment"><code>UV_PROJECT_ENVIRONMENT</code></a> <small class="env-reference">added in v0.4.4</small></h3>
+
 
 Specifies the path to the directory to use for a project virtual environment.
 
 See the [project documentation](../concepts/projects/config.md#project-environment-path)
 for more details.
 
-### `UV_PUBLISH_CHECK_URL`
-<small>Since `0.4.30`</small>
+<h3 id="uv_publish_check_url">
+<a class="toclink" href="#uv_publish_check_url"><code>UV_PUBLISH_CHECK_URL</code></a> <small class="env-reference">added in v0.4.30</small></h3>
+
 
 Don't upload a file if it already exists on the index. The value is the URL of the index.
 
-### `UV_PUBLISH_INDEX`
-<small>Since `0.5.8`</small>
+<h3 id="uv_publish_index">
+<a class="toclink" href="#uv_publish_index"><code>UV_PUBLISH_INDEX</code></a> <small class="env-reference">added in v0.5.8</small></h3>
+
 
 Equivalent to the `--index` command-line argument in `uv publish`. If
 set, uv the index with this name in the configuration for publishing.
 
-### `UV_PUBLISH_PASSWORD`
-<small>Since `0.4.16`</small>
+<h3 id="uv_publish_password">
+<a class="toclink" href="#uv_publish_password"><code>UV_PUBLISH_PASSWORD</code></a> <small class="env-reference">added in v0.4.16</small></h3>
+
 
 Equivalent to the `--password` command-line argument in `uv publish`. If
 set, uv will use this password for publishing.
 
-### `UV_PUBLISH_TOKEN`
-<small>Since `0.4.16`</small>
+<h3 id="uv_publish_token">
+<a class="toclink" href="#uv_publish_token"><code>UV_PUBLISH_TOKEN</code></a> <small class="env-reference">added in v0.4.16</small></h3>
+
 
 Equivalent to the `--token` command-line argument in `uv publish`. If set, uv
 will use this token (with the username `__token__`) for publishing.
 
-### `UV_PUBLISH_URL`
-<small>Since `0.4.16`</small>
+<h3 id="uv_publish_url">
+<a class="toclink" href="#uv_publish_url"><code>UV_PUBLISH_URL</code></a> <small class="env-reference">added in v0.4.16</small></h3>
+
 
 Equivalent to the `--publish-url` command-line argument. The URL of the upload
 endpoint of the index to use with `uv publish`.
 
-### `UV_PUBLISH_USERNAME`
-<small>Since `0.4.16`</small>
+<h3 id="uv_publish_username">
+<a class="toclink" href="#uv_publish_username"><code>UV_PUBLISH_USERNAME</code></a> <small class="env-reference">added in v0.4.16</small></h3>
+
 
 Equivalent to the `--username` command-line argument in `uv publish`. If
 set, uv will use this username for publishing.
 
-### `UV_PYPY_INSTALL_MIRROR`
-<small>Since `0.2.35`</small>
+<h3 id="uv_pypy_install_mirror">
+<a class="toclink" href="#uv_pypy_install_mirror"><code>UV_PYPY_INSTALL_MIRROR</code></a> <small class="env-reference">added in v0.2.35</small></h3>
+
 
 Managed PyPy installations are downloaded from [python.org](https://downloads.python.org/).
 
@@ -477,39 +554,45 @@ different source for PyPy installations. The provided URL will replace
 `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
 Distributions can be read from a local directory by using the `file://` URL scheme.
 
-### `UV_PYTHON`
-<small>Since `0.1.40`</small>
+<h3 id="uv_python">
+<a class="toclink" href="#uv_python"><code>UV_PYTHON</code></a> <small class="env-reference">added in v0.1.40</small></h3>
+
 
 Equivalent to the `--python` command-line argument. If set to a path, uv will use
 this Python interpreter for all operations.
 
-### `UV_PYTHON_BIN_DIR`
-<small>Since `0.4.29`</small>
+<h3 id="uv_python_bin_dir">
+<a class="toclink" href="#uv_python_bin_dir"><code>UV_PYTHON_BIN_DIR</code></a> <small class="env-reference">added in v0.4.29</small></h3>
+
 
 Specifies the directory to place links to installed, managed Python executables.
 
-### `UV_PYTHON_CACHE_DIR`
-<small>Since `0.7.0`</small>
+<h3 id="uv_python_cache_dir">
+<a class="toclink" href="#uv_python_cache_dir"><code>UV_PYTHON_CACHE_DIR</code></a> <small class="env-reference">added in v0.7.0</small></h3>
+
 
 Specifies the directory for caching the archives of managed Python installations before
 installation.
 
-### `UV_PYTHON_CPYTHON_BUILD`
-<small>Since `0.8.14`</small>
+<h3 id="uv_python_cpython_build">
+<a class="toclink" href="#uv_python_cpython_build"><code>UV_PYTHON_CPYTHON_BUILD</code></a> <small class="env-reference">added in v0.8.14</small></h3>
+
 
 Pin managed CPython versions to a specific build version.
 
 For CPython, this should be the build date (e.g., "20250814").
 
-### `UV_PYTHON_DOWNLOADS`
-<small>Since `0.3.2`</small>
+<h3 id="uv_python_downloads">
+<a class="toclink" href="#uv_python_downloads"><code>UV_PYTHON_DOWNLOADS</code></a> <small class="env-reference">added in v0.3.2</small></h3>
+
 
 Equivalent to the
 [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
 `--no-python-downloads` option. Whether uv should allow Python downloads.
 
-### `UV_PYTHON_DOWNLOADS_JSON_URL`
-<small>Since `0.6.13`</small>
+<h3 id="uv_python_downloads_json_url">
+<a class="toclink" href="#uv_python_downloads_json_url"><code>UV_PYTHON_DOWNLOADS_JSON_URL</code></a> <small class="env-reference">added in v0.6.13</small></h3>
+
 
 Managed Python installations information is hardcoded in the `uv` binary.
 
@@ -518,25 +601,29 @@ This will allow for setting each property of the Python installation, mostly the
 
 Note that currently, only local paths are supported.
 
-### `UV_PYTHON_GRAALPY_BUILD`
-<small>Since `0.8.14`</small>
+<h3 id="uv_python_graalpy_build">
+<a class="toclink" href="#uv_python_graalpy_build"><code>UV_PYTHON_GRAALPY_BUILD</code></a> <small class="env-reference">added in v0.8.14</small></h3>
+
 
 Pin managed GraalPy versions to a specific build version.
 
 For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
 
-### `UV_PYTHON_INSTALL_BIN`
-<small>Since `0.8.0`</small>
+<h3 id="uv_python_install_bin">
+<a class="toclink" href="#uv_python_install_bin"><code>UV_PYTHON_INSTALL_BIN</code></a> <small class="env-reference">added in v0.8.0</small></h3>
+
 
 Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
 
-### `UV_PYTHON_INSTALL_DIR`
-<small>Since `0.2.22`</small>
+<h3 id="uv_python_install_dir">
+<a class="toclink" href="#uv_python_install_dir"><code>UV_PYTHON_INSTALL_DIR</code></a> <small class="env-reference">added in v0.2.22</small></h3>
+
 
 Specifies the directory for storing managed Python installations.
 
-### `UV_PYTHON_INSTALL_MIRROR`
-<small>Since `0.2.35`</small>
+<h3 id="uv_python_install_mirror">
+<a class="toclink" href="#uv_python_install_mirror"><code>UV_PYTHON_INSTALL_MIRROR</code></a> <small class="env-reference">added in v0.2.35</small></h3>
+
 
 Managed Python installations are downloaded from the Astral
 [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
@@ -546,49 +633,57 @@ The provided URL will replace `https://github.com/astral-sh/python-build-standal
 `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
 Distributions can be read from a local directory by using the `file://` URL scheme.
 
-### `UV_PYTHON_INSTALL_REGISTRY`
-<small>Since `0.8.0`</small>
+<h3 id="uv_python_install_registry">
+<a class="toclink" href="#uv_python_install_registry"><code>UV_PYTHON_INSTALL_REGISTRY</code></a> <small class="env-reference">added in v0.8.0</small></h3>
+
 
 Whether to install the Python executable into the Windows registry.
 
-### `UV_PYTHON_PREFERENCE`
-<small>Since `0.3.2`</small>
+<h3 id="uv_python_preference">
+<a class="toclink" href="#uv_python_preference"><code>UV_PYTHON_PREFERENCE</code></a> <small class="env-reference">added in v0.3.2</small></h3>
+
 
 Whether uv should prefer system or managed Python versions.
 
-### `UV_PYTHON_PYODIDE_BUILD`
-<small>Since `0.8.14`</small>
+<h3 id="uv_python_pyodide_build">
+<a class="toclink" href="#uv_python_pyodide_build"><code>UV_PYTHON_PYODIDE_BUILD</code></a> <small class="env-reference">added in v0.8.14</small></h3>
+
 
 Pin managed Pyodide versions to a specific build version.
 
 For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
 
-### `UV_PYTHON_PYPY_BUILD`
-<small>Since `0.8.14`</small>
+<h3 id="uv_python_pypy_build">
+<a class="toclink" href="#uv_python_pypy_build"><code>UV_PYTHON_PYPY_BUILD</code></a> <small class="env-reference">added in v0.8.14</small></h3>
+
 
 Pin managed PyPy versions to a specific build version.
 
 For PyPy, this should be the PyPy version (e.g., "7.3.20").
 
-### `UV_REQUEST_TIMEOUT`
-<small>Since `0.1.6`</small>
+<h3 id="uv_request_timeout">
+<a class="toclink" href="#uv_request_timeout"><code>UV_REQUEST_TIMEOUT</code></a> <small class="env-reference">added in v0.1.6</small></h3>
+
 
 Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
 
-### `UV_REQUIRE_HASHES`
-<small>Since `0.1.34`</small>
+<h3 id="uv_require_hashes">
+<a class="toclink" href="#uv_require_hashes"><code>UV_REQUIRE_HASHES</code></a> <small class="env-reference">added in v0.1.34</small></h3>
+
 
 Equivalent to the `--require-hashes` command-line argument. If set to `true`,
 uv will require that all dependencies have a hash specified in the requirements file.
 
-### `UV_RESOLUTION`
-<small>Since `0.1.27`</small>
+<h3 id="uv_resolution">
+<a class="toclink" href="#uv_resolution"><code>UV_RESOLUTION</code></a> <small class="env-reference">added in v0.1.27</small></h3>
+
 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 
-### `UV_STACK_SIZE`
-<small>Since `0.0.5`</small>
+<h3 id="uv_stack_size">
+<a class="toclink" href="#uv_stack_size"><code>UV_STACK_SIZE</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Use to set the stack size used by uv.
 
@@ -600,8 +695,9 @@ stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
 `max(UV_STACK_SIZE, 1MB)`.
 
-### `UV_SYSTEM_PYTHON`
-<small>Since `0.1.18`</small>
+<h3 id="uv_system_python">
+<a class="toclink" href="#uv_system_python"><code>UV_SYSTEM_PYTHON</code></a> <small class="env-reference">added in v0.1.18</small></h3>
+
 
 Equivalent to the `--system` command-line argument. If set to `true`, uv will
 use the first Python interpreter found in the system `PATH`.
@@ -610,40 +706,47 @@ WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (
 or containerized environments and should be used with caution, as modifying the system
 Python can lead to unexpected behavior.
 
-### `UV_TEST_NO_HTTP_RETRY_DELAY`
-<small>Since `0.7.21`</small>
+<h3 id="uv_test_no_http_retry_delay">
+<a class="toclink" href="#uv_test_no_http_retry_delay"><code>UV_TEST_NO_HTTP_RETRY_DELAY</code></a> <small class="env-reference">added in v0.7.21</small></h3>
+
 
 Used to disable delay for HTTP retries in tests.
 
-### `UV_TOOL_BIN_DIR`
-<small>Since `0.3.0`</small>
+<h3 id="uv_tool_bin_dir">
+<a class="toclink" href="#uv_tool_bin_dir"><code>UV_TOOL_BIN_DIR</code></a> <small class="env-reference">added in v0.3.0</small></h3>
+
 
 Specifies the "bin" directory for installing tool executables.
 
-### `UV_TOOL_DIR`
-<small>Since `0.2.16`</small>
+<h3 id="uv_tool_dir">
+<a class="toclink" href="#uv_tool_dir"><code>UV_TOOL_DIR</code></a> <small class="env-reference">added in v0.2.16</small></h3>
+
 
 Specifies the directory where uv stores managed tools.
 
-### `UV_TORCH_BACKEND`
-<small>Since `0.6.9`</small>
+<h3 id="uv_torch_backend">
+<a class="toclink" href="#uv_torch_backend"><code>UV_TORCH_BACKEND</code></a> <small class="env-reference">added in v0.6.9</small></h3>
+
 
 Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
 
-### `UV_UNMANAGED_INSTALL`
-<small>Since `0.5.0`</small>
+<h3 id="uv_unmanaged_install">
+<a class="toclink" href="#uv_unmanaged_install"><code>UV_UNMANAGED_INSTALL</code></a> <small class="env-reference">added in v0.5.0</small></h3>
+
 
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
 
-### `UV_VENV_CLEAR`
-<small>Since `0.8.0`</small>
+<h3 id="uv_venv_clear">
+<a class="toclink" href="#uv_venv_clear"><code>UV_VENV_CLEAR</code></a> <small class="env-reference">added in v0.8.0</small></h3>
+
 
 Equivalent to the `--clear` command-line argument. If set, uv will remove any
 existing files or directories at the target path.
 
-### `UV_VENV_SEED`
-<small>Since `0.5.21`</small>
+<h3 id="uv_venv_seed">
+<a class="toclink" href="#uv_venv_seed"><code>UV_VENV_SEED</code></a> <small class="env-reference">added in v0.5.21</small></h3>
+
 
 Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
 created by `uv venv`.
@@ -656,222 +759,261 @@ Note that `setuptools` and `wheel` are not included in Python 3.12+ environments
 
 uv also reads the following externally defined environment variables:
 
-### `ALL_PROXY`
-<small>Since `0.1.38`</small>
+<h3 id="all_proxy">
+<a class="toclink" href="#all_proxy"><code>ALL_PROXY</code></a> <small class="env-reference">added in v0.1.38</small></h3>
+
 
 General proxy for all network requests.
 
-### `ANDROID_API_LEVEL`
-<small>Since `0.8.16`</small>
+<h3 id="android_api_level">
+<a class="toclink" href="#android_api_level"><code>ANDROID_API_LEVEL</code></a> <small class="env-reference">added in v0.8.16</small></h3>
+
 
 Used with `--python-platform aarch64-linux-android` and related variants to set the
 Android API level. (i.e., the minimum supported Android API level).
 
 Defaults to `24`.
 
-### `APPDATA`
-<small>Since `0.1.42`</small>
+<h3 id="appdata">
+<a class="toclink" href="#appdata"><code>APPDATA</code></a> <small class="env-reference">added in v0.1.42</small></h3>
+
 
 Path to user-level configuration directory on Windows systems.
 
-### `BASH_VERSION`
-<small>Since `0.1.28`</small>
+<h3 id="bash_version">
+<a class="toclink" href="#bash_version"><code>BASH_VERSION</code></a> <small class="env-reference">added in v0.1.28</small></h3>
+
 
 Used to detect Bash shell usage.
 
-### `CLICOLOR_FORCE`
-<small>Since `0.1.32`</small>
+<h3 id="clicolor_force">
+<a class="toclink" href="#clicolor_force"><code>CLICOLOR_FORCE</code></a> <small class="env-reference">added in v0.1.32</small></h3>
+
 
 Use to control color via `anstyle`.
 
-### `COLUMNS`
-<small>Since `0.6.2`</small>
+<h3 id="columns">
+<a class="toclink" href="#columns"><code>COLUMNS</code></a> <small class="env-reference">added in v0.6.2</small></h3>
+
 
 Overrides terminal width used for wrapping. This variable is not read by uv directly.
 
 This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
 
-### `CONDA_DEFAULT_ENV`
-<small>Since `0.5.0`</small>
+<h3 id="conda_default_env">
+<a class="toclink" href="#conda_default_env"><code>CONDA_DEFAULT_ENV</code></a> <small class="env-reference">added in v0.5.0</small></h3>
+
 
 Used to determine the name of the active Conda environment.
 
-### `CONDA_PREFIX`
-<small>Since `0.0.5`</small>
+<h3 id="conda_prefix">
+<a class="toclink" href="#conda_prefix"><code>CONDA_PREFIX</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Used to detect the path of an active Conda environment.
 
-### `CONDA_ROOT`
-<small>Since `0.8.18`</small>
+<h3 id="conda_root">
+<a class="toclink" href="#conda_root"><code>CONDA_ROOT</code></a> <small class="env-reference">added in v0.8.18</small></h3>
+
 
 Used to determine the root install path of Conda.
 
-### `FISH_VERSION`
-<small>Since `0.1.28`</small>
+<h3 id="fish_version">
+<a class="toclink" href="#fish_version"><code>FISH_VERSION</code></a> <small class="env-reference">added in v0.1.28</small></h3>
+
 
 Used to detect Fish shell usage.
 
-### `FORCE_COLOR`
-<small>Since `0.2.7`</small>
+<h3 id="force_color">
+<a class="toclink" href="#force_color"><code>FORCE_COLOR</code></a> <small class="env-reference">added in v0.2.7</small></h3>
+
 
 Forces colored output regardless of terminal support.
 
 See [force-color.org](https://force-color.org).
 
-### `GITHUB_ACTIONS`
-<small>Since `0.4.16`</small>
+<h3 id="github_actions">
+<a class="toclink" href="#github_actions"><code>GITHUB_ACTIONS</code></a> <small class="env-reference">added in v0.4.16</small></h3>
+
 
 Indicates that the current process is running in GitHub Actions.
 
 `uv publish` may attempt trusted publishing flows when set
 to `true`.
 
-### `GITLAB_CI`
-<small>Since `0.8.18`</small>
+<h3 id="gitlab_ci">
+<a class="toclink" href="#gitlab_ci"><code>GITLAB_CI</code></a> <small class="env-reference">added in v0.8.18</small></h3>
+
 
 Indicates that the current process is running in GitLab CI.
 
 `uv publish` may attempt trusted publishing flows when set
 to `true`.
 
-### `HF_TOKEN`
-<small>Since `0.8.1`</small>
+<h3 id="hf_token">
+<a class="toclink" href="#hf_token"><code>HF_TOKEN</code></a> <small class="env-reference">added in v0.8.1</small></h3>
+
 
 Authentication token for Hugging Face requests. When set, uv will use this token
 when making requests to `https://huggingface.co/` and any subdomains.
 
-### `HOME`
-<small>Since `0.0.5`</small>
+<h3 id="home">
+<a class="toclink" href="#home"><code>HOME</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 The standard `HOME` env var.
 
-### `HTTPS_PROXY`
-<small>Since `0.1.38`</small>
+<h3 id="https_proxy">
+<a class="toclink" href="#https_proxy"><code>HTTPS_PROXY</code></a> <small class="env-reference">added in v0.1.38</small></h3>
+
 
 Proxy for HTTPS requests.
 
-### `HTTP_PROXY`
-<small>Since `0.1.38`</small>
+<h3 id="http_proxy">
+<a class="toclink" href="#http_proxy"><code>HTTP_PROXY</code></a> <small class="env-reference">added in v0.1.38</small></h3>
+
 
 Proxy for HTTP requests.
 
-### `HTTP_TIMEOUT`
-<small>Since `0.1.7`</small>
+<h3 id="http_timeout">
+<a class="toclink" href="#http_timeout"><code>HTTP_TIMEOUT</code></a> <small class="env-reference">added in v0.1.7</small></h3>
+
 
 Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
 
-### `IPHONEOS_DEPLOYMENT_TARGET`
-<small>Since `0.8.16`</small>
+<h3 id="iphoneos_deployment_target">
+<a class="toclink" href="#iphoneos_deployment_target"><code>IPHONEOS_DEPLOYMENT_TARGET</code></a> <small class="env-reference">added in v0.8.16</small></h3>
+
 
 Used with `--python-platform arm64-apple-ios` and related variants to set the
 deployment target (i.e., the minimum supported iOS version).
 
 Defaults to `13.0`.
 
-### `JPY_SESSION_NAME`
-<small>Since `0.2.6`</small>
+<h3 id="jpy_session_name">
+<a class="toclink" href="#jpy_session_name"><code>JPY_SESSION_NAME</code></a> <small class="env-reference">added in v0.2.6</small></h3>
+
 
 Used to detect when running inside a Jupyter notebook.
 
-### `KSH_VERSION`
-<small>Since `0.2.33`</small>
+<h3 id="ksh_version">
+<a class="toclink" href="#ksh_version"><code>KSH_VERSION</code></a> <small class="env-reference">added in v0.2.33</small></h3>
+
 
 Used to detect Ksh shell usage.
 
-### `LOCALAPPDATA`
-<small>Since `0.3.3`</small>
+<h3 id="localappdata">
+<a class="toclink" href="#localappdata"><code>LOCALAPPDATA</code></a> <small class="env-reference">added in v0.3.3</small></h3>
+
 
 Used to look for Microsoft Store Pythons installations.
 
-### `MACOSX_DEPLOYMENT_TARGET`
-<small>Since `0.1.42`</small>
+<h3 id="macosx_deployment_target">
+<a class="toclink" href="#macosx_deployment_target"><code>MACOSX_DEPLOYMENT_TARGET</code></a> <small class="env-reference">added in v0.1.42</small></h3>
+
 
 Used with `--python-platform macos` and related variants to set the
 deployment target (i.e., the minimum supported macOS version).
 
 Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
 
-### `NETRC`
-<small>Since `0.1.16`</small>
+<h3 id="netrc">
+<a class="toclink" href="#netrc"><code>NETRC</code></a> <small class="env-reference">added in v0.1.16</small></h3>
+
 
 Use to set the .netrc file location.
 
-### `NO_COLOR`
-<small>Since `0.2.7`</small>
+<h3 id="no_color">
+<a class="toclink" href="#no_color"><code>NO_COLOR</code></a> <small class="env-reference">added in v0.2.7</small></h3>
+
 
 Disables colored output (takes precedence over `FORCE_COLOR`).
 
 See [no-color.org](https://no-color.org).
 
-### `NO_PROXY`
-<small>Since `0.1.38`</small>
+<h3 id="no_proxy">
+<a class="toclink" href="#no_proxy"><code>NO_PROXY</code></a> <small class="env-reference">added in v0.1.38</small></h3>
+
 
 Comma-separated list of hostnames (e.g., `example.com`) and/or patterns (e.g., `192.168.1.0/24`) that should bypass the proxy.
 
-### `NU_VERSION`
-<small>Since `0.1.16`</small>
+<h3 id="nu_version">
+<a class="toclink" href="#nu_version"><code>NU_VERSION</code></a> <small class="env-reference">added in v0.1.16</small></h3>
+
 
 Used to detect `NuShell` usage.
 
-### `PAGER`
-<small>Since `0.4.18`</small>
+<h3 id="pager">
+<a class="toclink" href="#pager"><code>PAGER</code></a> <small class="env-reference">added in v0.4.18</small></h3>
+
 
 The standard `PAGER` posix env var. Used by `uv` to configure the appropriate pager.
 
-### `PATH`
-<small>Since `0.0.5`</small>
+<h3 id="path">
+<a class="toclink" href="#path"><code>PATH</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 The standard `PATH` env var.
 
-### `PROMPT`
-<small>Since `0.1.16`</small>
+<h3 id="prompt">
+<a class="toclink" href="#prompt"><code>PROMPT</code></a> <small class="env-reference">added in v0.1.16</small></h3>
+
 
 Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
 
-### `PWD`
-<small>Since `0.0.5`</small>
+<h3 id="pwd">
+<a class="toclink" href="#pwd"><code>PWD</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 The standard `PWD` posix env var.
 
-### `PYC_INVALIDATION_MODE`
-<small>Since `0.1.7`</small>
+<h3 id="pyc_invalidation_mode">
+<a class="toclink" href="#pyc_invalidation_mode"><code>PYC_INVALIDATION_MODE</code></a> <small class="env-reference">added in v0.1.7</small></h3>
+
 
 The validation modes to use when run with `--compile`.
 
 See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 
-### `PYTHONPATH`
-<small>Since `0.1.22`</small>
+<h3 id="pythonpath">
+<a class="toclink" href="#pythonpath"><code>PYTHONPATH</code></a> <small class="env-reference">added in v0.1.22</small></h3>
+
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
 
-### `PYX_API_KEY`
-<small>Since `0.8.15`</small>
+<h3 id="pyx_api_key">
+<a class="toclink" href="#pyx_api_key"><code>PYX_API_KEY</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 The pyx API key (e.g., `sk-pyx-...`).
 
-### `PYX_API_URL`
-<small>Since `0.8.15`</small>
+<h3 id="pyx_api_url">
+<a class="toclink" href="#pyx_api_url"><code>PYX_API_URL</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 The URL of the pyx Simple API server.
 
-### `PYX_AUTH_TOKEN`
-<small>Since `0.8.15`</small>
+<h3 id="pyx_auth_token">
+<a class="toclink" href="#pyx_auth_token"><code>PYX_AUTH_TOKEN</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 The pyx authentication token (e.g., `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`), as output by `uv auth token`.
 
-### `PYX_CDN_DOMAIN`
-<small>Since `0.8.15`</small>
+<h3 id="pyx_cdn_domain">
+<a class="toclink" href="#pyx_cdn_domain"><code>PYX_CDN_DOMAIN</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 The domain of the pyx CDN.
 
-### `PYX_CREDENTIALS_DIR`
-<small>Since `0.8.15`</small>
+<h3 id="pyx_credentials_dir">
+<a class="toclink" href="#pyx_credentials_dir"><code>PYX_CREDENTIALS_DIR</code></a> <small class="env-reference">added in v0.8.15</small></h3>
+
 
 Specifies the directory where uv stores pyx credentials.
 
-### `RUST_BACKTRACE`
-<small>Since `0.7.22`</small>
+<h3 id="rust_backtrace">
+<a class="toclink" href="#rust_backtrace"><code>RUST_BACKTRACE</code></a> <small class="env-reference">added in v0.7.22</small></h3>
+
 
 If set, it can be used to display more stack trace details when a panic occurs.
 This is used by uv particularly on windows to show more details during a platform exception.
@@ -884,8 +1026,9 @@ For example:
 See the [Rust backtrace documentation](https://doc.rust-lang.org/std/backtrace/index.html)
 for more.
 
-### `RUST_LOG`
-<small>Since `0.0.5`</small>
+<h3 id="rust_log">
+<a class="toclink" href="#rust_log"><code>RUST_LOG</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 If set, uv will use this value as the log level for its `--verbose` output. Accepts
 any filter compatible with the `tracing_subscriber` crate.
@@ -898,8 +1041,9 @@ For example:
 See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
 for more.
 
-### `RUST_MIN_STACK`
-<small>Since `0.5.19`</small>
+<h3 id="rust_min_stack">
+<a class="toclink" href="#rust_min_stack"><code>RUST_MIN_STACK</code></a> <small class="env-reference">added in v0.5.19</small></h3>
+
 
 Use to set the stack size used by uv.
 
@@ -914,39 +1058,46 @@ stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
 `max(RUST_MIN_STACK, 1MB)`.
 
-### `SHELL`
-<small>Since `0.1.16`</small>
+<h3 id="shell">
+<a class="toclink" href="#shell"><code>SHELL</code></a> <small class="env-reference">added in v0.1.16</small></h3>
+
 
 The standard `SHELL` posix env var.
 
-### `SSL_CERT_FILE`
-<small>Since `0.1.14`</small>
+<h3 id="ssl_cert_file">
+<a class="toclink" href="#ssl_cert_file"><code>SSL_CERT_FILE</code></a> <small class="env-reference">added in v0.1.14</small></h3>
+
 
 Custom certificate bundle file path for SSL connections.
 
-### `SSL_CLIENT_CERT`
-<small>Since `0.2.11`</small>
+<h3 id="ssl_client_cert">
+<a class="toclink" href="#ssl_client_cert"><code>SSL_CLIENT_CERT</code></a> <small class="env-reference">added in v0.2.11</small></h3>
+
 
 If set, uv will use this file for mTLS authentication.
 This should be a single file containing both the certificate and the private key in PEM format.
 
-### `SYSTEMDRIVE`
-<small>Since `0.4.26`</small>
+<h3 id="systemdrive">
+<a class="toclink" href="#systemdrive"><code>SYSTEMDRIVE</code></a> <small class="env-reference">added in v0.4.26</small></h3>
+
 
 Path to system-level configuration directory on Windows systems.
 
-### `TRACING_DURATIONS_FILE`
-<small>Since `0.0.5`</small>
+<h3 id="tracing_durations_file">
+<a class="toclink" href="#tracing_durations_file"><code>TRACING_DURATIONS_FILE</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
 
-### `USERPROFILE`
-<small>Since `0.0.5`</small>
+<h3 id="userprofile">
+<a class="toclink" href="#userprofile"><code>USERPROFILE</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Path to root directory of user's profile on Windows systems.
 
-### `UV`
-<small>Since `0.6.0`</small>
+<h3 id="uv">
+<a class="toclink" href="#uv"><code>UV</code></a> <small class="env-reference">added in v0.6.0</small></h3>
+
 
 The path to the binary that was used to invoke uv.
 
@@ -958,49 +1109,58 @@ of the symbolic link and other platforms will return the path of the symbolic li
 See <https://doc.rust-lang.org/std/env/fn.current_exe.html#security> for security
 considerations.
 
-### `VIRTUAL_ENV`
-<small>Since `0.0.5`</small>
+<h3 id="virtual_env">
+<a class="toclink" href="#virtual_env"><code>VIRTUAL_ENV</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 Used to detect an activated virtual environment.
 
-### `VIRTUAL_ENV_DISABLE_PROMPT`
-<small>Since `0.0.5`</small>
+<h3 id="virtual_env_disable_prompt">
+<a class="toclink" href="#virtual_env_disable_prompt"><code>VIRTUAL_ENV_DISABLE_PROMPT</code></a> <small class="env-reference">added in v0.0.5</small></h3>
+
 
 If set to `1` before a virtual environment is activated, then the
 virtual environment name will not be prepended to the terminal prompt.
 
-### `XDG_BIN_HOME`
-<small>Since `0.2.16`</small>
+<h3 id="xdg_bin_home">
+<a class="toclink" href="#xdg_bin_home"><code>XDG_BIN_HOME</code></a> <small class="env-reference">added in v0.2.16</small></h3>
+
 
 Path to directory where executables are installed.
 
-### `XDG_CACHE_HOME`
-<small>Since `0.1.17`</small>
+<h3 id="xdg_cache_home">
+<a class="toclink" href="#xdg_cache_home"><code>XDG_CACHE_HOME</code></a> <small class="env-reference">added in v0.1.17</small></h3>
+
 
 Path to cache directory on Unix systems.
 
-### `XDG_CONFIG_DIRS`
-<small>Since `0.4.26`</small>
+<h3 id="xdg_config_dirs">
+<a class="toclink" href="#xdg_config_dirs"><code>XDG_CONFIG_DIRS</code></a> <small class="env-reference">added in v0.4.26</small></h3>
+
 
 Path to system-level configuration directory on Unix systems.
 
-### `XDG_CONFIG_HOME`
-<small>Since `0.1.34`</small>
+<h3 id="xdg_config_home">
+<a class="toclink" href="#xdg_config_home"><code>XDG_CONFIG_HOME</code></a> <small class="env-reference">added in v0.1.34</small></h3>
+
 
 Path to user-level configuration directory on Unix systems.
 
-### `XDG_DATA_HOME`
-<small>Since `0.2.16`</small>
+<h3 id="xdg_data_home">
+<a class="toclink" href="#xdg_data_home"><code>XDG_DATA_HOME</code></a> <small class="env-reference">added in v0.2.16</small></h3>
+
 
 Path to directory for storing managed Python installations and tools.
 
-### `ZDOTDIR`
-<small>Since `0.2.25`</small>
+<h3 id="zdotdir">
+<a class="toclink" href="#zdotdir"><code>ZDOTDIR</code></a> <small class="env-reference">added in v0.2.25</small></h3>
+
 
 Used to determine which `.zshenv` to use when Zsh is being used.
 
-### `ZSH_VERSION`
-<small>Since `0.1.28`</small>
+<h3 id="zsh_version">
+<a class="toclink" href="#zsh_version"><code>ZSH_VERSION</code></a> <small class="env-reference">added in v0.1.28</small></h3>
+
 
 Used to detect Zsh shell usage.
 

@@ -77,10 +77,10 @@ fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
-fn get_since(attrs: &[Attribute]) -> Option<String> {
+fn get_added_in(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.path().is_ident("attr_since"))
+        .find(|a| a.path().is_ident("attr_added_in"))
         .and_then(|attr| attr.parse_args::<LitStr>().ok())
         .map(|lit_str| lit_str.value())
 }
@@ -101,15 +101,15 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             ImplItem::Const(item) if !is_hidden(&item.attrs) => {
                 let name = item.ident.to_string();
                 let doc = get_doc_comment(&item.attrs);
-                let since = get_since(&item.attrs);
-                Some((name, doc, since))
+                let added_in = get_added_in(&item.attrs);
+                Some((name, doc, added_in))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
                     let doc = get_doc_comment(&item.attrs);
-                    let since = get_since(&item.attrs);
-                    Some((pattern, doc, since))
+                    let added_in = get_added_in(&item.attrs);
+                    Some((pattern, doc, added_in))
                 } else {
                     None // Skip if pattern extraction fails.
                 }
@@ -119,8 +119,8 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .collect();
 
     let struct_name = &ast.self_ty;
-    let pairs = constants.iter().map(|(name, doc, since)| {
-        if let Some(s) = since {
+    let pairs = constants.iter().map(|(name, doc, added_in)| {
+        if let Some(s) = added_in {
             quote! { (#name, #doc, Some(#s)) }
         } else {
             quote! { (#name, #doc, None) }
@@ -152,6 +152,6 @@ pub fn attr_env_var_pattern(_attr: TokenStream, item: TokenStream) -> TokenStrea
 }
 
 #[proc_macro_attribute]
-pub fn attr_since(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn attr_added_in(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
