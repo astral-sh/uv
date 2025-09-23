@@ -1794,7 +1794,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@351d894493fd3289754a5471c0892ba92fa0abe2
+        uses: aws-actions/configure-aws-credentials@0be22f94c34623c570f2c1479d3a28b5678673c7
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
