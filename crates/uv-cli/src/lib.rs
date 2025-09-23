@@ -5560,6 +5560,10 @@ pub struct PythonUninstallArgs {
     /// Uninstall all managed Python versions.
     #[arg(long, conflicts_with("targets"))]
     pub all: bool,
+
+    /// Uninstall outdated Python versions, keeping the latest in each family.
+    #[arg(long, conflicts_with_all(["all", "targets"]))]
+    pub outdated: bool,
 }
 
 #[derive(Args)]
