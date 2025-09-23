@@ -5355,7 +5355,7 @@ pub struct PythonListArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
     pub python_downloads_json_url: Option<String>,
 }
 
@@ -5438,7 +5438,7 @@ pub struct PythonInstallArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5447,13 +5447,13 @@ pub struct PythonInstallArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
     pub python_downloads_json_url: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
@@ -5490,9 +5490,12 @@ impl PythonInstallArgs {
     #[must_use]
     pub fn install_mirrors(&self) -> PythonInstallMirrors {
         PythonInstallMirrors {
-            python_install_mirror: self.mirror.clone(),
-            pypy_install_mirror: self.pypy_mirror.clone(),
-            python_downloads_json_url: self.python_downloads_json_url.clone(),
+            python_install_mirror: self.mirror.clone().filter(|x| !x.is_empty()),
+            pypy_install_mirror: self.pypy_mirror.clone().filter(|x| !x.is_empty()),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .clone()
+                .filter(|x| !x.is_empty()),
         }
     }
 }
@@ -5522,7 +5525,7 @@ pub struct PythonUpgradeArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5531,7 +5534,7 @@ pub struct PythonUpgradeArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
@@ -5544,7 +5547,7 @@ pub struct PythonUpgradeArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
     pub python_downloads_json_url: Option<String>,
 }
 
@@ -5552,9 +5555,12 @@ impl PythonUpgradeArgs {
     #[must_use]
     pub fn install_mirrors(&self) -> PythonInstallMirrors {
         PythonInstallMirrors {
-            python_install_mirror: self.mirror.clone(),
-            pypy_install_mirror: self.pypy_mirror.clone(),
-            python_downloads_json_url: self.python_downloads_json_url.clone(),
+            python_install_mirror: self.mirror.clone().filter(|x| !x.is_empty()),
+            pypy_install_mirror: self.pypy_mirror.clone().filter(|x| !x.is_empty()),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .clone()
+                .filter(|x| !x.is_empty()),
         }
     }
 }

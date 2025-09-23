@@ -951,6 +951,7 @@ impl PythonListSettings {
         };
 
         let python_downloads_json_url = python_downloads_json_url_arg
+            .filter(|s| !s.is_empty())
             .or(environment.install_mirrors.python_downloads_json_url)
             .or(python_downloads_json_url_option);
 
