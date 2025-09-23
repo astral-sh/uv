@@ -15,7 +15,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{PylockToml, RequirementsTxtExport};
+use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -351,7 +351,22 @@ pub(crate) async fn export(
             write!(writer, "{}", export.to_toml()?)?;
         }
         ExportFormat::CycloneDX1_5 => {
-            write!(writer, "{{}}")?;
+            let export = cyclonedx_json::from_lock(
+                &target,
+                &prune,
+                &extras,
+                &groups,
+                include_annotations,
+                editable,
+                &install_options,
+            )?;
+
+            let mut output = Vec::<u8>::new();
+
+            export.output_as_json_v1_5(&mut output)?;
+
+            let output_str = String::from_utf8(output)?;
+            write!(writer, "{}", output_str)?;
         }
     }
 
