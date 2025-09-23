@@ -393,7 +393,9 @@ async fn build_impl(
                     // encoding everything in strings
                     if err.to_string().contains("/bin/python")
                         && std::error::Error::source(err).is_some_and(|err| {
-                            err.to_string().ends_with("outside of the target directory")
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
                         })
                     {
                         Some(
