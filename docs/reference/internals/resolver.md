@@ -169,7 +169,7 @@ as a combination of aspects:
 
 For most project it's not possible to determine whether they will be compatible with a new Python
 version once its released, so blocking newer versions in advance would only block users from
-upgrading or testing newer Python versions. The exception are packages which use the unstable C ABI
+upgrading or testing newer Python versions. The exceptions are packages which use the unstable C ABI
 or internals of CPython such as its bytecode format, some of which uv handles by inspecting the
 wheel tags.
 
