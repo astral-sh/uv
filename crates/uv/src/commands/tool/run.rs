@@ -199,7 +199,7 @@ pub(crate) async fn run(
                     invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("uv run {}", target_path.user_display().cyan()),
+                    format!("uv run {}", target_path.user_display()).green(),
                 ))
             } else {
                 let package_name = PackageName::from_str(target)?;
