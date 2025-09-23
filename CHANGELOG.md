@@ -3,9 +3,21 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.22
+
+Released on 2025-09-23.
+
+### Python
+
+- Upgrade Pyodide to 0.28.3 ([#15999](https://github.com/astral-sh/uv/pull/15999))
+
+### Security 
+
+- Upgrade `astral-tokio-tar` to 0.5.5 which [hardens tar archive extraction](https://github.com/astral-sh/tokio-tar/security/advisories/GHSA-3wgq-wrwc-vqmv) ([#16004](https://github.com/astral-sh/uv/pull/16004))
+
 ## 0.8.21
 
-+Released on 2025-09-23.
+Released on 2025-09-23.
 
 ### Enhancements
 
