@@ -3592,6 +3592,87 @@ fn pep_751_dependency() -> Result<()> {
 }
 
 #[test]
+fn cyclonedx_export() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Add custom filters for CycloneDX dynamic values
+    let mut filters = context.filters();
+    filters.push((
+        r"urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        "[SERIAL_NUMBER]",
+    ));
+    filters.push((
+        r#""timestamp": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z""#,
+        r#""timestamp": "[TIMESTAMP]""#,
+    ));
+
+    uv_snapshot!(filters, context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_export_no_header() -> Result<()> {
     let context = TestContext::new("3.12");
 
