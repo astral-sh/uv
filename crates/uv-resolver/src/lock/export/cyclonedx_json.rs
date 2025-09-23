@@ -5,6 +5,7 @@ use crate::lock::Source;
 use crate::lock::export::ExportableRequirements;
 use cyclonedx_bom::models::component::Classification;
 use cyclonedx_bom::models::metadata::Metadata;
+use cyclonedx_bom::models::tool::{Tool, Tools};
 use cyclonedx_bom::prelude::NormalizedString;
 use cyclonedx_bom::prelude::{Bom, Component, Components};
 use uv_configuration::{
@@ -40,6 +41,13 @@ pub fn from_lock<'lock>(
             res
         }),
         timestamp: cyclonedx_bom::prelude::DateTime::now().ok(),
+        tools: Some(Tools::List(vec![Tool {
+            vendor: Some(NormalizedString::new("Astral Software Inc.")),
+            name: Some(NormalizedString::new("uv")),
+            version: Some(NormalizedString::new(uv_version::version())),
+            hashes: None,
+            external_references: None,
+        }])),
         ..Metadata::default()
     };
 

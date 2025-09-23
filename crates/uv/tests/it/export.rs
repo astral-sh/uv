@@ -3622,6 +3622,11 @@ fn cyclonedx_export() -> Result<()> {
         r#""timestamp": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z""#,
         r#""timestamp": "[TIMESTAMP]""#,
     ));
+    filters.push((
+        r#""name": "uv",\s*"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
+        r#""name": "uv",
+        "version": "[VERSION]""#,
+    ));
 
     uv_snapshot!(filters, context.export().arg("--format").arg("cyclonedx1.5"), @r#"
     success: true
@@ -3634,6 +3639,13 @@ fn cyclonedx_export() -> Result<()> {
       "serialNumber": "[SERIAL_NUMBER]",
       "metadata": {
         "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
         "component": {
           "type": "application",
           "bom-ref": "1-project@0.1.0",
