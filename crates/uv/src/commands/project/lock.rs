@@ -209,14 +209,18 @@ pub(crate) async fn lock(
         Ok(lock) => {
             if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
-                let mut changed = false;
                 if let LockResult::Changed(previous, lock) = &lock {
+                    let mut changed = false;
                     for event in LockEvent::detect_changes(previous.as_ref(), lock, dry_run) {
                         changed = true;
                         writeln!(printer.stderr(), "{event}")?;
                     }
-                }
-                if !changed {
+
+                    // If we didn't report any version changes, but the lockfile changed, report back.
+                    if !changed {
+                        writeln!(printer.stderr(), "{}", "Lockfile changes detected".bold())?;
+                    }
+                } else {
                     writeln!(
                         printer.stderr(),
                         "{}",
@@ -932,7 +936,11 @@ async fn do_lock(
                         .unwrap_or_default(),
                 );
 
-            Ok(LockResult::Changed(previous, lock))
+            if previous.as_ref().is_some_and(|previous| *previous == lock) {
+                Ok(LockResult::Unchanged(lock))
+            } else {
+                Ok(LockResult::Changed(previous, lock))
+            }
         }
     }
 }

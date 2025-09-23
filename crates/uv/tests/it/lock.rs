@@ -13237,6 +13237,33 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "pytest", marker = "python_version < '0'" }]
+        "#
+        );
+    });
+
     Ok(())
 }
 
@@ -13277,6 +13304,31 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "debug"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "pytest", marker = "python_version < '0'" }]
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -31682,11 +31734,11 @@ fn lock_refresh() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    // Write a `uv.lock` that accidentally omits the `anyio` wheel.
+    // Write a `uv.lock` that accidentally omits the `anyio` wheel, and uses an outdated revision.
     context.temp_dir.child("uv.lock").write_str(
         r#"
         version = 1
-        revision = 3
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -31752,7 +31804,7 @@ fn lock_refresh() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -31812,7 +31864,7 @@ fn lock_refresh() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // The wheel should be present.
+    // The wheel should be present, and the revision should be incremented.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -31869,6 +31921,16 @@ fn lock_refresh() -> Result<()> {
         "#
         );
     });
+
+    // Re-run with `--refresh --locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
 
     Ok(())
 }

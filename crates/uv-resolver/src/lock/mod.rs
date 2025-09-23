@@ -170,7 +170,7 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker
 });
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     /// The (major) version of the lockfile format.
@@ -3233,34 +3233,6 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
-impl PackageMetadata {
-    fn unwire(self, requires_python: &RequiresPython) -> Self {
-        // We need to complexify these markers so things like
-        // `requires_python < '0'` get normalized to False
-        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
-            requirements
-                .into_iter()
-                .map(|mut requirement| {
-                    let complexified_marker =
-                        requires_python.complexify_markers(requirement.marker);
-                    requirement.marker = complexified_marker;
-                    requirement
-                })
-                .collect()
-        };
-
-        Self {
-            requires_dist: unwire_requirements(self.requires_dist),
-            provides_extra: self.provides_extra,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
-                .collect(),
-        }
-    }
-}
-
 impl PackageWire {
     fn unwire(
         self,
@@ -3292,7 +3264,7 @@ impl PackageWire {
 
         Ok(Package {
             id: self.id,
-            metadata: self.metadata.unwire(requires_python),
+            metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -4826,11 +4798,12 @@ impl Dependency {
     ) -> Self {
         let simplified_marker =
             SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
+        let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
             extra,
             simplified_marker,
-            complexified_marker,
+            complexified_marker: UniversalMarker::from_combined(complexified_marker),
         }
     }
 
