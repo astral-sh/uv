@@ -46,6 +46,7 @@ uv-workspace = { workspace = true }
 
 arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
+cyclonedx-bom = { workspace = true }
 dashmap = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -71,6 +72,7 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
