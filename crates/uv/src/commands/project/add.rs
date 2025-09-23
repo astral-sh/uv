@@ -980,7 +980,7 @@ async fn lock_and_sync(
         if locked {
             LockMode::Locked(target.interpreter())
         } else {
-            LockMode::Write(target.interpreter())
+            LockMode::Write(target.interpreter(), false)
         },
         &settings.resolver,
         client_builder,
@@ -1102,7 +1102,7 @@ async fn lock_and_sync(
                 if locked {
                     LockMode::Locked(target.interpreter())
                 } else {
-                    LockMode::Write(target.interpreter())
+                    LockMode::Write(target.interpreter(), false)
                 },
                 &settings.resolver,
                 client_builder,
