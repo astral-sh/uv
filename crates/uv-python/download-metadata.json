@@ -18949,10 +18949,10 @@
     "minor": 13,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/0.28.2/xbuildenv-0.28.2.tar.bz2",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.28.3/xbuildenv-0.28.3.tar.bz2",
     "sha256": null,
     "variant": null,
-    "build": "0.28.2"
+    "build": "0.28.3"
   },
   "cpython-3.13.2-linux-aarch64-gnu": {
     "name": "cpython",
