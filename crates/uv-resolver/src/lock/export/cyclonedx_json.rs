@@ -1,13 +1,18 @@
 use crate::Installable;
 use crate::LockError;
 use crate::lock::Package;
+use crate::lock::PackageId;
 use crate::lock::Source;
+use crate::lock::export::ExportableRequirement;
 use crate::lock::export::ExportableRequirements;
 use cyclonedx_bom::models::component::Classification;
+use cyclonedx_bom::models::dependency::Dependencies;
+use cyclonedx_bom::models::dependency::Dependency;
 use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::tool::{Tool, Tools};
 use cyclonedx_bom::prelude::NormalizedString;
 use cyclonedx_bom::prelude::{Bom, Component, Components};
+use std::collections::HashMap;
 use uv_configuration::{
     DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults, InstallOptions,
 };
@@ -32,11 +37,13 @@ pub fn from_lock<'lock>(
 
     // ID counter for bom-ref generation
     let mut id_counter = 1;
+    let mut package_to_bom_ref = HashMap::<&PackageId, Component>::new();
 
     let metadata = Metadata {
         component: root.map(|package| {
             let res =
                 create_component_from_package(package, Classification::Application, id_counter);
+            package_to_bom_ref.insert(&package.id, res.clone());
             id_counter += 1;
             res
         }),
@@ -60,14 +67,18 @@ pub fn from_lock<'lock>(
         .map(|node| {
             let res =
                 create_component_from_package(node.package, Classification::Library, id_counter);
+            package_to_bom_ref.insert(&node.package.id, res.clone());
             id_counter += 1;
             res
         })
         .collect();
 
+    let dependencies = create_dependencies_from_mapping(&nodes, &package_to_bom_ref);
+
     let bom = Bom {
         metadata: Some(metadata),
         components: Some(Components(components)),
+        dependencies: Some(dependencies),
         ..Bom::default()
     };
 
@@ -183,4 +194,61 @@ fn create_component_from_package(
         model_card: None,
         data: None,
     }
+}
+
+fn create_dependencies_from_mapping<'lock>(
+    nodes: &[ExportableRequirement<'lock>],
+    package_to_component: &HashMap<&PackageId, Component>,
+) -> Dependencies {
+    let mut dependencies = Vec::new();
+
+    // Add dependencies for all other packages
+    for node in nodes {
+        if let Some(package_bom_ref) = package_to_component.get(&node.package.id) {
+            let mut package_deps = Vec::new();
+
+            // Add regular dependencies
+            for dep in &node.package.dependencies {
+                if let Some(component) = package_to_component.get(&dep.package_id) {
+                    package_deps.push(component);
+                }
+            }
+
+            // Add optional dependencies (extras)
+            for (_extra_name, deps) in &node.package.optional_dependencies {
+                for dep in deps {
+                    if let Some(component) = package_to_component.get(&dep.package_id) {
+                        package_deps.push(component);
+                    }
+                }
+            }
+
+            // Add dependency groups
+            for (_group_name, deps) in &node.package.dependency_groups {
+                for dep in deps {
+                    if let Some(component) = package_to_component.get(&dep.package_id) {
+                        package_deps.push(component);
+                    }
+                }
+            }
+
+            // Remove duplicates and sort
+            // package_deps.sort();
+            package_deps.sort_by_key(|p| &p.bom_ref);
+            let bom_refs = package_deps
+                .iter()
+                .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
+                .collect();
+            package_deps.dedup();
+
+            dependencies.push(Dependency {
+                dependency_ref: package_bom_ref
+                    .bom_ref
+                    .clone()
+                    .expect("bom-ref should always exist"),
+                dependencies: bom_refs,
+            });
+        }
+    }
+    Dependencies(dependencies)
 }
