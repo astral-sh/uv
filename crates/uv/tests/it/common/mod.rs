@@ -463,7 +463,7 @@ impl TestContext {
         self
     }
 
-    /// Adds filters for non-deterministic CycloneDX data
+    /// Adds filters for non-deterministic `CycloneDX` data
     pub fn with_cyclonedx_filters(mut self) -> Self {
         self.filters.push((
             r"urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}".to_string(),

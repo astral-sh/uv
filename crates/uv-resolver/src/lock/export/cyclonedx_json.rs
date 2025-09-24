@@ -83,7 +83,7 @@ pub fn from_lock<'lock>(
     Ok(bom)
 }
 
-/// Create and register a CycloneDX component, updating the counter and map
+/// Create and register a `CycloneDX` component, updating the counter and map
 fn create_and_register_component<'a>(
     package: &'a Package,
     classification: Classification,
@@ -107,7 +107,11 @@ fn create_bom_ref(id: usize, name: &str, version: Option<&str>) -> String {
 
 /// Extract version string from a package
 fn get_version_string(package: &Package) -> Option<String> {
-    package.id.version.as_ref().map(|v| v.to_string())
+    package
+        .id
+        .version
+        .as_ref()
+        .map(std::string::ToString::to_string)
 }
 
 /// Extract package name string from a package
@@ -138,7 +142,7 @@ fn create_purl(package: &Package) -> Option<String> {
     ))
 }
 
-/// Create a CycloneDX component from a package node with the given classification and ID
+/// Create a `CycloneDX` component from a package node with the given classification and ID
 fn create_component_from_package(
     package: &Package,
     classification: Classification,
