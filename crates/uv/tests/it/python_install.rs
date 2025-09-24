@@ -3618,3 +3618,220 @@ fn python_install_build_version_pypy() {
     error: No download found for request: pypy-3.10-[PLATFORM]
     ");
 }
+
+#[test]
+fn python_uninstall_outdated() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install multiple versions of the same minor release
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    // Install versions from different minor releases
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.8"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.8 in [TIME]
+     + cpython-3.11.8-[PLATFORM] (python3.11)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.10 in [TIME]
+     + cpython-3.11.10-[PLATFORM] (python3.11)
+    ");
+
+    // Test --outdated removes older versions while keeping latest in each family
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Warning: Removing outdated Python versions may break existing virtual environments that use those versions.
+
+    Found 2 outdated Python installations to remove:
+     - cpython-3.11.8-[PLATFORM] (python3.11)
+     - cpython-3.12.1-[PLATFORM] (python3.12)
+
+    Uninstalled 2 outdated Python installations in [TIME]
+     - cpython-3.11.8-[PLATFORM]
+     - cpython-3.12.1-[PLATFORM]
+    ");
+
+    // Verify only the latest versions remain
+    uv_snapshot!(context.filters(), context.python_list(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.11.10-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.11.10-[PLATFORM]/[INSTALL-BIN]/python[EXE]
+    cpython-3.12.5-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/python[EXE]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_no_outdated_versions() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install only one version per minor release
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.10 in [TIME]
+     + cpython-3.11.10-[PLATFORM] (python3.11)
+    ");
+
+    // Test --outdated when there are no outdated versions
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    No outdated Python installations found
+    ");
+
+    // Verify all versions remain
+    uv_snapshot!(context.filters(), context.python_list(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.11.10-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.11.10-[PLATFORM]/[INSTALL-BIN]/python[EXE]
+    cpython-3.12.5-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/python[EXE]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_conflicts() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Test conflict with --all
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated").arg("--all"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--outdated' cannot be used with '--all'
+
+    Usage: uv python uninstall --outdated --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
+
+    // Test conflict with specific targets
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated").arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--outdated' cannot be used with '<TARGETS>...'
+
+    Usage: uv python uninstall --outdated --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
+}
+
+#[test]
+fn python_uninstall_outdated_single_version() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install multiple versions of same minor
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    // Test --outdated with single outdated version (different messaging)
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Warning: Removing outdated Python versions may break existing virtual environments that use those versions.
+
+    Found 1 outdated Python installation to remove:
+     - cpython-3.12.1-[PLATFORM] (python3.12)
+
+    Uninstalled 3.12.1 outdated Python installation in [TIME]
+     - cpython-3.12.1-[PLATFORM]
+    ");
+}

@@ -161,9 +161,17 @@ async fn do_uninstall(
         if matching_installations.is_empty() {
             writeln!(printer.stderr(), "No outdated Python installations found")?;
         } else {
+            // Safety warning about virtual environments
             writeln!(
                 printer.stderr(),
-                "Found {} outdated Python installation{}",
+                "{}",
+                "Warning: Removing outdated Python versions may break existing virtual environments that use those versions.".yellow()
+            )?;
+            writeln!(printer.stderr())?;
+
+            writeln!(
+                printer.stderr(),
+                "Found {} outdated Python installation{} to remove:",
                 matching_installations.len(),
                 if matching_installations.len() == 1 {
                     ""
@@ -171,6 +179,20 @@ async fn do_uninstall(
                     "s"
                 }
             )?;
+
+            // Show detailed list of versions that will be removed
+            let mut installations_by_key: Vec<_> = matching_installations.iter().collect();
+            installations_by_key.sort_by(|a, b| a.key().cmp(b.key()));
+
+            for installation in installations_by_key {
+                writeln!(
+                    printer.stderr(),
+                    " - {} ({})",
+                    installation.key().bold(),
+                    installation.key().executable_name_minor().dimmed()
+                )?;
+            }
+            writeln!(printer.stderr())?;
         }
     }
 
@@ -325,29 +347,35 @@ async fn do_uninstall(
     // Report on any uninstalled installations.
     if let Some(first_uninstalled) = uninstalled.first() {
         if uninstalled.len() == 1 {
-            // Ex) "Uninstalled Python 3.9.7 in 1.68s"
-            writeln!(
-                printer.stderr(),
-                "{}",
+            let message = if outdated {
+                format!(
+                    "Uninstalled {} outdated Python installation {}",
+                    format!("{}", first_uninstalled.version()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+            } else {
                 format!(
                     "Uninstalled {} {}",
                     format!("Python {}", first_uninstalled.version()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
-                .dimmed()
-            )?;
+            };
+            writeln!(printer.stderr(), "{}", message.dimmed())?;
         } else {
-            // Ex) "Uninstalled 2 versions in 1.68s"
-            writeln!(
-                printer.stderr(),
-                "{}",
+            let message = if outdated {
                 format!(
-                    "Uninstalled {} {}",
-                    format!("{} versions", uninstalled.len()).bold(),
+                    "Uninstalled {} outdated Python installations {}",
+                    format!("{}", uninstalled.len()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
-                .dimmed()
-            )?;
+            } else {
+                format!(
+                    "Uninstalled {} versions {}",
+                    format!("{}", uninstalled.len()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+            };
+            writeln!(printer.stderr(), "{}", message.dimmed())?;
         }
 
         for event in uninstalled
