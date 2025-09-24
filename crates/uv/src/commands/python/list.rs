@@ -7,8 +7,10 @@ use uv_preview::Preview;
 
 use anyhow::Result;
 use itertools::Either;
+use miette::Diagnostic;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
+use thiserror::Error;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
@@ -50,6 +52,18 @@ struct PrintData {
     libc: String,
 }
 
+#[derive(Debug, Error, Diagnostic)]
+enum Error {
+    #[error("Cannot use `--all-variants` with a Python request that specifies a variant")]
+    #[diagnostic(
+        code(uv::python::list::conflicting_arguments),
+        help(
+            "Use `--all-variants` to show all variants for a Python version, or specify an exact variant like `3.10+debug`, but not both."
+        )
+    )]
+    ConflictingArguments,
+}
+
 /// List available Python installations.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
@@ -58,6 +72,7 @@ pub(crate) async fn list(
     all_versions: bool,
     all_platforms: bool,
     all_arches: bool,
+    all_variants: bool,
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
@@ -68,11 +83,21 @@ pub(crate) async fn list(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
+
+    if all_variants {
+        if let Some(request) = request.as_ref() {
+            if request.variant() != Some(uv_python::PythonVariant::Default) {
+                return Err(Error::ConflictingArguments.into());
+            }
+        }
+    }
+
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+            .map(|request| request.with_all_variants(all_variants))
     };
 
     let mut output = BTreeSet::new();
@@ -110,8 +135,14 @@ pub(crate) async fn list(
             .transpose()?
             .into_iter()
             .flatten()
-            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
-            .filter(|download| !download.key().variant().is_debug());
+            .filter(|download| {
+                all_variants
+                    || request
+                        .as_ref()
+                        .and_then(uv_python::PythonRequest::variant)
+                        .unwrap_or(uv_python::PythonVariant::Default)
+                        == *download.key().variant()
+            });
 
         for download in downloads {
             output.insert((
