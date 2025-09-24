@@ -91,6 +91,38 @@ impl SimpleHtml {
         };
         let href = std::str::from_utf8(href.as_bytes())?;
 
+        // Extract the `core-metadata` field, which is either set on:
+        // - `data-core-metadata`, per PEP 714.
+        // - `data-dist-info-metadata`, per PEP 658.
+        let core_metadata = if let Some(dist_info_metadata) = link
+            .attributes()
+            .get("data-core-metadata")
+            .flatten()
+            .or_else(|| link.attributes().get("data-dist-info-metadata").flatten())
+        {
+            let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
+            let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
+            match dist_info_metadata.as_ref() {
+                "true" => Some(CoreMetadata::Bool(true)),
+                "false" => Some(CoreMetadata::Bool(false)),
+                fragment => match Hashes::parse_fragment(fragment) {
+                    Ok(hash) => Some(CoreMetadata::Hashes(hash)),
+                    Err(err) => {
+                        warn!("Failed to parse core metadata value `{fragment}`: {err}");
+                        None
+                    }
+                },
+            }
+        } else {
+            None
+        };
+
+        // Take hashes from URL fragment, falling back to hashes from core_metadata.
+        let default_hashes = || match core_metadata {
+            Some(CoreMetadata::Hashes(ref hashes)) => hashes.clone(),
+            _ => Hashes::default(),
+        };
+
         // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
@@ -98,7 +130,7 @@ impl SimpleHtml {
             (
                 path,
                 if fragment.trim().is_empty() {
-                    Hashes::default()
+                    default_hashes()
                 } else {
                     match Hashes::parse_fragment(&fragment) {
                         Ok(hashes) => hashes,
@@ -108,13 +140,13 @@ impl SimpleHtml {
                         ) => {
                             // If the URL includes an irrelevant hash (e.g., `#main`), ignore it.
                             debug!("{err}");
-                            Hashes::default()
+                            default_hashes()
                         }
                         Err(HashError::UnsupportedHashAlgorithm(fragment)) => {
                             if fragment == "egg" {
                                 // If the URL references an egg hash, ignore it.
                                 debug!("{}", HashError::UnsupportedHashAlgorithm(fragment));
-                                Hashes::default()
+                                default_hashes()
                             } else {
                                 // If the URL references a hash, but it's unsupported, error.
                                 return Err(HashError::UnsupportedHashAlgorithm(fragment).into());
@@ -124,7 +156,7 @@ impl SimpleHtml {
                 },
             )
         } else {
-            (decoded.as_ref(), Hashes::default())
+            (decoded.as_ref(), default_hashes())
         };
 
         // Extract the filename from the body text, which MUST match that of
@@ -150,32 +182,6 @@ impl SimpleHtml {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
             Some(LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from))
-        } else {
-            None
-        };
-
-        // Extract the `core-metadata` field, which is either set on:
-        // - `data-core-metadata`, per PEP 714.
-        // - `data-dist-info-metadata`, per PEP 658.
-        let core_metadata = if let Some(dist_info_metadata) = link
-            .attributes()
-            .get("data-core-metadata")
-            .flatten()
-            .or_else(|| link.attributes().get("data-dist-info-metadata").flatten())
-        {
-            let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
-            let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
-            match dist_info_metadata.as_ref() {
-                "true" => Some(CoreMetadata::Bool(true)),
-                "false" => Some(CoreMetadata::Bool(false)),
-                fragment => match Hashes::parse_fragment(fragment) {
-                    Ok(hash) => Some(CoreMetadata::Hashes(hash)),
-                    Err(err) => {
-                        warn!("Failed to parse core metadata value `{fragment}`: {err}");
-                        None
-                    }
-                },
-            }
         } else {
             None
         };
@@ -1368,6 +1374,76 @@ mod tests {
                     size: None,
                     upload_time: None,
                     url: "/whl/Jinja2-3.1.6-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
+    }
+
+    /// Use hashes from core metadata if not available in URL fragment
+    #[test]
+    fn parse_core_metadata_hashes() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Links for jinja2</h1>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl" data-core-metadata="sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+</body>
+</html>
+<!--TIMESTAMP 1703347410-->
+    "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                PypiFile {
+                    core_metadata: Some(
+                        Hashes(
+                            Hashes {
+                                md5: None,
+                                sha256: Some(
+                                    "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                                ),
+                                sha384: None,
+                                sha512: None,
+                                blake2b: None,
+                            },
+                        ),
+                    ),
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],

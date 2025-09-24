@@ -29339,8 +29339,8 @@ fn lock_pytorch_local_preference() -> Result<()> {
             { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp312-none-macosx_11_0_arm64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp313-none-macosx_11_0_arm64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp312-none-macosx_11_0_arm64.whl", hash = "sha256:09942b3e6552f6c3a8400e323ae1a177bdc07c27b65c634ef0a52b3c2d137068", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:09942b3e6552f6c3a8400e323ae1a177bdc07c27b65c634ef0a52b3c2d137068", upload-time = "2025-01-29T22:50:59.085Z" },
         ]
 
         [[package]]
@@ -29360,14 +29360,14 @@ fn lock_pytorch_local_preference() -> Result<()> {
             { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-win_amd64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-win_amd64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313t-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
-            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl", hash = "sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:0fc88ff13b016b20f1fe3d23d03315b6e14ef5a89ba5ee23f155586c89bb6706", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-linux_x86_64.whl", hash = "sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313-win_amd64.whl", hash = "sha256:00132587f15194dfce61988d5ac88c755d1e2a501feef2c3f511831c76b2104f", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313t-linux_x86_64.whl", hash = "sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a", upload-time = "2025-01-29T22:50:59.085Z" },
         ]
 
         [[package]]

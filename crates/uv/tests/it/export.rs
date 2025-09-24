@@ -3318,17 +3318,35 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
         --hash=sha256:9cebf7e04ff162015ce31c9c6c9144daa34a93bd082f54fd8f12deca4f47515f \
         --hash=sha256:db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8
         # via torch
-    torch==2.6.0 ; sys_platform == 'darwin'
+    torch==2.6.0 ; sys_platform == 'darwin' \
+        --hash=sha256:09942b3e6552f6c3a8400e323ae1a177bdc07c27b65c634ef0a52b3c2d137068 \
+        --hash=sha256:09942b3e6552f6c3a8400e323ae1a177bdc07c27b65c634ef0a52b3c2d137068
         # via
         #   project
         #   torchvision
-    torch==2.6.0+cpu ; sys_platform != 'darwin'
+    torch==2.6.0+cpu ; sys_platform != 'darwin' \
+        --hash=sha256:00132587f15194dfce61988d5ac88c755d1e2a501feef2c3f511831c76b2104f \
+        --hash=sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80 \
+        --hash=sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80 \
+        --hash=sha256:05d5e2f9aec5224a4e8e6d661125da8159b11e4a301cd5c0658ff8c5b7842b80 \
+        --hash=sha256:0fc88ff13b016b20f1fe3d23d03315b6e14ef5a89ba5ee23f155586c89bb6706 \
+        --hash=sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a \
+        --hash=sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a \
+        --hash=sha256:6846bf9fd7e4901f115814c965084a3c88575d747ae1ab098fdd300b6c58720a
         # via
         #   project
         #   torchvision
-    torchvision==0.21.0 ; (python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
+    torchvision==0.21.0 ; (python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin' \
+        --hash=sha256:cac83b7239876e796d6ca40b7f6f2daf69b80373852555429607e1d3f6cd784d \
+        --hash=sha256:cac83b7239876e796d6ca40b7f6f2daf69b80373852555429607e1d3f6cd784d \
+        --hash=sha256:cac83b7239876e796d6ca40b7f6f2daf69b80373852555429607e1d3f6cd784d \
+        --hash=sha256:cac83b7239876e796d6ca40b7f6f2daf69b80373852555429607e1d3f6cd784d
         # via project
-    torchvision==0.21.0+cpu ; (python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torchvision==0.21.0+cpu ; (python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') \
+        --hash=sha256:1bf60f6e955eabcf85d9f8facceea1faec25b5e92507be1af978d2951d3b9bca \
+        --hash=sha256:1bf60f6e955eabcf85d9f8facceea1faec25b5e92507be1af978d2951d3b9bca \
+        --hash=sha256:3fcf807786d83cbae4e9e07ddc52677bef9e47e6aff3b0d5502310377dc1feb3 \
+        --hash=sha256:3fcf807786d83cbae4e9e07ddc52677bef9e47e6aff3b0d5502310377dc1feb3
         # via project
     typing-extensions==4.12.2 \
         --hash=sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d \
