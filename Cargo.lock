@@ -3188,7 +3188,7 @@ checksum = "60ebe4262ae91ddd28c8721111a0a6e9e58860e211fc92116c4bb85c98fd96ad"
 dependencies = [
  "hex",
  "percent-encoding",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

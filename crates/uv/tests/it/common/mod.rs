@@ -463,6 +463,27 @@ impl TestContext {
         self
     }
 
+    /// Adds filters for non-deterministic CycloneDX data
+    pub fn with_cyclonedx_filters(mut self) -> Self {
+        self.filters.push((
+            r"urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}".to_string(),
+            "[SERIAL_NUMBER]".to_string(),
+        ));
+        self.filters.push((
+            r#""timestamp": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z""#
+                .to_string(),
+            r#""timestamp": "[TIMESTAMP]""#.to_string(),
+        ));
+        self.filters.push((
+            r#""name": "uv",\s*"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#
+                .to_string(),
+            r#""name": "uv",
+        "version": "[VERSION]""#
+                .to_string(),
+        ));
+        self
+    }
+
     /// Add a filter that collapses duplicate whitespace.
     #[must_use]
     pub fn with_collapsed_whitespace(mut self) -> Self {

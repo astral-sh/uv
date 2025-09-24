@@ -3592,122 +3592,6 @@ fn pep_751_dependency() -> Result<()> {
 }
 
 #[test]
-fn cyclonedx_export() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-        "#,
-    )?;
-
-    context.lock().assert().success();
-
-    // Add custom filters for CycloneDX dynamic values
-    let mut filters = context.filters();
-    filters.push((
-        r"urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        "[SERIAL_NUMBER]",
-    ));
-    filters.push((
-        r#""timestamp": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z""#,
-        r#""timestamp": "[TIMESTAMP]""#,
-    ));
-    filters.push((
-        r#""name": "uv",\s*"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
-        r#""name": "uv",
-        "version": "[VERSION]""#,
-    ));
-
-    uv_snapshot!(filters, context.export().arg("--format").arg("cyclonedx1.5"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {
-      "bomFormat": "CycloneDX",
-      "specVersion": "1.5",
-      "version": 1,
-      "serialNumber": "[SERIAL_NUMBER]",
-      "metadata": {
-        "timestamp": "[TIMESTAMP]",
-        "tools": [
-          {
-            "vendor": "Astral Software Inc.",
-            "name": "uv",
-            "version": "[VERSION]"
-          }
-        ],
-        "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
-          "name": "project",
-          "version": "0.1.0"
-        }
-      },
-      "components": [
-        {
-          "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "3-idna@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "4-sniffio@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
-        }
-      ],
-      "dependencies": [
-        {
-          "ref": "2-anyio@3.7.0",
-          "dependsOn": [
-            "3-idna@3.6",
-            "4-sniffio@1.3.1"
-          ]
-        },
-        {
-          "ref": "3-idna@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "1-project@0.1.0",
-          "dependsOn": [
-            "2-anyio@3.7.0"
-          ]
-        },
-        {
-          "ref": "4-sniffio@1.3.1",
-          "dependsOn": []
-        }
-      ]
-    }
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    "#);
-
-    Ok(())
-}
-
-#[test]
 fn pep_751_export_no_header() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4772,6 +4656,3859 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
 
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "4-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0"
+          ]
+        },
+        {
+          "ref": "4-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna @ https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:generic/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-idna@3.6"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_git_dependency() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask @ git+https://github.com/pallets/flask.git@2.3.3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-blinker@1.7.0",
+          "name": "blinker",
+          "version": "1.7.0",
+          "purl": "pkg:pypi/blinker@1.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-click@8.1.7",
+          "name": "click",
+          "version": "8.1.7",
+          "purl": "pkg:pypi/click@8.1.7"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-colorama@0.4.6",
+          "name": "colorama",
+          "version": "0.4.6",
+          "purl": "pkg:pypi/colorama@0.4.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-flask@2.3.3",
+          "name": "flask",
+          "version": "2.3.3",
+          "purl": "pkg:generic/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-itsdangerous@2.1.2",
+          "name": "itsdangerous",
+          "version": "2.1.2",
+          "purl": "pkg:pypi/itsdangerous@2.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-jinja2@3.1.3",
+          "name": "jinja2",
+          "version": "3.1.3",
+          "purl": "pkg:pypi/jinja2@3.1.3"
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-markupsafe@2.1.5",
+          "name": "markupsafe",
+          "version": "2.1.5",
+          "purl": "pkg:pypi/markupsafe@2.1.5"
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-werkzeug@3.0.1",
+          "name": "werkzeug",
+          "version": "3.0.1",
+          "purl": "pkg:pypi/werkzeug@3.0.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-blinker@1.7.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-click@8.1.7",
+          "dependsOn": [
+            "4-colorama@0.4.6"
+          ]
+        },
+        {
+          "ref": "4-colorama@0.4.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-flask@2.3.3",
+          "dependsOn": [
+            "2-blinker@1.7.0",
+            "3-click@8.1.7",
+            "6-itsdangerous@2.1.2",
+            "7-jinja2@3.1.3",
+            "9-werkzeug@3.0.1"
+          ]
+        },
+        {
+          "ref": "6-itsdangerous@2.1.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "7-jinja2@3.1.3",
+          "dependsOn": [
+            "8-markupsafe@2.1.5"
+          ]
+        },
+        {
+          "ref": "8-markupsafe@2.1.5",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "5-flask@2.3.3"
+          ]
+        },
+        {
+          "ref": "9-werkzeug@3.0.1",
+          "dependsOn": [
+            "8-markupsafe@2.1.5"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_no_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "standalone-project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-standalone-project@1.0.0",
+          "name": "standalone-project",
+          "version": "1.0.0"
+        }
+      },
+      "components": [],
+      "dependencies": [
+        {
+          "ref": "1-standalone-project@1.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_mixed_source_types() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "mixed-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests==2.31.0",  # PyPI registry package
+            "flask @ git+https://github.com/pallets/flask.git@2.3.3",  # Git package
+            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"  # Direct URL package
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-mixed-project@0.1.0",
+          "name": "mixed-project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-blinker@1.7.0",
+          "name": "blinker",
+          "version": "1.7.0",
+          "purl": "pkg:pypi/blinker@1.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-certifi@2024.2.2",
+          "name": "certifi",
+          "version": "2024.2.2",
+          "purl": "pkg:pypi/certifi@2024.2.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-charset-normalizer@3.3.2",
+          "name": "charset-normalizer",
+          "version": "3.3.2",
+          "purl": "pkg:pypi/charset-normalizer@3.3.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-click@8.1.7",
+          "name": "click",
+          "version": "8.1.7",
+          "purl": "pkg:pypi/click@8.1.7"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-colorama@0.4.6",
+          "name": "colorama",
+          "version": "0.4.6",
+          "purl": "pkg:pypi/colorama@0.4.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-flask@2.3.3",
+          "name": "flask",
+          "version": "2.3.3",
+          "purl": "pkg:generic/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:generic/iniconfig@2.0.0?download_url=https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"
+        },
+        {
+          "type": "library",
+          "bom-ref": "10-itsdangerous@2.1.2",
+          "name": "itsdangerous",
+          "version": "2.1.2",
+          "purl": "pkg:pypi/itsdangerous@2.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "11-jinja2@3.1.3",
+          "name": "jinja2",
+          "version": "3.1.3",
+          "purl": "pkg:pypi/jinja2@3.1.3"
+        },
+        {
+          "type": "library",
+          "bom-ref": "12-markupsafe@2.1.5",
+          "name": "markupsafe",
+          "version": "2.1.5",
+          "purl": "pkg:pypi/markupsafe@2.1.5"
+        },
+        {
+          "type": "library",
+          "bom-ref": "13-requests@2.31.0",
+          "name": "requests",
+          "version": "2.31.0",
+          "purl": "pkg:pypi/requests@2.31.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "14-urllib3@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "15-werkzeug@3.0.1",
+          "name": "werkzeug",
+          "version": "3.0.1",
+          "purl": "pkg:pypi/werkzeug@3.0.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-blinker@1.7.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-certifi@2024.2.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-charset-normalizer@3.3.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-click@8.1.7",
+          "dependsOn": [
+            "6-colorama@0.4.6"
+          ]
+        },
+        {
+          "ref": "6-colorama@0.4.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "7-flask@2.3.3",
+          "dependsOn": [
+            "10-itsdangerous@2.1.2",
+            "11-jinja2@3.1.3",
+            "15-werkzeug@3.0.1",
+            "2-blinker@1.7.0",
+            "5-click@8.1.7"
+          ]
+        },
+        {
+          "ref": "8-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "9-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "10-itsdangerous@2.1.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "11-jinja2@3.1.3",
+          "dependsOn": [
+            "12-markupsafe@2.1.5"
+          ]
+        },
+        {
+          "ref": "12-markupsafe@2.1.5",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-mixed-project@0.1.0",
+          "dependsOn": [
+            "13-requests@2.31.0",
+            "7-flask@2.3.3",
+            "9-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "13-requests@2.31.0",
+          "dependsOn": [
+            "14-urllib3@2.2.1",
+            "3-certifi@2024.2.2",
+            "4-charset-normalizer@3.3.2",
+            "8-idna@3.6"
+          ]
+        },
+        {
+          "ref": "14-urllib3@2.2.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "15-werkzeug@3.0.1",
+          "dependsOn": [
+            "12-markupsafe@2.1.5"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 15 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_project_extra() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        async = ["anyio==3.7.0"]
+        pytest = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "2-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        async = ["anyio==3.7.0"]
+        pytest = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "5-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0",
+            "4-iniconfig@2.0.0",
+            "6-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "5-sniffio@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_with_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child1", "child2"]
+
+        [tool.uv.workspace]
+        members = ["child1", "packages/*"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+        child2 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("packages").child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.9"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "application",
+          "bom-ref": "3-child1@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "application",
+          "bom-ref": "4-child2@0.2.9",
+          "name": "child2",
+          "version": "0.2.9",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "5-idna@3.6",
+            "7-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-child1@0.1.0",
+          "dependsOn": [
+            "6-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "4-child2@0.2.9",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0",
+            "3-child1@0.1.0",
+            "4-child2@0.2.9"
+          ]
+        },
+        {
+          "ref": "7-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_non_root() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--package").arg("child"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "1-child@0.1.0",
+          "dependsOn": [
+            "2-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "2-iniconfig@2.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_with_extras() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        async = ["anyio==3.7.0"]
+        test = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "application",
+          "bom-ref": "2-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-child@0.1.0",
+          "dependsOn": [
+            "3-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-child@0.1.0"
+          ]
+        },
+        {
+          "ref": "3-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "application",
+          "bom-ref": "2-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-child@0.1.0",
+          "dependsOn": [
+            "3-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-child@0.1.0"
+          ]
+        },
+        {
+          "ref": "3-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_frozen() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Remove the child `pyproject.toml`.
+    fs_err::remove_dir_all(child.path())?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    "###);
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "application",
+          "bom-ref": "3-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "4-idna@3.6",
+            "6-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-child@0.1.0",
+          "dependsOn": [
+            "5-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "4-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0",
+            "3-child@0.1.0"
+          ]
+        },
+        {
+          "ref": "6-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_all_packages() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "application",
+          "bom-ref": "3-child1@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "application",
+          "bom-ref": "4-child2@0.2.0",
+          "name": "child2",
+          "version": "0.2.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "5-idna@3.6",
+            "7-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-child1@0.1.0",
+          "dependsOn": [
+            "6-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "4-child2@0.2.0",
+          "dependsOn": [
+            "7-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "5-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0"
+          ]
+        },
+        {
+          "ref": "7-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1", "anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child2", "iniconfig>=2"]
+
+        [tool.uv.sources]
+        child2 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "application",
+          "bom-ref": "3-child1@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "application",
+          "bom-ref": "4-child2@0.2.0",
+          "name": "child2",
+          "version": "0.2.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "5-idna@3.6",
+            "7-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-child1@0.1.0",
+          "dependsOn": [
+            "4-child2@0.2.0",
+            "6-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "4-child2@0.2.0",
+          "dependsOn": [
+            "7-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "5-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0",
+            "3-child1@0.1.0"
+          ]
+        },
+        {
+          "ref": "7-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dependency_marker() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio ; sys_platform == 'darwin'", "iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@4.3.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "5-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@4.3.0",
+            "4-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "5-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = [
+            "trio ; python_version > '3.11'",
+            "trio ; sys_platform == 'win32'",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-attrs@23.2.0",
+          "name": "attrs",
+          "version": "23.2.0",
+          "purl": "pkg:pypi/attrs@23.2.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-cffi@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "(python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32')"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-exceptiongroup@1.2.0",
+          "name": "exceptiongroup",
+          "version": "1.2.0",
+          "purl": "pkg:pypi/exceptiongroup@1.2.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version < '3.11' and sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-outcome@1.3.0.post0",
+          "name": "outcome",
+          "version": "1.3.0.post0",
+          "purl": "pkg:pypi/outcome@1.3.0.post0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-pycparser@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "(python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32')"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-sortedcontainers@2.4.0",
+          "name": "sortedcontainers",
+          "version": "2.4.0",
+          "purl": "pkg:pypi/sortedcontainers@2.4.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "10-trio@0.25.0",
+          "name": "trio",
+          "version": "0.25.0",
+          "purl": "pkg:pypi/trio@0.25.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-attrs@23.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-cffi@1.16.0",
+          "dependsOn": [
+            "7-pycparser@2.21"
+          ]
+        },
+        {
+          "ref": "4-exceptiongroup@1.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-outcome@1.3.0.post0",
+          "dependsOn": [
+            "2-attrs@23.2.0"
+          ]
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "10-trio@0.25.0"
+          ]
+        },
+        {
+          "ref": "7-pycparser@2.21",
+          "dependsOn": []
+        },
+        {
+          "ref": "8-sniffio@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "9-sortedcontainers@2.4.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "10-trio@0.25.0",
+          "dependsOn": [
+            "2-attrs@23.2.0",
+            "3-cffi@1.16.0",
+            "4-exceptiongroup@1.2.0",
+            "5-idna@3.6",
+            "6-outcome@1.3.0.post0",
+            "8-sniffio@1.3.1",
+            "9-sortedcontainers@2.4.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dependency_extra() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask[dotenv]"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-blinker@1.7.0",
+          "name": "blinker",
+          "version": "1.7.0",
+          "purl": "pkg:pypi/blinker@1.7.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-click@8.1.7",
+          "name": "click",
+          "version": "8.1.7",
+          "purl": "pkg:pypi/click@8.1.7"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-colorama@0.4.6",
+          "name": "colorama",
+          "version": "0.4.6",
+          "purl": "pkg:pypi/colorama@0.4.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-flask@3.0.2",
+          "name": "flask",
+          "version": "3.0.2",
+          "purl": "pkg:pypi/flask@3.0.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-itsdangerous@2.1.2",
+          "name": "itsdangerous",
+          "version": "2.1.2",
+          "purl": "pkg:pypi/itsdangerous@2.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-jinja2@3.1.3",
+          "name": "jinja2",
+          "version": "3.1.3",
+          "purl": "pkg:pypi/jinja2@3.1.3"
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-markupsafe@2.1.5",
+          "name": "markupsafe",
+          "version": "2.1.5",
+          "purl": "pkg:pypi/markupsafe@2.1.5"
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-python-dotenv@1.0.1",
+          "name": "python-dotenv",
+          "version": "1.0.1",
+          "purl": "pkg:pypi/python-dotenv@1.0.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "10-werkzeug@3.0.1",
+          "name": "werkzeug",
+          "version": "3.0.1",
+          "purl": "pkg:pypi/werkzeug@3.0.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-blinker@1.7.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-click@8.1.7",
+          "dependsOn": [
+            "4-colorama@0.4.6"
+          ]
+        },
+        {
+          "ref": "4-colorama@0.4.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-flask@3.0.2",
+          "dependsOn": [
+            "10-werkzeug@3.0.1",
+            "2-blinker@1.7.0",
+            "3-click@8.1.7",
+            "6-itsdangerous@2.1.2",
+            "7-jinja2@3.1.3",
+            "9-python-dotenv@1.0.1"
+          ]
+        },
+        {
+          "ref": "6-itsdangerous@2.1.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "7-jinja2@3.1.3",
+          "dependsOn": [
+            "8-markupsafe@2.1.5"
+          ]
+        },
+        {
+          "ref": "8-markupsafe@2.1.5",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "5-flask@3.0.2"
+          ]
+        },
+        {
+          "ref": "9-python-dotenv@1.0.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "10-werkzeug@3.0.1",
+          "dependsOn": [
+            "8-markupsafe@2.1.5"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_prune() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "jupyter-client"
+        ]
+    "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // project v0.1.0
+    // └── jupyter-client v8.6.1
+    //     ├── jupyter-core v5.7.2
+    //     │   ├── platformdirs v4.2.0
+    //     │   └── traitlets v5.14.2
+    //     ├── python-dateutil v2.9.0.post0
+    //     │   └── six v1.16.0
+    //     ├── pyzmq v25.1.2
+    //     ├── tornado v6.4
+    //     └── traitlets v5.14.2
+
+    uv_snapshot!(
+        context.filters(),
+        context.export()
+            .arg("--format")
+            .arg("cyclonedx1.5")
+            .arg("--prune")
+            .arg("jupyter-core"),
+            @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-cffi@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "implementation_name == 'pypy'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-jupyter-client@8.6.1",
+          "name": "jupyter-client",
+          "version": "8.6.1",
+          "purl": "pkg:pypi/jupyter-client@8.6.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-pycparser@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "implementation_name == 'pypy'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-python-dateutil@2.9.0.post0",
+          "name": "python-dateutil",
+          "version": "2.9.0.post0",
+          "purl": "pkg:pypi/python-dateutil@2.9.0.post0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-pyzmq@25.1.2",
+          "name": "pyzmq",
+          "version": "25.1.2",
+          "purl": "pkg:pypi/pyzmq@25.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-six@1.16.0",
+          "name": "six",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/six@1.16.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-tornado@6.4",
+          "name": "tornado",
+          "version": "6.4",
+          "purl": "pkg:pypi/tornado@6.4"
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-traitlets@5.14.2",
+          "name": "traitlets",
+          "version": "5.14.2",
+          "purl": "pkg:pypi/traitlets@5.14.2"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-cffi@1.16.0",
+          "dependsOn": [
+            "4-pycparser@2.21"
+          ]
+        },
+        {
+          "ref": "3-jupyter-client@8.6.1",
+          "dependsOn": [
+            "5-python-dateutil@2.9.0.post0",
+            "6-pyzmq@25.1.2",
+            "8-tornado@6.4",
+            "9-traitlets@5.14.2"
+          ]
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "3-jupyter-client@8.6.1"
+          ]
+        },
+        {
+          "ref": "4-pycparser@2.21",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-python-dateutil@2.9.0.post0",
+          "dependsOn": [
+            "7-six@1.16.0"
+          ]
+        },
+        {
+          "ref": "6-pyzmq@25.1.2",
+          "dependsOn": [
+            "2-cffi@1.16.0"
+          ]
+        },
+        {
+          "ref": "7-six@1.16.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "8-tornado@6.4",
+          "dependsOn": []
+        },
+        {
+          "ref": "9-traitlets@5.14.2",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio ; sys_platform == 'darwin'"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default exports include dev group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-sniffio@1.3.1",
+            "3-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "2-sniffio@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    // Export only specific group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-group").arg("bar"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-iniconfig@2.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    // Export with additional group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@4.3.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "4-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@4.3.0",
+            "4-sniffio@1.3.1",
+            "5-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "4-sniffio@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_non_project() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        async = ["anyio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default export with no project section
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ]
+      },
+      "components": [],
+      "dependencies": []
+    }
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Export with group specified
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("async"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ]
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "1-anyio@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "2-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "1-anyio@4.3.0",
+          "dependsOn": [
+            "2-idna@3.6",
+            "3-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "2-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_no_emit() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Exclude `anyio`.
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("anyio"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "application",
+          "bom-ref": "2-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-child@0.1.0",
+          "dependsOn": [
+            "4-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-child@0.1.0"
+          ]
+        },
+        {
+          "ref": "5-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    // Exclude `project`.
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-project"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@3.7.0",
+          "name": "anyio",
+          "version": "3.7.0",
+          "purl": "pkg:pypi/anyio@3.7.0"
+        },
+        {
+          "type": "application",
+          "bom-ref": "3-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "4-idna@3.6",
+            "6-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-child@0.1.0",
+          "dependsOn": [
+            "5-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "4-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "../dependency" }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().current_dir(&project).assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&project), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-dependency@0.1.0",
+          "name": "dependency",
+          "version": "0.1.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-iniconfig@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-dependency@0.1.0",
+          "dependsOn": [
+            "3-iniconfig@2.0.0"
+          ]
+        },
+        {
+          "ref": "3-iniconfig@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-dependency@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "testtools==2.3.0",
+            "fixtures==3.0.0",
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-argparse@1.4.0",
+          "name": "argparse",
+          "version": "1.4.0",
+          "purl": "pkg:pypi/argparse@1.4.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-extras@1.0.0",
+          "name": "extras",
+          "version": "1.0.0",
+          "purl": "pkg:pypi/extras@1.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-fixtures@3.0.0",
+          "name": "fixtures",
+          "version": "3.0.0",
+          "purl": "pkg:pypi/fixtures@3.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-linecache2@1.0.0",
+          "name": "linecache2",
+          "version": "1.0.0",
+          "purl": "pkg:pypi/linecache2@1.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "6-pbr@6.0.0",
+          "name": "pbr",
+          "version": "6.0.0",
+          "purl": "pkg:pypi/pbr@6.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "7-python-mimeparse@1.6.0",
+          "name": "python-mimeparse",
+          "version": "1.6.0",
+          "purl": "pkg:pypi/python-mimeparse@1.6.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "8-six@1.16.0",
+          "name": "six",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/six@1.16.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "9-testtools@2.3.0",
+          "name": "testtools",
+          "version": "2.3.0",
+          "purl": "pkg:pypi/testtools@2.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "10-traceback2@1.4.0",
+          "name": "traceback2",
+          "version": "1.4.0",
+          "purl": "pkg:pypi/traceback2@1.4.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "11-unittest2@1.1.0",
+          "name": "unittest2",
+          "version": "1.1.0",
+          "purl": "pkg:pypi/unittest2@1.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-argparse@1.4.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "3-extras@1.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-fixtures@3.0.0",
+          "dependsOn": [
+            "6-pbr@6.0.0",
+            "8-six@1.16.0",
+            "9-testtools@2.3.0"
+          ]
+        },
+        {
+          "ref": "5-linecache2@1.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "6-pbr@6.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "4-fixtures@3.0.0",
+            "9-testtools@2.3.0"
+          ]
+        },
+        {
+          "ref": "7-python-mimeparse@1.6.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "8-six@1.16.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "9-testtools@2.3.0",
+          "dependsOn": [
+            "10-traceback2@1.4.0",
+            "11-unittest2@1.1.0",
+            "3-extras@1.0.0",
+            "4-fixtures@3.0.0",
+            "6-pbr@6.0.0",
+            "7-python-mimeparse@1.6.0",
+            "8-six@1.16.0"
+          ]
+        },
+        {
+          "ref": "10-traceback2@1.4.0",
+          "dependsOn": [
+            "5-linecache2@1.0.0"
+          ]
+        },
+        {
+          "ref": "11-unittest2@1.1.0",
+          "dependsOn": [
+            "10-traceback2@1.4.0",
+            "2-argparse@1.4.0",
+            "8-six@1.16.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dev_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default export includes dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "5-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@4.3.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "4-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@4.3.0",
+            "5-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "4-sniffio@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "5-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 5 packages in [TIME]
+    "#);
+
+    // Export without dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-typing-extensions@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-typing-extensions@4.10.0"
+          ]
+        },
+        {
+          "ref": "2-typing-extensions@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 5 packages in [TIME]
+    "#);
+
+    // Export only dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "2-anyio@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "3-idna@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "4-sniffio@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@4.3.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "4-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "4-sniffio@1.3.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 5 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "project" },
+            { package = "child" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Export with --all-packages to CycloneDX format should succeed as conflict detection is skipped
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "application",
+          "bom-ref": "2-child@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-child@0.1.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Should fail when exporting to `requirements.txt` or `pylock.toml`as conflict detection is enabled for these formats
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("requirements-txt").arg("--all-packages"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    error: Package `child` and package `project` are incompatible with the declared conflicts: {child, project}
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--all-packages"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    error: Package `child` and package `project` are incompatible with the declared conflicts: {child, project}
     ");
 
     Ok(())
