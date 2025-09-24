@@ -206,11 +206,11 @@ h3.cli-reference {
   font-size: 1.1em;
   margin: 0 0 0 0;
 }
-h3:has(+ p > small.env-var-since) {
+h3:has(+ p > small.added-in) {
   display: inline-block;
   margin: 0;
 }
-h3 + p:has(> small.env-var-since) {
+h3 + p:has(> small.added-in) {
   display: inline;
   margin: 0;
 }
