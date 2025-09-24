@@ -1124,7 +1124,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "spdx",
+ "spdx 0.10.9",
  "strum",
  "thiserror 1.0.69",
  "time",
@@ -3298,7 +3298,7 @@ checksum = "60ebe4262ae91ddd28c8721111a0a6e9e58860e211fc92116c4bb85c98fd96ad"
 dependencies = [
  "hex",
  "percent-encoding",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -4367,6 +4367,15 @@ checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "spdx"
+version = "0.10.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e17e880bafaeb362a7b751ec46bdc5b61445a188f80e0606e68167cd540fa3"
+dependencies = [
+ "smallvec",
 ]
 
 [[package]]
@@ -5620,7 +5629,7 @@ dependencies = [
  "schemars",
  "serde",
  "sha2",
- "spdx",
+ "spdx 0.12.0",
  "tar",
  "tempfile",
  "thiserror 2.0.17",
