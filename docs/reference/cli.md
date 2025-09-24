@@ -1845,12 +1845,13 @@ uv export [OPTIONS]
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-export--format"><a href="#uv-export--format"><code>--format</code></a> <i>format</i></dt><dd><p>The format to which <code>uv.lock</code> should be exported.</p>
-<p>Supports both <code>requirements.txt</code> and <code>pylock.toml</code> (PEP 751) output formats.</p>
+<p>Supports <code>requirements.txt</code>, <code>pylock.toml</code> (PEP 751) and CycloneDX v1.5 JSON output formats.</p>
 <p>uv will infer the output format from the file extension of the output file, if provided. Otherwise, defaults to <code>requirements.txt</code>.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
 <li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
+<li><code>cyclonedx1.5</code>:  Export in CycloneDX v1.5 JSON format</li>
 </ul></dd><dt id="uv-export--frozen"><a href="#uv-export--frozen"><code>--frozen</code></a></dt><dd><p>Do not update the <code>uv.lock</code> before exporting.</p>
 <p>If a <code>uv.lock</code> does not exist, uv will exit with an error.</p>
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-export--group"><a href="#uv-export--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
