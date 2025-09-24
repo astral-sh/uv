@@ -3675,6 +3675,29 @@ fn cyclonedx_export() -> Result<()> {
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         }
+      ],
+      "dependencies": [
+        {
+          "ref": "2-anyio@3.7.0",
+          "dependsOn": [
+            "3-idna@3.6",
+            "4-sniffio@1.3.1"
+          ]
+        },
+        {
+          "ref": "3-idna@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "1-project@0.1.0",
+          "dependsOn": [
+            "2-anyio@3.7.0"
+          ]
+        },
+        {
+          "ref": "4-sniffio@1.3.1",
+          "dependsOn": []
+        }
       ]
     }
     ----- stderr -----
