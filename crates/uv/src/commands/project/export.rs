@@ -357,7 +357,6 @@ pub(crate) async fn export(
                 &extras,
                 &groups,
                 include_annotations,
-                editable,
                 &install_options,
             )?;
 
@@ -366,7 +365,7 @@ pub(crate) async fn export(
             export.output_as_json_v1_5(&mut output)?;
 
             let output_str = String::from_utf8(output)?;
-            write!(writer, "{}", output_str)?;
+            write!(writer, "{output_str}")?;
         }
     }
 

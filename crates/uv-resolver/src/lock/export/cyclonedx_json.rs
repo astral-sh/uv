@@ -1,22 +1,20 @@
-use crate::Installable;
-use crate::LockError;
-use crate::lock::Package;
-use crate::lock::PackageId;
-use crate::lock::Source;
-use crate::lock::export::ExportableRequirement;
-use crate::lock::export::ExportableRequirements;
+use std::collections::HashMap;
+
 use cyclonedx_bom::models::component::Classification;
-use cyclonedx_bom::models::dependency::Dependencies;
-use cyclonedx_bom::models::dependency::Dependency;
+use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
 use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::tool::{Tool, Tools};
-use cyclonedx_bom::prelude::NormalizedString;
-use cyclonedx_bom::prelude::{Bom, Component, Components};
-use std::collections::HashMap;
+use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
+use itertools::Itertools;
+
 use uv_configuration::{
-    DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults, InstallOptions,
+    DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_normalize::PackageName;
+
+use crate::lock::export::{ExportableRequirement, ExportableRequirements};
+use crate::lock::{Package, PackageId, Source};
+use crate::{Installable, LockError};
 
 pub fn from_lock<'lock>(
     target: &impl Installable<'lock>,
@@ -24,7 +22,6 @@ pub fn from_lock<'lock>(
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     annotate: bool,
-    #[allow(unused_variables)] editable: Option<EditableMode>,
     install_options: &'lock InstallOptions,
 ) -> Result<Bom, LockError> {
     // Extract the packages from the lock file.
@@ -35,17 +32,18 @@ pub fn from_lock<'lock>(
 
     let root = target.lock().root();
 
-    // ID counter for bom-ref generation
+    // Used as prefix in bom-ref generation, to ensure uniqueness
     let mut id_counter = 1;
     let mut package_to_bom_ref = HashMap::<&PackageId, Component>::new();
 
     let metadata = Metadata {
         component: root.map(|package| {
-            let res =
-                create_component_from_package(package, Classification::Application, id_counter);
-            package_to_bom_ref.insert(&package.id, res.clone());
-            id_counter += 1;
-            res
+            create_and_register_component(
+                package,
+                Classification::Application,
+                &mut id_counter,
+                &mut package_to_bom_ref,
+            )
         }),
         timestamp: cyclonedx_bom::prelude::DateTime::now().ok(),
         tools: Some(Tools::List(vec![Tool {
@@ -62,14 +60,14 @@ pub fn from_lock<'lock>(
         .iter()
         .filter(|node| root.is_none_or(|package| package.id != node.package.id));
 
-    // Convert dependency packages to CycloneDX components.
     let components = dependencies
         .map(|node| {
-            let res =
-                create_component_from_package(node.package, Classification::Library, id_counter);
-            package_to_bom_ref.insert(&node.package.id, res.clone());
-            id_counter += 1;
-            res
+            create_and_register_component(
+                node.package,
+                Classification::Library,
+                &mut id_counter,
+                &mut package_to_bom_ref,
+            )
         })
         .collect();
 
@@ -85,17 +83,29 @@ pub fn from_lock<'lock>(
     Ok(bom)
 }
 
-/// Creates a bom-ref string in the format "{id}-{package_name}@{version}"
-/// or "{id}-{package_name}" if no version is provided.
+/// Create and register a CycloneDX component, updating the counter and map
+fn create_and_register_component<'a>(
+    package: &'a Package,
+    classification: Classification,
+    id_counter: &mut usize,
+    package_to_bom_ref: &mut HashMap<&'a PackageId, Component>,
+) -> Component {
+    let component = create_component_from_package(package, classification, *id_counter);
+    package_to_bom_ref.insert(&package.id, component.clone());
+    *id_counter += 1;
+    component
+}
+
+/// Creates a bom-ref string in the format "{id}-{package_name}@{version}" or "{id}-{package_name}" if no version is provided.
 fn create_bom_ref(id: usize, name: &str, version: Option<&str>) -> String {
     if let Some(version) = version {
-        format!("{}-{}@{}", id, name, version)
+        format!("{id}-{name}@{version}")
     } else {
-        format!("{}-{}", id, name)
+        format!("{id}-{name}")
     }
 }
 
-/// Extract version string from a package, returning empty string if no version
+/// Extract version string from a package
 fn get_version_string(package: &Package) -> Option<String> {
     package.id.version.as_ref().map(|v| v.to_string())
 }
@@ -105,54 +115,27 @@ fn get_package_name(package: &Package) -> String {
     package.id.name.to_string()
 }
 
-/// Generate a Package URL (PURL) from a package
+/// Generate a Package URL (purl) from a package
 fn create_purl(package: &Package) -> Option<String> {
     let name = get_package_name(package);
     let version = get_version_string(package);
 
-    match &package.id.source {
-        Source::Registry(_) => {
-            if let Some(version) = version {
-                Some(format!("pkg:pypi/{}@{}", name, version))
-            } else {
-                Some(format!("pkg:pypi/{}", name))
-            }
+    let (purl_type, qualifiers) = match &package.id.source {
+        Source::Registry(_) => ("pypi", String::new()),
+        Source::Git(url, _) | Source::Direct(url, _) => {
+            ("generic", format!("?download_url={}", url.as_ref()))
         }
-        Source::Git(url, _) => {
-            if let Some(version) = version {
-                Some(format!(
-                    "pkg:generic/{}@{}?download_url={}",
-                    name,
-                    version,
-                    url.as_ref()
-                ))
-            } else {
-                Some(format!(
-                    "pkg:generic/{}?download_url={}",
-                    name,
-                    url.as_ref()
-                ))
-            }
+        // No purl for local sources
+        Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => {
+            return None;
         }
-        Source::Direct(url, _) => {
-            if let Some(version) = version {
-                Some(format!(
-                    "pkg:generic/{}@{}?download_url={}",
-                    name,
-                    version,
-                    url.as_ref()
-                ))
-            } else {
-                Some(format!(
-                    "pkg:generic/{}?download_url={}",
-                    name,
-                    url.as_ref()
-                ))
-            }
-        }
-        // No PURL for local sources Path, Directory, Editable, Virtual.
-        Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => None,
-    }
+    };
+
+    let version_specifier = version.map_or_else(String::new, |v| format!("@{v}"));
+
+    Some(format!(
+        "pkg:{purl_type}/{name}{version_specifier}{qualifiers}"
+    ))
 }
 
 /// Create a CycloneDX component from a package node with the given classification and ID
@@ -196,59 +179,38 @@ fn create_component_from_package(
     }
 }
 
-fn create_dependencies_from_mapping<'lock>(
-    nodes: &[ExportableRequirement<'lock>],
+fn create_dependencies_from_mapping(
+    nodes: &[ExportableRequirement<'_>],
     package_to_component: &HashMap<&PackageId, Component>,
 ) -> Dependencies {
-    let mut dependencies = Vec::new();
+    let dependencies = nodes.iter().filter_map(|node| {
+        package_to_component
+            .get(&node.package.id)
+            .map(|package_bom_ref| {
+                let immediate_deps = &node.package.dependencies;
+                let optional_deps = node.package.optional_dependencies.values().flatten();
+                let dep_groups = node.package.dependency_groups.values().flatten();
 
-    // Add dependencies for all other packages
-    for node in nodes {
-        if let Some(package_bom_ref) = package_to_component.get(&node.package.id) {
-            let mut package_deps = Vec::new();
+                let package_deps = immediate_deps
+                    .iter()
+                    .chain(optional_deps)
+                    .chain(dep_groups)
+                    .filter_map(|dep| package_to_component.get(&dep.package_id));
 
-            // Add regular dependencies
-            for dep in &node.package.dependencies {
-                if let Some(component) = package_to_component.get(&dep.package_id) {
-                    package_deps.push(component);
+                let bom_refs = package_deps
+                    .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
+                    .sorted_unstable()
+                    .unique()
+                    .collect();
+
+                Dependency {
+                    dependency_ref: package_bom_ref
+                        .bom_ref
+                        .clone()
+                        .expect("bom-ref should always exist"),
+                    dependencies: bom_refs,
                 }
-            }
-
-            // Add optional dependencies (extras)
-            for (_extra_name, deps) in &node.package.optional_dependencies {
-                for dep in deps {
-                    if let Some(component) = package_to_component.get(&dep.package_id) {
-                        package_deps.push(component);
-                    }
-                }
-            }
-
-            // Add dependency groups
-            for (_group_name, deps) in &node.package.dependency_groups {
-                for dep in deps {
-                    if let Some(component) = package_to_component.get(&dep.package_id) {
-                        package_deps.push(component);
-                    }
-                }
-            }
-
-            // Remove duplicates and sort
-            // package_deps.sort();
-            package_deps.sort_by_key(|p| &p.bom_ref);
-            let bom_refs = package_deps
-                .iter()
-                .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
-                .collect();
-            package_deps.dedup();
-
-            dependencies.push(Dependency {
-                dependency_ref: package_bom_ref
-                    .bom_ref
-                    .clone()
-                    .expect("bom-ref should always exist"),
-                dependencies: bom_refs,
-            });
-        }
-    }
-    Dependencies(dependencies)
+            })
+    });
+    Dependencies(dependencies.collect())
 }
