@@ -355,7 +355,7 @@ impl<'lock> LockTarget<'lock> {
             }
             Self::Script(script) => {
                 // Collect any `tool.uv.index` from the script.
-                let empty = Vec::default();
+                let empty = vec![];
                 let indexes = match sources {
                     SourceStrategy::Enabled => script
                         .metadata
