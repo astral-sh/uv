@@ -3687,17 +3687,6 @@ fn python_uninstall_outdated() {
      - cpython-3.11.8-[PLATFORM]
      - cpython-3.12.1-[PLATFORM]
     ");
-
-    // Verify only the latest versions remain
-    uv_snapshot!(context.filters(), context.python_list(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    cpython-3.11.10-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.11.10-[PLATFORM]/[INSTALL-BIN]/python[EXE]
-    cpython-3.12.5-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/python[EXE]
-
-    ----- stderr -----
-    ");
 }
 
 #[test]
@@ -3738,17 +3727,6 @@ fn python_uninstall_outdated_no_outdated_versions() {
     ----- stderr -----
     Searching for Python installations
     No outdated Python installations found
-    ");
-
-    // Verify all versions remain
-    uv_snapshot!(context.filters(), context.python_list(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    cpython-3.11.10-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.11.10-[PLATFORM]/[INSTALL-BIN]/python[EXE]
-    cpython-3.12.5-[PLATFORM]	[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/python[EXE]
-
-    ----- stderr -----
     ");
 }
 

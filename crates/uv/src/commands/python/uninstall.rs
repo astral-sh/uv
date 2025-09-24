@@ -197,12 +197,13 @@ async fn do_uninstall(
     }
 
     if matching_installations.is_empty() {
-        if !outdated {
-            writeln!(
-                printer.stderr(),
-                "No Python installations found matching the requests"
-            )?;
+        if outdated {
+            return Ok(ExitStatus::Success);
         }
+        writeln!(
+            printer.stderr(),
+            "No Python installations found matching the requests"
+        )?;
         return Ok(ExitStatus::Failure);
     }
 
