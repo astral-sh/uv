@@ -21,14 +21,16 @@ following platforms:
 - Linux (armv7)
 - Linux (i686)
 - Linux (s390x)
+- Windows (arm64)
 
 uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and Tier 2
 platforms. However, while Tier 2 platforms are continuously built, they are not continuously tested
 or developed against, and so stability may vary in practice.
 
-Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, and known _not_ to
-build on aarch64 Windows, but does not consider either platform to be supported at this time. The
-minimum supported Windows versions are Windows 10 and Windows Server 2016, following
+Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, but does not consider
+it to be supported at this time. Windows arm64 has transparent x86_64 emulation, x64_64 uv as well
+as x86_64 Python with x86_64 packages can also be used. The minimum supported Windows versions are
+Windows 10 and Windows Server 2016, following
 [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
 ## macOS versions
