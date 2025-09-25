@@ -40,8 +40,6 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
-permissions: {}
-
 jobs:
   sdist:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
