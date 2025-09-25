@@ -14,6 +14,7 @@ use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 use uv_logging::UvFormat;
+use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
