@@ -279,7 +279,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 4 packages in [TIME]
     "
     );
 
@@ -310,11 +310,11 @@ fn wrong_backtracking_indirect() -> Result<()> {
 
         [[package]]
         name = "package-a"
-        version = "2.0.0"
+        version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-2.0.0.tar.gz", hash = "sha256:8f28371115dab396e098ce46f514d6bdf15a42c81cc75aa78c675db61e1ed67e" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-1.0.0.tar.gz", hash = "sha256:11281e0531d34bd2f8bc66a25d068b1e434f530fdce72e98b2d7f3a4eecc47a3" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-2.0.0-py3-none-any.whl", hash = "sha256:ea2a2e5008c2ca39195650f532c8ff6c129a91ca92018490fe53f9f0d323414e" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-1.0.0-py3-none-any.whl", hash = "sha256:6987cda5abdec6eaf0ac6d7abb83284ac4294c57577644c9173bdc388e179151" },
         ]
 
         [[package]]
@@ -331,23 +331,14 @@ fn wrong_backtracking_indirect() -> Result<()> {
 
         [[package]]
         name = "package-b-inner"
-        version = "1.0.0"
+        version = "2.0.9"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-too-old" },
+            { name = "package-a" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-1.0.0.tar.gz", hash = "sha256:e1ddc7be17380b754483067727ad9fa4e40f2f9b837982e9b9124ee9425ad72e" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-2.0.9.tar.gz", hash = "sha256:37312bb0cef3b4a44fb53425c6027412ee70cd68674d16493b6b795077c816b1" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-1.0.0-py3-none-any.whl", hash = "sha256:c58bcad2e57e160ec81d3e7a057f2c9a1a5fb74a3e3d18d82d79ab0dc5ce85dd" },
-        ]
-
-        [[package]]
-        name = "package-too-old"
-        version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_too_old-1.0.0.tar.gz", hash = "sha256:de078b8acaad7f58f194407633aac7fda37550f5fbe778ecd837599ed3872a4d" }
-        wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_too_old-1.0.0-py3-none-any.whl", hash = "sha256:d6ddc9421418ce70582869cf38c4f0322fc4061be36edc501555a616d560e7ba" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-2.0.9-py3-none-any.whl", hash = "sha256:010e03bdcac3eeb0df2e6dc97351e9ee86f1df605180458646591b2d9ef7e9a3" },
         ]
         "#
         );

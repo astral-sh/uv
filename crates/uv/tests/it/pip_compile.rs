@@ -9605,9 +9605,9 @@ fn universal_marker_propagation() -> Result<()> {
         # via jinja2
     mpmath==1.3.0
         # via sympy
-    networkx==3.1 ; python_full_version < '3.9'
+    networkx==3.1 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version < '3.9' and sys_platform == 'darwin') or (python_full_version < '3.9' and sys_platform == 'win32') or (python_full_version < '3.9' and sys_platform == 'linux') or (python_full_version < '3.9' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via torch
-    networkx==3.2 ; python_full_version >= '3.9'
+    networkx==3.2.1 ; (python_full_version >= '3.9' and python_full_version < '3.11' and sys_platform == 'linux') or (python_full_version >= '3.12' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version >= '3.9' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version >= '3.9' and platform_machine != 'x86_64' and sys_platform == 'win32') or (python_full_version >= '3.9' and platform_machine != 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.9' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (python_full_version >= '3.9' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     numpy==1.24.4 ; python_full_version < '3.9'
         # via torchvision
