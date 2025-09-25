@@ -22,7 +22,6 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
-use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -958,7 +957,7 @@ pub struct ResolverInstallerSchema {
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -1007,26 +1006,15 @@ pub struct PythonInstallMirrors {
     pub python_downloads_json_url: Option<String>,
 }
 
-impl Default for PythonInstallMirrors {
-    fn default() -> Self {
-        Self::resolve(None, None, None)
-    }
-}
-
 impl PythonInstallMirrors {
-    pub fn resolve(
-        python_mirror: Option<String>,
-        pypy_mirror: Option<String>,
-        python_downloads_json_url: Option<String>,
-    ) -> Self {
-        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
-        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
-        let python_downloads_json_url_env =
-            std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
         Self {
-            python_install_mirror: python_mirror_env.or(python_mirror),
-            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
-            python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
+            python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
+            pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .or(other.python_downloads_json_url),
         }
     }
 }
@@ -2270,11 +2258,11 @@ impl From<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
-            install_mirrors: PythonInstallMirrors::resolve(
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
                 python_downloads_json_url,
-            ),
+            },
             conflicts,
             publish: PublishOptions {
                 publish_url,

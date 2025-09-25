@@ -703,6 +703,7 @@ fn python_upgrade_force_install() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_empty_python_install_mirror()
         .with_managed_python_dirs();
 
     context

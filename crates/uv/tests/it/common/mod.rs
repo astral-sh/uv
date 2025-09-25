@@ -466,6 +466,15 @@ impl TestContext {
         self
     }
 
+    #[must_use]
+    pub fn with_empty_python_install_mirror(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_PYTHON_INSTALL_MIRROR.into(),
+            String::new().into(),
+        ));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {

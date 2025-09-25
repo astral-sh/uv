@@ -254,7 +254,11 @@ pub(crate) struct InitSettings {
 impl InitSettings {
     /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: InitArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: InitArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let InitArgs {
             path,
             name,
@@ -293,7 +297,7 @@ impl InitSettings {
         )
         .unwrap_or(kind.packaged_by_default());
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -314,7 +318,9 @@ impl InitSettings {
             pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,
             python: python.and_then(Maybe::into_option),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -356,7 +362,11 @@ impl RunSettings {
 
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: RunArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let RunArgs {
             extra,
             all_extras,
@@ -401,7 +411,7 @@ impl RunSettings {
             max_recursion_depth,
         } = args;
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -461,7 +471,9 @@ impl RunSettings {
                 filesystem,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
@@ -497,6 +509,7 @@ impl ToolRunSettings {
         args: ToolRunArgs,
         filesystem: Option<FilesystemOptions>,
         invocation_source: ToolRunCommand,
+        environment: EnvironmentOptions,
     ) -> Self {
         let ToolRunArgs {
             command,
@@ -554,7 +567,7 @@ impl ToolRunSettings {
                     .unwrap_or_default(),
             ));
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.install_mirrors)
             .unwrap_or_default();
@@ -595,7 +608,9 @@ impl ToolRunSettings {
             refresh: Refresh::from(refresh),
             settings,
             options,
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
             env_file,
             no_env_file,
         }
@@ -627,7 +642,11 @@ pub(crate) struct ToolInstallSettings {
 impl ToolInstallSettings {
     /// Resolve the [`ToolInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: ToolInstallArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let ToolInstallArgs {
             package,
             editable,
@@ -656,7 +675,7 @@ impl ToolInstallSettings {
                     .unwrap_or_default(),
             ));
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.install_mirrors)
             .unwrap_or_default();
@@ -701,7 +720,9 @@ impl ToolInstallSettings {
             refresh: Refresh::from(refresh),
             options,
             settings,
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -719,7 +740,11 @@ pub(crate) struct ToolUpgradeSettings {
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: ToolUpgradeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let ToolUpgradeArgs {
             name,
             python,
@@ -788,7 +813,7 @@ impl ToolUpgradeSettings {
 
         let args = resolver_installer_options(installer, build);
         let filesystem = filesystem.map(FilesystemOptions::into_options);
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|options| options.install_mirrors)
             .unwrap_or_default();
@@ -804,7 +829,9 @@ impl ToolUpgradeSettings {
             python_platform,
             args,
             filesystem: top_level,
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -900,7 +927,11 @@ pub(crate) struct PythonListSettings {
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonListArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PythonListArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PythonListArgs {
             request,
             all_versions,
@@ -919,8 +950,9 @@ impl PythonListSettings {
             None => None,
         };
 
-        let python_downloads_json_url =
-            python_downloads_json_url_arg.or(python_downloads_json_url_option);
+        let python_downloads_json_url = python_downloads_json_url_arg
+            .or(environment.install_mirrors.python_downloads_json_url)
+            .or(python_downloads_json_url_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -982,19 +1014,20 @@ impl PythonInstallSettings {
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> Self {
-        let options = filesystem.map(FilesystemOptions::into_options);
-        let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
-            Some(options) => (
-                options.install_mirrors.python_install_mirror,
-                options.install_mirrors.pypy_install_mirror,
-                options.install_mirrors.python_downloads_json_url,
-            ),
-            None => (None, None, None),
-        };
-        let python_mirror = args.mirror.or(python_mirror);
-        let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
-        let python_downloads_json_url =
-            args.python_downloads_json_url.or(python_downloads_json_url);
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let install_mirrors = args
+            .install_mirrors()
+            .combine(environment.install_mirrors)
+            .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror,
+            pypy_install_mirror,
+            python_downloads_json_url,
+        } = install_mirrors;
 
         let PythonInstallArgs {
             install_dir,
@@ -1019,8 +1052,8 @@ impl PythonInstallSettings {
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
             registry: flag(registry, no_registry, "registry")
                 .or(environment.python_install_registry),
-            python_install_mirror: python_mirror,
-            pypy_install_mirror: pypy_mirror,
+            python_install_mirror,
+            pypy_install_mirror,
             python_downloads_json_url,
             default,
         }
@@ -1046,20 +1079,26 @@ pub(crate) struct PythonUpgradeSettings {
 impl PythonUpgradeSettings {
     /// Resolve the [`PythonUpgradeSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let options = filesystem.map(FilesystemOptions::into_options);
-        let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
-            Some(options) => (
-                options.install_mirrors.python_install_mirror,
-                options.install_mirrors.pypy_install_mirror,
-                options.install_mirrors.python_downloads_json_url,
-            ),
-            None => (None, None, None),
-        };
-        let python_mirror = args.mirror.or(python_mirror);
-        let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
-        let python_downloads_json_url =
-            args.python_downloads_json_url.or(python_downloads_json_url);
+    pub(crate) fn resolve(
+        args: PythonUpgradeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let install_mirrors = args
+            .install_mirrors()
+            .combine(environment.install_mirrors)
+            .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror,
+            pypy_install_mirror,
+            python_downloads_json_url,
+        } = install_mirrors;
+
         let force = false;
         let default = false;
         let bin = None;
@@ -1079,8 +1118,8 @@ impl PythonUpgradeSettings {
             targets,
             force,
             registry,
-            python_install_mirror: python_mirror,
-            pypy_install_mirror: pypy_mirror,
+            python_install_mirror,
+            pypy_install_mirror,
             reinstall,
             python_downloads_json_url,
             default,
@@ -1163,7 +1202,11 @@ pub(crate) struct PythonPinSettings {
 impl PythonPinSettings {
     /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonPinArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PythonPinArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PythonPinArgs {
             request,
             no_resolved,
@@ -1173,7 +1216,7 @@ impl PythonPinSettings {
             rm,
         } = args;
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -1183,7 +1226,9 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1215,7 +1260,11 @@ pub(crate) struct SyncSettings {
 impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: SyncArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let SyncArgs {
             extra,
             all_extras,
@@ -1254,7 +1303,7 @@ impl SyncSettings {
             no_check,
             output_format,
         } = args;
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1315,7 +1364,9 @@ impl SyncSettings {
             python_platform,
             refresh: Refresh::from(refresh),
             settings,
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1337,7 +1388,11 @@ pub(crate) struct LockSettings {
 impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: LockArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let LockArgs {
             check,
             check_exists,
@@ -1349,7 +1404,7 @@ impl LockSettings {
             python,
         } = args;
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1362,7 +1417,9 @@ impl LockSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1403,7 +1460,11 @@ pub(crate) struct AddSettings {
 impl AddSettings {
     /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: AddArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let AddArgs {
             packages,
             requirements,
@@ -1508,7 +1569,7 @@ impl AddSettings {
             }
         }
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1548,7 +1609,9 @@ impl AddSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1574,7 +1637,11 @@ pub(crate) struct RemoveSettings {
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RemoveArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: RemoveArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let RemoveArgs {
             dev,
             optional,
@@ -1603,7 +1670,7 @@ impl RemoveSettings {
             DependencyType::Production
         };
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1628,7 +1695,9 @@ impl RemoveSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1656,7 +1725,11 @@ pub(crate) struct VersionSettings {
 impl VersionSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: VersionArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: VersionArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let VersionArgs {
             value,
             bump,
@@ -1675,7 +1748,7 @@ impl VersionSettings {
             python,
         } = args;
 
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1697,7 +1770,9 @@ impl VersionSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1727,7 +1802,11 @@ pub(crate) struct TreeSettings {
 
 impl TreeSettings {
     /// Resolve the [`TreeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: TreeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let TreeArgs {
             tree,
             universal,
@@ -1748,7 +1827,8 @@ impl TreeSettings {
             python_platform,
             python,
         } = args;
-        let install_mirrors = filesystem
+
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1779,7 +1859,9 @@ impl TreeSettings {
             python_platform,
             python: python.and_then(Maybe::into_option),
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1812,7 +1894,11 @@ pub(crate) struct ExportSettings {
 impl ExportSettings {
     /// Resolve the [`ExportSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ExportArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: ExportArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let ExportArgs {
             format,
             all_packages,
@@ -1851,7 +1937,7 @@ impl ExportSettings {
             script,
             python,
         } = args;
-        let install_mirrors = filesystem
+        let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
@@ -1897,7 +1983,9 @@ impl ExportSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -1951,7 +2039,11 @@ pub(crate) struct PipCompileSettings {
 
 impl PipCompileSettings {
     /// Resolve the [`PipCompileSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipCompileArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipCompileArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipCompileArgs {
             src_file,
             constraints,
@@ -2117,6 +2209,7 @@ impl PipCompileSettings {
                     ..PipOptions::from(resolver)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2135,7 +2228,11 @@ pub(crate) struct PipSyncSettings {
 
 impl PipSyncSettings {
     /// Resolve the [`PipSyncSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: Box<PipSyncArgs>, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: Box<PipSyncArgs>,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipSyncArgs {
             src_file,
             constraints,
@@ -2215,6 +2312,7 @@ impl PipSyncSettings {
                     ..PipOptions::from(installer)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2240,7 +2338,11 @@ pub(crate) struct PipInstallSettings {
 
 impl PipInstallSettings {
     /// Resolve the [`PipInstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipInstallArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipInstallArgs {
             package,
             requirements,
@@ -2377,6 +2479,7 @@ impl PipInstallSettings {
                     ..PipOptions::from(installer)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2393,7 +2496,11 @@ pub(crate) struct PipUninstallSettings {
 
 impl PipUninstallSettings {
     /// Resolve the [`PipUninstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipUninstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipUninstallArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipUninstallArgs {
             package,
             requirements,
@@ -2428,6 +2535,7 @@ impl PipUninstallSettings {
                     ..PipOptions::default()
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2443,7 +2551,11 @@ pub(crate) struct PipFreezeSettings {
 
 impl PipFreezeSettings {
     /// Resolve the [`PipFreezeSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipFreezeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipFreezeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipFreezeArgs {
             exclude_editable,
             strict,
@@ -2466,6 +2578,7 @@ impl PipFreezeSettings {
                     ..PipOptions::default()
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2483,7 +2596,11 @@ pub(crate) struct PipListSettings {
 
 impl PipListSettings {
     /// Resolve the [`PipListSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipListArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipListArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipListArgs {
             editable,
             exclude_editable,
@@ -2513,6 +2630,7 @@ impl PipListSettings {
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2528,7 +2646,11 @@ pub(crate) struct PipShowSettings {
 
 impl PipShowSettings {
     /// Resolve the [`PipShowSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipShowArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipShowArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipShowArgs {
             package,
             strict,
@@ -2551,6 +2673,7 @@ impl PipShowSettings {
                     ..PipOptions::default()
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2571,7 +2694,11 @@ pub(crate) struct PipTreeSettings {
 
 impl PipTreeSettings {
     /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipTreeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipTreeArgs {
             show_version_specifiers,
             tree,
@@ -2600,6 +2727,7 @@ impl PipTreeSettings {
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2613,7 +2741,11 @@ pub(crate) struct PipCheckSettings {
 
 impl PipCheckSettings {
     /// Resolve the [`PipCheckSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipCheckArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PipCheckArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PipCheckArgs {
             python,
             system,
@@ -2632,6 +2764,7 @@ impl PipCheckSettings {
                     ..PipOptions::default()
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -2659,7 +2792,11 @@ pub(crate) struct BuildSettings {
 
 impl BuildSettings {
     /// Resolve the [`BuildSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: BuildArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: BuildArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let BuildArgs {
             src,
             out_dir,
@@ -2681,8 +2818,7 @@ impl BuildSettings {
             refresh,
             resolver,
         } = args;
-
-        let install_mirrors = match &filesystem {
+        let filesystem_install_mirrors = match &filesystem {
             Some(fs) => fs.install_mirrors.clone(),
             None => PythonInstallMirrors::default(),
         };
@@ -2708,7 +2844,9 @@ impl BuildSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
@@ -2731,7 +2869,11 @@ pub(crate) struct VenvSettings {
 
 impl VenvSettings {
     /// Resolve the [`VenvSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: VenvArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: VenvArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let VenvArgs {
             python,
             system,
@@ -2779,6 +2921,7 @@ impl VenvSettings {
                     ..PipOptions::from(index_args)
                 },
                 filesystem,
+                environment,
             ),
         }
     }
@@ -3041,11 +3184,15 @@ pub(crate) struct PipSettings {
 
 impl PipSettings {
     /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(args: PipOptions, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn combine(
+        args: PipOptions,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let Options {
             top_level,
             pip,
-            install_mirrors,
+            install_mirrors: filesystem_install_mirrors,
             ..
         } = filesystem
             .map(FilesystemOptions::into_options)
@@ -3386,7 +3533,9 @@ impl PipSettings {
                     top_level_no_build_package.unwrap_or_default(),
                 )),
             ),
-            install_mirrors,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
         }
     }
 }
