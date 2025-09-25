@@ -176,6 +176,40 @@ numpy==2.0.0; python_version >= "3.9" and python_version < "3.10"
 numpy==2.1.0; python_version >= "3.10"
 ```
 
+## URL dependencies
+
+In uv, a dependency can either be a registry dependency, a package with a version specifier or the
+plain package name, or a URL dependency. All requirements in the form `{name} @ {url}` are URL
+dependencies, and also all dependencies that have a `git`,` url`, `path`, or `workspace` source.
+
+When a URL is declared for a package, uv pins the package to this URL, and the version this URL
+implies. If there are two conflicting URLs for a package, the resolver errors, as a URL can only be
+declared as something akin to an exact `==` pin, and not as list of URLs. A list of URLs is
+supported through [flat indexes](../../concepts/indexes.md#flat-indexes) instead.
+
+uv requires that URLs are either declared directly (in the project, in a
+[workspace member](../../concepts/projects/workspaces.md), in a
+[constraint](../../concepts/resolution.md#dependency-constraints), or in an
+[override](../../concepts/resolution.md#dependency-overrides), any location that is discovered
+directly), or by other URL dependencies. uv discovers all URL dependencies and their transitive URL
+dependencies ahead of the resolution and pins all packages to the URLs and the versions they imply.
+
+uv does not allow URLs in index packages. This has two reasons: One is a security and predictability
+aspect, that forbids registry distributions to point to non-registry distributions and helps
+auditing which URLs can be accessed. For example, when only using one index URL and no URL
+dependencies, uv will not install any package from outside the index.
+
+The other is that URLs can add additional versions to the resolution. Say the root package depends
+on foo, bar, and baz, all registry dependencies. foo depends on `bar >= 2`, but bar only has version
+1 on the index. With the incremental approach, this is an error: foo cannot be fulfilled, there is a
+resolver error. If URLs on index packages were allowed, it could be that there is a version of baz
+declares a dependency on baz-core and that has a version that declares
+`bar @ https://example.com/bar-2-py3-none-any.whl` adding a version of bar that makes requirements
+resolve. If a dependency can add new versions, discarding any version in the resolver would require
+looking at all possible versions of all direct and transitive dependencies. This breaks the core
+assumption incremental resolvers make that the set of versions for a package is static and would
+require to always fetch the metadata for all possibly reachable version.
+
 ## Prioritization
 
 Prioritization is important for both performance and for better resolutions.

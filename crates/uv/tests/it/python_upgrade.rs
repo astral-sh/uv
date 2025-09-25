@@ -63,6 +63,29 @@ fn python_upgrade() {
     Installed Python 3.10.18 in [TIME]
      ~ cpython-3.10.18-[PLATFORM] (python3.10)
     ");
+
+    // Install an earlier pre-release version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0rc2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0rc2 in [TIME]
+     + cpython-3.14.0rc2-[PLATFORM] (python3.14)
+    ");
+
+    // Upgrade the pre-release version
+    uv_snapshot!(context.filters(), context.python_upgrade(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
+    Installed Python 3.14.0rc3 in [TIME]
+     + cpython-3.14.0rc3-[PLATFORM] (python3.14)
+    ");
 }
 
 #[test]

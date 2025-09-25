@@ -437,6 +437,8 @@ pub enum Commands {
     ///
     /// - `<version>` e.g. `3`, `3.12`, `3.12.3`
     /// - `<version-specifier>` e.g. `>=3.12,<3.13`
+    /// - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    /// - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     /// - `<implementation>` e.g. `cpython` or `cp`
     /// - `<implementation>@<version>` e.g. `cpython@3.12`
     /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -773,6 +775,13 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache clean` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache clean` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

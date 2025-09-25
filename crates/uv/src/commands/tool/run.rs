@@ -199,7 +199,7 @@ pub(crate) async fn run(
                     invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("uv run {}", target_path.user_display().cyan()),
+                    format!("uv run {}", target_path.user_display()).green(),
                 ))
             } else {
                 let package_name = PackageName::from_str(target)?;
@@ -385,9 +385,6 @@ pub(crate) async fn run(
         executable,
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
-
-    // Unblock cache removal operations.
-    drop(cache);
 
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),

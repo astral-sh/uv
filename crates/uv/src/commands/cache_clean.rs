@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+use tracing::debug;
 
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
@@ -14,6 +15,7 @@ use crate::printer::Printer;
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) fn cache_clean(
     packages: &[PackageName],
+    force: bool,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -25,7 +27,19 @@ pub(crate) fn cache_clean(
         )?;
         return Ok(ExitStatus::Success);
     }
-    let cache = cache.with_exclusive_lock()?;
+
+    let cache = if force {
+        // If `--force` is used, attempt to acquire the exclusive lock but do not block.
+        match cache.with_exclusive_lock_no_wait() {
+            Ok(cache) => cache,
+            Err(cache) => {
+                debug!("Cache is currently in use, proceeding due to `--force`");
+                cache
+            }
+        }
+    } else {
+        cache.with_exclusive_lock()?
+    };
 
     let summary = if packages.is_empty() {
         writeln!(
