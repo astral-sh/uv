@@ -14,6 +14,7 @@ use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 use uv_logging::UvFormat;
+#[cfg(feature = "tracing-durations-export")]
 use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
