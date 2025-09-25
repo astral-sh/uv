@@ -24,7 +24,7 @@ pub enum ExportFormat {
     CycloneDX1_5,
 }
 
-/// The format to use when compiling to a `requirements.txt` or `pylock.toml` file.
+/// The output format to use in `uv pip compile`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
