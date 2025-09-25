@@ -367,6 +367,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         },
         durations_layer,
         globals.color,
+        environment.log_context.clone().unwrap_or_default(),
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.

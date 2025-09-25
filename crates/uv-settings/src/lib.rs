@@ -571,6 +571,7 @@ pub struct EnvironmentOptions {
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
+    pub log_context: Option<bool>,
 }
 
 impl EnvironmentOptions {
@@ -592,6 +593,7 @@ impl EnvironmentOptions {
                     EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL,
                 )?,
             },
+            log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
         })
     }
 }
