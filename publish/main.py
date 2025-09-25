@@ -82,15 +82,19 @@ def download_release_assets(url: str, output_dir: Path) -> None:
         print(f"Saved to {output_path}")
 
 
-def upload_to_r2(local_dir: Path, version: str) -> None:
+def upload_to_r2(local_dir: Path, *, wheelnext_version: str | None) -> None:
     """Upload files to Cloudflare R2 using wrangler."""
     bucket = "uv-wheelnext-releases"
 
     # Upload each file
     for file_path in local_dir.iterdir():
         if file_path.is_file():
-            print(f"Uploading {file_path.name} to R2...")
-            r2_path = file_path.name
+            if wheelnext_version:
+                r2_path = f"{wheelnext_version}/{file_path.name}"
+            else:
+                r2_path = file_path.name
+
+            print(f"Uploading {file_path.name} to {r2_path}...")
 
             try:
                 result = subprocess.run(
@@ -115,7 +119,7 @@ def upload_to_r2(local_dir: Path, version: str) -> None:
                     print(f"Command stderr:\n{result.stderr.decode()}")
                 print(f"Uploaded to {bucket}/{r2_path}")
             except subprocess.CalledProcessError as e:
-                print(f"Error uploading {file_path.name}: {e.stderr.decode()}")
+                print(f"Error uploading {file_path.name}: {e.stderr.decode()} {e.stdout.decode()}")
                 sys.exit(1)
 
 
@@ -132,13 +136,18 @@ def main() -> None:
         "url",
         help="GitHub release URL (e.g., https://github.com/astral-sh/uv/releases/tag/0.6.14)",
     )
+    parser.add_argument(
+        "--wheelnext-version",
+        type=str,
+        help="Wheelnext version",
+    )
     args = parser.parse_args()
 
     # Extract the version from the URL.
-    _, _, version = parse_release_url(args.url)
+    _, _, uv_version = parse_release_url(args.url)
 
     # Create the downloads directory.
-    downloads_dir = Path.cwd() / "downloads" / version
+    downloads_dir = Path.cwd() / "downloads" / uv_version
     downloads_dir.mkdir(parents=True, exist_ok=True)
 
     # Download release assets.
@@ -147,7 +156,7 @@ def main() -> None:
 
     # Upload to R2.
     print("Uploading to Cloudflare R2...")
-    upload_to_r2(downloads_dir, version)
+    upload_to_r2(downloads_dir, wheelnext_version=args.wheelnext_version)
 
     print("All done!")
 
