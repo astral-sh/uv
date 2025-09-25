@@ -370,49 +370,62 @@ before uploading artifacts.
 
 ## Cloudsmith
 
-uv can install packages from Cloudsmith by using a
+uv can pull and push packages from Cloudsmith by using
 [API token](https://docs.cloudsmith.com/accounts-and-teams/api-key#getting-your-api-key)
 authentication.
 
-To use it, add the index to your project:
+First, add the index `cloudsmith` to your project, replacing `WORKSPACE` and `REPOSITORY` in the
+`url` and `publish-url` fields with your workspace and repository names:
 
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "cloudsmith"
 url  = "https://dl.cloudsmith.io/basic/WORKSPACE/REPOSITORY/python/simple/"
+
 # optional, but recommended for publish:
 publish-url = "https://python.cloudsmith.io/WORKSPACE/REPOSITORY/"
+default = true
 ```
 
-Set environment variables to pull packages or dependencies:
+!!! note
+
+    Add the `default = true` option to set the Cloudsmith repository as the main one, skipping PyPI. Learn more about this and other options in the uv [Package indexes](https://docs.astral.sh/uv/concepts/indexes/#defining-an-index) documentation.
+
+### Authenticate with a Cloudsmith access token
+
+First, set the next environment variables with your Cloudsmith credentials.
+
+For **pulling dependencies** from your new `cloudsmith` index:
 
 ```console
 $ export UV_INDEX_CLOUDSMITH_USERNAME=token
-$ export UV_INDEX_CLOUDSMITH_PASSWORD=<API-KEY>
-$ export UV_PIP_NO_INDEX=1 # optional: forbid fallback to PyPI
-$ uv publish --index cloudsmith
+$ export UV_INDEX_CLOUDSMITH_PASSWORD=<CLOUDSMITH_TOKEN>
 ```
 
-uv will use them to authenticate against your Cloudsmith repository. Now, execute the next command
-to fetch and install all the required dependencies in your active virtual environment.
-
-Set these environmental variables to push packages:
+For **publishing your artifacts**:
 
 ```console
 $ export UV_PUBLISH_USERNAME=token
-$ export UV_PUBLISH_PASSWORD=<API-KEY>
+$ export UV_PUBLISH_PASSWORD=<CLOUDSMITH_TOKEN>
 ```
 
-Once you are happy with your project, just run the next command to build your wheel package and the
-source distribution (`.tar.gz`) file, including your Python "source code" and everything required to
-run it:
+uv will use them to authenticate against your Cloudsmith repository.
+
+### Fetching dependencies from Cloudsmith
+
+To fetch and install all the required dependencies to your project from a Cloudsmith repository, use
+the previously defined index `cloudsmith` when running the `uv sync` command:
 
 ```console
-$ python -m build
+$ uv sync --index cloudsmith
 ```
 
-Once those assets are ready, just publish both artifacts to Cloudsmith. Remember to specify your
-`cloudsmith` index as defined in the `[[tool.uv.index.name]]` field in your project definition:
+### Publishing packages to Cloudsmith
+
+You can
+[use the `uv build` command for packaging your project](https://docs.astral.sh/uv/guides/package/).
+Once your project's artifacts (wheel package and the source distribution `.tar.gz` files) are ready,
+push them to your Cloudsmith repository specifying the `cloudsmith` index:
 
 ```console
 $ uv publish --index cloudsmith dist/*
