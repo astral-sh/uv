@@ -14,6 +14,7 @@ use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 use uv_logging::UvFormat;
+#[cfg(feature = "tracing-durations-export")]
 use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +36,7 @@ pub(crate) fn setup_logging(
     level: Level,
     durations_layer: Option<impl Layer<Registry> + Send + Sync>,
     color: ColorChoice,
+    detailed_logging: bool,
 ) -> anyhow::Result<()> {
     // We use directives here to ensure `RUST_LOG` can override them
     let default_directive = match level {
@@ -87,7 +89,6 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
     if detailed_logging {
         // Regardless of the tracing level, include the uptime and target for each message.
         tracing_subscriber::registry()
