@@ -17,6 +17,7 @@ following platforms:
 
 - Linux (PPC64)
 - Linux (PPC64LE)
+- Linux (RISC-V64)
 - Linux (aarch64)
 - Linux (armv7)
 - Linux (i686)
