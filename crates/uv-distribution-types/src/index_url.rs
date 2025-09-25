@@ -644,14 +644,26 @@ bitflags::bitflags! {
 /// We only store indexes that lack capabilities (i.e., don't support range requests, aren't
 /// authorized). The benefit is that the map is almost always empty, so validating capabilities is
 /// extremely cheap.
-#[derive(Debug, Default, Clone)]
-pub struct IndexCapabilities(Arc<RwLock<FxHashMap<IndexUrl, Flags>>>);
+#[derive(Debug, Clone)]
+pub struct IndexCapabilities {
+    flags: Arc<RwLock<FxHashMap<IndexUrl, Flags>>>,
+    custom_messages: Arc<RwLock<FxHashMap<IndexUrl, String>>>,
+}
+
+impl Default for IndexCapabilities {
+    fn default() -> Self {
+        Self {
+            flags: Arc::new(RwLock::new(FxHashMap::default())),
+            custom_messages: Arc::new(RwLock::new(FxHashMap::default())),
+        }
+    }
+}
 
 impl IndexCapabilities {
     /// Returns `true` if the given [`IndexUrl`] supports range requests.
     pub fn supports_range_requests(&self, index_url: &IndexUrl) -> bool {
         !self
-            .0
+            .flags
             .read()
             .unwrap()
             .get(index_url)
@@ -660,7 +672,7 @@ impl IndexCapabilities {
 
     /// Mark an [`IndexUrl`] as not supporting range requests.
     pub fn set_no_range_requests(&self, index_url: IndexUrl) {
-        self.0
+        self.flags
             .write()
             .unwrap()
             .entry(index_url)
@@ -670,7 +682,7 @@ impl IndexCapabilities {
 
     /// Returns `true` if the given [`IndexUrl`] returns a `401 Unauthorized` status code.
     pub fn unauthorized(&self, index_url: &IndexUrl) -> bool {
-        self.0
+        self.flags
             .read()
             .unwrap()
             .get(index_url)
@@ -679,7 +691,7 @@ impl IndexCapabilities {
 
     /// Mark an [`IndexUrl`] as returning a `401 Unauthorized` status code.
     pub fn set_unauthorized(&self, index_url: IndexUrl) {
-        self.0
+        self.flags
             .write()
             .unwrap()
             .entry(index_url)
@@ -689,7 +701,7 @@ impl IndexCapabilities {
 
     /// Returns `true` if the given [`IndexUrl`] returns a `403 Forbidden` status code.
     pub fn forbidden(&self, index_url: &IndexUrl) -> bool {
-        self.0
+        self.flags
             .read()
             .unwrap()
             .get(index_url)
@@ -698,12 +710,45 @@ impl IndexCapabilities {
 
     /// Mark an [`IndexUrl`] as returning a `403 Forbidden` status code.
     pub fn set_forbidden(&self, index_url: IndexUrl) {
-        self.0
+        self.flags
             .write()
             .unwrap()
             .entry(index_url)
             .or_insert(Flags::empty())
             .insert(Flags::FORBIDDEN);
+    }
+
+    /// Mark an [`IndexUrl`] as returning a `401 Unauthorized` status code with a custom error message.
+    pub fn set_unauthorized_with_message(&self, index_url: IndexUrl, message: String) {
+        self.flags
+            .write()
+            .unwrap()
+            .entry(index_url.clone())
+            .or_insert(Flags::empty())
+            .insert(Flags::UNAUTHORIZED);
+        self.custom_messages
+            .write()
+            .unwrap()
+            .insert(index_url, message);
+    }
+
+    /// Mark an [`IndexUrl`] as returning a `403 Forbidden` status code with a custom error message.
+    pub fn set_forbidden_with_message(&self, index_url: IndexUrl, message: String) {
+        self.flags
+            .write()
+            .unwrap()
+            .entry(index_url.clone())
+            .or_insert(Flags::empty())
+            .insert(Flags::FORBIDDEN);
+        self.custom_messages
+            .write()
+            .unwrap()
+            .insert(index_url, message);
+    }
+
+    /// Get the custom error message for an [`IndexUrl`] if available.
+    pub fn custom_message(&self, index_url: &IndexUrl) -> Option<String> {
+        self.custom_messages.read().unwrap().get(index_url).cloned()
     }
 }
 
