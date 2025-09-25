@@ -163,6 +163,9 @@ pub struct PythonDownloadRequest {
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
     pub(crate) prereleases: Option<bool>,
+
+    /// Whether to allow all variants, or to filter by the requested variant.
+    pub(crate) all_variants: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -254,6 +257,7 @@ impl PythonDownloadRequest {
         os: Option<Os>,
         libc: Option<Libc>,
         prereleases: Option<bool>,
+        all_variants: Option<bool>,
     ) -> Self {
         Self {
             version,
@@ -263,6 +267,7 @@ impl PythonDownloadRequest {
             libc,
             build: None,
             prereleases,
+            all_variants,
         }
     }
 
@@ -315,6 +320,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_prereleases(mut self, prereleases: bool) -> Self {
         self.prereleases = Some(prereleases);
+        self
+    }
+
+    #[must_use]
+    pub fn with_all_variants(mut self, all_variants: bool) -> Self {
+        self.all_variants = Some(all_variants);
         self
     }
 
@@ -450,9 +461,12 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if let Some(variant) = version.variant() {
-                if variant != key.variant {
-                    return false;
+            // Only filter by variant if `all_variants` is not requested
+            if self.all_variants.is_none() {
+                if let Some(variant) = version.variant() {
+                    if variant != key.variant {
+                        return false;
+                    }
                 }
             }
         }
@@ -565,6 +579,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(*key.os()),
             Some(*key.libc()),
             Some(key.prerelease.is_some()),
+            None,
         )
     }
 }
@@ -788,7 +803,15 @@ impl FromStr for PythonDownloadRequest {
             }
         }
 
-        Ok(Self::new(version, implementation, arch, os, libc, None))
+        Ok(Self::new(
+            version,
+            implementation,
+            arch,
+            os,
+            libc,
+            None,
+            None,
+        ))
     }
 }
 
