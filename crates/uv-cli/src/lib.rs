@@ -770,6 +770,12 @@ pub enum CacheCommand {
     /// Note that it is important for performance for the cache directory to be located on the same
     /// file system as the Python environment uv is operating on.
     Dir,
+    /// Show the cache size.
+    ///
+    /// Displays the total size of the cache directory. This includes all cached wheels, source
+    /// distributions, and other cached data. The default output format is raw bytes, suitable
+    /// for parsing in scripts. Use `--format human` for human-readable output.
+    Size(SizeArgs),
 }
 
 #[derive(Args, Debug)]
@@ -802,6 +808,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct SizeArgs {
+    /// Display size in human-readable format (e.g., 1.2 GiB instead of raw bytes)
+    #[arg(long = "human", short = 'H', alias = "human-readable")]
+    pub human: bool,
 }
 
 #[derive(Args)]
