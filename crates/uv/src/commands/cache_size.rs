@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::Cache;
 
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
@@ -23,29 +23,15 @@ pub(crate) fn cache_size(
         return Ok(ExitStatus::Success);
     }
 
-    let mut total_bytes = 0u64;
-
-    // Traverse all cache buckets and sum their sizes
-    for bucket in CacheBucket::iter() {
-        let bucket_path = cache.bucket(bucket);
-        if !bucket_path.exists() {
-            continue;
-        }
-
-        // Walk directory tree and sum file sizes
-        for entry in walkdir::WalkDir::new(&bucket_path) {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(_) => continue, // Skip entries we can't read
-            };
-
-            if entry.file_type().is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    total_bytes += metadata.len();
-                }
-            }
-        }
-    }
+    // Walk the entire cache root
+    let total_bytes: u64 = walkdir::WalkDir::new(cache.root())
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| match entry.metadata() {
+            Ok(metadata) if metadata.is_file() => Some(metadata.len()),
+            _ => None,
+        })
+        .sum();
 
     // Output in requested format
     if human_readable {
