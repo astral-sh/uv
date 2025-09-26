@@ -348,11 +348,11 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(package_name, &cache)?
             .filter(|environment| {
-                if environment.uses(&interpreter) {
+                if environment.environment().uses(&interpreter) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         package_name,
-                        environment.interpreter().sys_executable().display()
+                        environment.environment().interpreter().sys_executable().display()
                     );
                     true
                 } else {
@@ -399,7 +399,7 @@ pub(crate) async fn install(
                 let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                 // Check if the installed packages meet the requirements.
-                let site_packages = SitePackages::from_environment(environment)?;
+                let site_packages = SitePackages::from_environment(environment.environment())?;
                 if matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
@@ -461,7 +461,7 @@ pub(crate) async fn install(
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
         let environment = match update_environment(
-            environment,
+            environment.into_environment(),
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
