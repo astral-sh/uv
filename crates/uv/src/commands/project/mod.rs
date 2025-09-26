@@ -663,6 +663,7 @@ impl ScriptInterpreter {
         cache: &Cache,
         printer: Printer,
         preview: Preview,
+        isolated: bool,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;
@@ -674,35 +675,36 @@ impl ScriptInterpreter {
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
         let root = Self::root(script, active, cache);
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                match environment_is_usable(
-                    &venv,
-                    EnvironmentKind::Script,
-                    python_request.as_ref(),
-                    python_preference,
-                    requires_python
-                        .as_ref()
-                        .map(|(requires_python, _)| requires_python),
-                    cache,
-                ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
+        if !isolated {
+            match PythonEnvironment::from_root(&root, cache) {
+                Ok(venv) => {
+                    match environment_is_usable(
+                        &venv,
+                        EnvironmentKind::Script,
+                        python_request.as_ref(),
+                        python_preference,
+                        requires_python
+                            .as_ref()
+                            .map(|(requires_python, _)| requires_python),
+                        cache,
+                    ) {
+                        Ok(()) => return Ok(Self::Environment(venv)),
+                        Err(err) if keep_incompatible => {
+                            warn_user!(
+                                "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                                root.user_display().cyan(),
+                            );
+                            return Ok(Self::Environment(venv));
+                        }
+                        Err(err) => {
+                            debug!("{err}");
+                        }
                     }
                 }
+                Err(uv_python::Error::MissingEnvironment(_)) => {}
+                Err(err) => warn!("Ignoring existing script environment: {err}"),
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
-
         let reporter = PythonDownloadReporter::single(printer);
 
         let interpreter = PythonInstallation::find_or_download(
@@ -1535,6 +1537,7 @@ impl ScriptEnvironment {
             cache,
             printer,
             preview,
+            false,
         )
         .await?
         {

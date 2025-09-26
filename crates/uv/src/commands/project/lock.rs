@@ -172,6 +172,7 @@ pub(crate) async fn lock(
                 cache,
                 printer,
                 preview,
+                false,
             )
             .await?
             .into_interpreter(),
