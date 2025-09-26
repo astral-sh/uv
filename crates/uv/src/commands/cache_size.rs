@@ -26,7 +26,7 @@ pub(crate) fn cache_size(
     // Walk the entire cache root
     let total_bytes: u64 = walkdir::WalkDir::new(cache.root())
         .into_iter()
-        .filter_map(|entry| entry.ok())
+        .filter_map(std::result::Result::ok)
         .filter_map(|entry| match entry.metadata() {
             Ok(metadata) if metadata.is_file() => Some(metadata.len()),
             _ => None,
@@ -36,10 +36,10 @@ pub(crate) fn cache_size(
     // Output in requested format
     if human_readable {
         let (size, unit) = human_readable_bytes(total_bytes);
-        writeln!(printer.stdout(), "{:.1} {}", size, unit)?;
+        writeln!(printer.stdout(), "{size:.1} {unit}")?;
     } else {
         // Raw bytes (script-friendly)
-        writeln!(printer.stdout(), "{}", total_bytes)?;
+        writeln!(printer.stdout(), "{total_bytes}")?;
     }
 
     Ok(ExitStatus::Success)
