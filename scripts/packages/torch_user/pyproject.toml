@@ -6,8 +6,8 @@ dependencies = ["torch"]
 
 [[tool.uv.index]]
 name = "torch-variants"
-url = "https://download.pytorch.org/whl/variant"
-default = true
+url = "https://wheelnext.github.io/variants-index/v0.0.2"
+# default = true # triton is missing
 
 [build-system]
 requires = ["uv_build>=0.8.0,<0.9.0"]
