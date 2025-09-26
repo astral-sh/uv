@@ -86,7 +86,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     pub fn evaluate_markers(
         &self,
         env: &MarkerEnvironment,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.evaluate_optional_environment(Some(env), variants, extras)
@@ -96,7 +96,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     pub fn evaluate_optional_environment(
         &self,
         env: Option<&MarkerEnvironment>,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker

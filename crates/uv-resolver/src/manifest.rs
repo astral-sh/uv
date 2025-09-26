@@ -126,7 +126,7 @@ impl Manifest {
                                 move |requirement| {
                                     requirement.evaluate_markers(
                                         env.marker_environment(),
-                                        MarkerVariantsUniversal,
+                                        &MarkerVariantsUniversal,
                                         lookahead.extras(),
                                     )
                                 },
@@ -136,7 +136,7 @@ impl Manifest {
                             move |requirement| {
                                 requirement.evaluate_markers(
                                     env.marker_environment(),
-                                    MarkerVariantsUniversal,
+                                    &MarkerVariantsUniversal,
                                     &[],
                                 )
                             },
@@ -147,7 +147,7 @@ impl Manifest {
                                 .filter(move |requirement| {
                                     requirement.evaluate_markers(
                                         env.marker_environment(),
-                                        MarkerVariantsUniversal,
+                                        &MarkerVariantsUniversal,
                                         &[],
                                     )
                                 })
@@ -163,7 +163,7 @@ impl Manifest {
                     .filter(move |requirement| {
                         requirement.evaluate_markers(
                             env.marker_environment(),
-                            MarkerVariantsUniversal,
+                            &MarkerVariantsUniversal,
                             &[],
                         )
                     }),
@@ -185,7 +185,7 @@ impl Manifest {
                     .filter(move |requirement| {
                         requirement.evaluate_markers(
                             env.marker_environment(),
-                            MarkerVariantsUniversal,
+                            &MarkerVariantsUniversal,
                             &[],
                         )
                     })
@@ -198,7 +198,7 @@ impl Manifest {
                     .filter(move |requirement| {
                         requirement.evaluate_markers(
                             env.marker_environment(),
-                            MarkerVariantsUniversal,
+                            &MarkerVariantsUniversal,
                             &[],
                         )
                     })
@@ -235,7 +235,7 @@ impl Manifest {
                                 move |requirement| {
                                     requirement.evaluate_markers(
                                         env.marker_environment(),
-                                        MarkerVariantsUniversal,
+                                        &MarkerVariantsUniversal,
                                         lookahead.extras(),
                                     )
                                 },
@@ -245,7 +245,7 @@ impl Manifest {
                             move |requirement| {
                                 requirement.evaluate_markers(
                                     env.marker_environment(),
-                                    MarkerVariantsUniversal,
+                                    &MarkerVariantsUniversal,
                                     &[],
                                 )
                             },
@@ -259,7 +259,7 @@ impl Manifest {
                     move |requirement| {
                         requirement.evaluate_markers(
                             env.marker_environment(),
-                            MarkerVariantsUniversal,
+                            &MarkerVariantsUniversal,
                             &[],
                         )
                     },
@@ -280,7 +280,11 @@ impl Manifest {
         self.overrides
             .apply(self.requirements.iter())
             .filter(move |requirement| {
-                requirement.evaluate_markers(env.marker_environment(), MarkerVariantsUniversal, &[])
+                requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                )
             })
     }
 

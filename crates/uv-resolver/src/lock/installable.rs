@@ -22,7 +22,7 @@ use uv_pep508::{
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
-use uv_variants::variants_json::Variant;
+use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::lock::{LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
@@ -159,7 +159,7 @@ pub trait Installable<'lock> {
                 // TODO(konsti): Evaluate variant declarations on workspace/path dependencies.
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    MarkerVariantsUniversal,
+                    &MarkerVariantsUniversal,
                     activated_projects.iter().copied(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
@@ -227,7 +227,7 @@ pub trait Installable<'lock> {
             if !dependency
                 .marker
                 // No package, evaluate markers to false.
-                .evaluate(marker_env, Vec::new().as_slice(), &[])
+                .evaluate(marker_env, &Vec::new().as_slice(), &[])
             {
                 continue;
             }
@@ -283,7 +283,7 @@ pub trait Installable<'lock> {
             // TODO(konsti): Evaluate markers for the current package
             if !dependency
                 .marker
-                .evaluate(marker_env, MarkerVariantsUniversal, &[])
+                .evaluate(marker_env, &MarkerVariantsUniversal, &[])
             {
                 continue;
             }
@@ -395,7 +395,7 @@ pub trait Installable<'lock> {
                     // TODO(konsti): Evaluate variants
                     if !dep.complexified_marker.evaluate(
                         marker_env,
-                        MarkerVariantsUniversal,
+                        &MarkerVariantsUniversal,
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -511,7 +511,7 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    CurrentQueriedVariants {
+                    &CurrentQueriedVariants {
                         global: &resolved_variants,
                         current: resolved_variants.0.get(&variant_base).unwrap(),
                     },
@@ -637,12 +637,13 @@ pub trait Installable<'lock> {
 
 /// Map for the package identifier to the package's variants for marker evaluation.
 #[derive(Default, Debug)]
-struct QueriedVariants(HashMap<String, Variant>);
+struct QueriedVariants(HashMap<String, VariantWithLabel>);
 
 /// Variants for markers evaluation both for the current package (without base) and globally (with
 /// base).
+#[derive(Copy, Clone, Debug)]
 struct CurrentQueriedVariants<'a> {
-    current: &'a Variant,
+    current: &'a VariantWithLabel,
     global: &'a QueriedVariants,
 }
 
@@ -672,7 +673,7 @@ impl MarkerVariantsEnvironment for CurrentQueriedVariants<'_> {
         variant.contains_namespace(namespace)
     }
 
-    fn contains_based_feature(
+    fn contains_base_feature(
         &self,
         prefix: &str,
         namespace: &VariantNamespace,
@@ -685,7 +686,7 @@ impl MarkerVariantsEnvironment for CurrentQueriedVariants<'_> {
         variant.contains_feature(namespace, feature)
     }
 
-    fn contains_based_property(
+    fn contains_base_property(
         &self,
         prefix: &str,
         namespace: &VariantNamespace,
@@ -698,6 +699,10 @@ impl MarkerVariantsEnvironment for CurrentQueriedVariants<'_> {
 
         variant.contains_property(namespace, feature, value)
     }
+
+    fn label(&self) -> Option<&str> {
+        self.current.label()
+    }
 }
 
 async fn determine_properties<Context: BuildContext>(
@@ -706,10 +711,10 @@ async fn determine_properties<Context: BuildContext>(
     marker_env: &ResolverMarkerEnvironment,
     distribution_database: &DistributionDatabase<'_, Context>,
     variants_cache: &PackageVariantCache,
-) -> Result<Variant, LockError> {
+) -> Result<VariantWithLabel, LockError> {
     let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
         // When selecting a non-variant wheel, all variant markers evaluate to false.
-        return Ok(Variant::default());
+        return Ok(VariantWithLabel::default());
     };
     let resolved_variants = if variants_cache.register(variants_json.version_id()) {
         let resolved_variants = distribution_database
@@ -757,9 +762,12 @@ async fn determine_properties<Context: BuildContext>(
         // TODO(konsti): The variant exists because we used it for scoring, but we should
         // be able to write this without unwrap.
         let known_properties = resolved_variants.variants_json.variants[best_variant].clone();
-        Ok(known_properties)
+        Ok(VariantWithLabel {
+            variant: known_properties,
+            label: Some(best_variant.clone()),
+        })
     } else {
         // When selecting the non-variant wheel, all variant markers evaluate to false.
-        Ok(Variant::default())
+        Ok(VariantWithLabel::default())
     }
 }

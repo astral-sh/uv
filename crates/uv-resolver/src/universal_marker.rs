@@ -296,7 +296,7 @@ impl UniversalMarker {
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
     pub(crate) fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
-        self.marker.evaluate(env, MarkerVariantsUniversal, &[])
+        self.marker.evaluate(env, &MarkerVariantsUniversal, &[])
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
@@ -308,7 +308,7 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         projects: impl Iterator<Item = P>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,

@@ -73,7 +73,7 @@ impl Requirement {
     pub fn evaluate_markers(
         &self,
         env: Option<&MarkerEnvironment>,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker

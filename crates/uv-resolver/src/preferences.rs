@@ -243,7 +243,7 @@ impl Preferences {
             if let Some(markers) = env.marker_environment() {
                 if !preference
                     .marker
-                    .evaluate(markers, MarkerVariantsUniversal, &[])
+                    .evaluate(markers, &MarkerVariantsUniversal, &[])
                 {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;

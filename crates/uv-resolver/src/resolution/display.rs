@@ -93,7 +93,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             for requirement in self.resolution.requirements.iter().filter(|requirement| {
                 requirement.evaluate_markers(
                     self.env.marker_environment(),
-                    MarkerVariantsUniversal,
+                    &MarkerVariantsUniversal,
                     &[],
                 )
             }) {
@@ -112,7 +112,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .filter(|requirement| {
                     requirement.evaluate_markers(
                         self.env.marker_environment(),
-                        MarkerVariantsUniversal,
+                        &MarkerVariantsUniversal,
                         &[],
                     )
                 })
@@ -132,7 +132,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .filter(|requirement| {
                     requirement.evaluate_markers(
                         self.env.marker_environment(),
-                        MarkerVariantsUniversal,
+                        &MarkerVariantsUniversal,
                         &[],
                     )
                 })

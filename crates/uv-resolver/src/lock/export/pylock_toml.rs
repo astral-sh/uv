@@ -983,7 +983,7 @@ impl<'lock> PylockToml {
             // Omit packages that aren't relevant to the current environment.
             if !package
                 .marker
-                .evaluate_pep751(markers, MarkerVariantsUniversal, extras, groups)
+                .evaluate_pep751(markers, &MarkerVariantsUniversal, extras, groups)
             {
                 continue;
             }

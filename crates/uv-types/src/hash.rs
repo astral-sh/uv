@@ -137,7 +137,7 @@ impl HashStrategy {
         for (requirement, digests) in constraints {
             if !requirement.evaluate_markers(
                 marker_env.map(ResolverMarkerEnvironment::markers),
-                MarkerVariantsUniversal,
+                &MarkerVariantsUniversal,
                 &[],
             ) {
                 continue;
@@ -183,7 +183,7 @@ impl HashStrategy {
         for (requirement, digests) in requirements {
             if !requirement.evaluate_markers(
                 marker_env.map(ResolverMarkerEnvironment::markers),
-                MarkerVariantsUniversal,
+                &MarkerVariantsUniversal,
                 &[],
             ) {
                 continue;

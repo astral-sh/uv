@@ -54,7 +54,7 @@ impl MarkerVariantsEnvironment for Variant {
         false
     }
 
-    fn contains_based_feature(
+    fn contains_base_feature(
         &self,
         _prefix: &str,
         _namespace: &VariantNamespace,
@@ -63,7 +63,7 @@ impl MarkerVariantsEnvironment for Variant {
         false
     }
 
-    fn contains_based_property(
+    fn contains_base_property(
         &self,
         _prefix: &str,
         _namespace: &VariantNamespace,
