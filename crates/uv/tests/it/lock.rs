@@ -8878,6 +8878,7 @@ fn lock_peer_member() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     Ok(())
@@ -9195,6 +9196,7 @@ fn lock_dev_transitive() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     Ok(())
