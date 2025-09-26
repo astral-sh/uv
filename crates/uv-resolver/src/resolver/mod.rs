@@ -86,7 +86,7 @@ use crate::{
 };
 pub(crate) use provider::MetadataUnavailable;
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::Variant;
+use uv_variants::variant_with_label::VariantWithLabel;
 
 mod availability;
 mod batch_prefetch;
@@ -2057,30 +2057,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &FilePins,
         env: &ResolverEnvironment,
         in_memory_index: &InMemoryIndex,
-    ) -> Variant {
+    ) -> VariantWithLabel {
         // TODO(konsti): Perf/Caching with version selection: This is in the hot path!
 
         if env.marker_environment().is_none() {
-            return Variant::default();
+            return VariantWithLabel::default();
         }
 
         // Grab the pinned distribution for the given name and version.
         let Some(dist) = pins.get(name, version) else {
-            return Variant::default();
+            return VariantWithLabel::default();
         };
 
         let Some(filename) = dist.wheel_filename() else {
             // TODO(konsti): Handle installed dists too
-            return Variant::default();
+            return VariantWithLabel::default();
         };
 
         let Some(variant_label) = filename.variant() else {
-            return Variant::default();
+            return VariantWithLabel::default();
         };
 
         let Some(index) = dist.index() else {
             warn!("Wheel variant has no index: {filename}");
-            return Variant::default();
+            return VariantWithLabel::default();
         };
 
         let version_id = GlobalVersionId::new(
@@ -2089,7 +2089,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
 
         let Some(resolved_variants) = in_memory_index.variant_priorities().get(&version_id) else {
-            return Variant::default();
+            return VariantWithLabel::default();
         };
 
         // Collect the host properties for marker filtering.
@@ -2099,7 +2099,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .variants
             .get(variant_label)
             .expect("Missing previously select variant label");
-        variant.clone()
+
+        VariantWithLabel {
+            variant: variant.clone(),
+            label: Some(variant_label.clone()),
+        }
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
@@ -2277,7 +2281,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: &Requirement,
         extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
@@ -2334,7 +2338,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
-        variants: impl MarkerVariantsEnvironment + 'parameters,
+        variants: &'parameters (impl MarkerVariantsEnvironment + 'parameters),
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters

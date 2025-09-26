@@ -319,7 +319,7 @@ impl<T: Pep508Url> Requirement<T> {
     pub fn evaluate_markers(
         &self,
         env: &MarkerEnvironment,
-        variants: impl MarkerVariantsEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker.evaluate(env, variants, extras)

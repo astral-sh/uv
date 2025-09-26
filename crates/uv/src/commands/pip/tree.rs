@@ -255,7 +255,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                 }
                 if !requirement
                     .marker
-                    .evaluate(markers, MarkerVariantsUniversal, &[])
+                    .evaluate(markers, &MarkerVariantsUniversal, &[])
                 {
                     continue;
                 }

@@ -93,7 +93,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| {
-                requirement.evaluate_markers(env.marker_environment(), MarkerVariantsUniversal, &[])
+                requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                )
             })
             .map(|requirement| (*requirement).clone())
             .collect();
@@ -115,7 +119,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     {
                         if requirement.evaluate_markers(
                             env.marker_environment(),
-                            MarkerVariantsUniversal,
+                            &MarkerVariantsUniversal,
                             lookahead.extras(),
                         ) {
                             queue.push_back((*requirement).clone());

@@ -265,7 +265,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, MarkerVariantsUniversal, &[]) {
+                    if !dependency.evaluate_markers(markers, &MarkerVariantsUniversal, &[]) {
                         continue;
                     }
 
@@ -454,7 +454,7 @@ impl SitePackages {
         for requirement in requirements {
             if let Some(r#overrides) = overrides.get(&requirement.name) {
                 for dependency in r#overrides {
-                    if dependency.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
+                    if dependency.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                         if seen.insert((*dependency).clone()) {
                             stack.push(Cow::Borrowed(*dependency));
                         }
@@ -462,7 +462,7 @@ impl SitePackages {
                 }
             } else {
                 // TODO(konsti): Evaluate variants
-                if requirement.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
+                if requirement.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                     if seen.insert(requirement.clone()) {
                         stack.push(Cow::Borrowed(requirement));
                     }
@@ -481,7 +481,7 @@ impl SitePackages {
                 }
                 [distribution] => {
                     // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
+                    if requirement.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                         match RequirementSatisfaction::check(
                             name,
                             distribution,
@@ -504,7 +504,7 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[])
+                        if constraint.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[])
                         {
                             match RequirementSatisfaction::check(
                                 name,
@@ -541,7 +541,7 @@ impl SitePackages {
                             for dependency in r#overrides {
                                 if dependency.evaluate_markers(
                                     Some(markers),
-                                    MarkerVariantsUniversal,
+                                    &MarkerVariantsUniversal,
                                     &requirement.extras,
                                 ) {
                                     if seen.insert((*dependency).clone()) {
@@ -552,7 +552,7 @@ impl SitePackages {
                         } else {
                             if dependency.evaluate_markers(
                                 Some(markers),
-                                MarkerVariantsUniversal,
+                                &MarkerVariantsUniversal,
                                 &requirement.extras,
                             ) {
                                 if seen.insert(dependency.clone()) {
