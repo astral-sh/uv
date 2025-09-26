@@ -97,11 +97,14 @@ async fn pyx_logout(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    let client = BaseClientBuilder::new(
+        network_settings.connectivity,
+        network_settings.native_tls,
+        network_settings.allow_insecure_host.clone(),
+        Preview::default(),
+        network_settings.timeout,
+    )
+    .build();
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {
