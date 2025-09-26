@@ -630,7 +630,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 provider.plugin_use.unwrap_or_default().run_on_install()
                     && provider
                         .enable_if
-                        .evaluate(marker_env, MarkerVariantsUniversal, &[])
+                        .evaluate(marker_env, &MarkerVariantsUniversal, &[])
             }))
             .map(|(name, provider)| {
                 self.resolve_provider(locked_and_inferred, variant_lock.as_ref(), name, provider)
@@ -645,7 +645,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             !provider.plugin_use.unwrap_or_default().run_on_install()
                 && provider
                     .enable_if
-                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
         }) {
             let Some(features) = variants_json.default_priorities.property.get(namespace) else {
                 warn!(

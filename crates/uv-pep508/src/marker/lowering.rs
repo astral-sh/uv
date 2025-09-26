@@ -60,6 +60,8 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// `variant_label`
+    VariantLabel,
 }
 
 impl CanonicalMarkerValueString {
@@ -92,6 +94,7 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
             MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersion,
             MarkerValueString::SysPlatform => Self::SysPlatform,
             MarkerValueString::SysPlatformDeprecated => Self::SysPlatform,
+            MarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -109,6 +112,7 @@ impl From<CanonicalMarkerValueString> for MarkerValueString {
             CanonicalMarkerValueString::PlatformSystem => Self::PlatformSystem,
             CanonicalMarkerValueString::PlatformVersion => Self::PlatformVersion,
             CanonicalMarkerValueString::SysPlatform => Self::SysPlatform,
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -125,6 +129,7 @@ impl Display for CanonicalMarkerValueString {
             Self::PlatformSystem => f.write_str("platform_system"),
             Self::PlatformVersion => f.write_str("platform_version"),
             Self::SysPlatform => f.write_str("sys_platform"),
+            Self::VariantLabel => f.write_str("variant_label"),
         }
     }
 }

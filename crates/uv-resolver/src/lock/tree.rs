@@ -197,7 +197,7 @@ impl<'env> TreeDisplay<'env> {
                         continue;
                     }
                     if markers.is_some_and(|markers| {
-                        !marker.evaluate(markers, MarkerVariantsUniversal, &[])
+                        !marker.evaluate(markers, &MarkerVariantsUniversal, &[])
                     }) {
                         continue;
                     }
@@ -236,7 +236,7 @@ impl<'env> TreeDisplay<'env> {
                             continue;
                         }
                         if markers.is_some_and(|markers| {
-                            !marker.evaluate(markers, MarkerVariantsUniversal, &[])
+                            !marker.evaluate(markers, &MarkerVariantsUniversal, &[])
                         }) {
                             continue;
                         }
