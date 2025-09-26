@@ -774,7 +774,7 @@ pub enum CacheCommand {
     ///
     /// Displays the total size of the cache directory. This includes all cached wheels, source
     /// distributions, and other cached data. The default output format is raw bytes, suitable
-    /// for parsing in scripts. Use `--format human` for human-readable output.
+    /// for parsing in scripts. Use `--human` for human-readable output.
     Size(SizeArgs),
 }
 
