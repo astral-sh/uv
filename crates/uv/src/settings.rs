@@ -89,6 +89,9 @@ impl GlobalSettings {
             color: if let Some(color_choice) = args.color {
                 // If `--color` is passed explicitly, use its value.
                 color_choice
+            } else if args.no_color {
+                // If `--no-color` is passed explicitly, disable color output.
+                ColorChoice::Never
             } else if std::env::var_os(EnvVars::NO_COLOR)
                 .filter(|v| !v.is_empty())
                 .is_some()
