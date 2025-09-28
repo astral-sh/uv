@@ -499,6 +499,13 @@ The URL to treat as an S3-compatible storage endpoint. Requests to this endpoint
 will be signed using AWS Signature Version 4 based on the `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
 
+### `UV_SKIP_WHEEL_FILENAME_CHECK`
+
+Avoid verifying that wheel filenames match their contents when installing wheels. This
+is not recommended, as wheels with inconsistent filenames should be considered invalid and
+corrected by the relevant package maintainers; however, this option can be used to work
+around invalid artifacts in rare cases.
+
 ### `UV_STACK_SIZE`
 
 Use to set the stack size used by uv.
