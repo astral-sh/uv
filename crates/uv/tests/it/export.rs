@@ -4836,7 +4836,6 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
