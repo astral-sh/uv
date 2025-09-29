@@ -6,6 +6,7 @@ use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::tool::{Tool, Tools};
 use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
 use itertools::Itertools;
+use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 
 use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -15,6 +16,28 @@ use uv_normalize::PackageName;
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
+
+/// Character set for percent-encoding PURL components, copied from packageurl.rs.
+const PURL_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`')
+    .add(b'?')
+    .add(b'{')
+    .add(b'}')
+    .add(b';')
+    .add(b'=')
+    .add(b'+')
+    .add(b'@')
+    .add(b'\\')
+    .add(b'[')
+    .add(b']')
+    .add(b'^')
+    .add(b'|');
 
 pub fn from_lock<'lock>(
     target: &impl Installable<'lock>,
@@ -121,25 +144,42 @@ fn get_package_name(package: &Package) -> &str {
 
 /// Generate a Package URL (purl) from a package. Returns `None` for local sources.
 fn create_purl(package: &Package) -> Option<String> {
-    let name = get_package_name(package);
-    let version = get_version_string(package);
+    let name = percent_encode(get_package_name(package).as_bytes(), PURL_ENCODE_SET);
+
+    let version = get_version_string(package).map_or_else(String::new, |v| {
+        format!("@{}", percent_encode(v.as_bytes(), PURL_ENCODE_SET))
+    });
 
     let (purl_type, qualifiers) = match &package.id.source {
-        Source::Registry(_) => ("pypi", String::new()),
-        Source::Git(url, _) | Source::Direct(url, _) => {
-            ("generic", format!("?download_url={}", url.as_ref()))
-        }
+        Source::Registry(_) => ("pypi", vec![]),
+        Source::Git(url, _) => ("generic", vec![("vcs_url", url.as_ref())]),
+        Source::Direct(url, _) => ("generic", vec![("download_url", url.as_ref())]),
         // No purl for local sources
         Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => {
             return None;
         }
     };
 
-    let version_specifier = version.map_or_else(String::new, |v| format!("@{v}"));
+    let qualifiers = if qualifiers.is_empty() {
+        String::new()
+    } else {
+        format_qualifiers(&qualifiers)
+    };
 
-    Some(format!(
-        "pkg:{purl_type}/{name}{version_specifier}{qualifiers}"
-    ))
+    Some(format!("pkg:{purl_type}/{name}{version}{qualifiers}"))
+}
+
+fn format_qualifiers(qualifiers: &[(&str, &str)]) -> String {
+    let joined_qualifiers = qualifiers
+        .iter()
+        .map(|(key, value)| {
+            format!(
+                "{key}={}",
+                percent_encode(value.as_bytes(), PURL_ENCODE_SET)
+            )
+        })
+        .join("&");
+    format!("?{joined_qualifiers}")
 }
 
 /// Create a `CycloneDX` component from a package node with the given classification and ID.
