@@ -882,7 +882,6 @@ fn seed_older_python_version() {
     context.venv.assert(predicates::path::is_dir());
 }
 
-
 #[test]
 fn create_venv_with_invalid_http_timeout() {
     let context = TestContext::new_with_versions(&["3.12"]).with_http_timeout("");
