@@ -61,6 +61,31 @@ pub(crate) async fn uninstall(
     Ok(ExitStatus::Success)
 }
 
+fn requests_from_targets<'a>(
+    targets: impl Iterator<Item = &'a str>,
+    all: bool,
+    outdated: bool,
+) -> Result<Vec<PythonRequest>> {
+    if all {
+        return Ok(vec![PythonRequest::Default]);
+    }
+
+    let targets = targets.collect::<BTreeSet<_>>();
+    let requests = targets
+        .iter()
+        .map(|target| PythonRequest::parse(target))
+        .collect::<Vec<_>>();
+
+    if requests.is_empty() {
+        if !outdated {
+            anyhow::bail!("No targets specified for uninstall");
+        }
+        return Ok(vec![PythonRequest::Default]);
+    }
+
+    Ok(requests)
+}
+
 /// Perform the uninstallation of managed Python installations.
 async fn do_uninstall(
     installations: &ManagedPythonInstallations,
@@ -72,18 +97,7 @@ async fn do_uninstall(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    let requests = if all {
-        vec![PythonRequest::Default]
-    } else if outdated {
-        // For --outdated, we'll identify outdated installations after loading all of them
-        vec![PythonRequest::Default]
-    } else {
-        let targets = targets.into_iter().collect::<BTreeSet<_>>();
-        targets
-            .iter()
-            .map(|target| PythonRequest::parse(target.as_str()))
-            .collect::<Vec<_>>()
-    };
+    let requests = requests_from_targets(targets.iter().map(String::as_str), all, outdated)?;
 
     let download_requests = requests
         .iter()
@@ -95,7 +109,17 @@ async fn do_uninstall(
         // Always include pre-releases in uninstalls
         .map(|result| result.map(|request| request.with_prereleases(true)))
         .collect::<Result<Vec<_>>>()?;
+
     let installed_installations: Vec<_> = installations.find_all()?.collect();
+    let latest_minor_installations = outdated.then(|| {
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            installed_installations.iter(),
+        )
+        .into_values()
+        .map(|installation| installation.key().clone())
+        .collect::<BTreeSet<_>>()
+    });
+
     let mut matching_installations = BTreeSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
         if matches!(requests.as_slice(), [PythonRequest::Default]) {
@@ -111,6 +135,16 @@ async fn do_uninstall(
         for installation in installed_installations
             .iter()
             .filter(|installation| download_request.satisfied_by_key(installation.key()))
+            .filter(|installation| {
+                // When doing an outdated check, don't consider the latest of each minor version
+                // as matching.
+                latest_minor_installations
+                    .as_ref()
+                    .map(|latest_minor_installations| {
+                        latest_minor_installations.contains(installation.key())
+                    })
+                    .unwrap_or(true)
+            })
         {
             found = true;
             matching_installations.insert(installation.clone());
@@ -137,73 +171,20 @@ async fn do_uninstall(
         }
     }
 
-    // For --outdated, identify installations to remove by finding the latest in each family
-    if outdated {
-        matching_installations.clear();
-
-        // Find the highest installation for each minor version family
-        let highest_by_minor_version =
-            PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-                installed_installations.iter(),
-            );
-
-        // Keep track of installations to keep (highest in each family)
-        let installations_to_keep: BTreeSet<_> =
-            highest_by_minor_version.values().cloned().collect();
-
-        // All other installations are outdated and should be removed
-        for installation in &installed_installations {
-            if !installations_to_keep.contains(installation) {
-                matching_installations.insert(installation.clone());
-            }
-        }
-
-        if matching_installations.is_empty() {
-            writeln!(printer.stderr(), "No outdated Python installations found")?;
-        } else {
-            // Safety warning about virtual environments
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "Warning: Removing outdated Python versions may break existing virtual environments that use those versions.".yellow()
-            )?;
-            writeln!(printer.stderr())?;
-
-            writeln!(
-                printer.stderr(),
-                "Found {} outdated Python installation{} to remove:",
-                matching_installations.len(),
-                if matching_installations.len() == 1 {
-                    ""
-                } else {
-                    "s"
-                }
-            )?;
-
-            // Show detailed list of versions that will be removed
-            let mut installations_by_key: Vec<_> = matching_installations.iter().collect();
-            installations_by_key.sort_by(|a, b| a.key().cmp(b.key()));
-
-            for installation in installations_by_key {
-                writeln!(
-                    printer.stderr(),
-                    " - {} ({})",
-                    installation.key().bold(),
-                    installation.key().executable_name_minor().dimmed()
-                )?;
-            }
-            writeln!(printer.stderr())?;
-        }
-    }
-
     if matching_installations.is_empty() {
+        let matching = if targets.is_empty() {
+            ""
+        } else {
+            " matching the requests"
+        };
         if outdated {
+            writeln!(
+                printer.stderr(),
+                "No outdated Python installations found{matching}"
+            )?;
             return Ok(ExitStatus::Success);
         }
-        writeln!(
-            printer.stderr(),
-            "No Python installations found matching the requests"
-        )?;
+        writeln!(printer.stderr(), "No Python installations found{matching}")?;
         return Ok(ExitStatus::Failure);
     }
 
@@ -363,19 +344,12 @@ async fn do_uninstall(
             };
             writeln!(printer.stderr(), "{}", message.dimmed())?;
         } else {
-            let message = if outdated {
-                format!(
-                    "Uninstalled {} outdated Python installations {}",
-                    format!("{}", uninstalled.len()).bold(),
-                    format!("in {}", elapsed(start.elapsed())).dimmed()
-                )
-            } else {
-                format!(
-                    "Uninstalled {} versions {}",
-                    format!("{}", uninstalled.len()).bold(),
-                    format!("in {}", elapsed(start.elapsed())).dimmed()
-                )
-            };
+            let message = format!(
+                "Uninstalled {} {}versions {}",
+                format!("{}", uninstalled.len()).bold(),
+                if outdated { "outdated " } else { "" },
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            );
             writeln!(printer.stderr(), "{}", message.dimmed())?;
         }
 

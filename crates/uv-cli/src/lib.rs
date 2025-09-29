@@ -5554,7 +5554,6 @@ pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
-    #[arg(required = true)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
@@ -5562,7 +5561,7 @@ pub struct PythonUninstallArgs {
     pub all: bool,
 
     /// Uninstall outdated Python versions, keeping the latest in each family.
-    #[arg(long, conflicts_with_all(["all", "targets"]))]
+    #[arg(long, conflicts_with_all(["all"]))]
     pub outdated: bool,
 }
 
