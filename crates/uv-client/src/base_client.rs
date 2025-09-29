@@ -79,8 +79,7 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
     indexes: Indexes,
-    timeout: Option<Duration>,
-    default_timeout: Duration,
+    timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
@@ -138,8 +137,7 @@ impl Default for BaseClientBuilder<'_> {
             platform: None,
             auth_integration: AuthIntegration::default(),
             indexes: Indexes::new(),
-            timeout: None,
-            default_timeout: Duration::from_secs(30),
+            timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
             redirect_policy: RedirectPolicy::default(),
@@ -155,7 +153,7 @@ impl BaseClientBuilder<'_> {
         native_tls: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
-        timeout: Option<Duration>,
+        timeout: Duration,
     ) -> Self {
         Self {
             preview,
@@ -250,14 +248,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
+    pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    #[must_use]
-    pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
-        self.default_timeout = default_timeout;
         self
     }
 
@@ -309,7 +301,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> BaseClient {
-        let timeout = self.timeout.unwrap_or(self.default_timeout);
+        let timeout = self.timeout;
         debug!("Using request timeout of {}s", timeout.as_secs());
 
         // Use the custom client if provided, otherwise create a new one

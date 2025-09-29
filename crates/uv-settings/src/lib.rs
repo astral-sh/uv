@@ -573,7 +573,7 @@ pub struct EnvironmentOptions {
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
-    pub http_timeout: Option<Duration>,
+    pub http_timeout: Duration,
 }
 
 impl EnvironmentOptions {
@@ -603,7 +603,7 @@ impl EnvironmentOptions {
                     EnvVars::UV_REQUEST_TIMEOUT,
                 )?)
                 .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
-                .map(Duration::from_secs),
+                .map(Duration::from_secs).unwrap_or(Duration::from_secs(30)),
         })
     }
 }

@@ -173,7 +173,7 @@ pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
-    pub(crate) timeout: Option<Duration>,
+    pub(crate) timeout: Duration,
 }
 
 impl NetworkSettings {
