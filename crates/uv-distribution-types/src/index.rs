@@ -48,7 +48,7 @@ impl IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -154,6 +154,92 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub cache_control: Option<IndexCacheControl>,
+}
+
+impl PartialEq for Index {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        *url == other.url
+            && *name == other.name
+            && *explicit == other.explicit
+            && *default == other.default
+            && *format == other.format
+            && *publish_url == other.publish_url
+            && *authenticate == other.authenticate
+            && *ignore_error_codes == other.ignore_error_codes
+            && *cache_control == other.cache_control
+    }
+}
+
+impl Eq for Index {}
+
+impl PartialOrd for Index {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Index {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.cmp(&other.url)
+            .then_with(|| name.cmp(&other.name))
+            .then_with(|| explicit.cmp(&other.explicit))
+            .then_with(|| default.cmp(&other.default))
+            .then_with(|| format.cmp(&other.format))
+            .then_with(|| publish_url.cmp(&other.publish_url))
+            .then_with(|| authenticate.cmp(&other.authenticate))
+            .then_with(|| ignore_error_codes.cmp(&other.ignore_error_codes))
+            .then_with(|| cache_control.cmp(&other.cache_control))
+    }
+}
+
+impl std::hash::Hash for Index {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.hash(state);
+        name.hash(state);
+        explicit.hash(state);
+        default.hash(state);
+        format.hash(state);
+        publish_url.hash(state);
+        authenticate.hash(state);
+        ignore_error_codes.hash(state);
+        cache_control.hash(state);
+    }
 }
 
 #[derive(
