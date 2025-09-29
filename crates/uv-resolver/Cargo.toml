@@ -57,6 +57,7 @@ indexmap = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 owo-colors = { workspace = true }
+percent-encoding = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
