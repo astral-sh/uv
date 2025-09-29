@@ -603,7 +603,8 @@ impl EnvironmentOptions {
                     EnvVars::UV_REQUEST_TIMEOUT,
                 )?)
                 .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
-                .map(Duration::from_secs).unwrap_or(Duration::from_secs(30)),
+                .map(Duration::from_secs)
+                .unwrap_or(Duration::from_secs(30)),
         })
     }
 }
