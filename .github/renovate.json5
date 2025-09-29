@@ -87,6 +87,12 @@
       enabled: false,
     },
     {
+      groupName: "pubgrub",
+      matchManagers: ["cargo"],
+      matchPackageNames: ["pubgrub", "version-ranges"],
+      description: "version-ranges and pubgrub are in the same Git repository",
+    },
+    {
       commitMessageTopic: "MSRV",
       matchManagers: ["custom.regex"],
       matchDepNames: ["msrv"],
