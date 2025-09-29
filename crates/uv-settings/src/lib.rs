@@ -697,6 +697,9 @@ fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>,
             };
         }
     };
+    if value.is_empty() {
+        return Ok(None);
+    }
     match value.parse::<u64>() {
         Ok(v) => Ok(Some(v)),
         Err(_) => Err(Error::InvalidEnvironmentVariable {
