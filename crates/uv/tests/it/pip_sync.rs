@@ -1233,7 +1233,7 @@ fn mismatched_version() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1242,8 +1242,23 @@ fn mismatched_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
-      Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-    "###
+      Caused by: Wheel version does not match filename (2.0.1 != 3.7.2), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK, "1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl)
+    "
     );
 
     Ok(())

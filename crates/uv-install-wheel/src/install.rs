@@ -11,6 +11,7 @@ use tracing::{instrument, trace};
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
+use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 use crate::linker::{LinkMode, Locks};
 use crate::wheel::{
@@ -50,11 +51,21 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // Validate the wheel name and version.
     {
         if name != filename.name {
-            return Err(Error::MismatchedName(name, filename.name.clone()));
+            if !matches!(
+                parse_boolish_environment_variable(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK),
+                Ok(Some(true))
+            ) {
+                return Err(Error::MismatchedName(name, filename.name.clone()));
+            }
         }
 
         if version != filename.version && version != filename.version.clone().without_local() {
-            return Err(Error::MismatchedVersion(version, filename.version.clone()));
+            if !matches!(
+                parse_boolish_environment_variable(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK),
+                Ok(Some(true))
+            ) {
+                return Err(Error::MismatchedVersion(version, filename.version.clone()));
+            }
         }
     }
 

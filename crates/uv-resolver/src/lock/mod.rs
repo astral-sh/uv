@@ -46,6 +46,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
+use uv_static::{EnvVars, parse_boolish_environment_variable};
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -3245,11 +3246,16 @@ impl PackageWire {
                 if *version != wheel.filename.version
                     && *version != wheel.filename.version.clone().without_local()
                 {
-                    return Err(LockError::from(LockErrorKind::InconsistentVersions {
-                        name: self.id.name,
-                        version: version.clone(),
-                        wheel: wheel.clone(),
-                    }));
+                    if !matches!(
+                        parse_boolish_environment_variable(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK),
+                        Ok(Some(true))
+                    ) {
+                        return Err(LockError::from(LockErrorKind::InconsistentVersions {
+                            name: self.id.name,
+                            version: version.clone(),
+                            wheel: wheel.clone(),
+                        }));
+                    }
                 }
             }
             // We can't check the source dist version since it does not need to contain the version
@@ -5866,7 +5872,7 @@ enum LockErrorKind {
     },
     /// A package has inconsistent versions in a single entry
     // Using name instead of id since the version in the id is part of the conflict.
-    #[error("The entry for package `{name}` v{version} has wheel `{wheel_filename}` with inconsistent version: v{wheel_version} ", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version)]
+    #[error("The entry for package `{name}` ({version}) has wheel `{wheel_filename}` with inconsistent version ({wheel_version}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version, env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     InconsistentVersions {
         /// The name of the package with the inconsistent entry.
         name: PackageName,
