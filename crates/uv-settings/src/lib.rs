@@ -687,11 +687,7 @@ fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>,
         Ok(v) => v,
         Err(e) => {
             return match e {
-                std::env::VarError::NotPresent => Err(Error::InvalidEnvironmentVariable {
-                    name: name.to_string(),
-                    value: String::new(),
-                    err: "expected an integer".to_string(),
-                }),
+                std::env::VarError::NotPresent => Ok(None),
                 std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
                     name: name.to_string(),
                     value: err.to_string_lossy().to_string(),
