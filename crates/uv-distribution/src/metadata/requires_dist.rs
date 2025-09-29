@@ -61,6 +61,7 @@ impl RequiresDist {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
+            ..DiscoveryOptions::default()
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?

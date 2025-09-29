@@ -570,6 +570,8 @@ pub enum Error {
 pub struct EnvironmentOptions {
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub log_context: Option<bool>,
 }
 
 impl EnvironmentOptions {
@@ -580,6 +582,18 @@ impl EnvironmentOptions {
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: parse_string_environment_variable(
+                    EnvVars::UV_PYTHON_INSTALL_MIRROR,
+                )?,
+                pypy_install_mirror: parse_string_environment_variable(
+                    EnvVars::UV_PYPY_INSTALL_MIRROR,
+                )?,
+                python_downloads_json_url: parse_string_environment_variable(
+                    EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL,
+                )?,
+            },
+            log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
         })
     }
 }
@@ -634,4 +648,25 @@ fn parse_boolish_environment_variable(name: &'static str) -> Result<Option<bool>
     };
 
     Ok(Some(value))
+}
+
+/// Parse a string environment variable.
+fn parse_string_environment_variable(name: &'static str) -> Result<Option<String>, Error> {
+    match std::env::var(name) {
+        Ok(v) => {
+            if v.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(v))
+            }
+        }
+        Err(e) => match e {
+            std::env::VarError::NotPresent => Ok(None),
+            std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value: err.to_string_lossy().to_string(),
+                err: "expected a valid UTF-8 string".to_string(),
+            }),
+        },
+    }
 }

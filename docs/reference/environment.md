@@ -498,6 +498,12 @@ uv will require that all dependencies have a hash specified in the requirements 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 
+### `UV_S3_ENDPOINT_URL`
+
+The URL to treat as an S3-compatible storage endpoint. Requests to this endpoint
+will be signed using AWS Signature Version 4 based on the `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
+
 ### `UV_STACK_SIZE`
 
 Use to set the stack size used by uv.
@@ -573,6 +579,38 @@ Defaults to `24`.
 
 Path to user-level configuration directory on Windows systems.
 
+### `AWS_ACCESS_KEY_ID`
+
+The AWS access key ID to use when signing S3 requests.
+
+### `AWS_CONFIG_FILE`
+
+The AWS config file to use when signing S3 requests.
+
+### `AWS_DEFAULT_REGION`
+
+The default AWS region to use when signing S3 requests, if `AWS_REGION` is not set.
+
+### `AWS_PROFILE`
+
+The AWS profile to use when signing S3 requests.
+
+### `AWS_REGION`
+
+The AWS region to use when signing S3 requests.
+
+### `AWS_SECRET_ACCESS_KEY`
+
+The AWS secret access key to use when signing S3 requests.
+
+### `AWS_SESSION_TOKEN`
+
+The AWS session token to use when signing S3 requests.
+
+### `AWS_SHARED_CREDENTIALS_FILE`
+
+The AWS shared credentials file to use when signing S3 requests.
+
 ### `BASH_VERSION`
 
 Used to detect Bash shell usage.
@@ -589,11 +627,15 @@ This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
 
 ### `CONDA_DEFAULT_ENV`
 
-Used to determine if an active Conda environment is the base environment or not.
+Used to determine the name of the active Conda environment.
 
 ### `CONDA_PREFIX`
 
-Used to detect an activated Conda environment.
+Used to detect the path of an active Conda environment.
+
+### `CONDA_ROOT`
+
+Used to determine the root install path of Conda.
 
 ### `FISH_VERSION`
 

@@ -77,6 +77,7 @@ impl SourcedDependencyGroups {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
+            ..DiscoveryOptions::default()
         };
 
         // The subsequent API takes an absolute path to the dir the pyproject is in
@@ -84,7 +85,7 @@ impl SourcedDependencyGroups {
         let absolute_pyproject_path =
             std::path::absolute(pyproject_path).map_err(WorkspaceError::Normalize)?;
         let project_dir = absolute_pyproject_path.parent().unwrap_or(&empty);
-        let project = VirtualProject::discover_defaulted(project_dir, &discovery, cache).await?;
+        let project = VirtualProject::discover(project_dir, &discovery, cache).await?;
 
         // Collect the dependency groups.
         let dependency_groups =

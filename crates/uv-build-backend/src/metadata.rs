@@ -64,6 +64,12 @@ pub enum ValidationError {
 
 /// Check if the build backend is matching the currently running uv version.
 pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "kebab-case")]
+    struct PyProjectToml {
+        build_system: BuildSystem,
+    }
+
     let pyproject_toml: PyProjectToml =
         match fs_err::read_to_string(source_tree.join("pyproject.toml"))
             .map_err(|err| err.to_string())
@@ -73,12 +79,14 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
                 debug!(
-                    "Not using uv build backend direct build of {name}, no pyproject.toml: {err}"
+                    "Not using uv build backend direct build for source tree `{name}`, \
+                    failed to parse pyproject.toml: {err}"
                 );
                 return false;
             }
         };
     match pyproject_toml
+        .build_system
         .check_build_system(uv_version::version())
         .as_slice()
     {
@@ -87,10 +95,10 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
         // Any warning -> no match
         [first, others @ ..] => {
             debug!(
-                "Not using uv build backend direct build of {name}, pyproject.toml does not match: {first}"
+                "Not using uv build backend direct build of `{name}`, pyproject.toml does not match: {first}"
             );
             for other in others {
-                trace!("Further uv build backend direct build of {name} mismatch: {other}");
+                trace!("Further uv build backend direct build of `{name}` mismatch: {other}");
             }
             false
         }
@@ -161,83 +169,9 @@ impl PyProjectToml {
         self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
     }
 
-    /// Returns user-facing warnings if the `[build-system]` table looks suspicious.
-    ///
-    /// Example of a valid table:
-    ///
-    /// ```toml
-    /// [build-system]
-    /// requires = ["uv_build>=0.4.15,<0.5.0"]
-    /// build-backend = "uv_build"
-    /// ```
+    /// See [`BuildSystem::check_build_system`].
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
-        let mut warnings = Vec::new();
-        if self.build_system.build_backend.as_deref() != Some("uv_build") {
-            warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
-                self.build_system.build_backend.clone().unwrap_or_default()
-            ));
-        }
-
-        let uv_version =
-            Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
-        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
-        let next_breaking = Version::new([0, next_minor]);
-
-        let expected = || {
-            format!(
-                "Expected a single uv requirement in `build-system.requires`, found `{}`",
-                toml::to_string(&self.build_system.requires).unwrap_or_default()
-            )
-        };
-
-        let [uv_requirement] = &self.build_system.requires.as_slice() else {
-            warnings.push(expected());
-            return warnings;
-        };
-        if uv_requirement.name.as_str() != "uv-build" {
-            warnings.push(expected());
-            return warnings;
-        }
-        let bounded = match &uv_requirement.version_or_url {
-            None => false,
-            Some(VersionOrUrl::Url(_)) => {
-                // We can't validate the url
-                true
-            }
-            Some(VersionOrUrl::VersionSpecifier(specifier)) => {
-                // We don't check how wide the range is (that's up to the user), we just
-                // check that the current version is compliant, to avoid accidentally using a
-                // too new or too old uv, and we check that an upper bound exists. The latter
-                // is very important to allow making breaking changes in uv without breaking
-                // the existing immutable source distributions on pypi.
-                if !specifier.contains(&uv_version) {
-                    // This is allowed to happen when testing prereleases, but we should still warn.
-                    warnings.push(format!(
-                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
-                        current uv version {uv_version}"#,
-                    ));
-                }
-                Ranges::from(specifier.clone())
-                    .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
-            }
-        };
-
-        if !bounded {
-            warnings.push(format!(
-                "`build_system.requires = [\"{}\"]` is missing an \
-                upper bound on the `uv_build` version such as `<{next_breaking}`. \
-                Without bounding the `uv_build` version, the source distribution will break \
-                when a future, breaking version of `uv_build` is released.",
-                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
-                // module name with underscore
-                uv_requirement.verbatim()
-            ));
-        }
-
-        warnings
+        self.build_system.check_build_system(uv_version)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -782,18 +716,6 @@ pub(crate) enum Contact {
     Email { email: String },
 }
 
-/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
-    /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
-    /// A string naming a Python object that will be used to perform the build.
-    build_backend: Option<String>,
-    /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
-    backend_path: Option<Vec<String>>,
-}
-
 /// The `tool` section as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -808,6 +730,100 @@ pub(crate) struct Tool {
 pub(crate) struct ToolUv {
     /// Configuration for building source distributions and wheels with the uv build backend
     build_backend: Option<BuildBackendSettings>,
+}
+
+/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
+    /// A string naming a Python object that will be used to perform the build.
+    build_backend: Option<String>,
+    /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
+    backend_path: Option<Vec<String>>,
+}
+
+impl BuildSystem {
+    /// Check if the `[build-system]` table matches the uv build backend expectations and return
+    /// a list of warnings if it looks suspicious.
+    ///
+    /// Example of a valid table:
+    ///
+    /// ```toml
+    /// [build-system]
+    /// requires = ["uv_build>=0.4.15,<0.5.0"]
+    /// build-backend = "uv_build"
+    /// ```
+    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if self.build_backend.as_deref() != Some("uv_build") {
+            warnings.push(format!(
+                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
+                self.build_backend.clone().unwrap_or_default()
+            ));
+        }
+
+        let uv_version =
+            Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
+        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
+        let next_breaking = Version::new([0, next_minor]);
+
+        let expected = || {
+            format!(
+                "Expected a single uv requirement in `build-system.requires`, found `{}`",
+                toml::to_string(&self.requires).unwrap_or_default()
+            )
+        };
+
+        let [uv_requirement] = &self.requires.as_slice() else {
+            warnings.push(expected());
+            return warnings;
+        };
+        if uv_requirement.name.as_str() != "uv-build" {
+            warnings.push(expected());
+            return warnings;
+        }
+        let bounded = match &uv_requirement.version_or_url {
+            None => false,
+            Some(VersionOrUrl::Url(_)) => {
+                // We can't validate the url
+                true
+            }
+            Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+                // We don't check how wide the range is (that's up to the user), we just
+                // check that the current version is compliant, to avoid accidentally using a
+                // too new or too old uv, and we check that an upper bound exists. The latter
+                // is very important to allow making breaking changes in uv without breaking
+                // the existing immutable source distributions on pypi.
+                if !specifier.contains(&uv_version) {
+                    // This is allowed to happen when testing prereleases, but we should still warn.
+                    warnings.push(format!(
+                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
+                        current uv version {uv_version}"#,
+                    ));
+                }
+                Ranges::from(specifier.clone())
+                    .bounding_range()
+                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
+                    .unwrap_or(false)
+            }
+        };
+
+        if !bounded {
+            warnings.push(format!(
+                "`build_system.requires = [\"{}\"]` is missing an \
+                upper bound on the `uv_build` version such as `<{next_breaking}`. \
+                Without bounding the `uv_build` version, the source distribution will break \
+                when a future, breaking version of `uv_build` is released.",
+                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
+                // module name with underscore
+                uv_requirement.verbatim()
+            ));
+        }
+
+        warnings
+    }
 }
 
 #[cfg(test)]

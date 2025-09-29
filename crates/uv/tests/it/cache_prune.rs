@@ -29,16 +29,18 @@ fn prune_no_op() -> Result<()> {
         .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
         .collect();
 
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     Ok(())
 }
@@ -68,17 +70,19 @@ fn prune_stale_directory() -> Result<()> {
         .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
         .collect();
 
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     Ok(())
 }
@@ -128,18 +132,20 @@ fn prune_cached_env() {
         ])
         .collect();
 
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 }
 
 /// `cache prune` should remove any stale symlink from the cache.
@@ -173,17 +179,19 @@ fn prune_stale_symlink() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     Ok(())
 }
@@ -340,18 +348,20 @@ fn prune_stale_revision() -> Result<()> {
         .collect();
 
     // Pruning should remove the unused revision.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    "###);
+    DEBUG Released lock at `[CACHE_DIR]/.lock`
+    ");
 
     // Uninstall and reinstall the package. We should use the cached version.
     uv_snapshot!(&filters, context

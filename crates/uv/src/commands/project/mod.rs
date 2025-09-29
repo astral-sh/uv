@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -1368,7 +1368,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1408,7 +1410,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1560,7 +1564,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1600,7 +1606,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -2124,6 +2132,7 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
@@ -2243,6 +2252,7 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
+            InstallationStrategy::Permissive,
             &marker_env,
             &tags,
             config_setting,
@@ -2388,6 +2398,7 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,

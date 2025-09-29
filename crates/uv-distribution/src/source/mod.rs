@@ -1469,7 +1469,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 }
                 Ok(None) => {}
                 Err(err) => {
-                    debug!("Failed to deserialize cached revision for: {source} ({err})",);
+                    debug!("Failed to deserialize cached revision for: {source} ({err})");
                 }
             }
         }

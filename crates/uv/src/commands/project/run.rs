@@ -25,7 +25,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -104,7 +104,7 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
     env_file: EnvFile,
     preview: Preview,
@@ -244,7 +244,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
-                cache,
+                &cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -281,7 +281,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryResolveLogger)
                 },
                 concurrency,
-                cache,
+                &cache,
                 &workspace_cache,
                 printer,
                 preview,
@@ -328,7 +328,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
@@ -382,7 +382,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -437,7 +437,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -468,7 +468,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     printer,
                     preview,
                 )
@@ -481,7 +481,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -654,7 +656,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -681,7 +683,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -701,7 +705,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active,
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -754,7 +758,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryResolveLogger)
                     },
                     concurrency,
-                    cache,
+                    &cache,
                     &workspace_cache,
                     printer,
                     preview,
@@ -842,7 +846,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -892,7 +896,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -914,7 +918,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -996,7 +1002,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 printer,
                 preview,
             )
@@ -1040,7 +1046,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 base_interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -1352,6 +1360,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        InstallationStrategy::Permissive,
         &markers,
         tags,
         config_setting,

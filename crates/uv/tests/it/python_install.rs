@@ -22,6 +22,7 @@ fn python_install() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
         .with_python_download_cache();
 
     // Install the latest version
@@ -2375,8 +2376,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0rc2 in [TIME]
-     + cpython-3.14.0rc2-[PLATFORM] (python3.14)
+    Installed Python 3.14.0rc3 in [TIME]
+     + cpython-3.14.0rc3-[PLATFORM] (python3.14)
     ");
 
     // Install a specific pre-release
@@ -2411,7 +2412,7 @@ fn python_find_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2421,7 +2422,7 @@ fn python_find_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2430,7 +2431,7 @@ fn python_find_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

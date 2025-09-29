@@ -206,9 +206,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
                     // Verify that the existing file contents match the expected contents.
                     if existing_contents != expected_contents {
-                        return Err(Error::DuplicateLocalFileHeader {
-                            path: relpath.clone(),
-                        });
+                        if !skip_validation {
+                            return Err(Error::DuplicateLocalFileHeader {
+                                path: relpath.clone(),
+                            });
+                        }
                     }
 
                     (bytes_read as u64, entry_reader)
@@ -455,9 +457,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                         }
                         std::collections::hash_map::Entry::Occupied(entry) => {
                             if mode != *entry.get() {
-                                return Err(Error::DuplicateExecutableFileHeader {
-                                    path: relpath.clone(),
-                                });
+                                if !skip_validation {
+                                    return Err(Error::DuplicateExecutableFileHeader {
+                                        path: relpath.clone(),
+                                    });
+                                }
                             }
                         }
                     }

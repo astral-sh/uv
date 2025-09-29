@@ -22,7 +22,7 @@ use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeatures};
@@ -782,6 +782,7 @@ pub(super) async fn do_sync(
     operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Strict,
         modifications,
         reinstall,
         build_options,
@@ -899,11 +900,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
             if let Some(root_url) = index.root_url() {
                 uv_auth::store_credentials(&root_url, credentials.clone());
             }
+            uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
 

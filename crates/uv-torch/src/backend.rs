@@ -313,17 +313,25 @@ impl TorchStrategy {
                         | "torchserve"
                         | "torchtext"
                         | "torchvision"
+                        | "triton"
                         | "pytorch-triton"
+                        | "pytorch-triton-rocm"
+                        | "pytorch-triton-xpu"
                 )
             }
             TorchSource::Pyx => {
                 matches!(
                     package_name.as_str(),
-                    "flash-attn"
+                    "deepspeed"
+                        | "flash-attn"
                         | "flash-attn-3"
                         | "megablocks"
                         | "natten"
-                        | "deepspeed"
+                        | "pyg-lib"
+                        | "torch-cluster"
+                        | "torch-scatter"
+                        | "torch-sparse"
+                        | "torch-spline-conv"
                         | "vllm"
                         | "torch"
                         | "torch-model-archiver"
@@ -336,7 +344,10 @@ impl TorchStrategy {
                         | "torchserve"
                         | "torchtext"
                         | "torchvision"
+                        | "triton"
                         | "pytorch-triton"
+                        | "pytorch-triton-rocm"
+                        | "pytorch-triton-xpu"
                 )
             }
         }

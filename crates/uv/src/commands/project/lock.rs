@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
@@ -84,6 +84,7 @@ pub(crate) async fn lock(
     locked: bool,
     frozen: bool,
     dry_run: DryRun,
+    refresh: Refresh,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -201,20 +202,25 @@ pub(crate) async fn lock(
         printer,
         preview,
     )
+    .with_refresh(&refresh)
     .execute(target)
     .await
     {
         Ok(lock) => {
             if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
-                let mut changed = false;
                 if let LockResult::Changed(previous, lock) = &lock {
+                    let mut changed = false;
                     for event in LockEvent::detect_changes(previous.as_ref(), lock, dry_run) {
                         changed = true;
                         writeln!(printer.stderr(), "{event}")?;
                     }
-                }
-                if !changed {
+
+                    // If we didn't report any version changes, but the lockfile changed, report back.
+                    if !changed {
+                        writeln!(printer.stderr(), "{}", "Lockfile changes detected".bold())?;
+                    }
+                } else {
                     writeln!(
                         printer.stderr(),
                         "{}",
@@ -260,6 +266,7 @@ pub(super) enum LockMode<'env> {
 pub(super) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
+    refresh: Option<&'env Refresh>,
     settings: &'env ResolverSettings,
     client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
@@ -288,6 +295,7 @@ impl<'env> LockOperation<'env> {
         Self {
             mode,
             constraints: vec![],
+            refresh: None,
             settings,
             client_builder,
             state,
@@ -307,6 +315,13 @@ impl<'env> LockOperation<'env> {
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
         self.constraints = constraints;
+        self
+    }
+
+    /// Set the refresh strategy for the [`LockOperation`].
+    #[must_use]
+    pub(super) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
+        self.refresh = Some(refresh);
         self
     }
 
@@ -334,6 +349,7 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     Some(existing),
                     self.constraints,
+                    self.refresh,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -376,6 +392,7 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     existing,
                     self.constraints,
+                    self.refresh,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -407,6 +424,7 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     external: Vec<NameRequirementSpecification>,
+    refresh: Option<&Refresh>,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
@@ -621,11 +639,10 @@ async fn do_lock(
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
             if let Some(root_url) = index.root_url() {
                 uv_auth::store_credentials(&root_url, credentials.clone());
             }
+            uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
 
@@ -744,6 +761,7 @@ async fn do_lock(
             &requires_python,
             index_locations,
             upgrade,
+            refresh,
             &options,
             &hasher,
             state.index(),
@@ -918,23 +936,27 @@ async fn do_lock(
                         .unwrap_or_default(),
                 );
 
-            Ok(LockResult::Changed(previous, lock))
+            if previous.as_ref().is_some_and(|previous| *previous == lock) {
+                Ok(LockResult::Unchanged(lock))
+            } else {
+                Ok(LockResult::Changed(previous, lock))
+            }
         }
     }
 }
 
 #[derive(Debug)]
 enum ValidatedLock {
-    /// An existing lockfile was provided, and it satisfies the workspace requirements.
-    Satisfies(Lock),
     /// An existing lockfile was provided, but its contents should be ignored.
     Unusable(Lock),
-    /// An existing lockfile was provided, and the locked versions and forks should be preferred if
-    /// possible, even though the lockfile does not satisfy the workspace requirements.
-    Preferable(Lock),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
     /// though the forks should be ignored.
     Versions(Lock),
+    /// An existing lockfile was provided, and the locked versions and forks should be preferred if
+    /// possible, even though the lockfile does not satisfy the workspace requirements.
+    Preferable(Lock),
+    /// An existing lockfile was provided, and it satisfies the workspace requirements.
+    Satisfies(Lock),
 }
 
 impl ValidatedLock {
@@ -958,13 +980,17 @@ impl ValidatedLock {
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
         upgrade: &Upgrade,
+        refresh: Option<&Refresh>,
         options: &Options,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
-        // Start with the most severe condition: a fundamental option changed between resolutions.
+        // Perform checks in a deliberate order, such that the most extreme conditions are tested
+        // first (i.e., every check that returns `Self::Unusable`, followed by every check that
+        // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and
+        // finally `Self::Satisfies`).
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
                 printer.stderr(),
@@ -973,15 +999,6 @@ impl ValidatedLock {
                 options.resolution_mode.cyan()
             );
             return Ok(Self::Unusable(lock));
-        }
-        if lock.prerelease_mode() != options.prerelease_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
-                lock.prerelease_mode().cyan(),
-                options.prerelease_mode.cyan()
-            );
-            return Ok(Self::Preferable(lock));
         }
         if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(
@@ -1077,28 +1094,6 @@ impl ValidatedLock {
             return Ok(Self::Versions(lock));
         }
 
-        if let Upgrade::Packages(_) = upgrade {
-            // If the user specified `--upgrade-package`, then at best we can prefer some of
-            // the existing versions.
-            debug!("Resolving despite existing lockfile due to `--upgrade-package`");
-            return Ok(Self::Preferable(lock));
-        }
-
-        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
-        // the set of `resolution-markers` may no longer cover the entire supported Python range.
-        if lock.requires_python().range() != requires_python.range() {
-            debug!(
-                "Resolving despite existing lockfile due to change in Python requirement: `{}` vs. `{}`",
-                lock.requires_python(),
-                requires_python,
-            );
-            return if lock.fork_markers().is_empty() {
-                Ok(Self::Preferable(lock))
-            } else {
-                Ok(Self::Versions(lock))
-            };
-        }
-
         // If the set of supported environments has changed, we have to perform a clean resolution.
         let expected = lock.simplified_supported_environments();
         let actual = environments
@@ -1141,6 +1136,46 @@ impl ValidatedLock {
                 lock.conflicts(),
             );
             return Ok(Self::Versions(lock));
+        }
+
+        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
+        // the set of `resolution-markers` may no longer cover the entire supported Python range.
+        if lock.requires_python().range() != requires_python.range() {
+            debug!(
+                "Resolving despite existing lockfile due to change in Python requirement: `{}` vs. `{}`",
+                lock.requires_python(),
+                requires_python,
+            );
+            return if lock.fork_markers().is_empty() {
+                Ok(Self::Preferable(lock))
+            } else {
+                Ok(Self::Versions(lock))
+            };
+        }
+
+        // If the pre-release mode has changed, we have to re-resolve, but can retain the existing
+        // versions and forks.
+        if lock.prerelease_mode() != options.prerelease_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
+                lock.prerelease_mode().cyan(),
+                options.prerelease_mode.cyan()
+            );
+            return Ok(Self::Preferable(lock));
+        }
+
+        // If the user specified `--upgrade-package`, then at best we can prefer some of
+        // the existing versions.
+        if let Upgrade::Packages(_) = upgrade {
+            debug!("Resolving despite existing lockfile due to `--upgrade-package`");
+            return Ok(Self::Preferable(lock));
+        }
+
+        // If the user specified `--refresh`, then we have to re-resolve.
+        if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
+            debug!("Resolving despite existing lockfile due to `--refresh`");
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration

@@ -391,9 +391,15 @@ async fn build_impl(
                 let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
                     // TODO(konsti): astral-tokio-tar should use a proper error instead of
                     // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
                     if err.to_string().contains("/bin/python")
                         && std::error::Error::source(err).is_some_and(|err| {
-                            err.to_string().ends_with("outside of the target directory")
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
                         })
                     {
                         Some(

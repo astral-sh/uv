@@ -414,6 +414,180 @@ fn python_find_project() {
 }
 
 #[test]
+fn virtual_empty() {
+    // testing how `uv python find` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})
+        .unwrap();
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--no-project"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Create a pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn virtual_dependency_group() {
+    // testing basic `uv python find` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`, but `[dependency-groups]` defined,
+    // which really shouldn't matter)
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})
+        .unwrap();
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--no-project"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    ");
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Create a pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    // Ask for the python
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Ask for specific python (3.11)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Ask for the python (--no-project)
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
 fn python_find_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         // Enable additional filters for Windows compatibility

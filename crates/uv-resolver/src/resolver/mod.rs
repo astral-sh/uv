@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Overrides, SourceStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -82,7 +83,6 @@ use crate::{
     marker,
 };
 pub(crate) use provider::MetadataUnavailable;
-use uv_torch::TorchStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -201,6 +201,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.git(),
             build_context.capabilities(),
             build_context.locations(),
+            build_context.sources(),
             provider,
             installed_packages,
         )
@@ -224,6 +225,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         git: &GitResolver,
         capabilities: &IndexCapabilities,
         locations: &IndexLocations,
+        source_strategy: SourceStrategy,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -231,7 +233,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(&options, &manifest, &env),
+            selector: CandidateSelector::for_resolution(&options, &manifest, &env, source_strategy),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -2950,6 +2952,12 @@ impl ForkState {
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
+            // As we're adding an incompatibility from the proxy package to the base package,
+            // we need to register the base package.
+            if let Some(base_package) = package.base_package() {
+                self.priorities
+                    .insert(&base_package, version, &self.fork_urls);
+            }
         }
 
         Ok(())
@@ -2962,6 +2970,24 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                parent: _,
+                url: _,
+            } = dependency;
+
+            let Some(base_package) = package.base_package() else {
+                continue;
+            };
+
+            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
+            self.pubgrub
+                .add_proxy_package(proxy_package, base_package_id, version.clone());
+        }
+
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),

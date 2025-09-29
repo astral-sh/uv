@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
@@ -533,6 +533,7 @@ pub(crate) async fn pip_sync(
     match operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         Modifications::Exact,
         &reinstall,
         &build_options,

@@ -1728,8 +1728,8 @@ mod tests {
             request.version,
             Some(VersionRequest::from_str("3.13.0rc1").unwrap())
         );
-        assert_eq!(request.os, None,);
-        assert_eq!(request.arch, None,);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
         assert_eq!(request.libc, None);
     }
 

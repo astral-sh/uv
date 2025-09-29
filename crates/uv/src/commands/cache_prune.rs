@@ -10,7 +10,7 @@ use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Prune all unreachable objects from the cache.
-pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn cache_prune(ci: bool, cache: Cache, printer: Printer) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
             printer.stderr(),
@@ -19,6 +19,7 @@ pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<E
         )?;
         return Ok(ExitStatus::Success);
     }
+    let cache = cache.with_exclusive_lock()?;
 
     writeln!(
         printer.stderr(),
@@ -29,7 +30,7 @@ pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<E
     let mut summary = Removal::default();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
-    summary += uv_distribution::prune(cache)
+    summary += uv_distribution::prune(&cache)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
 
     // Prune the remaining cache buckets.
