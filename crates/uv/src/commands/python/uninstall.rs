@@ -329,28 +329,35 @@ async fn do_uninstall(
     // Report on any uninstalled installations.
     if let Some(first_uninstalled) = uninstalled.first() {
         if uninstalled.len() == 1 {
-            let message = if outdated {
+            // Ex) "Uninstalled Python 3.9.7 in 1.68s"
+            writeln!(
+                printer.stderr(),
+                "{}",
                 format!(
-                    "Uninstalled {} outdated Python installation {}",
-                    format!("{}", first_uninstalled.version()).bold(),
-                    format!("in {}", elapsed(start.elapsed())).dimmed()
-                )
-            } else {
-                format!(
-                    "Uninstalled {} {}",
+                    "Uninstalled {}{} {}",
+                    if outdated { "outdated version " } else { "" },
                     format!("Python {}", first_uninstalled.version()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
-            };
-            writeln!(printer.stderr(), "{}", message.dimmed())?;
+                .dimmed()
+            )?;
         } else {
-            let message = format!(
-                "Uninstalled {} {}versions {}",
-                format!("{}", uninstalled.len()).bold(),
-                if outdated { "outdated " } else { "" },
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            );
-            writeln!(printer.stderr(), "{}", message.dimmed())?;
+            // Ex) "Uninstalled 2 versions in 1.68s"
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Uninstalled {} {}",
+                    format!(
+                        "{} {}versions",
+                        uninstalled.len(),
+                        if outdated { "outdated " } else { "" }
+                    )
+                    .bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+                .dimmed()
+            )?;
         }
 
         for event in uninstalled
