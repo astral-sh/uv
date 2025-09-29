@@ -683,22 +683,29 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
 
 /// Parse a integer environment variable.
 fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>, Error> {
-    match std::env::var(name) {
-        Ok(v) => match v.parse::<u64>() {
-            Ok(v) => Ok(Some(v)),
-            Err(err) => Err(Error::InvalidEnvironmentVariable {
-                name: name.to_string(),
-                value: err.to_string(),
-                err: "expected an integer".to_string(),
-            }),
-        },
-        Err(e) => match e {
-            std::env::VarError::NotPresent => Ok(None),
-            std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
-                name: name.to_string(),
-                value: err.to_string_lossy().to_string(),
-                err: "expected an integer".to_string(),
-            }),
-        },
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Err(Error::InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: String::new(),
+                    err: "expected an integer".to_string(),
+                }),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: err.to_string_lossy().to_string(),
+                    err: "expected an integer".to_string(),
+                }),
+            };
+        }
+    };
+    match value.parse::<u64>() {
+        Ok(v) => Ok(Some(v)),
+        Err(_) => Err(Error::InvalidEnvironmentVariable {
+            name: name.to_string(),
+            value,
+            err: "expected an integer".to_string(),
+        }),
     }
 }
