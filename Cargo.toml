@@ -37,6 +37,7 @@ uv-distribution = { path = "crates/uv-distribution" }
 uv-distribution-filename = { path = "crates/uv-distribution-filename" }
 uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
+uv-flags = { path = "crates/uv-flags" }
 uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { path = "crates/uv-git" }
 uv-git-types = { path = "crates/uv-git-types" }

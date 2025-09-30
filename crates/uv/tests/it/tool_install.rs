@@ -3906,7 +3906,6 @@ fn tool_install_default_credentials() -> Result<()> {
                 sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
-
     });
 
     insta::with_settings!({
@@ -4092,6 +4091,116 @@ fn tool_install_with_executables_from_no_entrypoints() {
      + werkzeug==3.0.1
     Installed 1 executable: flask
     "###);
+}
+
+#[test]
+fn tool_install_find_links() {
+    let context = TestContext::new("3.13").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    ");
+
+    // Install with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    Installed 1 executable: basic-app
+    ");
+
+    tool_dir
+        .child("basic-app")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("basic-app")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("basic-app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run basic-app in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        #![TEMP_DIR]/tools/basic-app/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from basic_app import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "#);
+    });
+
+    // Run the installed version with `--find-links` on the CLI again.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    ");
+
+    // Run the installed version without `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
 }
 
 #[test]

@@ -5351,6 +5351,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-extract",
+ "uv-flags",
  "uv-fs",
  "uv-git",
  "uv-git-types",
@@ -5983,6 +5984,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-flags"
+version = "0.0.1"
+dependencies = [
+ "bitflags 2.9.4",
+]
+
+[[package]]
 name = "uv-fs"
 version = "0.0.1"
 dependencies = [
@@ -6070,6 +6078,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "mailparse",
+ "owo-colors",
  "pathdiff",
  "reflink-copy",
  "regex",
@@ -6084,6 +6093,7 @@ dependencies = [
  "thiserror 2.0.16",
  "tracing",
  "uv-distribution-filename",
+ "uv-flags",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
@@ -6557,6 +6567,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-flags",
  "uv-fs",
  "uv-git",
  "uv-git-types",
@@ -6619,6 +6630,7 @@ dependencies = [
  "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",
+ "uv-flags",
  "uv-fs",
  "uv-install-wheel",
  "uv-macros",

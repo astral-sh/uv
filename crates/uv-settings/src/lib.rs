@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use uv_dirs::{system_config_file, user_config_dir};
+use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -569,6 +570,7 @@ pub enum Error {
 /// the CLI level, however there are limited semantics in that context.
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
+    pub skip_wheel_filename_check: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
@@ -580,6 +582,9 @@ impl EnvironmentOptions {
     /// Create a new [`EnvironmentOptions`] from environment variables.
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
+            skip_wheel_filename_check: parse_boolish_environment_variable(
+                EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
+            )?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
@@ -707,5 +712,16 @@ fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>,
             value,
             err: "expected an integer".to_string(),
         }),
+    }
+}
+
+/// Populate the [`EnvironmentFlags`] from the given [`EnvironmentOptions`].
+impl From<&EnvironmentOptions> for EnvironmentFlags {
+    fn from(options: &EnvironmentOptions) -> Self {
+        let mut flags = Self::empty();
+        if options.skip_wheel_filename_check == Some(true) {
+            flags.insert(Self::SKIP_WHEEL_FILENAME_CHECK);
+        }
+        flags
     }
 }

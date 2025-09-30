@@ -937,4 +937,10 @@ impl EnvVars {
 
     /// The AWS shared credentials file to use when signing S3 requests.
     pub const AWS_SHARED_CREDENTIALS_FILE: &'static str = "AWS_SHARED_CREDENTIALS_FILE";
+
+    /// Avoid verifying that wheel filenames match their contents when installing wheels. This
+    /// is not recommended, as wheels with inconsistent filenames should be considered invalid and
+    /// corrected by the relevant package maintainers; however, this option can be used to work
+    /// around invalid artifacts in rare cases.
+    pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
 }

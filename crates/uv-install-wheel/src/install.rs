@@ -48,7 +48,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     let version = Version::from_str(&version)?;
 
     // Validate the wheel name and version.
-    {
+    if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
         if name != filename.name {
             return Err(Error::MismatchedName(name, filename.name.clone()));
         }
