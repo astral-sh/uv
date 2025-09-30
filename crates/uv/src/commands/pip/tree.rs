@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -556,7 +556,11 @@ impl<'env> DisplayDependencyGraph<'env> {
             },
         );
 
-        let mut merged = lower.into_iter().chain(upper).chain(others).collect::<Vec<_>>();
+        let mut merged = lower
+            .into_iter()
+            .chain(upper)
+            .chain(others)
+            .collect::<Vec<_>>();
 
         let mut seen = FxHashSet::default();
 
