@@ -1,5 +1,11 @@
 use std::env;
 
+use anyhow::Result;
+use clap::Parser;
+use tracing::instrument;
+
+use uv_settings::EnvironmentOptions;
+
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::generate_all::Args as GenerateAllArgs;
@@ -12,10 +18,6 @@ use crate::generate_sysconfig_mappings::Args as GenerateSysconfigMetadataArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::validate_zip::ValidateZipArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
-use anyhow::Result;
-use clap::Parser;
-use tracing::instrument;
-use uv_settings::EnvironmentOptions;
 
 mod clear_compile;
 mod compile;
