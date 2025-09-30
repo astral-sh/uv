@@ -434,6 +434,7 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     existing,
                     self.constraints,
+                    self.refresh,
                     self.settings,
                     self.client_builder,
                     self.state,
