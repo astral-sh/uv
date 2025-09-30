@@ -1,0 +1,7 @@
+pyproject.toml
+src/marker_dup/__init__.py
+src/marker_dup.egg-info/PKG-INFO
+src/marker_dup.egg-info/SOURCES.txt
+src/marker_dup.egg-info/dependency_links.txt
+src/marker_dup.egg-info/requires.txt
+src/marker_dup.egg-info/top_level.txt

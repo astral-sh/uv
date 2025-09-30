@@ -1,0 +1,6 @@
+
+[:python_version >= "3.11"]
+dup-target>=0.3.6
+
+[:python_version >= "3.12"]
+dup-target>=0.4.0

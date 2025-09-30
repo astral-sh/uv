@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: marker-dup
+Version: 0.1.0
+Summary: Package with duplicated marker-specific dependencies
+Requires-Dist: dup-target>=0.3.6; python_version >= "3.11"
+Requires-Dist: dup-target>=0.4.0; python_version >= "3.12"
