@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
