@@ -253,6 +253,7 @@ impl Interpreter {
                 self.implementation_tuple(),
                 self.manylinux_compatible,
                 self.gil_disabled,
+                false,
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }

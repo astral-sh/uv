@@ -131,7 +131,7 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
     });
 
     pub(crate) async fn resolve(
