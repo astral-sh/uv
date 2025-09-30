@@ -678,3 +678,53 @@ impl Cursor {
         self.edges.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DisplayDependencyGraph;
+    use std::str::FromStr;
+    use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+
+    fn simplify_specs(specs: &[&str]) -> VersionSpecifiers {
+        DisplayDependencyGraph::simplify_specifiers(
+            specs
+                .iter()
+                .map(|s| VersionSpecifier::from_str(s).expect("valid specifier"))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn prefers_highest_lower_bound() {
+        assert_eq!(
+            simplify_specs(&[">=0.3.6", ">=0.3.7"]).to_string(),
+            ">=0.3.7"
+        );
+    }
+
+    #[test]
+    fn prefers_strict_bound_on_tie() {
+        assert_eq!(simplify_specs(&[">=1", ">1"]).to_string(), ">1");
+    }
+
+    #[test]
+    fn retains_other_specifiers_and_dedupes() {
+        assert_eq!(
+            simplify_specs(&[">=0.3.7", "<0.4", "!=0.3.9", ">=0.3.7"]).to_string(),
+            ">=0.3.7, !=0.3.9, <0.4"
+        );
+    }
+
+    #[test]
+    fn prefers_lowest_upper_bound() {
+        assert_eq!(simplify_specs(&["<=1", "<1"]).to_string(), "<1");
+    }
+
+    #[test]
+    fn keeps_both_bounds_when_present() {
+        assert_eq!(
+            simplify_specs(&[">=0.3.7", "<0.4", ">=0.3.6"]).to_string(),
+            ">=0.3.7, <0.4"
+        );
+    }
+}
