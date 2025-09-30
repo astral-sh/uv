@@ -1,0 +1,11 @@
+[metadata]
+created-by = "tool-that-created-the-file" # Freeform string
+version = "0.1" # PEP 440 version
+
+[[provider]]
+resolved = ["cpu_level_provider==0.1"]
+plugin-api = "cpu_level_provider"
+namespace = "cpu_level"
+
+[provider.properties]
+x86_64_level = []

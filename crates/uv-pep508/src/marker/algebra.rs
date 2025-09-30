@@ -46,6 +46,7 @@
 //! merged to be applied globally.
 
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
@@ -581,6 +582,43 @@ impl InternerGuard<'_> {
         }
     }
 
+    /// Contract: The type of variable remains the same.
+    pub(crate) fn edit_variable(
+        &mut self,
+        i: NodeId,
+        f: &impl Fn(&Variable) -> Option<Variable>,
+    ) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        // Restrict all nodes recursively.
+        let node = self.shared.node(i);
+        let children = node.children.map(i, |node| self.edit_variable(node, f));
+
+        if let Some(var) = f(&node.var) {
+            self.create_node(var, children)
+        } else {
+            self.create_node(node.var.clone(), children)
+        }
+    }
+
+    pub(crate) fn collect_variant_bases(&mut self, i: NodeId, bases: &mut BTreeSet<String>) {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return;
+        }
+
+        // Restrict all nodes recursively.
+        let node = self.shared.node(i);
+        if let Some(base) = node.var.variant_base() {
+            bases.insert(base.to_string());
+        }
+
+        for child in node.children.nodes() {
+            self.collect_variant_bases(child, bases);
+        }
+    }
+
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
     ///
     /// If there are no extra nodes, then this returns a tree that is always
@@ -1071,6 +1109,17 @@ impl Variable {
             return false;
         };
         marker.is_conflicting()
+    }
+
+    fn variant_base(&self) -> Option<&str> {
+        match self {
+            Self::List(
+                CanonicalMarkerListPair::VariantNamespaces { base, .. }
+                | CanonicalMarkerListPair::VariantFeatures { base, .. }
+                | CanonicalMarkerListPair::VariantProperties { base, .. },
+            ) => base.as_deref(),
+            _ => None,
+        }
     }
 }
 
