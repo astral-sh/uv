@@ -507,6 +507,7 @@ impl<'env> DisplayDependencyGraph<'env> {
             (None::<String>, Vec::new()),
             |(url, mut specs), edge_id| {
                 let requirement = &self.graph[*edge_id];
+
                 let url = match requirement.version_or_url.as_ref() {
                     None => url,
                     Some(VersionOrUrl::VersionSpecifier(values)) => {
@@ -515,6 +516,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                     }
                     Some(VersionOrUrl::Url(value)) => url.or_else(|| Some(value.to_string())),
                 };
+
                 (url, specs)
             },
         );
