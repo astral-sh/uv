@@ -76,7 +76,7 @@ where
     R: tokio::io::AsyncRead + Unpin,
 {
     pub fn new(reader: R, hashers: &'a mut [Hasher]) -> Self {
-        HashReader { reader, hashers }
+        Self { reader, hashers }
     }
 
     /// Exhaust the underlying reader.
