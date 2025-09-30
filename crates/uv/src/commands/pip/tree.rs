@@ -360,7 +360,7 @@ impl<'env> DisplayDependencyGraph<'env> {
     /// Perform a depth-first traversal of the given distribution and its dependencies.
     fn visit(
         &self,
-        cursor: Cursor,
+        cursor: &Cursor,
         visited: &mut FxHashMap<&'env PackageName, Vec<PackageName>>,
         path: &mut Vec<&'env PackageName>,
     ) -> Vec<String> {
@@ -377,7 +377,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         if self.show_version_specifiers && !cursor.is_root() {
             line.push(' ');
 
-            let requirement = self.aggregate_requirement(&cursor);
+            let requirement = self.aggregate_requirement(cursor);
 
             if self.invert {
                 let parent = self.graph.edge_endpoints(cursor.edge().unwrap()).unwrap().0;
@@ -486,9 +486,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                 ("├── ", "│   ")
             };
 
-            for (visited_index, visited_line) in
-                self.visit(dep.clone(), visited, path).iter().enumerate()
-            {
+            for (visited_index, visited_line) in self.visit(dep, visited, path).iter().enumerate() {
                 let prefix = if visited_index == 0 {
                     prefix_top
                 } else {
@@ -544,10 +542,10 @@ impl<'env> DisplayDependencyGraph<'env> {
             (None, None, Vec::new()),
             |(lower, upper, mut rest), spec| match *spec.operator() {
                 Operator::GreaterThan | Operator::GreaterThanEqual => {
-                    (Self::prefer_lower(lower, spec), upper, rest)
+                    (Some(Self::prefer_lower(lower, spec)), upper, rest)
                 }
                 Operator::LessThan | Operator::LessThanEqual => {
-                    (lower, Self::prefer_upper(upper, spec), rest)
+                    (lower, Some(Self::prefer_upper(upper, spec)), rest)
                 }
                 _ => {
                     rest.push(spec);
@@ -572,12 +570,12 @@ impl<'env> DisplayDependencyGraph<'env> {
     fn prefer_lower(
         current: Option<VersionSpecifier>,
         candidate: VersionSpecifier,
-    ) -> Option<VersionSpecifier> {
+    ) -> VersionSpecifier {
         match current {
-            None => Some(candidate),
+            None => candidate,
             Some(existing) => match candidate.version().cmp(existing.version()) {
-                Ordering::Greater => Some(candidate),
-                Ordering::Less => Some(existing),
+                Ordering::Greater => candidate,
+                Ordering::Less => existing,
                 Ordering::Equal => {
                     let candidate_inclusive =
                         matches!(candidate.operator(), Operator::GreaterThanEqual);
@@ -586,9 +584,9 @@ impl<'env> DisplayDependencyGraph<'env> {
                         matches!(existing.operator(), Operator::GreaterThanEqual);
 
                     if !candidate_inclusive && existing_inclusive {
-                        Some(candidate)
+                        candidate
                     } else {
-                        Some(existing)
+                        existing
                     }
                 }
             },
@@ -598,12 +596,12 @@ impl<'env> DisplayDependencyGraph<'env> {
     fn prefer_upper(
         current: Option<VersionSpecifier>,
         candidate: VersionSpecifier,
-    ) -> Option<VersionSpecifier> {
+    ) -> VersionSpecifier {
         match current {
-            None => Some(candidate),
+            None => candidate,
             Some(existing) => match candidate.version().cmp(existing.version()) {
-                Ordering::Less => Some(candidate),
-                Ordering::Greater => Some(existing),
+                Ordering::Less => candidate,
+                Ordering::Greater => existing,
                 Ordering::Equal => {
                     let candidate_inclusive =
                         matches!(candidate.operator(), Operator::LessThanEqual);
@@ -611,9 +609,9 @@ impl<'env> DisplayDependencyGraph<'env> {
                     let existing_inclusive = matches!(existing.operator(), Operator::LessThanEqual);
 
                     if !candidate_inclusive && existing_inclusive {
-                        Some(candidate)
+                        candidate
                     } else {
-                        Some(existing)
+                        existing
                     }
                 }
             },
@@ -629,7 +627,8 @@ impl<'env> DisplayDependencyGraph<'env> {
 
         for node in &self.roots {
             path.clear();
-            lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
+            let cursor = Cursor::root(*node);
+            lines.extend(self.visit(&cursor, &mut visited, &mut path));
         }
 
         lines
