@@ -30,6 +30,7 @@ use uv_cli::{
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
+use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
@@ -313,6 +314,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Set the global flags.
+    uv_flags::init(EnvironmentFlags::from(&environment))
+        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {

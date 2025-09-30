@@ -46,7 +46,6 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
-use uv_static::{EnvVars, parse_boolish_environment_variable};
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -3241,15 +3240,12 @@ impl PackageWire {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
-        if let Some(version) = &self.id.version {
-            for wheel in &self.wheels {
-                if *version != wheel.filename.version
-                    && *version != wheel.filename.version.clone().without_local()
-                {
-                    if !matches!(
-                        parse_boolish_environment_variable(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK),
-                        Ok(Some(true))
-                    ) {
+        if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
+            if let Some(version) = &self.id.version {
+                for wheel in &self.wheels {
+                    if *version != wheel.filename.version
+                        && *version != wheel.filename.version.clone().without_local()
+                    {
                         return Err(LockError::from(LockErrorKind::InconsistentVersions {
                             name: self.id.name,
                             version: version.clone(),
@@ -3257,9 +3253,9 @@ impl PackageWire {
                         }));
                     }
                 }
+                // We can't check the source dist version since it does not need to contain the version
+                // in the filename.
             }
-            // We can't check the source dist version since it does not need to contain the version
-            // in the filename.
         }
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
