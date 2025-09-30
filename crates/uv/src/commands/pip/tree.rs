@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::cmp::Ordering;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -17,7 +18,7 @@ use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
@@ -373,30 +374,31 @@ impl<'env> DisplayDependencyGraph<'env> {
         let mut line = format!("{} v{}", package_name, metadata.version);
 
         // If the current package is not top-level (i.e., it has a parent), include the specifiers.
-        if self.show_version_specifiers {
-            if let Some(edge) = cursor.edge() {
-                line.push(' ');
+        if self.show_version_specifiers && !cursor.is_root() {
+            line.push(' ');
 
-                let source = &self.graph[edge];
-                if self.invert {
-                    let parent = self.graph.edge_endpoints(edge).unwrap().0;
-                    let parent = &self.graph[parent].name;
-                    match source.version_or_url.as_ref() {
-                        None => {
-                            let _ = write!(line, "[requires: {parent} *]");
-                        }
-                        Some(version) => {
-                            let _ = write!(line, "[requires: {parent} {version}]");
-                        }
+            let requirement = self.aggregate_requirement(&cursor);
+
+            if self.invert {
+                let parent = self.graph.edge_endpoints(cursor.edge().unwrap()).unwrap().0;
+
+                let parent = &self.graph[parent].name;
+
+                match requirement {
+                    None => {
+                        let _ = write!(line, "[requires: {parent} *]");
                     }
-                } else {
-                    match source.version_or_url.as_ref() {
-                        None => {
-                            let _ = write!(line, "[required: *]");
-                        }
-                        Some(version) => {
-                            let _ = write!(line, "[required: {version}]");
-                        }
+                    Some(value) => {
+                        let _ = write!(line, "[requires: {parent} {value}]");
+                    }
+                }
+            } else {
+                match requirement {
+                    None => {
+                        let _ = write!(line, "[required: *]");
+                    }
+                    Some(value) => {
+                        let _ = write!(line, "[required: {value}]");
                     }
                 }
             }
@@ -429,10 +431,14 @@ impl<'env> DisplayDependencyGraph<'env> {
         let mut dependencies = self
             .graph
             .edges_directed(cursor.node(), Direction::Outgoing)
-            .map(|edge| {
-                let node = edge.target();
-                Cursor::new(node, edge.id())
+            .fold(FxHashMap::default(), |mut acc, edge| {
+                acc.entry(edge.target())
+                    .or_insert_with(Vec::new)
+                    .push(edge.id());
+                acc
             })
+            .into_iter()
+            .map(|(node, edges)| Cursor::with_edges(node, edges))
             .collect::<Vec<_>>();
         dependencies.sort_by_key(|node| {
             let metadata = &self.graph[node.node()];
@@ -480,7 +486,8 @@ impl<'env> DisplayDependencyGraph<'env> {
                 ("├── ", "│   ")
             };
 
-            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
+            for (visited_index, visited_line) in
+                self.visit(dep.clone(), visited, path).iter().enumerate()
             {
                 let prefix = if visited_index == 0 {
                     prefix_top
@@ -494,6 +501,119 @@ impl<'env> DisplayDependencyGraph<'env> {
         path.pop();
 
         lines
+    }
+
+    /// Aggregate the requirements associated with the incoming edges for a node.
+    fn aggregate_requirement(&self, cursor: &Cursor) -> Option<String> {
+        let (url, specifiers) = cursor.edge_ids().iter().fold(
+            (None::<String>, Vec::new()),
+            |(url, mut specs), edge_id| {
+                let requirement = &self.graph[*edge_id];
+                let url = match requirement.version_or_url.as_ref() {
+                    None => url,
+                    Some(VersionOrUrl::VersionSpecifier(values)) => {
+                        specs.extend(values.iter().cloned());
+                        url
+                    }
+                    Some(VersionOrUrl::Url(value)) => url.or_else(|| Some(value.to_string())),
+                };
+                (url, specs)
+            },
+        );
+
+        if let Some(url) = url {
+            return Some(url);
+        }
+
+        if specifiers.is_empty() {
+            return None;
+        }
+
+        let display = Self::simplify_specifiers(specifiers).to_string();
+
+        if display.is_empty() {
+            None
+        } else {
+            Some(display)
+        }
+    }
+
+    /// Simplify a collection of specifiers into a canonical representation for display.
+    fn simplify_specifiers(specifiers: Vec<VersionSpecifier>) -> VersionSpecifiers {
+        let (lower, upper, others) = specifiers.into_iter().fold(
+            (None, None, Vec::new()),
+            |(lower, upper, mut rest), spec| match *spec.operator() {
+                Operator::GreaterThan | Operator::GreaterThanEqual => {
+                    (Self::prefer_lower(lower, spec), upper, rest)
+                }
+                Operator::LessThan | Operator::LessThanEqual => {
+                    (lower, Self::prefer_upper(upper, spec), rest)
+                }
+                _ => {
+                    rest.push(spec);
+                    (lower, upper, rest)
+                }
+            },
+        );
+
+        let mut merged = lower.into_iter().chain(upper).chain(others).collect::<Vec<_>>();
+
+        let mut seen = FxHashSet::default();
+
+        merged.retain(|spec| seen.insert(spec.to_string()));
+
+        VersionSpecifiers::from_iter(merged)
+    }
+
+    fn prefer_lower(
+        current: Option<VersionSpecifier>,
+        candidate: VersionSpecifier,
+    ) -> Option<VersionSpecifier> {
+        match current {
+            None => Some(candidate),
+            Some(existing) => match candidate.version().cmp(existing.version()) {
+                Ordering::Greater => Some(candidate),
+                Ordering::Less => Some(existing),
+                Ordering::Equal => {
+                    let candidate_inclusive =
+                        matches!(candidate.operator(), Operator::GreaterThanEqual);
+
+                    let existing_inclusive =
+                        matches!(existing.operator(), Operator::GreaterThanEqual);
+
+                    if !candidate_inclusive && existing_inclusive {
+                        Some(candidate)
+                    } else {
+                        Some(existing)
+                    }
+                }
+            },
+        }
+    }
+
+    fn prefer_upper(
+        current: Option<VersionSpecifier>,
+        candidate: VersionSpecifier,
+    ) -> Option<VersionSpecifier> {
+        match current {
+            None => Some(candidate),
+            Some(existing) => match candidate.version().cmp(existing.version()) {
+                Ordering::Less => Some(candidate),
+                Ordering::Greater => Some(existing),
+                Ordering::Equal => {
+                    let candidate_inclusive =
+                        matches!(candidate.operator(), Operator::LessThanEqual);
+
+                    let existing_inclusive = matches!(existing.operator(), Operator::LessThanEqual);
+
+                    if !candidate_inclusive && existing_inclusive {
+                        Some(candidate)
+                    } else {
+                        Some(existing)
+                    }
+                }
+            },
+        }
     }
 
     /// Depth-first traverse the nodes to render the tree.
@@ -513,27 +633,43 @@ impl<'env> DisplayDependencyGraph<'env> {
 }
 
 /// A node in the dependency graph along with the edge that led to it, or `None` for root nodes.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
-struct Cursor(NodeIndex, Option<EdgeIndex>);
+#[derive(Debug, Clone)]
+struct Cursor {
+    node: NodeIndex,
+    edges: Vec<EdgeIndex>,
+}
 
 impl Cursor {
-    /// Create a [`Cursor`] representing a node in the dependency tree.
-    fn new(node: NodeIndex, edge: EdgeIndex) -> Self {
-        Self(node, Some(edge))
-    }
-
     /// Create a [`Cursor`] representing a root node in the dependency tree.
     fn root(node: NodeIndex) -> Self {
-        Self(node, None)
+        Self {
+            node,
+            edges: Vec::new(),
+        }
+    }
+
+    /// Create a [`Cursor`] with the provided set of edges.
+    fn with_edges(node: NodeIndex, edges: Vec<EdgeIndex>) -> Self {
+        Self { node, edges }
     }
 
     /// Return the [`NodeIndex`] of the node.
     fn node(&self) -> NodeIndex {
-        self.0
+        self.node
     }
 
-    /// Return the [`EdgeIndex`] of the edge that led to the node, if any.
+    /// Return the [`EdgeIndex`] values that led to the node.
+    fn edge_ids(&self) -> &[EdgeIndex] {
+        &self.edges
+    }
+
+    /// Return the first [`EdgeIndex`] if the node is not a root.
     fn edge(&self) -> Option<EdgeIndex> {
-        self.1
+        self.edges.first().copied()
+    }
+
+    /// Whether this cursor represents a root node.
+    fn is_root(&self) -> bool {
+        self.edges.is_empty()
     }
 }

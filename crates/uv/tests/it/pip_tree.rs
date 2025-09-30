@@ -1159,3 +1159,76 @@ fn outdated() {
     "###
     );
 }
+
+/// Test that dependencies with multiple marker-specific requirements
+/// are only displayed once in the tree.
+#[test]
+#[cfg(feature = "pypi")]
+fn no_duplicate_dependencies_with_markers() {
+    let context = TestContext::new("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("pylint").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + astroid==3.3.11
+     + dill==0.4.0
+     + isort==6.0.1
+     + mccabe==0.7.0
+     + platformdirs==4.4.0
+     + pylint==3.3.8
+     + tomlkit==0.13.3
+    "###
+    );
+
+    // Ensure that dill is only listed once, even though pylint has multiple
+    // marker-specific requirements for dill (e.g., dill>=0.3.6 for Python 3.11+
+    // and dill>=0.3.7 for Python 3.12+). Pylint specifies multiple conditional
+    // dependencies on dill with different version specifiers for different Python versions.
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pylint v3.3.8
+    ├── astroid v3.3.11
+    ├── dill v0.4.0
+    ├── isort v6.0.1
+    ├── mccabe v0.7.0
+    ├── platformdirs v4.4.0
+    └── tomlkit v0.13.3
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree().arg("--show-version-specifiers"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pylint v3.3.8
+    ├── astroid v3.3.11 [required: >=3.3.8, <=3.4.0.dev0]
+    ├── dill v0.4.0 [required: >=0.3.7]
+    ├── isort v6.0.1 [required: >=4.2.5, !=5.13, <7]
+    ├── mccabe v0.7.0 [required: >=0.6, <0.8]
+    ├── platformdirs v4.4.0 [required: >=2.2]
+    └── tomlkit v0.13.3 [required: >=0.10.1]
+
+    ----- stderr -----
+    "###
+    );
+}
