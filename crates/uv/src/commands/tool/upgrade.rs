@@ -139,7 +139,9 @@ pub(crate) async fn upgrade(
         .await;
 
         match result {
-            Ok((outcome, pinned_version)) => {
+            Ok(outcome) => {
+                let pinned_version = outcome.pinned_version().cloned();
+
                 if let Some(version) = pinned_version.as_ref() {
                     debug!("`{name}` remains pinned to version {version}; skipping tool upgrade");
                 }
@@ -148,10 +150,10 @@ pub(crate) async fn upgrade(
                     UpgradeOutcome::UpgradeEnvironment => {
                         did_upgrade_environment.push(name);
                     }
-                    UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::UpgradeTool => {
+                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies { .. } => {
                         did_upgrade_tool.push(name);
                     }
-                    UpgradeOutcome::NoOp => {
+                    UpgradeOutcome::NoOp { .. } => {
                         debug!("Upgrading `{name}` was a no-op");
                     }
                 }
@@ -219,16 +221,26 @@ pub(crate) async fn upgrade(
 
     Ok(ExitStatus::Success)
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
     UpgradeTool,
     /// The tool's dependencies were upgraded, but the tool itself was unchanged.
-    UpgradeDependencies,
+    UpgradeDependencies { pinned_version: Option<Version> },
     /// The tool's environment was upgraded.
     UpgradeEnvironment,
     /// The tool was already up-to-date.
-    NoOp,
+    NoOp { pinned_version: Option<Version> },
+}
+
+impl UpgradeOutcome {
+    fn pinned_version(&self) -> Option<&Version> {
+        match self {
+            UpgradeOutcome::UpgradeDependencies { pinned_version }
+            | UpgradeOutcome::NoOp { pinned_version } => pinned_version.as_ref(),
+            UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+        }
+    }
 }
 
 /// Upgrade a specific tool.
@@ -246,7 +258,7 @@ async fn upgrade_tool(
     installer_metadata: bool,
     concurrency: Concurrency,
     preview: Preview,
-) -> Result<(UpgradeOutcome, Option<Version>)> {
+) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -388,9 +400,13 @@ async fn upgrade_tool(
         let outcome = if changelog.includes(name) {
             UpgradeOutcome::UpgradeTool
         } else if changelog.is_empty() {
-            UpgradeOutcome::NoOp
+            UpgradeOutcome::NoOp {
+                pinned_version: pinned_requirement_version(&existing_tool_receipt, name),
+            }
         } else {
-            UpgradeOutcome::UpgradeDependencies
+            UpgradeOutcome::UpgradeDependencies {
+                pinned_version: pinned_requirement_version(&existing_tool_receipt, name),
+            }
         };
 
         (environment, outcome)
@@ -427,14 +443,7 @@ async fn upgrade_tool(
         )?;
     }
 
-    let pinned_version = match outcome {
-        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
-        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
-            pinned_requirement_version(&existing_tool_receipt, name)
-        }
-    };
-
-    Ok((outcome, pinned_version))
+    Ok(outcome)
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
