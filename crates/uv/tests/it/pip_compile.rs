@@ -16130,7 +16130,7 @@ fn group_requires_python_incompatible_with_python_flag() -> Result<()> {
 
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.13.[X] will be used to build dependencies instead.
-    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.13`, but uv is resolving for Python `>=3.12` (set via `--python`) (current interpreter: `3.13.[X]`). Drop `--python` to use your current interpreter or re-run with `--python 3.13` to target a compatible Python version.
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.13`, but uv is resolving for Python `>=3.12` (current interpreter: `3.13.[X]`). Re-run with `--python 3.13` to target a compatible Python version.
     ");
 
     Ok(())

@@ -39,8 +39,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, PythonRequirementSource, Resolver, ResolverEnvironment,
-    ResolverOutput,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -255,8 +254,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                                     let (operator, version) = specifier.into_parts();
 
                                     match operator {
-                                        Operator::GreaterThan
-                                        | Operator::GreaterThanEqual
+                                        Operator::GreaterThanEqual
                                         | Operator::Equal
                                         | Operator::ExactEqual
                                         | Operator::EqualStar
@@ -265,42 +263,18 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                                     }
                                 });
 
-                            let source_hint = match python_requirement.source() {
-                                PythonRequirementSource::PythonVersion => " (set via `--python`)",
-                                PythonRequirementSource::RequiresPython => {
-                                    " (set via this project's `requires-python`)"
-                                }
-                                PythonRequirementSource::Interpreter => "",
-                            };
-
                             let mut message = format!(
-                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}`{source_hint} (current interpreter: `{interpreter_display}`).",
+                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}` (current interpreter: `{interpreter_display}`).",
                                 pyproject_path.user_display()
                             );
 
-                            let call_to_action = if let Some(ref version) = suggested_version {
+                            if let Some(ref version) = suggested_version {
                                 let suggested_python = version.to_string();
 
-                                if interpreter_version >= version
-                                    && matches!(
-                                        python_requirement.source(),
-                                        PythonRequirementSource::PythonVersion
-                                    )
-                                {
-                                    format!(
-                                        " Drop `--python` to use your current interpreter or re-run with `--python {suggested_python}` to target a compatible Python version."
-                                    )
-                                } else {
-                                    format!(
-                                        " Re-run with `--python {suggested_python}` to target a compatible Python version."
-                                    )
-                                }
-                            } else {
-                                " Specify a compatible Python version with `--python <VERSION>`."
-                                    .to_string()
-                            };
-
-                            message.push_str(&call_to_action);
+                                message.push_str(&format!(
+                                    " Re-run with `--python {suggested_python}` to target a compatible Python version."
+                                ))
+                            }
 
                             return Err(anyhow!(message).into());
                         }
