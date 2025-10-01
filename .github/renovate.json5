@@ -1,36 +1,22 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
-  suppressNotifications: [
-    "prEditedNotification"
-  ],
+  suppressNotifications: ["prEditedNotification"],
   extends: [
     "config:recommended",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: [
-    "internal"
-  ],
-  schedule: [
-    "before 4am on Monday"
-  ],
+  labels: ["internal"],
+  schedule: ["before 4am on Monday"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: [
-    "github-actions",
-    "pre-commit",
-    "cargo",
-    "custom.regex"
-  ],
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    managerFilePatterns: [
-      "/^Cargo\\.toml$/",
-      "/^crates/.*Cargo\\.toml$/"
-    ],
+    managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
@@ -38,35 +24,25 @@
   packageRules: [
     // Pin GitHub Actions to immutable SHAs.
     {
-      matchDepTypes: [
-        "action"
-      ],
+      matchDepTypes: ["action"],
       pinDigests: true,
     },
     // Annotate GitHub Actions SHAs with a SemVer version.
     {
-      extends: [
-        "helpers:pinGitHubActionDigests"
-      ],
+      extends: ["helpers:pinGitHubActionDigests"],
       extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
       versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
       // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
       // See: https://github.com/astral-sh/uv/issues/3642
-      matchPackageNames: [
-        "/zip/"
-      ],
-      matchManagers: [
-        "cargo"
-      ],
+      matchPackageNames: ["/zip/"],
+      matchManagers: ["cargo"],
       enabled: false,
     },
     {
       // Create dedicated branches to update references to dependencies in the documentation.
-      matchFileNames: [
-        "docs/**/*.md"
-      ],
+      matchFileNames: ["docs/**/*.md"],
       commitMessageTopic: "documentation references to {{{depName}}}",
       semanticCommitType: "docs",
       semanticCommitScope: null,
@@ -75,16 +51,9 @@
     {
       // Group upload/download artifact updates, the versions are dependent
       groupName: "Artifact GitHub Actions dependencies",
-      matchManagers: [
-        "github-actions"
-      ],
-      matchDatasources: [
-        "gitea-tags",
-        "github-tags"
-      ],
-      matchPackageNames: [
-        "/actions/.*-artifact/"
-      ],
+      matchManagers: ["github-actions"],
+      matchDatasources: ["gitea-tags", "github-tags"],
+      matchPackageNames: ["/actions/.*-artifact/"],
       description: "Weekly update of artifact-related GitHub Actions dependencies",
     },
     {
@@ -92,64 +61,41 @@
       // we'd only pin them to a specific version
       // if there was a deliberate reason to do so
       groupName: "GitHub runners",
-      matchManagers: [
-        "github-actions"
-      ],
-      matchDatasources: [
-        "github-runners"
-      ],
+      matchManagers: ["github-actions"],
+      matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
     },
     {
       groupName: "pre-commit dependencies",
-      matchManagers: [
-        "pre-commit"
-      ],
+      matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
     },
     {
       groupName: "Rust dev-dependencies",
-      matchManagers: [
-        "cargo"
-      ],
-      matchDepTypes: [
-        "devDependencies"
-      ],
+      matchManagers: ["cargo"],
+      matchDepTypes: ["devDependencies"],
       description: "Weekly update of Rust development dependencies",
     },
     {
       // We don't really use PyO3 in this project; it's pulled in as an optional feature
       // of the PEP 440 and PEP 508 crates, which we vendored and forked.
       groupName: "pyo3",
-      matchManagers: [
-        "cargo"
-      ],
-      matchPackageNames: [
-        "/pyo3/"
-      ],
+      matchManagers: ["cargo"],
+      matchPackageNames: ["/pyo3/"],
       description: "Weekly update of pyo3 dependencies",
       enabled: false,
     },
     {
       groupName: "pubgrub",
-      matchManagers: [
-        "cargo"
-      ],
-      matchDepName: [
-        "pubgrub",
-        "version-ranges"
-      ],
+      matchManagers: ["cargo"],
+      matchDepName: ["pubgrub", "version-ranges"],
       description: "version-ranges and pubgrub are in the same Git repository",
     },
     {
       commitMessageTopic: "MSRV",
-      matchManagers: [
-        "custom.regex"
-      ],
-      matchDepNames: [
-        "msrv"
-      ],
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["msrv"],
       // We have a rolling support policy for the MSRV
       // 2 releases back * 6 weeks per release * 7 days per week + 1
       minimumReleaseAge: "85 days",
@@ -157,12 +103,8 @@
       groupName: "MSRV",
     },
     {
-      matchManagers: [
-        "custom.regex"
-      ],
-      matchDepNames: [
-        "rust"
-      ],
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
   ],
@@ -170,9 +112,7 @@
     // Update major GitHub actions references in documentation.
     {
       customType: "regex",
-      managerFilePatterns: [
-        "/^docs/.*\\.md$/"
-      ],
+      managerFilePatterns: ["/^docs/.*\\.md$/"],
       matchStrings: [
         "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
       ],
@@ -182,9 +122,7 @@
     // Minimum supported Rust toolchain version
     {
       customType: "regex",
-      managerFilePatterns: [
-        "/(^|/)Cargo\\.toml?$/"
-      ],
+      managerFilePatterns: ["/(^|/)Cargo\\.toml?$/"],
       matchStrings: [
         'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
@@ -195,9 +133,7 @@
     // Rust toolchain version
     {
       customType: "regex",
-      managerFilePatterns: [
-        "/(^|/)rust-toolchain\\.toml?$/"
-      ],
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml?$/"],
       matchStrings: [
         'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
@@ -208,9 +144,6 @@
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
-    labels: [
-      "internal",
-      "security"
-    ],
+    labels: ["internal", "security"],
   },
 }
