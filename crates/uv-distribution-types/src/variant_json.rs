@@ -1,18 +1,38 @@
+use rustc_hash::FxHashMap;
 use std::{fmt::Display, str::FromStr};
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum VariantsJsonError {
-    #[error("Invalid variants.json filename")]
+    #[error("Invalid `variants.json` filename")]
     InvalidFilename,
-    #[error("Invalid variants.json package name: {0}")]
+    #[error("Invalid `variants.json` package name: {0}")]
     InvalidName(#[from] InvalidNameError),
-    #[error("Invalid variants.json version: {0}")]
+    #[error("Invalid `variants.json` version: {0}")]
     InvalidVersion(#[from] VersionParseError),
 }
 
 /// A `<name>-<version>-variants.json` file.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct VariantsJson {
+    variants: FxHashMap<String, serde_json::Value>,
+}
+
+impl VariantsJson {
+    /// Returns the label for the current variant.
+    pub fn label(&self) -> Option<&str> {
+        let mut keys = self.variants.keys();
+        let label = keys.next()?;
+        if keys.next().is_some() {
+            None
+        } else {
+            Some(label)
+        }
+    }
+}
+
+/// A `<name>-<version>-variants.json` filename.
 #[derive(
     Debug,
     Clone,
