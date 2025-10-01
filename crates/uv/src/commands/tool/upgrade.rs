@@ -9,9 +9,10 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
-use uv_distribution_types::{ExtraBuildRequires, Requirement};
+use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, Version};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
@@ -19,7 +20,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, Tool};
 use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
@@ -114,6 +115,9 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
+    // Track tools that could not be upgraded due to pinned versions.
+    let mut pinned = Vec::new();
+
     let mut errors = Vec::new();
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
@@ -135,14 +139,26 @@ pub(crate) async fn upgrade(
         .await;
 
         match result {
-            Ok(UpgradeOutcome::UpgradeEnvironment) => {
-                did_upgrade_environment.push(name);
-            }
-            Ok(UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::UpgradeTool) => {
-                did_upgrade_tool.push(name);
-            }
-            Ok(UpgradeOutcome::NoOp) => {
-                debug!("Upgrading `{name}` was a no-op");
+            Ok((outcome, pinned_version)) => {
+                if let Some(version) = pinned_version.as_ref() {
+                    debug!("`{name}` remains pinned to version {version}; skipping tool upgrade");
+                }
+
+                match outcome {
+                    UpgradeOutcome::UpgradeEnvironment => {
+                        did_upgrade_environment.push(name);
+                    }
+                    UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::UpgradeTool => {
+                        did_upgrade_tool.push(name);
+                    }
+                    UpgradeOutcome::NoOp => {
+                        debug!("Upgrading `{name}` was a no-op");
+                    }
+                }
+
+                if let Some(version) = pinned_version {
+                    pinned.push((name.clone(), version));
+                }
             }
             Err(err) => {
                 errors.push((name, err));
@@ -187,9 +203,24 @@ pub(crate) async fn upgrade(
         }
     }
 
+    for (name, version) in pinned {
+        let name_str = name.to_string();
+
+        let version_str = version.to_string();
+
+        let reinstall_command = format!("uv tool install {}@latest", name_str);
+
+        writeln!(
+            printer.stderr(),
+            "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to pick up a newer release.",
+            name_str.cyan(),
+            version_str.magenta(),
+            reinstall_command.green(),
+        )?;
+    }
+
     Ok(ExitStatus::Success)
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
@@ -217,7 +248,7 @@ async fn upgrade_tool(
     installer_metadata: bool,
     concurrency: Concurrency,
     preview: Preview,
-) -> Result<UpgradeOutcome> {
+) -> Result<(UpgradeOutcome, Option<Version>)> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -398,5 +429,40 @@ async fn upgrade_tool(
         )?;
     }
 
-    Ok(outcome)
+    let pinned_version = match outcome {
+        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
+            pinned_requirement_version(&existing_tool_receipt, name)
+        }
+    };
+
+    Ok((outcome, pinned_version))
+}
+
+fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
+    pinned_version_from(tool.requirements(), name)
+        .or_else(|| pinned_version_from(tool.constraints(), name))
+}
+
+fn pinned_version_from(requirements: &[Requirement], name: &PackageName) -> Option<Version> {
+    requirements
+        .iter()
+        .filter(|requirement| requirement.name == *name)
+        .find_map(|requirement| match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                let mut specifiers = specifier.iter();
+
+                let first = specifiers.next()?;
+
+                if specifiers.next().is_some() {
+                    return None;
+                }
+
+                match first.operator() {
+                    Operator::Equal | Operator::ExactEqual => Some(first.version().clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
 }
