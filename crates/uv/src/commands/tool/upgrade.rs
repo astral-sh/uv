@@ -115,8 +115,8 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
-    // Track tools that could not be upgraded due to pinned versions.
-    let mut pinned = Vec::new();
+    // Collect reasons why upgrades were skipped or altered.
+    let mut collected_reasons: Vec<(PackageName, UpgradeReason)> = Vec::new();
 
     let mut errors = Vec::new();
     for (name, constraints) in &names {
@@ -139,27 +139,21 @@ pub(crate) async fn upgrade(
         .await;
 
         match result {
-            Ok(outcome) => {
-                let pinned_version = outcome.pinned_version().cloned();
-
-                if let Some(version) = pinned_version.as_ref() {
-                    debug!("`{name}` remains pinned to version {version}; skipping tool upgrade");
-                }
-
-                match outcome {
+            Ok(report) => {
+                match report.outcome {
                     UpgradeOutcome::UpgradeEnvironment => {
                         did_upgrade_environment.push(name);
                     }
-                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies { .. } => {
+                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies => {
                         did_upgrade_tool.push(name);
                     }
-                    UpgradeOutcome::NoOp { .. } => {
+                    UpgradeOutcome::NoOp => {
                         debug!("Upgrading `{name}` was a no-op");
                     }
                 }
 
-                if let Some(version) = pinned_version {
-                    pinned.push((name.clone(), version));
+                if let Some(reason) = report.reason.clone() {
+                    collected_reasons.push((name.clone(), reason));
                 }
             }
             Err(err) => {
@@ -205,18 +199,8 @@ pub(crate) async fn upgrade(
         }
     }
 
-    for (name, version) in pinned {
-        let name_str = name.to_string();
-        let version_str = version.to_string();
-        let reinstall_command = format!("uv tool install {name_str}@latest");
-
-        writeln!(
-            printer.stderr(),
-            "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to upgrade to a new version.",
-            name_str.cyan(),
-            version_str.magenta(),
-            reinstall_command.green(),
-        )?;
+    for (name, reason) in collected_reasons {
+        reason.print(&name, printer)?;
     }
 
     Ok(ExitStatus::Success)
@@ -226,20 +210,44 @@ enum UpgradeOutcome {
     /// The tool itself was upgraded.
     UpgradeTool,
     /// The tool's dependencies were upgraded, but the tool itself was unchanged.
-    UpgradeDependencies { pinned_version: Option<Version> },
+    UpgradeDependencies,
     /// The tool's environment was upgraded.
     UpgradeEnvironment,
     /// The tool was already up-to-date.
-    NoOp { pinned_version: Option<Version> },
+    NoOp,
 }
 
-impl UpgradeOutcome {
-    fn pinned_version(&self) -> Option<&Version> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpgradeReport {
+    outcome: UpgradeOutcome,
+    reason: Option<UpgradeReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum UpgradeReason {
+    /// The tool remains pinned to an exact version, so an upgrade was skipped.
+    PinnedVersion { version: Version },
+}
+
+impl UpgradeReason {
+    fn print(&self, name: &PackageName, printer: Printer) -> Result<()> {
         match self {
-            UpgradeOutcome::UpgradeDependencies { pinned_version }
-            | UpgradeOutcome::NoOp { pinned_version } => pinned_version.as_ref(),
-            UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+            Self::PinnedVersion { version } => {
+                let name_str = name.to_string();
+                let version_str = version.to_string();
+                let reinstall_command = format!("uv tool install {name_str}@latest");
+
+                writeln!(
+                    printer.stderr(),
+                    "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to upgrade to a new version.",
+                    name_str.cyan(),
+                    version_str.magenta(),
+                    reinstall_command.green(),
+                )?;
+            }
         }
+
+        Ok(())
     }
 }
 
@@ -258,7 +266,7 @@ async fn upgrade_tool(
     installer_metadata: bool,
     concurrency: Concurrency,
     preview: Preview,
-) -> Result<UpgradeOutcome> {
+) -> Result<UpgradeReport> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -400,13 +408,9 @@ async fn upgrade_tool(
         let outcome = if changelog.includes(name) {
             UpgradeOutcome::UpgradeTool
         } else if changelog.is_empty() {
-            UpgradeOutcome::NoOp {
-                pinned_version: pinned_requirement_version(&existing_tool_receipt, name),
-            }
+            UpgradeOutcome::NoOp
         } else {
-            UpgradeOutcome::UpgradeDependencies {
-                pinned_version: pinned_requirement_version(&existing_tool_receipt, name),
-            }
+            UpgradeOutcome::UpgradeDependencies
         };
 
         (environment, outcome)
@@ -443,7 +447,15 @@ async fn upgrade_tool(
         )?;
     }
 
-    Ok(outcome)
+    let reason = match &outcome {
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
+            pinned_requirement_version(&existing_tool_receipt, name)
+                .map(|version| UpgradeReason::PinnedVersion { version })
+        }
+        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+    };
+
+    Ok(UpgradeReport { outcome, reason })
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
