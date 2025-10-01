@@ -136,9 +136,9 @@
       matchManagers: [
         "cargo"
       ],
-      matchPackageNames: [
-        "/pubgrub/",
-        "/version-ranges/"
+      matchDepName: [
+        "pubgrub",
+        "version-ranges"
       ],
       description: "version-ranges and pubgrub are in the same Git repository",
     },
