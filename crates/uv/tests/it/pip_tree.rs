@@ -1,8 +1,8 @@
 #![cfg(not(windows))]
 
 use std::process::Command;
+use assert_cmd::assert::OutputAssertExt;
 
-use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileTouch;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
@@ -1185,21 +1185,22 @@ fn no_duplicate_dependencies_with_markers() {
         build-backend = "uv_build"
     "#};
 
-    fn write_debug_package(context: &TestContext, contents: &str) -> ChildPath {
-        let project = context.temp_dir.child("debug");
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]).with_filtered_counts();
 
-        project.create_dir_all().unwrap();
+    let project = context.temp_dir.child("debug");
 
-        project.child("src/debug/__init__.py").touch().unwrap();
+    project.create_dir_all().unwrap();
 
-        project.child("pyproject.toml").write_str(contents).unwrap();
+    project.child("src/debug").create_dir_all().unwrap();
 
-        project
-    }
+    project.child("src/debug/__init__.py").touch().unwrap();
 
-    let context = TestContext::new("3.12").with_filtered_counts();
+    project
+        .child("pyproject.toml")
+        .write_str(PY_PROJECT)
+        .unwrap();
 
-    let project = write_debug_package(&context, PY_PROJECT);
+    context.reset_venv();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
@@ -1245,9 +1246,13 @@ fn no_duplicate_dependencies_with_markers() {
     "###
     );
 
-    let context = TestContext::new("3.13").with_filtered_counts();
-
-    let project = write_debug_package(&context, PY_PROJECT);
+    context
+        .venv()
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.13")
+        .assert()
+        .success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
