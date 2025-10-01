@@ -1,7 +1,7 @@
 #![cfg(not(windows))]
 
-use std::process::Command;
 use assert_cmd::assert::OutputAssertExt;
+use std::process::Command;
 
 use assert_fs::fixture::FileTouch;
 use assert_fs::fixture::FileWriteStr;
