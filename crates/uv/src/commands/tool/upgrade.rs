@@ -212,7 +212,7 @@ pub(crate) async fn upgrade(
 
         writeln!(
             printer.stderr(),
-            "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to pick up a newer release.",
+            "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to upgrade to a new version.",
             name_str.cyan(),
             version_str.magenta(),
             reinstall_command.green(),
