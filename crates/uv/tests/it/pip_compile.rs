@@ -16096,7 +16096,7 @@ fn group_requires_python_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.14`, but the active Python requirement is `>=3.13.[X]`
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.14`, but uv is resolving for Python `>=3.13.[X]` (current interpreter: `3.13.[X]`). Re-run with `--python 3.14` to target a compatible Python version.
     ");
 
     Ok(())

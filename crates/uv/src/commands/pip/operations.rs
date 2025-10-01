@@ -27,6 +27,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::Operator;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
@@ -38,7 +39,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    Preferences, PythonRequirement, PythonRequirementSource, Resolver, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -240,13 +242,67 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                             .target()
                             .is_contained_by(requires_python.specifiers())
                         {
-                            return Err(anyhow!(
-                                "Dependency group `{group_name}` in `{}` requires Python `{}`, but the active Python requirement is `{}`",
-                                pyproject_path.user_display(),
-                                requires_python.specifiers(),
-                                python_requirement.target().specifiers()
-                            )
-                            .into());
+                            let required_spec = requires_python.specifiers().to_string();
+                            let active_spec = python_requirement.target().specifiers().to_string();
+                            let interpreter_version = python_requirement.exact();
+                            let interpreter_display = interpreter_version.to_string();
+
+                            let suggested_version = requires_python
+                                .range()
+                                .lower()
+                                .specifier()
+                                .and_then(|specifier| {
+                                    let (operator, version) = specifier.into_parts();
+
+                                    match operator {
+                                        Operator::GreaterThan
+                                        | Operator::GreaterThanEqual
+                                        | Operator::Equal
+                                        | Operator::ExactEqual
+                                        | Operator::EqualStar
+                                        | Operator::TildeEqual => Some(version),
+                                        _ => None,
+                                    }
+                                });
+
+                            let source_hint = match python_requirement.source() {
+                                PythonRequirementSource::PythonVersion => " (set via `--python`)",
+                                PythonRequirementSource::RequiresPython => {
+                                    " (set via this project's `requires-python`)"
+                                }
+                                PythonRequirementSource::Interpreter => "",
+                            };
+
+                            let mut message = format!(
+                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}`{source_hint} (current interpreter: `{interpreter_display}`).",
+                                pyproject_path.user_display()
+                            );
+
+                            let call_to_action = if let Some(ref version) = suggested_version {
+                                let suggested_python = version.to_string();
+
+                                if interpreter_version >= version
+                                    && matches!(
+                                        python_requirement.source(),
+                                        PythonRequirementSource::PythonVersion
+                                    )
+                                {
+                                    format!(
+                                        " Drop `--python` to use your current interpreter or re-run with `--python {suggested_python}` to target a compatible Python version."
+                                    )
+                                } else {
+                                    format!(
+                                        " Re-run with `--python {suggested_python}` to target a compatible Python version."
+                                    )
+                                }
+                            } else {
+                                " Specify a compatible Python version with `--python <VERSION>`."
+                                    .to_string()
+                            };
+
+                            message.push_str(&call_to_action);
+
+                            return Err(anyhow!(message).into());
                         }
                     }
 
