@@ -205,9 +205,7 @@ pub(crate) async fn upgrade(
 
     for (name, version) in pinned {
         let name_str = name.to_string();
-
         let version_str = version.to_string();
-
         let reinstall_command = format!("uv tool install {name_str}@latest");
 
         writeln!(
