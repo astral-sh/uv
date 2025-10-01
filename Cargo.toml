@@ -145,7 +145,7 @@ percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "d8efd77673c9a90792da9da31b6c0da7ea8a324b" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "1447cf0602410ed07e1b4b6176debac90438f9c7" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
