@@ -2072,7 +2072,7 @@ fn group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     Ok(())
@@ -2217,7 +2217,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` (enabled by default) and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` (enabled by default) and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
@@ -2228,7 +2228,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
@@ -2239,7 +2239,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // Disabling the default group should succeed.
