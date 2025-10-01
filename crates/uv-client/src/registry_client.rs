@@ -23,7 +23,7 @@ use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
-    RegistryVariantsJson, VariantsJson,
+    RegistryVariantsJson, VariantsJsonFilename,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -1246,7 +1246,7 @@ pub struct VersionSourceDist {
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionVariantJson {
-    pub name: VariantsJson,
+    pub name: VariantsJsonFilename,
     pub file: File,
 }
 
