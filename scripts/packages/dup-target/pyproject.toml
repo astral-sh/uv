@@ -1,8 +1,0 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "dup-target"
-version = "0.4.0"
-description = "Test package for marker duplication"

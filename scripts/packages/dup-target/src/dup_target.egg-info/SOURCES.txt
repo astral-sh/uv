@@ -1,6 +1,0 @@
-pyproject.toml
-src/dup_target/__init__.py
-src/dup_target.egg-info/PKG-INFO
-src/dup_target.egg-info/SOURCES.txt
-src/dup_target.egg-info/dependency_links.txt
-src/dup_target.egg-info/top_level.txt
