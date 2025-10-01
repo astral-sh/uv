@@ -235,13 +235,30 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
-                    requirements.extend(group.iter().cloned().map(|group| Requirement {
-                        origin: Some(RequirementOrigin::Group(
-                            pyproject_path.clone(),
-                            metadata.name.clone(),
-                            group_name.clone(),
-                        )),
-                        ..group
+                    if let Some(requires_python) = group.requires_python.as_ref() {
+                        if !python_requirement
+                            .target()
+                            .is_contained_by(requires_python.specifiers())
+                        {
+                            return Err(anyhow!(
+                                "Dependency group `{group_name}` in `{}` requires Python `{}`, but the active Python requirement is `{}`",
+                                pyproject_path.user_display(),
+                                requires_python.specifiers(),
+                                python_requirement.target().specifiers()
+                            )
+                            .into());
+                        }
+                    }
+
+                    requirements.extend(group.requirements.iter().cloned().map(|group| {
+                        Requirement {
+                            origin: Some(RequirementOrigin::Group(
+                                pyproject_path.clone(),
+                                metadata.name.clone(),
+                                group_name.clone(),
+                            )),
+                            ..group
+                        }
                     }));
                 }
             }

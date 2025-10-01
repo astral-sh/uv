@@ -16071,6 +16071,38 @@ fn project_and_group_workspace() -> Result<()> {
 }
 
 #[test]
+fn group_requires_python_incompatible() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "requires-python"
+        version = "0.1.0"
+
+        [tool.uv.dependency-groups.ml1]
+        requires-python = ">=3.14"
+
+        [dependency-groups]
+        ml1 = ["tqdm"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:ml1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.14`, but the active Python requirement is `>=3.13.[X]`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn directory_and_group() -> Result<()> {
     // Checking that --directory is handled properly with --group
     fn new_context() -> Result<TestContext> {
