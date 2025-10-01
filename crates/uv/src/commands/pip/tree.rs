@@ -503,26 +503,21 @@ impl<'env> DisplayDependencyGraph<'env> {
 
     /// Aggregate the requirements associated with the incoming edges for a node.
     fn aggregate_requirement(&self, cursor: &Cursor) -> Option<String> {
-        let (url, specifiers) = cursor.edge_ids().iter().fold(
-            (None::<String>, Vec::new()),
-            |(url, mut specs), edge_id| {
-                let requirement = &self.graph[*edge_id];
+        let mut specifiers = Vec::new();
 
-                let url = match requirement.version_or_url.as_ref() {
-                    None => url,
-                    Some(VersionOrUrl::VersionSpecifier(values)) => {
-                        specs.extend(values.iter().cloned());
-                        url
-                    }
-                    Some(VersionOrUrl::Url(value)) => url.or_else(|| Some(value.to_string())),
-                };
+        for edge_id in cursor.edge_ids() {
+            let requirement = &self.graph[*edge_id];
 
-                (url, specs)
-            },
-        );
+            let Some(version_or_url) = requirement.version_or_url.as_ref() else {
+                continue;
+            };
 
-        if let Some(url) = url {
-            return Some(url);
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(values) => {
+                    specifiers.extend(values.iter().cloned());
+                }
+                VersionOrUrl::Url(value) => return Some(value.to_string()),
+            }
         }
 
         if specifiers.is_empty() {
