@@ -19,7 +19,8 @@ use uv_pypi_types::{DirectUrl, MetadataError};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VariantsJson,
+    VersionOrUrlRef,
 };
 
 #[derive(Error, Debug)]
@@ -482,6 +483,19 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }
+    }
+
+    /// Read the `variant.json` file of the distribution, if it exists.
+    pub fn read_variant_json(&self) -> Result<Option<VariantsJson>, InstalledDistError> {
+        let path = self.install_path().join("variant.json");
+        let file = match fs_err::File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let variants_json =
+            serde_json::from_reader::<BufReader<fs_err::File>, VariantsJson>(BufReader::new(file))?;
+        Ok(Some(variants_json))
     }
 
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
