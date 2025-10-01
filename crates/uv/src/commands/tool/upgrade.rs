@@ -208,7 +208,7 @@ pub(crate) async fn upgrade(
 
         let version_str = version.to_string();
 
-        let reinstall_command = format!("uv tool install {}@latest", name_str);
+        let reinstall_command = format!("uv tool install {name_str}@latest");
 
         writeln!(
             printer.stderr(),
