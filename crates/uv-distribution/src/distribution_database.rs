@@ -25,7 +25,7 @@ use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, RegistryVariantsJson, SourceDist, ToUrlError, VariantsJson,
+    Name, RegistryVariantsJson, SourceDist, ToUrlError, VariantsJsonFilename,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -596,7 +596,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         variants_json: VariantsJsonContent,
         marker_env: &MarkerEnvironment,
-        debug_filename: &VariantsJson,
+        debug_filename: &VariantsJsonFilename,
     ) -> Result<ResolvedVariants, Error> {
         // TODO: parse_boolish_environment_variable
         let locked_and_inferred =

@@ -26,12 +26,12 @@ pub enum VariantsJsonError {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-pub struct VariantsJson {
+pub struct VariantsJsonFilename {
     pub name: PackageName,
     pub version: Version,
 }
 
-impl VariantsJson {
+impl VariantsJsonFilename {
     /// Returns a consistent cache key with a maximum length of 64 characters.
     pub fn cache_key(&self) -> String {
         const CACHE_KEY_MAX_LEN: usize = 64;
@@ -50,7 +50,7 @@ impl VariantsJson {
     }
 }
 
-impl FromStr for VariantsJson {
+impl FromStr for VariantsJsonFilename {
     type Err = VariantsJsonError;
 
     /// Parse a `<name>-<version>-variants.json` filename.
@@ -71,7 +71,7 @@ impl FromStr for VariantsJson {
     }
 }
 
-impl Display for VariantsJson {
+impl Display for VariantsJsonFilename {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}-variants.json", self.name, self.version)
     }
@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn variants_json_parsing() {
-        let variant = VariantsJson::from_str("numpy-1.21.0-variants.json").unwrap();
+        let variant = VariantsJsonFilename::from_str("numpy-1.21.0-variants.json").unwrap();
         assert_eq!(variant.name.as_str(), "numpy");
         assert_eq!(variant.version.to_string(), "1.21.0");
     }

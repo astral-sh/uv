@@ -30,7 +30,7 @@ use uv_distribution_types::{
     IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RegistryVariantsJson, RemoteSource, Requirement, RequirementSource,
     RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
-    VariantsJson,
+    VariantsJsonFilename,
 };
 use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2967,7 +2967,7 @@ impl Package {
             zstd: None,
         };
         Ok(Some(RegistryVariantsJson {
-            filename: VariantsJson {
+            filename: VariantsJsonFilename {
                 name: self.name().clone(),
                 version: version.clone(),
             },

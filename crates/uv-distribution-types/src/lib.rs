@@ -1482,7 +1482,7 @@ impl Identifier for BuildableSource<'_> {
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryVariantsJson {
-    pub filename: VariantsJson,
+    pub filename: VariantsJsonFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
 }
