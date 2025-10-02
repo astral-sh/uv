@@ -1,10 +1,10 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{FlatIndexEntry, MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
+    File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -45,6 +45,26 @@ impl LatestClient<'_> {
     ) -> Result<Option<DistFilename>, uv_client::Error> {
         debug!("Fetching latest version of: `{package}`");
 
+        let mut latest: Option<DistFilename> = None;
+
+        let mut update_latest = |candidate: DistFilename| {
+            match latest.as_ref() {
+                Some(current) => {
+                    // Prefer higher versions, and prefer wheels over sdists at parity.
+                    if candidate.version() > current.version()
+                        || (candidate.version() == current.version()
+                            && matches!(candidate, DistFilename::WheelFilename(_))
+                            && matches!(current, DistFilename::SourceDistFilename(_)))
+                    {
+                        latest = Some(candidate);
+                    }
+                }
+                None => {
+                    latest = Some(candidate);
+                }
+            }
+        };
+
         let archives = match self
             .client
             .simple_detail(
@@ -66,98 +86,102 @@ impl LatestClient<'_> {
             }
         };
 
-        let mut latest: Option<DistFilename> = None;
         for (index, archive) in archives {
-            let MetadataFormat::Simple(archive) = archive else {
-                continue;
-            };
             let exclude_newer = self.effective_exclude_newer(package, index);
 
-            for datum in archive.iter().rev() {
-                // Find the first compatible distribution.
-                let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
-                    .expect("archived version files always deserializes");
-
-                // Determine whether there's a compatible wheel and/or source distribution.
-                let mut best = None;
-
-                for (filename, file) in files.all() {
-                    // Skip distributions uploaded after the cutoff.
-                    if let Some(exclude_newer) = &exclude_newer {
-                        match file.upload_time_utc_ms.as_ref() {
-                            Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
-                                continue;
-                            }
-                            None => {
-                                warn_user_once!(
-                                    "{} is missing an upload date, but user provided: {}",
-                                    file.filename,
-                                    exclude_newer
-                                );
-                            }
-                            _ => {}
+            let consider_candidate = |filename: &DistFilename, file: &File| {
+                if let Some(exclude_newer) = &exclude_newer {
+                    match file.upload_time_utc_ms.as_ref() {
+                        Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
+                            return false;
                         }
-                    }
-
-                    // Skip pre-release distributions.
-                    if !filename.version().is_stable() {
-                        if !matches!(self.prerelease, PrereleaseMode::Allow) {
-                            continue;
+                        None => {
+                            warn_user_once!(
+                                "{} is missing an upload date, but user provided: {}",
+                                file.filename,
+                                exclude_newer
+                            );
                         }
-                    }
-
-                    // Skip distributions that are yanked.
-                    if file.yanked.is_some_and(|yanked| yanked.is_yanked()) {
-                        continue;
-                    }
-
-                    // Skip distributions that are incompatible with the Python requirement.
-                    if let Some(requires_python) = self.requires_python {
-                        if file
-                            .requires_python
-                            .as_ref()
-                            .is_some_and(|file_requires_python| {
-                                !requires_python.is_contained_by(file_requires_python)
-                            })
-                        {
-                            continue;
-                        }
-                    }
-
-                    // Skip distributions that are incompatible with the current platform.
-                    if let DistFilename::WheelFilename(filename) = &filename {
-                        if self
-                            .tags
-                            .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
-                        {
-                            continue;
-                        }
-                    }
-
-                    match filename {
-                        DistFilename::WheelFilename(_) => {
-                            best = Some(filename);
-                            break;
-                        }
-                        DistFilename::SourceDistFilename(_) => {
-                            if best.is_none() {
-                                best = Some(filename);
-                            }
-                        }
+                        _ => {}
                     }
                 }
 
-                match (latest.as_ref(), best) {
-                    (Some(current), Some(best)) if best.version() > current.version() => {
-                        latest = Some(best);
+                if !filename.version().is_stable()
+                    && !matches!(self.prerelease, PrereleaseMode::Allow)
+                {
+                    return false;
+                }
+
+                if file
+                    .yanked
+                    .as_ref()
+                    .is_some_and(|yanked| yanked.is_yanked())
+                {
+                    return false;
+                }
+
+                if let Some(requires_python) = self.requires_python
+                    && file
+                        .requires_python
+                        .as_ref()
+                        .is_some_and(|file_requires_python| {
+                            !requires_python.is_contained_by(file_requires_python)
+                        })
+                {
+                    return false;
+                }
+
+                if let DistFilename::WheelFilename(filename) = filename
+                    && self
+                        .tags
+                        .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
+                {
+                    return false;
+                }
+
+                true
+            };
+
+            match archive {
+                MetadataFormat::Simple(archive) => {
+                    for datum in archive.iter().rev() {
+                        let files =
+                            rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
+                                .expect("archived version files always deserializes");
+
+                        let mut best: Option<DistFilename> = None;
+                        for (filename, file) in files.all() {
+                            if !consider_candidate(&filename, &file) {
+                                continue;
+                            }
+
+                            match filename {
+                                DistFilename::WheelFilename(_) => {
+                                    best = Some(filename);
+                                    break;
+                                }
+                                DistFilename::SourceDistFilename(_) if best.is_none() => {
+                                    best = Some(filename);
+                                }
+                                DistFilename::SourceDistFilename(_) => {}
+                            }
+                        }
+
+                        if let Some(best) = best {
+                            update_latest(best);
+                        }
                     }
-                    (None, Some(best)) => {
-                        latest = Some(best);
+                }
+                MetadataFormat::Flat(entries) => {
+                    for FlatIndexEntry { filename, file, .. } in entries {
+                        if consider_candidate(&filename, &file) {
+                            update_latest(filename);
+                        }
                     }
-                    _ => {}
                 }
             }
         }
+
         Ok(latest)
     }
 }
