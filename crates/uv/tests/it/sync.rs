@@ -11820,8 +11820,8 @@ fn sync_build_tag() -> Result<()> {
         source = { registry = "[TEMP_DIR]/links" }
         wheels = [
             { path = "[TEMP_DIR]/links/build_tag-1.0.0-1-py2.py3-none-any.whl" },
-            { path = "[TEMP_DIR]/links/build_tag-1.0.0-5-py2.py3-none-any.whl" },
             { path = "[TEMP_DIR]/links/build_tag-1.0.0-3-py2.py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/build_tag-1.0.0-5-py2.py3-none-any.whl" },
         ]
 
         [[package]]
