@@ -271,9 +271,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                             if let Some(ref version) = suggested_version {
                                 let suggested_python = version.to_string();
 
-                                write!(message, "{}", &format!(
-                                    " Re-run with `--python {suggested_python}` to target a compatible Python version."
-                                ))?;
+                                write!(
+                                    message,
+                                    "{}",
+                                    &format!(
+                                        " Re-run with `--python {suggested_python}` to target a compatible Python version."
+                                    )
+                                )?;
                             }
 
                             return Err(anyhow!(message).into());
