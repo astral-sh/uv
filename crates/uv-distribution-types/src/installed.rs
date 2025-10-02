@@ -17,10 +17,10 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
 use uv_redacted::DisplaySafeUrl;
+use uv_variants::variants_json::DistInfoVariantsJson;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VariantsJson,
-    VersionOrUrlRef,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
 };
 
 #[derive(Error, Debug)]
@@ -486,15 +486,16 @@ impl InstalledDist {
     }
 
     /// Read the `variant.json` file of the distribution, if it exists.
-    pub fn read_variant_json(&self) -> Result<Option<VariantsJson>, InstalledDistError> {
+    pub fn read_variant_json(&self) -> Result<Option<DistInfoVariantsJson>, InstalledDistError> {
         let path = self.install_path().join("variant.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let variants_json =
-            serde_json::from_reader::<BufReader<fs_err::File>, VariantsJson>(BufReader::new(file))?;
+        let variants_json = serde_json::from_reader::<BufReader<fs_err::File>, DistInfoVariantsJson>(
+            BufReader::new(file),
+        )?;
         Ok(Some(variants_json))
     }
 
