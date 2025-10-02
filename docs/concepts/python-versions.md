@@ -466,6 +466,15 @@ Pyodide distributions are provided by the [Pyodide project](https://github.com/p
 
 Pyodide is a port of CPython for the WebAssembly / Emscripten platform.
 
+## Transparent x86_64 emulation on aarch64
+
+Both macOS and Windows support running x86_64 binaries on aarch64 through transparent emulation.
+This is called [Rosetta 2](https://support.apple.com/en-gb/102527) or
+[Windows on ARM (WoA) emulation](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation).
+It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Python interpreter on
+aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
+for its architecture, either all x86_64 or all aarch64.
+
 ## Registration in the Windows registry
 
 On Windows, installation of managed Python versions will register them with the Windows registry as
