@@ -177,7 +177,7 @@ fn list_outdated_json() -> Result<()> {
 }
 
 #[test]
-fn list_outdated_find_links() -> Result<()> {
+fn list_outdated_find_links() {
     let context = TestContext::new("3.12");
 
     let links_dir = context.workspace_root.join("scripts/links");
@@ -217,8 +217,6 @@ fn list_outdated_find_links() -> Result<()> {
     warning: validation-1.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     "###
     );
-
-    Ok(())
 }
 
 #[test]
