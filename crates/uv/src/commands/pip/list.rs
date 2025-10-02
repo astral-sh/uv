@@ -16,10 +16,9 @@ use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
-use uv_distribution_filename::DistFilename;
+use uv_distribution_filename::{DistFilename, VariantLabel};
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
-    VariantsJson,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -29,6 +28,7 @@ use uv_preview::Preview;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_variants::variants_json::DistInfoVariantsJson;
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -172,8 +172,8 @@ pub(crate) async fn pip_list(
                         .ok()
                         .flatten()
                         .as_ref()
-                        .and_then(VariantsJson::label)
-                        .map(ToString::to_string),
+                        .and_then(DistInfoVariantsJson::label)
+                        .cloned(),
                     latest_version: latest
                         .get(dist.name())
                         .and_then(|filename| filename.as_ref())
@@ -220,7 +220,7 @@ pub(crate) async fn pip_list(
                         .ok()
                         .flatten()
                         .as_ref()
-                        .and_then(VariantsJson::label)
+                        .and_then(DistInfoVariantsJson::label)
                         .map(ToString::to_string)
                 })
                 .collect_vec();
@@ -360,7 +360,7 @@ struct Entry {
     name: PackageName,
     version: Version,
     #[serde(skip_serializing_if = "Option::is_none")]
-    variant: Option<String>,
+    variant: Option<VariantLabel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     latest_version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -5360,6 +5360,7 @@ dependencies = [
  "uv-torch",
  "uv-trampoline-builder",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",

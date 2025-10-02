@@ -96,6 +96,26 @@ pub struct VariantsJsonContent {
     pub variants: FxHashMap<VariantLabel, Variant>,
 }
 
+/// A `{name}-{version}.dist-info/variant.json` file.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[allow(clippy::zero_sized_map_values)]
+pub struct DistInfoVariantsJson {
+    pub variants: FxHashMap<VariantLabel, serde::de::IgnoredAny>,
+}
+
+impl DistInfoVariantsJson {
+    /// Returns the label for the current variant.
+    pub fn label(&self) -> Option<&VariantLabel> {
+        let mut keys = self.variants.keys();
+        let label = keys.next()?;
+        if keys.next().is_some() {
+            None
+        } else {
+            Some(label)
+        }
+    }
+}
+
 /// Default provider priorities
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
