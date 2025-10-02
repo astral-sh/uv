@@ -6071,7 +6071,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+      ╰─▶ Because first-local was not found in the package registry and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
           And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -6190,7 +6190,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+      ╰─▶ Because first-local was not found in the package registry and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
           And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
