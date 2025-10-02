@@ -212,9 +212,9 @@ fn list_outdated_find_links() {
     validation 1.0.0   3.0.0  wheel
 
     ----- stderr -----
+    warning: validation-1.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     warning: validation-2.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     warning: validation-3.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
-    warning: validation-1.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     "###
     );
 }
