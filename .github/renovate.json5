@@ -89,7 +89,7 @@
     {
       groupName: "pubgrub",
       matchManagers: ["cargo"],
-      matchDepName: ["pubgrub", "version-ranges"],
+      matchDepNames: ["pubgrub", "version-ranges"],
       description: "version-ranges and pubgrub are in the same Git repository",
     },
     {
