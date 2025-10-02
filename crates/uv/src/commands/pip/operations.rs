@@ -243,8 +243,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         {
                             let required_spec = requires_python.specifiers().to_string();
                             let active_spec = python_requirement.target().specifiers().to_string();
-                            let interpreter_version = python_requirement.exact();
-                            let interpreter_display = interpreter_version.to_string();
+                            let interpreter_version = python_requirement.exact().to_string();
 
                             let suggested_version = requires_python
                                 .range()
@@ -264,7 +263,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                                 });
 
                             let mut message = format!(
-                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}` (current interpreter: `{interpreter_display}`).",
+                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}` (current interpreter: `{interpreter_version}`).",
                                 pyproject_path.user_display()
                             );
 
