@@ -16104,7 +16104,7 @@ fn group_requires_python_incompatible_with_interpreter() -> Result<()> {
 
 #[test]
 fn group_requires_python_incompatible_with_python_flag() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -16129,8 +16129,7 @@ fn group_requires_python_incompatible_with_python_flag() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The requested Python version 3.12 is not available; 3.13.[X] will be used to build dependencies instead.
-    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.13`, but uv is resolving for Python `>=3.12` (current interpreter: `3.13.[X]`). Re-run with `--python 3.13` to target a compatible Python version.
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.13`, but uv is resolving for Python `>=3.12` (current interpreter: `3.12.[X]`). Re-run with `--python 3.13` to target a compatible Python version.
     ");
 
     Ok(())
