@@ -1358,7 +1358,7 @@ fn init_workspace() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
@@ -1402,8 +1402,8 @@ fn init_workspace() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
-            "bar",
+          "foo",
+          "bar",
         ]
         "#
         );
@@ -1421,8 +1421,8 @@ fn init_workspace() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
-            "bar",
+          "foo",
+          "bar",
         ]
         "#,
     })?;
@@ -1455,9 +1455,9 @@ fn init_workspace() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
-            "bar",
-            "baz",
+          "foo",
+          "bar",
+          "baz",
         ]
         "#
         );
@@ -1543,7 +1543,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
@@ -1640,7 +1640,7 @@ fn init_workspace_outside() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
@@ -1800,7 +1800,7 @@ fn init_isolated() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
@@ -1966,8 +1966,8 @@ fn init_project_inside_project() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
-            "foo/bar",
+          "foo",
+          "foo/bar",
         ]
         "#
         );
@@ -2035,7 +2035,7 @@ fn init_explicit_workspace() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
@@ -2106,7 +2106,7 @@ fn init_virtual_project() -> Result<()> {
 
         [tool.uv.workspace]
         members = [
-            "bar",
+          "bar",
         ]
         "#
         );
@@ -2150,7 +2150,7 @@ fn init_virtual_workspace() -> Result<()> {
             pyproject, @r#"
         [tool.uv.workspace]
         members = [
-            "bar",
+          "bar",
         ]
         "#
         );
@@ -2207,7 +2207,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
             workspace, @r#"
         [tool.uv.workspace]
         members = [
-            "foo",
+          "foo",
         ]
         "#
         );
