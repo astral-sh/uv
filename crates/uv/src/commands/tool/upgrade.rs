@@ -206,7 +206,7 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
     UpgradeTool,
