@@ -635,10 +635,6 @@ Used to determine the name of the active Conda environment.
 
 Used to detect the path of an active Conda environment.
 
-### `CONDA_ROOT`
-
-Used to determine the root install path of Conda.
-
 ### `FISH_VERSION`
 
 Used to detect Fish shell usage.
@@ -888,4 +884,8 @@ Used to determine which `.zshenv` to use when Zsh is being used.
 ### `ZSH_VERSION`
 
 Used to detect Zsh shell usage.
+
+### `_CONDA_ROOT`
+
+Used to determine the root install path of Conda.
 
