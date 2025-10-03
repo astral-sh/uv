@@ -135,6 +135,7 @@ impl GitSource {
                 &self.client,
                 self.disable_ssl,
                 self.offline,
+                self.git.lfs(),
             )?;
 
             Ok((db, actual_rev, task))
