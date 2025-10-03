@@ -883,6 +883,24 @@ fn seed_older_python_version() {
 }
 
 #[test]
+fn create_venv_with_invalid_http_timeout() {
+    let context = TestContext::new_with_versions(&["3.12"]).with_http_timeout("not_a_number");
+
+    // Create a virtual environment at `.venv`.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: expected an integer
+    "###);
+}
+
+#[test]
 fn create_venv_unknown_python_minor() {
     let context = TestContext::new_with_versions(&["3.12"]).with_filtered_python_sources();
 

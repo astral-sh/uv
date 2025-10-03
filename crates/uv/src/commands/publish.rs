@@ -125,7 +125,7 @@ pub(crate) async fn publish(
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
         // download. 15 min is taken from the time a trusted publishing token is valid.
-        .default_timeout(Duration::from_secs(15 * 60))
+        .timeout(Duration::from_secs(15 * 60))
         .build();
     let oidc_client = client_builder
         .clone()

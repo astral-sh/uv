@@ -66,6 +66,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -265,6 +266,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -465,6 +467,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -697,6 +700,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -898,6 +902,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1075,6 +1080,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1301,6 +1307,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1535,6 +1542,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1827,6 +1835,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2050,6 +2059,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2232,6 +2242,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2464,6 +2475,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2719,6 +2731,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2891,6 +2904,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3063,6 +3077,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3237,6 +3252,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3430,6 +3446,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3615,6 +3632,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3821,6 +3839,7 @@ fn resolve_both() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4066,6 +4085,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4390,6 +4410,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4689,6 +4710,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4864,6 +4886,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5058,6 +5081,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                     port: None,
                 },
             ],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5244,6 +5268,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5478,6 +5503,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5718,6 +5744,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5953,6 +5980,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6195,6 +6223,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6430,6 +6459,7 @@ fn index_priority() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6678,6 +6708,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6843,6 +6874,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7006,6 +7038,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7171,6 +7204,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7334,6 +7368,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7498,6 +7533,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7677,6 +7713,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7789,6 +7826,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7901,6 +7939,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8013,6 +8052,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8125,6 +8165,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8239,6 +8280,7 @@ fn preview_features() {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8372,6 +8414,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8545,6 +8588,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8741,6 +8785,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8912,6 +8957,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9077,6 +9123,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9243,6 +9290,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9474,6 +9522,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9591,6 +9640,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9731,6 +9781,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9846,6 +9897,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9951,6 +10003,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10057,6 +10110,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10227,6 +10281,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10395,6 +10450,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             connectivity: Online,
             native_tls: false,
             allow_insecure_host: [],
+            timeout: [TIME],
         },
         concurrency: Concurrency {
             downloads: 50,

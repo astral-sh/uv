@@ -24,7 +24,7 @@ pub(crate) async fn logout(
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
     if pyx_store.is_known_domain(service.url()) {
-        return pyx_logout(&pyx_store, network_settings, printer).await;
+        return pyx_logout(&pyx_store, network_settings, printer, preview).await;
     }
 
     let backend = AuthBackend::from_settings(preview)?;
@@ -95,13 +95,17 @@ async fn pyx_logout(
     store: &PyxTokenStore,
     network_settings: &NetworkSettings,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    let client = BaseClientBuilder::new(
+        network_settings.connectivity,
+        network_settings.native_tls,
+        network_settings.allow_insecure_host.clone(),
+        preview,
+        network_settings.timeout,
+    )
+    .build();
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {

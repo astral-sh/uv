@@ -79,7 +79,7 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
     indexes: Indexes,
-    default_timeout: Duration,
+    timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
@@ -137,7 +137,7 @@ impl Default for BaseClientBuilder<'_> {
             platform: None,
             auth_integration: AuthIntegration::default(),
             indexes: Indexes::new(),
-            default_timeout: Duration::from_secs(30),
+            timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
             redirect_policy: RedirectPolicy::default(),
@@ -153,12 +153,14 @@ impl BaseClientBuilder<'_> {
         native_tls: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
+        timeout: Duration,
     ) -> Self {
         Self {
             preview,
             allow_insecure_host,
             native_tls,
             connectivity,
+            timeout,
             ..Self::default()
         }
     }
@@ -246,8 +248,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
-        self.default_timeout = default_timeout;
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
         self
     }
 
@@ -299,21 +301,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> BaseClient {
-        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let timeout = env::var(EnvVars::UV_HTTP_TIMEOUT)
-            .or_else(|_| env::var(EnvVars::UV_REQUEST_TIMEOUT))
-            .or_else(|_| env::var(EnvVars::HTTP_TIMEOUT))
-            .and_then(|value| {
-                value.parse::<u64>()
-                    .map(Duration::from_secs)
-                    .or_else(|_| {
-                        // On parse error, warn and use the default timeout
-                        warn_user_once!("Ignoring invalid value from environment for `UV_HTTP_TIMEOUT`. Expected an integer number of seconds, got \"{value}\".");
-                        Ok(self.default_timeout)
-                    })
-            })
-            .unwrap_or(self.default_timeout);
+        let timeout = self.timeout;
         debug!("Using request timeout of {}s", timeout.as_secs());
 
         // Use the custom client if provided, otherwise create a new one
