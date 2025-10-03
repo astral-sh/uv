@@ -2,6 +2,7 @@
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
+use uv_platform::Os;
 #[cfg(test)]
 use uv_static::EnvVars;
 
@@ -11,6 +12,7 @@ pub use crate::discovery::{
     find_python_installations, satisfies_python_preference,
 };
 pub use crate::downloads::PlatformRequest;
+use crate::downloads::{ManagedPythonDownload, PythonDownloadRequest};
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::{ImplementationName, LenientImplementationName};
 pub use crate::installation::{
@@ -117,6 +119,27 @@ impl From<PythonNotFound> for Error {
     fn from(err: PythonNotFound) -> Self {
         Self::MissingPython(err, None)
     }
+}
+
+pub fn pyodide_version(interp: &Interpreter) -> Result<Option<&str>, Error> {
+    if !interp.os().is_emscripten() {
+        return Ok(None);
+    }
+    let pyver = interp.python_version();
+    let [major, minor, patch, ..] = *pyver.release() else {
+        panic!("oops")
+    };
+    let ver = VersionRequest::MajorMinorPatch(
+        major as u8,
+        minor as u8,
+        patch as u8,
+        PythonVariant::Default,
+    );
+    let download = ManagedPythonDownload::from_request(
+        &PythonDownloadRequest::new(Some(ver), None, None, Some(Os::emscripten()), None, None),
+        None,
+    )?;
+    Ok(download.build())
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
