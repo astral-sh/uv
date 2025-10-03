@@ -575,7 +575,7 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     #[cfg(feature = "tracing-durations-export")]
-    pub tracing_durations_file: Option<String>,
+    pub tracing_durations_file: Option<PathBuf>,
 }
 
 impl EnvironmentOptions {
@@ -604,7 +604,8 @@ impl EnvironmentOptions {
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_string_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
-            )?,
+            )?
+            .map(PathBuf::from),
         })
     }
 }
