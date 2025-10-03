@@ -570,7 +570,7 @@ impl<'a> IndexUrls {
         let mut seen = FxHashSet::default();
 
         let simple_indexes = if self.no_index {
-            Either::Left(std::iter::empty::<&'a Index>())
+            Either::Left(std::iter::empty())
         } else {
             Either::Right(
                 self.implicit_indexes()
@@ -615,9 +615,14 @@ impl<'a> IndexUrls {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the `--no-index` flag.
-    pub fn no_index(&self) -> bool {
+    /// Returns `true` if simple indexes (e.g., PyPI or `--extra-index-url`) are disabled via `--no-index`.
+    pub fn simple_indexes_disabled(&self) -> bool {
         self.no_index
+    }
+
+    /// Returns `true` if there are no index sources at all (simple indexes disabled and no flat indexes).
+    pub fn no_indexes(&self) -> bool {
+        self.no_index && self.flat_indexes.is_empty()
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
