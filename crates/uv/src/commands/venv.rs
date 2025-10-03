@@ -18,7 +18,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
     PackageConfigSettings, Requirement,
 };
-use uv_fs::Simplified;
+use uv_fs::{CWD, Simplified};
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::{Preview, PreviewFeatures};
@@ -28,9 +28,10 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
+use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_virtualenv::OnExisting;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
@@ -111,6 +112,9 @@ pub(crate) async fn venv(
         }
     };
 
+    // Determine whether the user provided an explicit path
+    let user_provided_path = path.is_some();
+
     // Determine the default path; either the virtual environment for the project or `.venv`
     let path = path.unwrap_or(
         project
@@ -189,6 +193,29 @@ pub(crate) async fn venv(
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )?;
+
+    // If using the default `.venv` (no explicit path provided), and an active
+    // VIRTUAL_ENV points elsewhere (and exists), warn to help users understand
+    // why subsequent commands may target the active environment instead.
+    if !user_provided_path && path == PathBuf::from(".venv") {
+        if let Some(value) = std::env::var_os(EnvVars::VIRTUAL_ENV) {
+            if !value.is_empty() {
+                let mut active_abs = PathBuf::from(&value);
+                if !active_abs.is_absolute() {
+                    active_abs = CWD.join(active_abs);
+                }
+                if active_abs.exists()
+                    && !uv_fs::is_same_file_allow_missing(&active_abs, &path).unwrap_or(false)
+                {
+                    let abs_str = active_abs.display().to_string();
+                    warn_user_once!(
+                        "`VIRTUAL_ENV={}` is set; subsequent commands may use the active environment instead of `.venv`. Consider clearing it with `deactivate`.",
+                        abs_str
+                    );
+                }
+            }
+        }
+    }
 
     let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
         && python_request
