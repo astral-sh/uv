@@ -106,7 +106,7 @@ fn pip_compile_baseline() {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -291,7 +291,7 @@ fn pip_install_baseline() {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -488,7 +488,7 @@ fn lock_baseline() {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -617,7 +617,7 @@ fn version_baseline() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -784,7 +784,7 @@ fn tool_install_baseline() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -902,7 +902,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     @@ -120,7 +158,7 @@
@@ -1058,7 +1058,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     @@ -120,7 +158,7 @@
@@ -1251,7 +1251,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     "#
@@ -1357,9 +1357,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
          settings: PipSettings {
              index_locations: IndexLocations {
                  indexes: [],
-    -            flat_index: [],
+    -            flat_indexes: [],
     -            no_index: false,
-    +            flat_index: [
+    +            flat_indexes: [
     +                Index {
     +                    name: None,
     +                    url: Url(
@@ -1554,7 +1554,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     "#
@@ -1973,7 +1973,7 @@ fn resolve_both() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     @@ -120,7 +158,7 @@
@@ -2105,7 +2105,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     @@ -120,7 +158,7 @@
@@ -2318,7 +2318,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     @@ -120,7 +156,7 @@
@@ -2656,7 +2656,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                    exclude_newer: None,
     +                },
     +            ],
-                 flat_index: [],
+                 flat_indexes: [],
                  no_index: false,
              },
     "#
