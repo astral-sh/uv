@@ -224,12 +224,6 @@ enum UpgradeConstraint {
     PinnedVersion { version: Version },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct UpgradeReport {
-    outcome: UpgradeOutcome,
-    constraint: Option<UpgradeConstraint>,
-}
-
 impl UpgradeConstraint {
     fn print(&self, name: &PackageName, printer: Printer) -> Result<()> {
         match self {
@@ -250,6 +244,12 @@ impl UpgradeConstraint {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpgradeReport {
+    outcome: UpgradeOutcome,
+    constraint: Option<UpgradeConstraint>,
 }
 
 /// Upgrade a specific tool.
