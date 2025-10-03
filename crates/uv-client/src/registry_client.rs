@@ -422,6 +422,10 @@ impl RegistryClient {
         }
 
         if results.is_empty() {
+            if self.index_urls.no_index() {
+                return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+            }
+
             return match self.connectivity {
                 Connectivity::Online => {
                     Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
