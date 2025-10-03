@@ -257,16 +257,16 @@ impl Deref for IndexUrl {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
-    flat_index: Vec<Index>,
+    flat_indexes: Vec<Index>,
     no_index: bool,
 }
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
+    pub fn new(indexes: Vec<Index>, flat_indexes: Vec<Index>, no_index: bool) -> Self {
         Self {
             indexes,
-            flat_index,
+            flat_indexes,
             no_index,
         }
     }
@@ -278,10 +278,10 @@ impl IndexLocations {
     ///
     /// If the current index location has an `index` set, it will be preserved.
     #[must_use]
-    pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
+    pub fn combine(self, indexes: Vec<Index>, flat_indexes: Vec<Index>, no_index: bool) -> Self {
         Self {
             indexes: self.indexes.into_iter().chain(indexes).collect(),
-            flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
+            flat_indexes: self.flat_indexes.into_iter().chain(flat_indexes).collect(),
             no_index: self.no_index || no_index,
         }
     }
@@ -367,7 +367,7 @@ impl<'a> IndexLocations {
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
     pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.flat_index.iter()
+        self.flat_indexes.iter()
     }
 
     /// Return the `--no-index` flag.
@@ -379,6 +379,7 @@ impl<'a> IndexLocations {
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
             indexes: self.indexes.clone(),
+            flat_indexes: self.flat_indexes.clone(),
             no_index: self.no_index,
         }
     }
@@ -391,7 +392,7 @@ impl<'a> IndexLocations {
     /// that the last-defined index is the first item in the vector.
     pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
         if self.no_index {
-            self.flat_index.iter().rev().collect()
+            self.flat_indexes.iter().rev().collect()
         } else {
             let mut indexes = vec![];
 
@@ -400,7 +401,7 @@ impl<'a> IndexLocations {
             for index in {
                 self.indexes
                     .iter()
-                    .chain(self.flat_index.iter())
+                    .chain(self.flat_indexes.iter())
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
             } {
                 if index.default {
@@ -430,11 +431,11 @@ impl<'a> IndexLocations {
     /// that the last-defined index is the first item in the vector.
     pub fn known_indexes(&'a self) -> impl Iterator<Item = &'a Index> {
         if self.no_index {
-            Either::Left(self.flat_index.iter().rev())
+            Either::Left(self.flat_indexes.iter().rev())
         } else {
             Either::Right(
                 std::iter::once(&*DEFAULT_INDEX)
-                    .chain(self.flat_index.iter().rev())
+                    .chain(self.flat_indexes.iter().rev())
                     .chain(self.indexes.iter().rev()),
             )
         }
@@ -506,15 +507,22 @@ impl From<&IndexLocations> for uv_auth::Indexes {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUrls {
     indexes: Vec<Index>,
+    flat_indexes: Vec<Index>,
     no_index: bool,
 }
 
 impl<'a> IndexUrls {
-    pub fn from_indexes(indexes: Vec<Index>) -> Self {
+    pub fn from_indexes(indexes: Vec<Index>, flat_indexes: Vec<Index>) -> Self {
         Self {
             indexes,
+            flat_indexes,
             no_index: false,
         }
+    }
+
+    /// Return an iterator over the configured flat-index locations.
+    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.flat_indexes.iter()
     }
 
     /// Return the default [`Index`] entry.
@@ -557,14 +565,23 @@ impl<'a> IndexUrls {
     /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
     /// over the `--index-url` definition.
     ///
-    /// If `no_index` was enabled, then this always returns an empty
-    /// iterator.
+    /// If `no_index` was enabled, then this always returns only the flat indexes.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         let mut seen = FxHashSet::default();
-        self.implicit_indexes()
-            .chain(self.default_index())
-            .filter(|index| !index.explicit)
-            .filter(move |index| seen.insert(index.raw_url())) // Filter out redundant raw URLs
+
+        let simple_indexes = if self.no_index {
+            Either::Left(std::iter::empty::<&'a Index>())
+        } else {
+            Either::Right(
+                self.implicit_indexes()
+                    .chain(self.default_index())
+                    .filter(|index| !index.explicit),
+            )
+        };
+
+        simple_indexes
+            .chain(self.flat_indexes.iter())
+            .filter(move |index| seen.insert(index.raw_url()))
     }
 
     /// Return an iterator over all user-defined [`Index`] entries in order.
@@ -792,7 +809,7 @@ mod tests {
             },
         ];
 
-        let index_urls = IndexUrls::from_indexes(indexes);
+        let index_urls = IndexUrls::from_indexes(indexes, Vec::new());
 
         let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
         assert_eq!(
@@ -829,7 +846,7 @@ mod tests {
             ignore_error_codes: None,
         }];
 
-        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_urls = IndexUrls::from_indexes(indexes.clone(), Vec::new());
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
@@ -871,7 +888,7 @@ mod tests {
             ignore_error_codes: None,
         }];
 
-        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_urls = IndexUrls::from_indexes(indexes.clone(), Vec::new());
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();

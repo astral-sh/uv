@@ -21,7 +21,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -149,7 +149,6 @@ impl<'a> RegistryClientBuilder<'a> {
     pub fn build(self) -> RegistryClient {
         self.index_locations.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
-        let flat_index = self.index_locations.flat_indexes().cloned().collect();
 
         // Build a base client
         let builder = self
@@ -173,7 +172,6 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
-            flat_index,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -183,7 +181,6 @@ impl<'a> RegistryClientBuilder<'a> {
     pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
         self.index_locations.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
-        let flat_index = self.index_locations.flat_indexes().cloned().collect();
 
         // Wrap in any relevant middleware and handle connectivity.
         let client = self
@@ -205,7 +202,6 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
-            flat_index,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -221,8 +217,6 @@ pub struct RegistryClient {
     index_strategy: IndexStrategy,
     /// The strategy to use when selecting a PyTorch backend, if any.
     torch_backend: Option<TorchStrategy>,
-    /// The configured flat indexes (e.g., `--find-links`).
-    flat_index: Vec<Index>,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -317,7 +311,7 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        let has_flat_indexes = !self.flat_index.is_empty();
+        let has_flat_indexes = self.index_urls.flat_indexes().next().is_some();
 
         // If `--no-index` is specified and no flat indexes are available, avoid fetching
         // regardless of whether the index is implicit, explicit, etc.
@@ -328,8 +322,7 @@ impl RegistryClient {
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
-            let find_links = self.flat_index.iter().map(IndexMetadataRef::from);
-            Either::Right(self.index_urls_for(package_name).chain(find_links))
+            Either::Right(self.index_urls_for(package_name))
         };
 
         let mut results = Vec::new();
