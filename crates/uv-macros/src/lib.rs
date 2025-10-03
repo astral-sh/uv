@@ -91,8 +91,15 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .iter()
         .filter_map(|item| match item {
             ImplItem::Const(item) if !is_hidden(&item.attrs) => {
-                let name = item.ident.to_string();
                 let doc = get_doc_comment(&item.attrs);
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit),
+                    ..
+                }) = &item.expr
+                else {
+                    return None;
+                };
+                let name = lit.value();
                 Some((name, doc))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
