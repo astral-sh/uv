@@ -14,8 +14,6 @@ use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 use uv_logging::UvFormat;
-#[cfg(feature = "tracing-durations-export")]
-use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
@@ -120,11 +118,13 @@ pub(crate) fn setup_logging(
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.
 #[cfg(feature = "tracing-durations-export")]
-pub(crate) fn setup_durations() -> anyhow::Result<(
+pub(crate) fn setup_durations(
+    tracing_durations_file: Option<String>,
+) -> anyhow::Result<(
     Option<DurationsLayer<Registry>>,
     Option<DurationsLayerDropGuard>,
 )> {
-    if let Ok(location) = std::env::var(EnvVars::TRACING_DURATIONS_FILE) {
+    if let Some(location) = tracing_durations_file {
         let location = std::path::PathBuf::from(location);
         if let Some(parent) = location.parent() {
             fs_err::create_dir_all(parent)
