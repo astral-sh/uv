@@ -52,7 +52,7 @@ Released on 2025-09-23.
 
 ### Preview features
 
-Add support for S3 request signing ([#15925](https://github.com/astral-sh/uv/pull/15925))
+- Add support for S3 request signing ([#15925](https://github.com/astral-sh/uv/pull/15925))
 
 ## 0.8.20
 
