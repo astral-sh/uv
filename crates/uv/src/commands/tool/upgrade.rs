@@ -115,8 +115,8 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
-    // Collect reasons why upgrades were skipped or altered.
-    let mut collected_reasons: Vec<(PackageName, UpgradeReason)> = Vec::new();
+    // Constraints that caused upgrades to be skipped or altered.
+    let mut collected_constraints: Vec<(PackageName, UpgradeConstraint)> = Vec::new();
 
     let mut errors = Vec::new();
     for (name, constraints) in &names {
@@ -152,8 +152,8 @@ pub(crate) async fn upgrade(
                     }
                 }
 
-                if let Some(reason) = report.reason.clone() {
-                    collected_reasons.push((name.clone(), reason));
+                if let Some(constraint) = report.constraint.clone() {
+                    collected_constraints.push((name.clone(), constraint));
                 }
             }
             Err(err) => {
@@ -199,12 +199,13 @@ pub(crate) async fn upgrade(
         }
     }
 
-    for (name, reason) in collected_reasons {
-        reason.print(&name, printer)?;
+    for (name, constraint) in collected_constraints {
+        constraint.print(&name, printer)?;
     }
 
     Ok(ExitStatus::Success)
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
@@ -218,18 +219,18 @@ enum UpgradeOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct UpgradeReport {
-    outcome: UpgradeOutcome,
-    reason: Option<UpgradeReason>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum UpgradeReason {
+enum UpgradeConstraint {
     /// The tool remains pinned to an exact version, so an upgrade was skipped.
     PinnedVersion { version: Version },
 }
 
-impl UpgradeReason {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpgradeReport {
+    outcome: UpgradeOutcome,
+    constraint: Option<UpgradeConstraint>,
+}
+
+impl UpgradeConstraint {
     fn print(&self, name: &PackageName, printer: Printer) -> Result<()> {
         match self {
             Self::PinnedVersion { version } => {
@@ -447,15 +448,18 @@ async fn upgrade_tool(
         )?;
     }
 
-    let reason = match &outcome {
+    let constraint = match &outcome {
         UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
             pinned_requirement_version(&existing_tool_receipt, name)
-                .map(|version| UpgradeReason::PinnedVersion { version })
+                .map(|version| UpgradeConstraint::PinnedVersion { version })
         }
         UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
     };
 
-    Ok(UpgradeReport { outcome, reason })
+    Ok(UpgradeReport {
+        outcome,
+        constraint,
+    })
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
