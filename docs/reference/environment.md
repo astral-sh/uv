@@ -645,6 +645,10 @@ Forces colored output regardless of terminal support.
 
 See [force-color.org](https://force-color.org).
 
+### `GH_HOST`
+
+The GitHub hostname. Defaults to `github.com`.
+
 ### `GITHUB_ACTIONS`
 
 Indicates that the current process is running in GitHub Actions.
