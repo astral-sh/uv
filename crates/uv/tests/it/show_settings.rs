@@ -9501,6 +9501,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -9618,6 +9619,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -9758,6 +9760,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -9873,6 +9876,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -9978,6 +9982,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
@@ -10084,6 +10089,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         locked: false,
         frozen: false,
         dry_run: Disabled,
+        force: false,
         script: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
