@@ -28,6 +28,10 @@ impl Os {
         matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
     }
 
+    pub fn emscripten() -> Self {
+        Self(target_lexicon::OperatingSystem::Emscripten)
+    }
+
     /// Whether this OS can run the other OS.
     pub fn supports(&self, other: Self) -> bool {
         // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
