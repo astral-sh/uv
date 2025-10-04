@@ -321,6 +321,13 @@ impl<'a> FlatIndexClient<'a> {
                 index: flat_index.clone(),
             });
         }
+
+        dists.sort_by(|a, b| {
+            a.filename
+                .cmp(&b.filename)
+                .then_with(|| a.index.cmp(&b.index))
+        });
+
         Ok(FlatIndexEntries::from_entries(dists))
     }
 }
