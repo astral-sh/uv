@@ -1482,6 +1482,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_versions,
                 args.all_platforms,
                 args.all_arches,
+                args.all_variants,
                 args.show_urls,
                 args.output_format,
                 args.python_downloads_json_url,

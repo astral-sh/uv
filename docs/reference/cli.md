@@ -3352,6 +3352,8 @@ uv python list [OPTIONS] [REQUEST]
 <p>By default, only downloads for the current architecture are shown.</p>
 </dd><dt id="uv-python-list--all-platforms"><a href="#uv-python-list--all-platforms"><code>--all-platforms</code></a></dt><dd><p>List Python downloads for all platforms.</p>
 <p>By default, only downloads for the current platform are shown.</p>
+</dd><dt id="uv-python-list--all-variants"><a href="#uv-python-list--all-variants"><code>--all-variants</code></a></dt><dd><p>Show all Python variants, including debug and freethreaded builds.</p>
+<p>By default, debug and freethreaded builds are hidden from the list.</p>
 </dd><dt id="uv-python-list--all-versions"><a href="#uv-python-list--all-versions"><code>--all-versions</code></a></dt><dd><p>List all Python versions, including old patch versions.</p>
 <p>By default, only the latest patch version is shown for each minor version.</p>
 </dd><dt id="uv-python-list--allow-insecure-host"><a href="#uv-python-list--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
