@@ -50,3 +50,6 @@ url = { workspace = true }
 ignored = ["uv-options-metadata", "clap"]
 
 [dev-dependencies]
+
+[features]
+tracing-durations-export = []
