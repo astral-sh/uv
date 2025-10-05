@@ -578,6 +578,8 @@ pub struct EnvironmentOptions {
     pub log_context: Option<bool>,
     pub http_timeout: Duration,
     pub upload_http_timeout: Duration,
+    #[cfg(feature = "tracing-durations-export")]
+    pub tracing_durations_file: Option<PathBuf>,
 }
 
 impl EnvironmentOptions {
@@ -619,6 +621,10 @@ impl EnvironmentOptions {
             .or(http_timeout)
             .unwrap_or(Duration::from_secs(15 * 60)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
+            #[cfg(feature = "tracing-durations-export")]
+            tracing_durations_file: parse_path_environment_variable(
+                EnvVars::TRACING_DURATIONS_FILE,
+            ),
         })
     }
 }
@@ -722,6 +728,18 @@ fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>,
             err: "expected an integer".to_string(),
         }),
     }
+}
+
+#[cfg(feature = "tracing-durations-export")]
+/// Parse a path environment variable.
+fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
+    let value = std::env::var_os(name)?;
+
+    if value.is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(value))
 }
 
 /// Populate the [`EnvironmentFlags`] from the given [`EnvironmentOptions`].

@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.23
+
+Released on 2025-10-03.
+
+### Enhancements
+
+- Build `s390x` on stable Rust compiler version ([#16082](https://github.com/astral-sh/uv/pull/16082))
+- Add `UV_SKIP_WHEEL_FILENAME_CHECK` to allow installing invalid wheels ([#16046](https://github.com/astral-sh/uv/pull/16046))
+
+### Bug fixes
+
+- Avoid rejecting already-installed URL distributions with `--no-sources` ([#16094](https://github.com/astral-sh/uv/pull/16094))
+- Confirm that the directory name is a valid Python install key during managed check ([#16080](https://github.com/astral-sh/uv/pull/16080))
+- Ignore origin when comparing installed tools ([#16055](https://github.com/astral-sh/uv/pull/16055))
+- Make cache control lookups robust to username ([#16088](https://github.com/astral-sh/uv/pull/16088))
+- Re-order lock validation checks by severity ([#16045](https://github.com/astral-sh/uv/pull/16045))
+- Remove tracking of inferred dependency conflicts ([#15909](https://github.com/astral-sh/uv/pull/15909))
+- Respect `--no-color` on the CLI ([#16044](https://github.com/astral-sh/uv/pull/16044))
+- Deduplicate marker-specific dependencies in `uv pip tree` output ([#16078](https://github.com/astral-sh/uv/pull/16078))
+
+### Documentation
+
+- Document transparent x86_64 emulation on aarch64 ([#16041](https://github.com/astral-sh/uv/pull/16041))
+- Document why we ban URLs from index dependencies ([#15929](https://github.com/astral-sh/uv/pull/15929))
+- Fix rendering of `_CONDA_ROOT` in reference ([#16114](https://github.com/astral-sh/uv/pull/16114))
+- Windows arm64 and Linux RISC-V64 are Tier 2 supported ([#16027](https://github.com/astral-sh/uv/pull/16027))
+
 ## 0.8.22
 
 Released on 2025-09-23.
@@ -11,7 +38,7 @@ Released on 2025-09-23.
 
 - Upgrade Pyodide to 0.28.3 ([#15999](https://github.com/astral-sh/uv/pull/15999))
 
-### Security 
+### Security
 
 - Upgrade `astral-tokio-tar` to 0.5.5 which [hardens tar archive extraction](https://github.com/astral-sh/tokio-tar/security/advisories/GHSA-3wgq-wrwc-vqmv) ([#16004](https://github.com/astral-sh/uv/pull/16004))
 
@@ -25,7 +52,7 @@ Released on 2025-09-23.
 
 ### Preview features
 
-Add support for S3 request signing ([#15925](https://github.com/astral-sh/uv/pull/15925))
+- Add support for S3 request signing ([#15925](https://github.com/astral-sh/uv/pull/15925))
 
 ## 0.8.20
 

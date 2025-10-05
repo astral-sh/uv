@@ -16,7 +16,7 @@
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    managerFilePatterns: ["/^crates/.*Cargo\\.toml$/"],
+    managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
@@ -89,7 +89,7 @@
     {
       groupName: "pubgrub",
       matchManagers: ["cargo"],
-      matchPackageNames: ["pubgrub", "version-ranges"],
+      matchDepNames: ["pubgrub", "version-ranges"],
       description: "version-ranges and pubgrub are in the same Git repository",
     },
     {
