@@ -3702,25 +3702,16 @@ fn python_uninstall_outdated_no_outdated_versions() {
      + cpython-3.12.5-[PLATFORM] (python3.12)
     ");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("3.11.10"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Installed Python 3.11.10 in [TIME]
-     + cpython-3.11.10-[PLATFORM] (python3.11)
-    ");
-
     // Test --outdated when there are no outdated versions
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12").arg("--outdated"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
-    No Python installations found
+    Searching for Python versions matching: Python 3.12
+    No existing installations found for: Python 3.12
+    No outdated Python installations found matching the requests
     ");
 }
 
