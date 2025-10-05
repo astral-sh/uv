@@ -876,7 +876,7 @@ impl EnvVars {
     /// Equivalent to the `--project` command-line argument.
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
-    /// Equivalent to the `--project` command-line argument.
+    /// Equivalent to the `--directory` command-line argument.
     pub const UV_DIRECTORY: &'static str = "UV_DIRECTORY";
 
     /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
