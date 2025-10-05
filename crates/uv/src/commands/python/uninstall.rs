@@ -131,19 +131,31 @@ async fn do_uninstall(
                 request.cyan()
             )?;
         }
+
+        // Check if this is a specific patch version request
+        let is_specific_patch = download_request
+            .version()
+            .map(|v| matches!(v, uv_python::VersionRequest::MajorMinorPatch(..)))
+            .unwrap_or(false);
+
         let mut found = false;
         for installation in installed_installations
             .iter()
             .filter(|installation| download_request.satisfied_by_key(installation.key()))
             .filter(|installation| {
                 // When doing an outdated check, don't consider the latest of each minor version
-                // as matching.
-                latest_minor_installations
-                    .as_ref()
-                    .map(|latest_minor_installations| {
-                        latest_minor_installations.contains(installation.key())
-                    })
-                    .unwrap_or(true)
+                // as matching. However, if a specific patch version is requested, ignore the
+                // outdated filter and uninstall the exact version requested.
+                if is_specific_patch {
+                    true
+                } else {
+                    latest_minor_installations
+                        .as_ref()
+                        .map(|latest_minor_installations| {
+                            !latest_minor_installations.contains(installation.key())
+                        })
+                        .unwrap_or(true)
+                }
             })
         {
             found = true;
