@@ -1429,7 +1429,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1692,6 +1692,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
+                &environment,
                 &client_builder,
                 username,
                 password,

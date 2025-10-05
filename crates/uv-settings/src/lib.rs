@@ -577,11 +577,21 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub http_timeout: Duration,
+    pub upload_http_timeout: Duration,
 }
 
 impl EnvironmentOptions {
     /// Create a new [`EnvironmentOptions`] from environment variables.
     pub fn new() -> Result<Self, Error> {
+        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
+        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
+        let http_timeout = parse_integer_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
+            .or(parse_integer_environment_variable(
+                EnvVars::UV_REQUEST_TIMEOUT,
+            )?)
+            .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
+            .map(Duration::from_secs);
+
         Ok(Self {
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
@@ -602,15 +612,13 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
-            // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-            // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-            http_timeout: parse_integer_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
-                .or(parse_integer_environment_variable(
-                    EnvVars::UV_REQUEST_TIMEOUT,
-                )?)
-                .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
-                .map(Duration::from_secs)
-                .unwrap_or(Duration::from_secs(30)),
+            upload_http_timeout: parse_integer_environment_variable(
+                EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
+            )?
+            .map(Duration::from_secs)
+            .or(http_timeout)
+            .unwrap_or(Duration::from_secs(15 * 60)),
+            http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
         })
     }
 }

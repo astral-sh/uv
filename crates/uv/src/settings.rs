@@ -758,7 +758,7 @@ impl ToolUpgradeSettings {
     pub(crate) fn resolve(
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> Self {
         let ToolUpgradeArgs {
             name,
@@ -846,6 +846,7 @@ impl ToolUpgradeSettings {
             filesystem: top_level,
             install_mirrors: environment
                 .install_mirrors
+                .clone()
                 .combine(filesystem_install_mirrors),
         }
     }
