@@ -6155,6 +6155,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-redacted",
+ "uv-static",
 ]
 
 [[package]]
