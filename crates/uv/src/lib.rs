@@ -1023,7 +1023,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, cache, printer)
+            commands::cache_prune(args.ci, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
