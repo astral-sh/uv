@@ -28,7 +28,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
@@ -1437,7 +1437,8 @@ impl PylockTomlVcs {
                 .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
             let precise = self.commit_id;
 
-            GitUrl::from_commit(url, reference, precise)?
+            // TODO(samypr100): GitLfs::from_env() as pylock.toml spec doesn't specify how to label LFS support
+            GitUrl::from_commit(url, reference, precise, GitLfs::from_env())?
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.

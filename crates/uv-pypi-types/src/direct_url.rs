@@ -36,7 +36,7 @@ pub enum DirectUrl {
     },
     /// The direct URL is path to a VCS repository. For example:
     /// ```json
-    /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git"}}
+    /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git", "git_lfs": true }}
     /// ```
     VcsUrl {
         url: String,
@@ -70,6 +70,8 @@ pub struct VcsInfo {
     pub commit_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requested_revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_lfs: Option<bool>, // Prefix lfs with VcsKind::Git per PEP 610
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -132,8 +134,16 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                     let path = format!("{}@{requested_revision}", url.path());
                     url.set_path(&path);
                 }
+                let mut frags: Vec<String> = Vec::new();
                 if let Some(subdirectory) = subdirectory {
-                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                    frags.push(format!("subdirectory={}", subdirectory.display()));
+                }
+                // Displays nicely that lfs was used
+                if let Some(true) = vcs_info.git_lfs {
+                    frags.push("lfs=true".to_string());
+                }
+                if !frags.is_empty() {
+                    url.set_fragment(Some(&frags.join("&")));
                 }
                 Ok(url)
             }
