@@ -465,7 +465,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@0c17dabcee8b8f1957fa917d17393a23e02e1583 # v1.36.3
+      - uses: crate-ci/typos@64e4db431eb262bb5c6baa19dce280d78532830c # v1.37.3
 
   docs:
     timeout-minutes: 10
