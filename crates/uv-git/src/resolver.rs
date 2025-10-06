@@ -167,11 +167,14 @@ impl GitResolver {
         let lock_dir = cache.join("locks");
         fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
-        let _lock = LockedFile::acquire(
-            lock_dir.join(cache_digest(&repository_url)),
-            &repository_url,
-        )
-        .await?;
+        let lock_ident = {
+            let mut digest = cache_digest(&repository_url);
+            if url.lfs().enabled() {
+                digest.push_str("_lfs");
+            }
+            digest
+        };
+        let _lock = LockedFile::acquire(lock_dir.join(&lock_ident), &repository_url).await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {

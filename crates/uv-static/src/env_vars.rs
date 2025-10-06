@@ -769,6 +769,10 @@ impl EnvVars {
     #[attr_added_in("0.6.4")]
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 
+    /// Skip Smudge LFS Filter.
+    #[attr_hidden]
+    pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
