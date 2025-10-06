@@ -15,7 +15,7 @@ pub enum WheelCache<'a> {
     Path(&'a DisplaySafeUrl),
     /// An editable dependency, which we key by URL.
     Editable(&'a DisplaySafeUrl),
-    /// A Git dependency, which we key by URL and SHA.
+    /// A Git dependency, which we key by URL (including LFS state), SHA.
     ///
     /// Note that this variant only exists for source distributions; wheels can't be delivered
     /// through Git.

@@ -1565,6 +1565,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            return Err(Error::MissingGitLfsArtifacts(resource.url.to_url()));
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1767,6 +1772,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.to_path_buf(),
                 ));
             }
+        }
+
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            return Err(Error::MissingGitLfsArtifacts(resource.url.to_url()));
         }
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
