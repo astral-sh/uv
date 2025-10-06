@@ -4,6 +4,7 @@ pub use crate::reference::GitReference;
 
 use thiserror::Error;
 use uv_redacted::DisplaySafeUrl;
+use uv_static::EnvVars;
 
 mod github;
 mod oid;
@@ -22,7 +23,7 @@ pub enum GitLfs {
 impl GitLfs {
     /// Create a `GitLfs` configuration from environment variables.
     pub fn from_env() -> Self {
-        if std::env::var("UV_GIT_LFS").is_ok() {
+        if std::env::var(EnvVars::UV_GIT_LFS).is_ok() {
             Self::Enabled
         } else {
             Self::Disabled
