@@ -25,6 +25,10 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 pub enum GitError {
     #[error("Git executable not found. Ensure that Git is installed and available.")]
     GitNotFound,
+    #[error("Git LFS extension not found. Ensure that Git LFS is installed and available.")]
+    GitLfsNotFound,
+    #[error("Is Git LFS configured? You may need to run `git lfs install`.")]
+    GitLfsNotConfigured,
     #[error(transparent)]
     Other(#[from] which::Error),
     #[error(
@@ -738,7 +742,7 @@ fn fetch_with_cli(
 ///
 /// Returns an error if Git LFS isn't available.
 /// Caching the command allows us to only check if LFS is installed once.
-static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     cmd.arg("lfs");
 
