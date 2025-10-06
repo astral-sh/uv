@@ -1565,10 +1565,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            return Err(Error::MissingGitLfsArtifacts);
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str(), &resource.git.lfs()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
@@ -1667,7 +1672,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|oid| {
                 self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Git(resource.url, oid.as_short_str()).root(),
+                    WheelCache::Git(resource.url, oid.as_short_str(), &resource.git.lfs()).root(),
                 )
             });
         if cache_shard
@@ -1769,10 +1774,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            return Err(Error::MissingGitLfsArtifacts);
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str(), &resource.git.lfs()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
