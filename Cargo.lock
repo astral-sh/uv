@@ -6150,6 +6150,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-version",
+ "uv-warnings",
  "which",
 ]
 
