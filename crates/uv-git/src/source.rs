@@ -10,7 +10,7 @@ use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::{GitRepositoryUrl, cache_digest};
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -72,8 +72,10 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {
+        let lfs_requested = self.git.lfs().enabled();
+
         // Compute the canonical URL for the repository.
-        let canonical = RepositoryUrl::new(self.git.repository());
+        let canonical = GitRepositoryUrl::new(self.git.repository(), Some(lfs_requested));
 
         // The path to the repo, within the Git database.
         let ident = cache_digest(&canonical);
@@ -96,8 +98,12 @@ impl GitSource {
             // revision, then no update needs to happen.
             if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
                 if db.contains(rev) {
-                    debug!("Using existing Git source `{}`", self.git.repository());
-                    return Ok((maybe_db.unwrap(), rev, None));
+                    // Check whether GitLFS was requested, but we have not fetched LFS artifacts.
+                    let reinit_lfs = lfs_requested && !db.contains_lfs_artifacts(rev);
+                    if !reinit_lfs {
+                        debug!("Using existing Git source `{}`", self.git.repository());
+                        return Ok((maybe_db.unwrap().with_lfs_ready(lfs_requested), rev, None));
+                    }
                 }
             }
 
@@ -108,10 +114,18 @@ impl GitSource {
                 if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
                     if let Ok(oid) = maybe_commit.parse::<GitOid>() {
                         if db.contains(oid) {
-                            // This reference is an exact commit. Treat it like it's
-                            // locked.
-                            debug!("Using existing Git source `{}`", self.git.repository());
-                            return Ok((maybe_db.unwrap(), oid, None));
+                            // Check whether GitLFS was requested, but we have not fetched LFS artifacts.
+                            let reinit_lfs = lfs_requested && !db.contains_lfs_artifacts(oid);
+                            if !reinit_lfs {
+                                // This reference is an exact commit. Treat it like it's
+                                // locked.
+                                debug!("Using existing Git source `{}`", self.git.repository());
+                                return Ok((
+                                    maybe_db.unwrap().with_lfs_ready(lfs_requested),
+                                    oid,
+                                    None,
+                                ));
+                            }
                         }
                     }
                 }
@@ -135,7 +149,7 @@ impl GitSource {
                 &self.client,
                 self.disable_ssl,
                 self.offline,
-                self.git.lfs(),
+                lfs_requested,
             )?;
 
             Ok((db, actual_rev, task))
