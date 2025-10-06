@@ -1,13 +1,27 @@
 pub use crate::github::GitHubRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
+use std::sync::LazyLock;
 
 use thiserror::Error;
 use uv_redacted::DisplaySafeUrl;
+use uv_static::EnvVars;
 
 mod github;
 mod oid;
 mod reference;
+
+/// Initialize [`GitLfs`] mode from `UV_GIT_LFS` environment.
+pub static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
+    if std::env::var_os(EnvVars::UV_GIT_LFS)
+        .and_then(|v| v.to_str().map(str::to_lowercase))
+        .is_some_and(|v| matches!(v.as_str(), "y" | "yes" | "t" | "true" | "on" | "1"))
+    {
+        GitLfs::Enabled
+    } else {
+        GitLfs::Disabled
+    }
+});
 
 /// Configuration for Git LFS (Large File Storage) support.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
@@ -22,11 +36,7 @@ pub enum GitLfs {
 impl GitLfs {
     /// Create a `GitLfs` configuration from environment variables.
     pub fn from_env() -> Self {
-        if std::env::var("UV_GIT_LFS").is_ok() {
-            Self::Enabled
-        } else {
-            Self::Disabled
-        }
+        *UV_GIT_LFS
     }
 
     /// Returns true if LFS is enabled.
