@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -36,7 +36,7 @@ pub enum DirectUrl {
     },
     /// The direct URL is path to a VCS repository. For example:
     /// ```json
-    /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git"}}
+    /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git", "extensions": ["lfs"] }}
     /// ```
     VcsUrl {
         url: String,
@@ -70,6 +70,8 @@ pub struct VcsInfo {
     pub commit_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requested_revision: Option<String>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty", default)]
+    pub extensions: BTreeSet<VcsExtensions>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -88,6 +90,20 @@ impl std::fmt::Display for VcsKind {
             Self::Hg => write!(f, "hg"),
             Self::Bzr => write!(f, "bzr"),
             Self::Svn => write!(f, "svn"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub enum VcsExtensions {
+    #[serde(rename = "lfs")]
+    GitLfs,
+}
+
+impl std::fmt::Display for VcsExtensions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GitLfs => write!(f, "lfs"),
         }
     }
 }
@@ -132,6 +148,9 @@ impl TryFrom<&DirectUrl> for Url {
                 }
                 if let Some(subdirectory) = subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                if vcs_info.extensions.contains(&VcsExtensions::GitLfs) {
+                    url.set_fragment(Some("lfs=true"));
                 }
                 Ok(url)
             }

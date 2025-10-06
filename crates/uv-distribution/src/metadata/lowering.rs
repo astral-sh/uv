@@ -606,6 +606,10 @@ fn git_source(
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
         url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
+    // Persist only when lfs support is explicitly requested
+    if let Some(true) = lfs {
+        url.set_fragment(Some("lfs=true"));
+    }
     let url = VerbatimUrl::from_url(url);
 
     let repository = git.clone();
