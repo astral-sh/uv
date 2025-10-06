@@ -61,6 +61,15 @@ impl From<bool> for GitLfs {
     }
 }
 
+impl std::fmt::Display for GitLfs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Enabled => write!(f, "enabled"),
+            Self::Disabled => write!(f, "disabled"),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum GitUrlParseError {
     #[error(
@@ -88,8 +97,9 @@ impl GitUrl {
     pub fn from_reference(
         repository: DisplaySafeUrl,
         reference: GitReference,
+        lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, None, GitLfs::from_env())
+        Self::from_fields(repository, reference, None, lfs)
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
@@ -97,8 +107,9 @@ impl GitUrl {
         repository: DisplaySafeUrl,
         reference: GitReference,
         precise: GitOid,
+        lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, Some(precise), GitLfs::from_env())
+        Self::from_fields(repository, reference, Some(precise), lfs)
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
@@ -188,7 +199,8 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
             url.set_path(&prefix);
         }
 
-        Self::from_reference(url, reference)
+        // TODO(samypr100): GitLfs::from_env() for now unless we want to support parsing lfs=true
+        Self::from_reference(url, reference, GitLfs::from_env())
     }
 }
 
