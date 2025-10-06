@@ -102,7 +102,7 @@ When moving from a pre-release to a new pre-release version, just bump the relev
 component:
 
 ```console
-uv version --bump beta
+$ uv version --bump beta
 hello-world 1.3.0b1 => 1.3.0b2
 ```
 
@@ -110,7 +110,7 @@ When moving from a pre-release to a stable version, the `stable` option can be u
 pre-release component:
 
 ```console
-uv version --bump stable
+$ uv version --bump stable
 hello-world 1.3.1b2 => 1.3.1
 ```
 
