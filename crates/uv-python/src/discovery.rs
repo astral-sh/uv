@@ -1668,9 +1668,19 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 impl PythonVariant {
     fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
-            // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
-            // backwards compatibility, but we may want to change this in the future.
-            Self::Default => !interpreter.gil_disabled(),
+            Self::Default => {
+                // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
+                // backwards compatibility, but we may want to change this in the future.
+                if (interpreter.python_major(), interpreter.python_minor()) >= (3, 14) {
+                    // For Python 3.14+, the free-threaded build is not considered experimental
+                    // and can satisfy the default variant without opt-in
+                    true
+                } else {
+                    // In Python 3.13 and earlier, the free-threaded build is considered
+                    // experimental and requires explicit opt-in
+                    !interpreter.gil_disabled()
+                }
+            }
             Self::Debug => interpreter.debug_enabled(),
             Self::Freethreaded => interpreter.gil_disabled(),
             Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
