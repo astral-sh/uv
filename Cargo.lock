@@ -5574,6 +5574,7 @@ dependencies = [
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
+ "uv-git-types",
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
