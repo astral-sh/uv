@@ -12,9 +12,10 @@ use tracing::{debug, warn};
 use url::Url;
 
 use uv_fs::Simplified;
-use uv_git_types::{GitLfs, GitOid, GitReference};
+use uv_git_types::{GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
+use uv_warnings::warn_user_once;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -137,6 +138,8 @@ pub(crate) struct GitRemote {
 pub(crate) struct GitDatabase {
     /// Underlying Git repository instance for this database.
     repo: GitRepository,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: Option<bool>,
 }
 
 /// A local checkout of a particular revision from a [`GitRepository`].
@@ -145,6 +148,8 @@ pub(crate) struct GitCheckout {
     revision: GitOid,
     /// Underlying Git repository instance for this checkout.
     repo: GitRepository,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: Option<bool>,
 }
 
 /// A local Git repository.
@@ -198,6 +203,42 @@ impl GitRepository {
         result.truncate(result.trim_end().len());
         Ok(result.parse()?)
     }
+
+    /// Verifies LFS artifacts have been initialized for a given `refname`.
+    fn lfs_fsck_objects(&self, refname: &str) -> bool {
+        let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
+            lfs.clone()
+        } else {
+            warn!("Git LFS is not available, skipping LFS fetch");
+            return false;
+        };
+
+        // Requires Git LFS 3.x (2021 release)
+        let result = cmd
+            .arg("fsck")
+            .arg("--objects")
+            .arg(refname)
+            .cwd(&self.path)
+            .exec_with_output();
+
+        match result {
+            Ok(_) => true,
+            Err(err) => {
+                let lfs_error = err.to_string();
+                if lfs_error.contains("unknown flag: --objects") {
+                    warn_user_once!(
+                        "Skipping Git LFS validation as Git LFS extension is outdated. \
+                        Upgrade to `git-lfs>=3.0.2` or manually verify git-lfs objects were \
+                        properly fetched after the current operation finishes."
+                    );
+                    true
+                } else {
+                    debug!("Git LFS validation failed: {err}");
+                    false
+                }
+            }
+        }
+    }
 }
 
 impl GitRemote {
@@ -231,7 +272,7 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         disable_ssl: bool,
         offline: bool,
-        lfs: GitLfs,
+        with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
@@ -246,9 +287,10 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                if lfs.enabled() {
-                    fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
+                if with_lfs {
+                    let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+                    db = db.with_lfs_ready(Some(lfs_ready));
                 }
                 return Ok((db, rev));
             }
@@ -271,19 +313,24 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
-        if lfs.enabled() {
-            fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
-                .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
-        }
+        let lfs_ready = with_lfs
+            .then(|| {
+                fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
+                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))
+            })
+            .transpose()?;
 
-        Ok((GitDatabase { repo }, rev))
+        Ok((GitDatabase { repo, lfs_ready }, rev))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
     #[allow(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
         let repo = GitRepository::open(db_path)?;
-        Ok(GitDatabase { repo })
+        Ok(GitDatabase {
+            repo,
+            lfs_ready: None,
+        })
     }
 }
 
@@ -299,7 +346,7 @@ impl GitDatabase {
             .map(|repo| GitCheckout::new(rev, repo))
             .filter(GitCheckout::is_fresh)
         {
-            Some(co) => co,
+            Some(co) => co.with_lfs_ready(self.lfs_ready),
             None => GitCheckout::clone_into(destination, self, rev)?,
         };
         Ok(checkout)
@@ -323,6 +370,18 @@ impl GitDatabase {
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
         self.repo.rev_parse(&format!("{oid}^0")).is_ok()
     }
+
+    /// Checks if `oid` contains necessary LFS artifacts in this database.
+    pub(crate) fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
+        self.repo.lfs_fsck_objects(&format!("{oid}^0"))
+    }
+
+    /// Set the Git LFS validation state (if any).
+    #[must_use]
+    pub(crate) fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
+        self.lfs_ready = lfs;
+        self
+    }
 }
 
 impl GitCheckout {
@@ -331,7 +390,11 @@ impl GitCheckout {
     ///
     /// * The `repo` will be the checked out Git repository.
     fn new(revision: GitOid, repo: GitRepository) -> Self {
-        Self { revision, repo }
+        Self {
+            revision,
+            repo,
+            lfs_ready: None,
+        }
     }
 
     /// Clone a repo for a `revision` into a local path from a `database`.
@@ -371,8 +434,8 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = Self::new(revision, repo);
-        checkout.reset()?;
-        Ok(checkout)
+        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
     /// Checks if the `HEAD` of this checkout points to the expected revision.
@@ -386,22 +449,39 @@ impl GitCheckout {
         }
     }
 
+    /// Indicates Git LFS artifacts have been initialized (when requested).
+    pub(crate) fn lfs_ready(&self) -> Option<bool> {
+        self.lfs_ready
+    }
+
+    /// Set the Git LFS validation state (if any).
+    #[must_use]
+    pub(crate) fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
+        self.lfs_ready = lfs;
+        self
+    }
+
     /// This performs `git reset --hard` to the revision of this checkout, with
     /// additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
     ///
     /// If we're interrupted while performing a `git reset` (e.g., we die
-    /// because of a signal) Cargo needs to be sure to try to check out this
+    /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.cargo-ok`],
+    /// To enable this we have a dummy file in our checkout, [`.ok`],
     /// which if present means that the repo has been successfully reset and is
-    /// ready to go. Hence if we start to do a reset, we make sure this file
+    /// ready to go. Hence, if we start to do a reset, we make sure this file
     /// *doesn't* exist, and then once we're done we create the file.
     ///
-    /// [`.cargo-ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self) -> Result<()> {
+    /// [`.ok`]: CHECKOUT_READY_LOCK
+    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
+
+        // We want to skip smudge if lfs was disabled for the repository
+        // as smudge filters can trigger on a reset even if lfs artifacts
+        // were not originally "fetched".
+        let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
@@ -409,6 +489,7 @@ impl GitCheckout {
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
@@ -418,12 +499,27 @@ impl GitCheckout {
             .arg("update")
             .arg("--recursive")
             .arg("--init")
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map(drop)?;
 
-        paths::create(ok_file)?;
-        Ok(())
+        // Validate Git LFS objects (if needed) after the reset.
+        // See `fetch_lfs` why we do this.
+        let lfs_validation = match with_lfs {
+            None => None,
+            Some(false) => Some(false),
+            Some(true) => Some(self.repo.lfs_fsck_objects(self.revision.as_str())),
+        };
+
+        // The .ok file should be written when the reset is successful.
+        // When Git LFS is enabled, the objects must also be fetched and
+        // validated successfully as part of the corresponding db.
+        if with_lfs.is_none() || lfs_validation == Some(true) {
+            paths::create(ok_file)?;
+        }
+
+        Ok(lfs_validation)
     }
 }
 
@@ -657,14 +753,14 @@ fn fetch_lfs(
     url: &Url,
     revision: &GitOid,
     disable_ssl: bool,
-) -> Result<()> {
+) -> Result<bool> {
     let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
         lfs.clone()
     } else {
         // Since this feature is opt-in, warn if not available
         warn!("Git LFS is not available, skipping LFS fetch");
-        return Ok(());
+        return Ok(false);
     };
 
     if disable_ssl {
@@ -681,10 +777,23 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_INDEX_FILE)
         .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
         .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        // We should not support requesting LFS artifacts with skip smudge being set.
+        // While this may not be necessary, it's added to avoid any potential future issues.
+        .env_remove(EnvVars::GIT_LFS_SKIP_SMUDGE)
         .cwd(&repo.path);
 
     cmd.exec_with_output()?;
-    Ok(())
+
+    // We now validate the Git LFS objects explicitly (if supported). This is
+    // needed to avoid issues with Git LFS not being installed or configured
+    // on the system and giving the wrong impression to the user that Git LFS
+    // objects were initialized correctly when installation finishes.
+    // We may want to allow the user to skip validation in the future via
+    // UV_GIT_LFS_NO_VALIDATION environment variable on rare cases where
+    // validation costs outweigh the benefit.
+    let validation_result = repo.lfs_fsck_objects(revision.as_str());
+
+    Ok(validation_result)
 }
 
 /// Whether `rev` is a shorter hash of `oid`.
