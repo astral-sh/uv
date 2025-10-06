@@ -443,6 +443,9 @@ impl CacheKey for Requirement {
                 } else {
                     0u8.cache_key(state);
                 }
+                if git.lfs().enabled() {
+                    1u8.cache_key(state);
+                }
                 url.cache_key(state);
             }
             RequirementSource::Path {

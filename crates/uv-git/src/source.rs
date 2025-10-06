@@ -168,7 +168,7 @@ impl GitSource {
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
         // checkout operation here pretty fast.
-        db.copy_to(actual_rev, &checkout_path)?;
+        let checkout = db.copy_to(actual_rev, &checkout_path)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
@@ -180,6 +180,7 @@ impl GitSource {
         Ok(Fetch {
             git: self.git.with_precise(actual_rev),
             path: checkout_path,
+            lfs_ready: checkout.lfs_ready().unwrap_or(false),
         })
     }
 }
@@ -189,6 +190,8 @@ pub struct Fetch {
     git: GitUrl,
     /// The path to the checked out repository.
     path: PathBuf,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: bool,
 }
 
 impl Fetch {
@@ -198,6 +201,10 @@ impl Fetch {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn lfs_ready(&self) -> &bool {
+        &self.lfs_ready
     }
 
     pub fn into_git(self) -> GitUrl {
