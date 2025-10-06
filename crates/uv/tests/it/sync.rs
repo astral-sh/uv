@@ -13557,12 +13557,12 @@ fn reject_unmatched_runtime() -> Result<()> {
 
 /// Test Git LFS configuration.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "git-lfs")]
 fn sync_git_lfs() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13").with_git_lfs_config();
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
     // Set `lfs = true` in the source
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
@@ -13572,11 +13572,11 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git", lfs = true }
+        test-lfs-repo = { git = "https://github.com/samypr100/test-lfs-repo.git", rev = "657500f0703dc173ac5d68dfa1d7e8c985c84424", lfs = true }
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13585,29 +13585,22 @@ fn sync_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
     ");
 
     // Verify that we can import the module and access LFS content
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-        import test_lfs_repo.lfs_module
-      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
-        version https://git-lfs.github.com/spec/v1
-                ^^^^^
-    SyntaxError: invalid syntax
     "#);
 
     // `UV_GIT_LFS=false` should not override `lfs = true`
-    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "false").arg("--reinstall").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "false").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13617,24 +13610,17 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-        import test_lfs_repo.lfs_module
-      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
-        version https://git-lfs.github.com/spec/v1
-                ^^^^^
-    SyntaxError: invalid syntax
     "#);
 
     // Set `lfs = false` in the source
@@ -13647,11 +13633,11 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git", lfs = false }
+        test-lfs-repo = { git = "https://github.com/samypr100/test-lfs-repo.git", rev = "657500f0703dc173ac5d68dfa1d7e8c985c84424", lfs = false }
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13661,7 +13647,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
     ");
 
     // Verify that LFS content is missing (import should fail)
@@ -13682,8 +13669,8 @@ fn sync_git_lfs() -> Result<()> {
     SyntaxError: invalid syntax
     "#);
 
-    // `UV_GIT_LFS=true` should not override `lfs = false`
-    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "true").arg("--reinstall").arg("--no-cache"), @r"
+    // `UV_GIT_lfs=true` should not override `lfs = false`
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13693,7 +13680,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -13723,11 +13710,11 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/zanieb/test-lfs-repo.git" }
+        test-lfs-repo = { git = "https://github.com/samypr100/test-lfs-repo.git", rev = "657500f0703dc173ac5d68dfa1d7e8c985c84424" }
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env("UV_GIT_LFS", "true").arg("--reinstall").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13737,13 +13724,40 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/zanieb/test-lfs-repo.git@39b6b03dc0a301420b7b4e73311d799fb139ba2e)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
     ");
 
     // Verify that we can import the module when UV_GIT_LFS is set
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    LFS module imported via env var
+
+    ----- stderr -----
+    "#);
+
+    // Cache should be primed with non-LFS sources
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13751,12 +13765,95 @@ fn sync_git_lfs() -> Result<()> {
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-        import test_lfs_repo.lfs_module; print('LFS module imported via env var')
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        import test_lfs_repo.lfs_module
       File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
         version https://git-lfs.github.com/spec/v1
                 ^^^^^
     SyntaxError: invalid syntax
+    "#);
+
+    // Cache should be primed with LFS sources
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    LFS module imported via env var
+
+    ----- stderr -----
+    "#);
+
+    // Cache should hit non-LFS sources
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import test_lfs_repo.lfs_module
+      File "[SITE_PACKAGES]/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    // Cache should hit LFS sources
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo.git@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    LFS module imported via env var
+
+    ----- stderr -----
     "#);
 
     Ok(())
