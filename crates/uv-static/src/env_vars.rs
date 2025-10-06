@@ -814,6 +814,11 @@ impl EnvVars {
     #[attr_added_in("next release")]
     pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
 
+    /// Used in tests to set the user global git config location.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_CONFIG_GLOBAL: &'static str = "GIT_CONFIG_GLOBAL";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.

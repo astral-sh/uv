@@ -17,8 +17,7 @@ use assert_fs::fixture::{
 };
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
-use indoc::formatdoc;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
@@ -906,6 +905,31 @@ impl TestContext {
         }
 
         Ok(())
+    }
+
+    /// Setup Git LFS Filters
+    ///
+    /// You can find the default filters in <https://github.com/git-lfs/git-lfs/blob/v3.7.1/lfs/attribute.go#L66-L71>
+    /// We set required to true to get a full stacktrace when these commands fail.
+    pub fn with_git_lfs_config(mut self) -> Self {
+        let git_lfs_config = self.root.child(".gitconfig");
+        git_lfs_config
+            .write_str(indoc! {r#"
+                [filter "lfs"]
+                    clean = git-lfs clean -- %f
+                    smudge = git-lfs smudge -- %f
+                    process = git-lfs filter-process
+                    required = true
+            "#})
+            .expect("Failed to setup `git-lfs` filters");
+
+        // Its possible your system config can cause conflicts with the Git LFS tests.
+        // In such cases, add self.extra_env.push(("GIT_CONFIG_NOSYSTEM".into(), "1".into()));
+        self.extra_env.push((
+            EnvVars::GIT_CONFIG_GLOBAL.into(),
+            git_lfs_config.as_os_str().into(),
+        ));
+        self
     }
 
     /// Shared behaviour for almost all test commands.

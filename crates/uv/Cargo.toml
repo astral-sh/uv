@@ -178,6 +178,7 @@ tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing
 default-tests = [
     "crates-io",
     "git",
+    "git-lfs",
     "pypi",
     "r2",
     "python",
@@ -190,6 +191,8 @@ default-tests = [
 crates-io = []
 # Introduces a testing dependency on Git.
 git = []
+# Introduces a testing dependency on Git LFS.
+git-lfs = ["git"]
 # Introduces a testing dependency on PyPI.
 pypi = []
 # Introduces a testing dependency on R2.
