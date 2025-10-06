@@ -79,8 +79,9 @@ impl GitUrl {
     pub fn from_reference(
         repository: DisplaySafeUrl,
         reference: GitReference,
+        lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, None, GitLfs::from_env())
+        Self::from_fields(repository, reference, None, lfs)
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
@@ -88,8 +89,9 @@ impl GitUrl {
         repository: DisplaySafeUrl,
         reference: GitReference,
         precise: GitOid,
+        lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
-        Self::from_fields(repository, reference, Some(precise), GitLfs::from_env())
+        Self::from_fields(repository, reference, Some(precise), lfs)
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
@@ -179,7 +181,8 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
             url.set_path(&prefix);
         }
 
-        Self::from_reference(url, reference)
+        // TODO(samypr100): GitLfs::from_env() for now unless we want to support additional query params
+        Self::from_reference(url, reference, GitLfs::from_env())
     }
 }
 

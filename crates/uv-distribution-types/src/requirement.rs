@@ -856,6 +856,11 @@ impl From<RequirementSource> for RequirementSourceWire {
                         .append_pair("subdirectory", &subdirectory);
                 }
 
+                // Put git_lfs=true in the query when explicitly enabled.
+                if git.lfs().enabled() {
+                    url.query_pairs_mut().append_pair("git_lfs", "true");
+                }
+
                 // Put the requested reference in the query.
                 match git.reference() {
                     GitReference::Branch(branch) => {
@@ -932,6 +937,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
+                let mut lfs = None;
                 for (key, val) in repository.query_pairs() {
                     match &*key {
                         "tag" => reference = GitReference::Tag(val.into_owned()),
@@ -940,10 +946,14 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                         "subdirectory" => {
                             subdirectory = Some(PortablePathBuf::from(val.as_ref()));
                         }
+                        "git_lfs" => {
+                            lfs = val.eq_ignore_ascii_case("true").then_some(GitLfs::Enabled);
+                        }
                         _ => {}
                     }
                 }
 
+                let lfs = lfs.unwrap_or_else(GitLfs::from_env);
                 let precise = repository.fragment().map(GitOid::from_str).transpose()?;
 
                 // Clear out any existing state.
@@ -959,13 +969,22 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);
                 }
+                let mut frags: Vec<String> = Vec::new();
                 if let Some(subdirectory) = subdirectory.as_ref() {
-                    url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+                    frags.push(format!("subdirectory={subdirectory}"));
                 }
+                // Persist only when git lfs support is explicitly requested
+                if lfs.enabled() {
+                    frags.push("git_lfs=true".to_string());
+                }
+                if !frags.is_empty() {
+                    url.set_fragment(Some(&frags.join("&")));
+                }
+
                 let url = VerbatimUrl::from_url(url);
 
                 Ok(Self::Git {
-                    git: GitUrl::from_fields(repository, reference, precise, GitLfs::from_env())?,
+                    git: GitUrl::from_fields(repository, reference, precise, lfs)?,
                     subdirectory: subdirectory.map(Box::<Path>::from),
                     url,
                 })
