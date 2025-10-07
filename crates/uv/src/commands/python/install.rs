@@ -562,7 +562,7 @@ pub(crate) async fn install(
             if upgrade {
                 writeln!(
                     printer.stderr(),
-                    "{request} is already on latest supported patch release"
+                    "{request} is already on the latest supported patch release"
                 )?;
             } else {
                 writeln!(printer.stderr(), "{request} is already installed")?;
