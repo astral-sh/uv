@@ -31969,3 +31969,34 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
 
     Ok(())
 }
+
+/// <https://github.com/astral-sh/uv/issues/16148>
+#[test]
+fn no_warning_without_and_with_lower_bound() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio[trio]",
+            "anyio>=4"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+
+    Ok(())
+}

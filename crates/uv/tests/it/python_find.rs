@@ -1,3 +1,4 @@
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
@@ -1155,7 +1156,7 @@ fn python_find_script_no_such_version() {
     script
         .write_str(indoc! {r#"
             # /// script
-            # requires-python = ">=3.14"
+            # requires-python = ">=3.15"
             # dependencies = []
             # ///
         "#})
@@ -1167,7 +1168,7 @@ fn python_find_script_no_such_version() {
     ----- stdout -----
 
     ----- stderr -----
-    No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    No interpreter found for Python >=3.15 in [PYTHON SOURCES]
     ");
 }
 
@@ -1254,5 +1255,83 @@ fn python_find_path() {
 
     ----- stderr -----
     error: No interpreter found at path `foobar`
+    ");
+}
+
+#[test]
+fn python_find_freethreaded_313() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.13t")
+        .assert()
+        .success();
+
+    // Request Python 3.13 (without opt-in)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
+    ");
+
+    // Request Python 3.13t (with explicit opt-in)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_find_freethreaded_314() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.14t")
+        .assert()
+        .success();
+
+    // Request Python 3.14 (without opt-in)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.14t (with explicit opt-in)
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
     ");
 }

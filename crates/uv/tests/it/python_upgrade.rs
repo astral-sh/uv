@@ -51,6 +51,7 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Python 3.10 is already on the latest supported patch release
     ");
 
     // Should reinstall on `--reinstall`
@@ -83,8 +84,8 @@ fn python_upgrade() {
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    Installed Python 3.14.0rc3 in [TIME]
-     + cpython-3.14.0rc3-[PLATFORM] (python3.14)
+    Installed Python 3.14.0 in [TIME]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
     ");
 }
 
