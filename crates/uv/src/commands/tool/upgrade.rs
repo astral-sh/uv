@@ -473,18 +473,12 @@ fn pinned_version_from(requirements: &[Requirement], name: &PackageName) -> Opti
         .filter(|requirement| requirement.name == *name)
         .find_map(|requirement| match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
-                let mut specifiers = specifier.iter();
-
-                let first = specifiers.next()?;
-
-                if specifiers.next().is_some() {
-                    return None;
-                }
-
-                match first.operator() {
-                    Operator::Equal | Operator::ExactEqual => Some(first.version().clone()),
-                    _ => None,
-                }
+                specifier
+                    .iter()
+                    .find_map(|specifier| match specifier.operator() {
+                        Operator::Equal | Operator::ExactEqual => Some(specifier.version().clone()),
+                        _ => None,
+                    })
             }
             _ => None,
         })
