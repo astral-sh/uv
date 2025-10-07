@@ -85,7 +85,7 @@ fn python_upgrade() {
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
     Installed Python 3.14.0 in [TIME]
-     + cpython-3.14.0-[PLATFORM]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
     ");
 }
 
