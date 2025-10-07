@@ -5035,7 +5035,7 @@ fn run_groups_requires_python() -> Result<()> {
         dev = ["sniffio"]
 
         [tool.uv.dependency-groups]
-        foo = {requires-python=">=3.14"}
+        foo = {requires-python=">=3.100"}
         bar = {requires-python=">=3.13"}
         dev = {requires-python=">=3.12"}
         "#,
@@ -5168,7 +5168,7 @@ fn run_groups_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
 
     Ok(())

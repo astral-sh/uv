@@ -1156,7 +1156,7 @@ fn python_find_script_no_such_version() {
     script
         .write_str(indoc! {r#"
             # /// script
-            # requires-python = ">=3.14"
+            # requires-python = ">=3.15"
             # dependencies = []
             # ///
         "#})
@@ -1168,7 +1168,7 @@ fn python_find_script_no_such_version() {
     ----- stdout -----
 
     ----- stderr -----
-    No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    No interpreter found for Python >=3.15 in [PYTHON SOURCES]
     ");
 }
 
