@@ -51,7 +51,7 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Python 3.10 is already on latest supported patch release
+    Python 3.10 is already on the latest supported patch release
     ");
 
     // Should reinstall on `--reinstall`
