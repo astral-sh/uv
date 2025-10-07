@@ -792,7 +792,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
     OnceCell::new();
 
