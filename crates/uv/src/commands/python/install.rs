@@ -285,9 +285,9 @@ pub(crate) async fn install(
         .collect::<IndexSet<_>>();
 
     if upgrade
-        && requests
-            .iter()
-            .any(|request| request.request.includes_patch())
+        && requests.iter().any(|request| {
+            request.request.includes_patch() || request.request.includes_prerelease()
+        })
     {
         writeln!(
             printer.stderr(),
