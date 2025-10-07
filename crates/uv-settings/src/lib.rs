@@ -574,6 +574,8 @@ pub struct EnvironmentOptions {
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
+    #[cfg(feature = "tracing-durations-export")]
+    pub tracing_durations_file: Option<PathBuf>,
 }
 
 impl EnvironmentOptions {
@@ -599,6 +601,10 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
+            #[cfg(feature = "tracing-durations-export")]
+            tracing_durations_file: parse_path_environment_variable(
+                EnvVars::TRACING_DURATIONS_FILE,
+            ),
         })
     }
 }
@@ -674,6 +680,18 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
             }),
         },
     }
+}
+
+#[cfg(feature = "tracing-durations-export")]
+/// Parse a path environment variable.
+fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
+    let value = std::env::var_os(name)?;
+
+    if value.is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(value))
 }
 
 /// Populate the [`EnvironmentFlags`] from the given [`EnvironmentOptions`].

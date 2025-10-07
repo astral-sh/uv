@@ -360,7 +360,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (durations_layer, _duration_guard) = logging::setup_durations()?;
+    let (durations_layer, _duration_guard) =
+        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
@@ -1022,7 +1023,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, cache, printer)
+            commands::cache_prune(args.ci, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,

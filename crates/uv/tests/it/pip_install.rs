@@ -12358,6 +12358,87 @@ fn reject_invalid_short_usize_zip64() {
     );
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16068>
+#[test]
+fn already_installed_url_dependency_no_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar")
+        .child("src")
+        .child("bar")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install `foo`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    // Install `bar` with `--no-sources`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./bar").arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+    ");
+
+    Ok(())
+}
+
 /// Test that build dependencies respect locked versions from the resolution.
 #[test]
 fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {

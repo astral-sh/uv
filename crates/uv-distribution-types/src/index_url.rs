@@ -10,7 +10,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::trace;
 use url::{ParseError, Url};
-
+use uv_auth::RealmRef;
+use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
@@ -292,6 +293,12 @@ impl IndexLocations {
     }
 }
 
+/// Returns `true` if two [`IndexUrl`]s refer to the same index.
+fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
+    RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
+        && CanonicalUrl::new(a.url()) == CanonicalUrl::new(b.url())
+}
+
 impl<'a> IndexLocations {
     /// Return the default [`Index`] entry.
     ///
@@ -456,7 +463,7 @@ impl<'a> IndexLocations {
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
     pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
             }
         }
@@ -466,7 +473,7 @@ impl<'a> IndexLocations {
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
             }
         }
@@ -599,7 +606,7 @@ impl<'a> IndexUrls {
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
     pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.status_code_strategy();
             }
         }
@@ -609,7 +616,7 @@ impl<'a> IndexUrls {
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
     pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
             }
         }
@@ -619,7 +626,7 @@ impl<'a> IndexUrls {
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
             }
         }

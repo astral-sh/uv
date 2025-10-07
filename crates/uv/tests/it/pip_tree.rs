@@ -1,9 +1,13 @@
 #![cfg(not(windows))]
 
+use assert_cmd::assert::OutputAssertExt;
 use std::process::Command;
 
+use assert_fs::fixture::FileTouch;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
+use assert_fs::fixture::PathCreateDir;
+use indoc::indoc;
 
 use uv_static::EnvVars;
 
@@ -1154,6 +1158,128 @@ fn outdated() {
     │   └── markupsafe v2.1.5
     └── werkzeug v3.0.1
         └── markupsafe v2.1.5
+
+    ----- stderr -----
+    "###
+    );
+}
+
+/// Test that dependencies with multiple marker-specific requirements
+/// are only displayed once in the tree.
+#[test]
+#[cfg(feature = "pypi")]
+fn no_duplicate_dependencies_with_markers() {
+    const PY_PROJECT: &str = indoc! {r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = [
+          "sniffio>=1.0.0; python_version >= '3.11'",
+          "sniffio>=1.0.1; python_version >= '3.12'",
+          "sniffio>=1.0.2; python_version >= '3.13'",
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.8.22,<10000"]
+        build-backend = "uv_build"
+    "#};
+
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]).with_filtered_counts();
+
+    let project = context.temp_dir.child("debug");
+
+    project.create_dir_all().unwrap();
+
+    project.child("src/debug").create_dir_all().unwrap();
+
+    project.child("src/debug/__init__.py").touch().unwrap();
+
+    project
+        .child("pyproject.toml")
+        .write_str(PY_PROJECT)
+        .unwrap();
+
+    context.reset_venv();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(project.path())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + debug==0.1.0 (from file://[TEMP_DIR]/debug)
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Ensure that the dependency is only listed once, even though `debug` declares multiple
+    // marker-specific requirements for the same dependency.
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    debug v0.1.0
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree().arg("--show-version-specifiers"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    debug v0.1.0
+    └── sniffio v1.3.1 [required: >=1.0.1]
+
+    ----- stderr -----
+    "###
+    );
+
+    context
+        .venv()
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.13")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(project.path())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + debug==0.1.0 (from file://[TEMP_DIR]/debug)
+     + sniffio==1.3.1
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree().arg("--show-version-specifiers"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    debug v0.1.0
+    └── sniffio v1.3.1 [required: >=1.0.2]
 
     ----- stderr -----
     "###

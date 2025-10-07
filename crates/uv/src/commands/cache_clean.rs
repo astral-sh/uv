@@ -28,17 +28,19 @@ pub(crate) fn cache_clean(
         return Ok(ExitStatus::Success);
     }
 
-    let cache = if force {
-        // If `--force` is used, attempt to acquire the exclusive lock but do not block.
-        match cache.with_exclusive_lock_no_wait() {
-            Ok(cache) => cache,
-            Err(cache) => {
-                debug!("Cache is currently in use, proceeding due to `--force`");
-                cache
-            }
+    let cache = match cache.with_exclusive_lock_no_wait() {
+        Ok(cache) => cache,
+        Err(cache) if force => {
+            debug!("Cache is currently in use, proceeding due to `--force`");
+            cache
         }
-    } else {
-        cache.with_exclusive_lock()?
+        Err(cache) => {
+            writeln!(
+                printer.stderr(),
+                "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+            )?;
+            cache.with_exclusive_lock()?
+        }
     };
 
     let summary = if packages.is_empty() {

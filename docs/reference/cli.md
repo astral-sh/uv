@@ -6007,6 +6007,8 @@ uv cache prune [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-cache-prune--directory"><a href="#uv-cache-prune--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
+</dd><dt id="uv-cache-prune--force"><a href="#uv-cache-prune--force"><code>--force</code></a></dt><dd><p>Force removal of the cache, ignoring in-use checks.</p>
+<p>By default, <code>uv cache prune</code> will block until no process is reading the cache. When <code>--force</code> is used, <code>uv cache prune</code> will proceed without taking a lock.</p>
 </dd><dt id="uv-cache-prune--help"><a href="#uv-cache-prune--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-cache-prune--managed-python"><a href="#uv-cache-prune--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>

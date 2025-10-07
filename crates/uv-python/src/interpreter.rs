@@ -3,6 +3,7 @@ use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::str::FromStr;
 use std::sync::OnceLock;
 use std::{env, io};
 
@@ -301,7 +302,19 @@ impl Interpreter {
             return false;
         };
 
-        self.sys_base_prefix.starts_with(installations.root())
+        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+            return false;
+        };
+
+        let Some(first_component) = suffix.components().next() else {
+            return false;
+        };
+
+        let Some(name) = first_component.as_os_str().to_str() else {
+            return false;
+        };
+
+        PythonInstallationKey::from_str(name).is_ok()
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error

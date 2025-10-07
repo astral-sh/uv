@@ -802,6 +802,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache prune` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache prune` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
