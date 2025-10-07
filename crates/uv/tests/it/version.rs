@@ -292,27 +292,19 @@ requires-python = ">=3.12"
 // Preserve comments immediately preceding the version when bumping
 #[test]
 fn version_bump_preserves_preceding_comments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context: TestContext = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
-# hello
-[project]
-# hello
-name = "hello-world"
-# hello
-version = "0.1.0"
-# hello
-description = "Add your description here"
-# hello
-readme = "README.md"
-# hello
-requires-python = ">=3.12"
-# hello
-dependencies = []
-# hello
-"#,
+        [project]
+        name = "hello-world"
+        # pre-1: stays above version
+        # pre-2: stays below pre-1
+        version = "0.1.0" # eol: stays on same line
+        # after-version: remains after version
+        description = "Add your description here"
+        "#,
     )?;
 
     // Bump patch version
@@ -328,21 +320,13 @@ dependencies = []
     assert_snapshot!(
         pyproject,
         @r#"
-        # hello
         [project]
-        # hello
         name = "hello-world"
-        # hello
-        version = "0.1.1"
-        # hello
+        # pre-1: stays above version
+        # pre-2: stays below pre-1
+        version = "0.1.1" # eol: stays on same line
+        # after-version: remains after version
         description = "Add your description here"
-        # hello
-        readme = "README.md"
-        # hello
-        requires-python = ">=3.12"
-        # hello
-        dependencies = []
-        # hello
         "#
     );
 

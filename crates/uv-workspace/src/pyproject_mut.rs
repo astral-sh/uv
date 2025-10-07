@@ -1142,22 +1142,13 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table_mut)
             .ok_or(Error::MalformedWorkspace)?;
 
-        // If a `version` entry already exists, preserve its formatting and comments
-        // while updating just the string content. Otherwise, insert a new value.
+        
         if let Some(existing) = project.get_mut("version") {
             if let Some(value) = existing.as_value_mut() {
-                // Build a new formatted string, carrying over prefix/suffix decorations
-                // from the existing value to preserve comments and whitespace.
                 let mut formatted = Formatted::new(version.to_string());
-                if let Some(prefix) = value.decor().prefix() {
-                    formatted.decor_mut().set_prefix(prefix.clone());
-                }
-                if let Some(suffix) = value.decor().suffix() {
-                    formatted.decor_mut().set_suffix(suffix.clone());
-                }
+                *formatted.decor_mut() = value.decor().clone();
                 *value = Value::String(formatted);
             } else {
-                // Fallback: replace non-value items without attempting to preserve decorations.
                 *existing = Item::Value(Value::String(Formatted::new(version.to_string())));
             }
         } else {
