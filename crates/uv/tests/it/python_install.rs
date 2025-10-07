@@ -1216,6 +1216,34 @@ fn python_install_freethreaded() {
     ");
 }
 
+#[test]
+fn python_upgrade_not_allowed() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Request a patch upgrade
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.13.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv python upgrade` only accepts minor versions
+    ");
+
+    // Request a pre-release upgrade
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.14rc3"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv python upgrade` only accepts minor versions
+    ");
+}
+
 // We only support debug builds on Unix
 #[cfg(unix)]
 #[test]

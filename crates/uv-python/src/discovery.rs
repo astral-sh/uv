@@ -1945,6 +1945,24 @@ impl PythonRequest {
         }
     }
 
+    /// Check if this request includes a specific prerelease version.
+    pub fn includes_prerelease(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Any => false,
+            Self::Version(version_request) => version_request.prerelease().is_some(),
+            Self::Directory(..) => false,
+            Self::File(..) => false,
+            Self::ExecutableName(..) => false,
+            Self::Implementation(..) => false,
+            Self::ImplementationVersion(_, version) => version.prerelease().is_some(),
+            Self::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.prerelease().is_some()),
+        }
+    }
+
     /// Check if a given interpreter satisfies the interpreter request.
     pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
@@ -2562,6 +2580,17 @@ impl VersionRequest {
             Self::MajorMinor(_, _, _) => None,
             Self::MajorMinorPatch(_, _, patch, _) => Some(*patch),
             Self::MajorMinorPrerelease(_, _, _, _) => None,
+        }
+    }
+
+    /// Return the pre-release segment of the request, if any.
+    pub(crate) fn prerelease(&self) -> Option<&Prerelease> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Major(_, _) => None,
+            Self::MajorMinor(_, _, _) => None,
+            Self::MajorMinorPatch(_, _, _, _) => None,
+            Self::MajorMinorPrerelease(_, _, prerelease, _) => Some(prerelease),
         }
     }
 
