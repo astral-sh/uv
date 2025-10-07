@@ -2084,3 +2084,65 @@ fn venv_included_in_sdist() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that workspace discovery works with and without trailing slash.
+///
+/// <https://github.com/astral-sh/uv/issues/13914>
+#[test]
+fn test_workspace_trailing_slash() {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace with a root and a member.
+    context.init().arg("--lib").assert().success();
+    context.init().arg("--lib").arg("child").assert().success();
+
+    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check that workspace discovery still works.
+    uv_snapshot!(context.filters(), context.build().arg("child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check general normalization too.
+    uv_snapshot!(context.filters(), context.build().arg("./child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+}
