@@ -21,6 +21,13 @@ There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts
 
   Previously, free-threaded variants of Python were considered experimental and required explicit opt-in (i.e., with `3.14t`) for usage. Now uv will allow use of free-threaded Python 3.14+ interpreters without explicit selection. The GIL-enabled build of Python will still be preferred, e.g., when performing an installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes before a GIL-enabled build on the `PATH`, it will be used. This change does not apply to free-threaded Python 3.13 interpreters, which will continue to require opt-in.
 
+- **Use Python 3.14 stable Docker images** ([#16150](https://github.com/astral-sh/uv/pull/16150))
+
+  Previously, the Python 3.14 images had an `-rc` suffix, e.g., `python:3.14-rc-alpine` or
+  `python:3.14-rc-trixie`. Now, the `-rc` suffix has been removed to match the stable
+  [upstream images](https://hub.docker.com/_/python). The `-rc` images tags will no longer be
+  updated. This change should not break existing workflows.
+
 - **Upgrade Alpine Docker image to Alpine 3.22**
 
   Previously, the `uv:alpine` Docker image was based on Alpine 3.21. Now, this image is based on Alpine 3.22. The previous image can be recovered with `uv:alpine3.21` and will continue to be updated until a future release.
