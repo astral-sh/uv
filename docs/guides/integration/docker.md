@@ -54,7 +54,7 @@ And the following derived images are available:
 - Based on `buildpack-deps:bookworm`:
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
-    - `ghcr.io/astral-sh/uv:python3.14-rc-alpine`
+    - `ghcr.io/astral-sh/uv:python3.14-alpine`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
@@ -62,21 +62,21 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
 - Based on `python3.x-trixie`:
-    - `ghcr.io/astral-sh/uv:python3.14-rc-trixie`
+    - `ghcr.io/astral-sh/uv:python3.14-trixie`
     - `ghcr.io/astral-sh/uv:python3.13-trixie`
     - `ghcr.io/astral-sh/uv:python3.12-trixie`
     - `ghcr.io/astral-sh/uv:python3.11-trixie`
     - `ghcr.io/astral-sh/uv:python3.10-trixie`
     - `ghcr.io/astral-sh/uv:python3.9-trixie`
 - Based on `python3.x-slim-trixie`:
-    - `ghcr.io/astral-sh/uv:python3.14-rc-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.14-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.13-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.12-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.11-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.10-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.9-trixie-slim`
 - Based on `python3.x-bookworm`:
-    - `ghcr.io/astral-sh/uv:python3.14-rc-bookworm`
+    - `ghcr.io/astral-sh/uv:python3.14-bookworm`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm`
@@ -84,7 +84,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-bookworm`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
-    - `ghcr.io/astral-sh/uv:python3.14-rc-bookworm-slim`
+    - `ghcr.io/astral-sh/uv:python3.14-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm-slim`
