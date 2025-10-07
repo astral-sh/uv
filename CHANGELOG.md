@@ -3,6 +3,19 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.24
+
+Released on 2025-10-06.
+
+### Enhancements
+
+- Emit a message on `cache clean` and `prune` when lock is held ([#16138](https://github.com/astral-sh/uv/pull/16138))
+- Add `--force` flag for `uv cache prune` ([#16137](https://github.com/astral-sh/uv/pull/16137))
+
+### Documentation
+
+- Fix example of bumping beta version without patch bump ([#16132](https://github.com/astral-sh/uv/pull/16132))
+
 ## 0.8.23
 
 Released on 2025-10-03.
