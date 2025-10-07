@@ -88,13 +88,14 @@ fn python_install() {
     "###);
 
     // Similarly, when a requested version is already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    Python 3.13 is already installed
+    ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r"
@@ -716,6 +717,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
+    Python 3.13 is already installed
     ");
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13").env(EnvVars::UV_PYTHON_INSTALL_BIN, "0"), @r"
     success: true
@@ -723,6 +725,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
+    Python 3.13 is already installed
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.13"), @r"
@@ -2596,13 +2599,14 @@ fn python_install_no_cache() {
     "###);
 
     // Similarly, when a requested version is already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    Python 3.13 is already installed
+    ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r"
