@@ -560,6 +560,10 @@ created by `uv venv`.
 
 Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
 
+### `UV_WORKING_DIRECTORY`
+
+Equivalent to the `--directory` command-line argument.
+
 
 
 ## Externally defined variables
