@@ -3448,7 +3448,7 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.14.0 in [TIME]
-     + cpython-3.14.0-[PLATFORM]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
     ");
 
     // Now, we should prefer that
