@@ -2770,8 +2770,8 @@ impl VersionRequest {
             ),
             Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
                 // Pre-releases of Python versions are always for the zero patch version
-                (*self_major, *self_minor, 0) == (major, minor, patch)
-                    && prerelease.is_none_or(|pre| *self_prerelease == pre)
+                (*self_major, *self_minor, 0, Some(*self_prerelease))
+                    == (major, minor, patch, prerelease)
             }
         }
     }
