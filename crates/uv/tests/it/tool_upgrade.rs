@@ -261,6 +261,7 @@ fn tool_upgrade_pinned_hint() {
     Modified babel environment
      - pytz==2018.5
      + pytz==2024.1
+
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     "###);
 }
@@ -733,6 +734,7 @@ fn tool_upgrade_with() {
     Modified babel environment
      - pytz==2018.5
      + pytz==2024.1
+
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     "###);
 }

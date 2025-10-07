@@ -199,6 +199,10 @@ pub(crate) async fn upgrade(
         }
     }
 
+    if !collected_constraints.is_empty() {
+        writeln!(printer.stderr())?;
+    }
+
     for (name, constraint) in collected_constraints {
         constraint.print(&name, printer)?;
     }
