@@ -1142,7 +1142,6 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table_mut)
             .ok_or(Error::MalformedWorkspace)?;
 
-        
         if let Some(existing) = project.get_mut("version") {
             if let Some(value) = existing.as_value_mut() {
                 let mut formatted = Formatted::new(version.to_string());
