@@ -3,6 +3,61 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.0
+
+Released on 2025-10-07.
+
+This release has been marked as breaking due to the release of Python 3.14, which contains some
+breaking changes (we recommend reading the ["What's new in Python 3.14"](https://docs.python.org/3/whatsnew/3.14.html)
+page). uv may use Python 3.14 in cases where it previously used 3.13, e.g., if you have not pinned
+your Python version and do not have any Python versions installed on your machine. While we think
+this is uncommon, we prefer to be cautious.
+
+There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts/build-backend/). If
+you have an upper bound in your `[build-system]` table, you should update it.
+
+### Breaking changes
+
+- **Python 3.14 is now the default stable version**
+
+  The default Python version has changed from 3.13 to 3.14. This applies to Python version
+  installation when no Python version is requested, e.g., `uv python install`. By default, uv will
+  use the system Python version if present, so this may not cause changes to general use of uv. For
+  example, if Python 3.13 is installed already, then `uv venv` will use that version. If no Python
+  versions are installed on a machine and automatic downloads are enabled, uv will now use 3.14
+  instead of 3.13, e.g., for `uv venv` or `uvx python`. This change will not affect users who are
+  using a `.python-version` file to pin to a specific Python version.
+
+- **Allow use of free-threaded variants in Python 3.14+ without explicit opt-in** ([#16142](https://github.com/astral-sh/uv/pull/16142))
+
+  Previously, free-threaded variants of Python were considered experimental and required explicit
+  opt-in (i.e., with `3.14t`) for usage. Now uv will allow use of free-threaded Python 3.14+
+  interpreters without explicit selection. The GIL-enabled build of Python will still be preferred,
+  e.g., when performing an installation with `uv python install 3.14`. However, e.g., if a
+  free-threaded interpreter comes before a GIL-enabled build on the `PATH`, it will be used. This
+  change does not apply to free-threaded Python 3.13 interpreters, which will continue to require
+  opt-in.
+
+### Python
+
+- Add CPython 3.14.0
+- Add CPython 3.13.8
+
+### Enhancements
+
+- Don't warn when dependency is constraint by other dependency ([#16149](https://github.com/astral-sh/uv/pull/16149))
+
+### Bug fixes
+
+- Fix `uv python upgrade / install` output when there is a no-op for one request ([#16158](https://github.com/astral-sh/uv/pull/16158))
+- Surface pinned-version hint when `uv tool upgrade` can’t move the tool ([#16081](https://github.com/astral-sh/uv/pull/16081))
+- Ban pre-release versions in `uv python upgrade` requests ([#16160](https://github.com/astral-sh/uv/pull/16160))
+- Fix `uv python upgrade` replacement of installed binaries on pre-release to stable ([#16159](https://github.com/astral-sh/uv/pull/16159))
+
+### Documentation
+
+- Update `uv pip compile` args in `layout.md` ([#16155](https://github.com/astral-sh/uv/pull/16155))
+
 ## 0.8.24
 
 Released on 2025-10-06.
