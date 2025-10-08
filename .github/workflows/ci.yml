@@ -2201,12 +2201,24 @@ jobs:
       - name: "Install Python"
         if: matrix.rocky-version == '8'
         run: |
-          dnf install python39 python39-pip which -y
+          for i in {1..5}; do
+            dnf install python39 python39-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            if [ $i -eq 5 ]; then
+              echo "Failed to install Python after 5 attempts"
+              exit 1
+            fi
+          done
 
       - name: "Install Python"
         if: matrix.rocky-version == '9'
         run: |
-          dnf install python3.9 python3.9-pip which -y
+          for i in {1..5}; do
+            dnf install python3.9 python3.9-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            if [ $i -eq 5 ]; then
+              echo "Failed to install Python after 5 attempts"
+              exit 1
+            fi
+          done
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
