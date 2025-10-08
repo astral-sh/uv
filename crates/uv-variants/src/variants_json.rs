@@ -1,6 +1,5 @@
 use std::ops::Deref;
 
-use indoc::formatdoc;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -182,31 +181,4 @@ pub struct Provider {
     pub requires: Vec<Requirement<VerbatimParsedUrl>>,
     /// Whether this plugin is run at install time.
     pub plugin_use: Option<PluginUse>,
-}
-
-impl Provider {
-    pub fn import(&self, name: &str) -> String {
-        let import = if let Some(plugin_api) = &self.plugin_api {
-            if let Some((path, object)) = plugin_api.split_once(':') {
-                format!("from {path} import {object} as backend")
-            } else {
-                format!("import {plugin_api} as backend")
-            }
-        } else {
-            // TODO(konsti): Normalize the name to a valid python identifier
-            format!("import {name} as backend")
-        };
-
-        formatdoc! {r#"
-            import sys
-
-            if sys.path[0] == "":
-                sys.path.pop(0)
-
-            {import}
-
-            if callable(backend):
-                backend = backend()
-        "#}
-    }
 }

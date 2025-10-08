@@ -147,6 +147,49 @@ impl VariantBuild {
         })
     }
 
+    pub fn import(&self) -> Result<String, Error> {
+        let import = if let Some(plugin_api) = &self.backend.plugin_api {
+            if let Some((path, object)) = plugin_api.split_once(':') {
+                format!("from {path} import {object} as backend")
+            } else {
+                format!("import {plugin_api} as backend")
+            }
+        } else {
+            let requires = self
+                .backend
+                .requires
+                .iter()
+                .filter(|requirement| {
+                    requirement.evaluate_markers(
+                        self.venv.interpreter().markers(),
+                        &Vec::new().as_slice(),
+                        &[],
+                    )
+                })
+                .collect::<Vec<_>>();
+            if let [requires] = requires.as_slice() {
+                format!("import {} as backend", requires.name.as_dist_info_name())
+            } else {
+                return Err(Error::InvalidRequires {
+                    backend_name: self.backend_name.clone(),
+                    matching: requires.len(),
+                });
+            }
+        };
+
+        Ok(formatdoc! {r#"
+            import sys
+
+            if sys.path[0] == "":
+                sys.path.pop(0)
+
+            {import}
+
+            if callable(backend):
+                backend = backend()
+        "#})
+    }
+
     /// Run a variant provider to infer compatible variants.
     pub async fn build(&self) -> Result<VariantProviderOutput, Error> {
         // Write the hook output to a file so that we can read it back reliably.
@@ -166,7 +209,7 @@ impl VariantBuild {
             with open("{out_file}", "w") as fp:
                 fp.write(json.dumps(output))
             "#,
-            backend = self.backend.import(&self.backend_name),
+            backend = self.import()?,
             out_file = out_file.escape_for_python()
         };
 
