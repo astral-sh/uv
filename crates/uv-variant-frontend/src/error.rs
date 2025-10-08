@@ -31,6 +31,14 @@ pub enum Error {
     BuildScriptPath(#[source] env::JoinPathsError),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
+    #[error(
+        "There must be exactly one `requires` value matching the current environment for \
+        {backend_name}, but there are {matching}"
+    )]
+    InvalidRequires {
+        backend_name: String,
+        matching: usize,
+    },
 }
 
 #[derive(Debug, Error)]
