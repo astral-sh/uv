@@ -489,16 +489,16 @@ async fn determine_requires_python(
         // (1) A request from the user or `.python-version` file
         // This can be arbitrary, i.e., not a version — in which case we may need to resolve the
         // interpreter
-        let (requires_python, pyhton_pin) = match python_request {
+        let (requires_python, python_pin) = match &python_request {
             PythonRequest::Version(VersionRequest::MajorMinor(major, minor, variant)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
-                    u64::from(major),
-                    u64::from(minor),
+                    u64::from(*major),
+                    u64::from(*minor),
                 ]));
 
                 let python_pin = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major, minor, variant,
+                        *major, *minor, *variant,
                     )))
                 } else {
                     None
@@ -513,14 +513,14 @@ async fn determine_requires_python(
                 variant,
             )) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
-                    u64::from(major),
-                    u64::from(minor),
-                    u64::from(patch),
+                    u64::from(*major),
+                    u64::from(*minor),
+                    u64::from(*patch),
                 ]));
 
                 let python_pin = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major, minor, patch, variant,
+                        *major, *minor, *patch, *variant,
                     )))
                 } else {
                     None
@@ -528,10 +528,7 @@ async fn determine_requires_python(
 
                 (requires_python, python_pin)
             }
-            ref python_request @ PythonRequest::Version(VersionRequest::Range(
-                ref specifiers,
-                ref variant,
-            )) => {
+            python_request @ PythonRequest::Version(VersionRequest::Range(specifiers, variant)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers);
 
                 let python_pin = if pin_python {
@@ -564,7 +561,7 @@ async fn determine_requires_python(
             }
             python_request => {
                 let interpreter = PythonInstallation::find_or_download(
-                    Some(&python_request),
+                    Some(python_request),
                     EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
@@ -596,10 +593,11 @@ async fn determine_requires_python(
             }
         };
 
-        Ok((requires_python, pyhton_pin))
+        debug!("Using Python version `{requires_python}` from request `{python_request}`");
+
+        Ok((requires_python, python_pin))
     } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
         // (2) An existing Python environment in the target directory
-        debug!("Using Python version from existing virtual environment in project");
         let interpreter = virtualenv.into_interpreter();
 
         let requires_python =
@@ -616,6 +614,10 @@ async fn determine_requires_python(
             None
         };
 
+        debug!(
+            "Using Python version `{requires_python}` from existing virtual environment in project"
+        );
+
         Ok((requires_python, python_pin))
     } else if let Some(requires_python) = workspace
         .as_ref()
@@ -624,7 +626,6 @@ async fn determine_requires_python(
         .flatten()
     {
         // (3) `requires-python` from the workspace
-        debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
             requires_python.specifiers().clone(),
             PythonVariant::Default,
@@ -656,6 +657,8 @@ async fn determine_requires_python(
         } else {
             None
         };
+
+        debug!("Using Python version `{requires_python}` from project workspace");
 
         Ok((requires_python, python_pin))
     } else {
@@ -689,6 +692,8 @@ async fn determine_requires_python(
         } else {
             None
         };
+
+        debug!("Using Python version `{requires_python}` from system interpreter");
 
         Ok((requires_python, python_pin))
     }
