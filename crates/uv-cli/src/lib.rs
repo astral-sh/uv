@@ -339,7 +339,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
