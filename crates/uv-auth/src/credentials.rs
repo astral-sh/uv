@@ -20,12 +20,14 @@ use uv_static::EnvVars;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
+    /// RFC 7617 HTTP Basic Authentication
     Basic {
         /// The username to use for authentication.
         username: Username,
         /// The password to use for authentication.
         password: Option<Password>,
     },
+    /// RFC 6750 Bearer Token Authentication
     Bearer {
         /// The token to use for authentication.
         token: Vec<u8>,
