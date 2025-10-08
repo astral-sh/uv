@@ -58,15 +58,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_system_properties"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "anes"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -651,19 +642,6 @@ checksum = "f1f927b07c74ba84c7e5fe4db2baeb3e996ab2688992e39ac68ce3220a677c7e"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.42"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
-dependencies = [
- "iana-time-zone",
- "js-sys",
- "num-traits",
- "wasm-bindgen",
- "windows-link 0.2.0",
 ]
 
 [[package]]
@@ -1959,30 +1937,6 @@ dependencies = [
  "tower-service",
  "tracing",
  "windows-registry",
-]
-
-[[package]]
-name = "iana-time-zone"
-version = "0.1.64"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33e57f83510bb73707521ebaffa789ec8caf86f9657cad665b092b581d40e9fb"
-dependencies = [
- "android_system_properties",
- "core-foundation-sys",
- "iana-time-zone-haiku",
- "js-sys",
- "log",
- "wasm-bindgen",
- "windows-core 0.61.2",
-]
-
-[[package]]
-name = "iana-time-zone-haiku"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -3483,9 +3437,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be18806fe2251c9924d875549573c9bf0e43b51d7efcf32a19ec31bb32196987"
+checksum = "c9a80170eaab619a5dfa6428b0596c0cb85734bfa36b717a764a16abc3456a7b"
 dependencies = [
  "reqsign-aws-v4",
  "reqsign-command-execute-tokio",
@@ -3496,21 +3450,19 @@ dependencies = [
 
 [[package]]
 name = "reqsign-aws-v4"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b0fb0ac0a8222efdb0746d83c5ec36c6bdb0f5310b4b92147e3de7c45ef6657"
+checksum = "c50993dfb45a89b82dba66b2251984baad70e1b3c502db980f077f095615a26e"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
- "chrono",
  "form_urlencoded",
  "http",
  "log",
  "percent-encoding",
  "quick-xml",
  "reqsign-core",
- "reqwest",
  "rust-ini",
  "serde",
  "serde_json",
@@ -3520,9 +3472,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-command-execute-tokio"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e145d2d409f3db11aa3094b8905d69b084d4060771c12e6522dde55924bfecd"
+checksum = "84d74ecba4eca9afdd6bebf86d71e442dd4acab3fcec4461f3b96b33cf6a16b5"
 dependencies = [
  "async-trait",
  "reqsign-core",
@@ -3531,32 +3483,31 @@ dependencies = [
 
 [[package]]
 name = "reqsign-core"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35fd7359352a79b293168785b9cbb239e7017b4fa0c934351518feee394f92bc"
+checksum = "8f2f07d63648c81c8dbccc19e8e10ef8d57daafb8174e4c2a75f14f33fe8c5ec"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
  "bytes",
- "chrono",
  "form_urlencoded",
  "hex",
  "hmac",
  "http",
+ "jiff",
  "log",
  "percent-encoding",
  "sha1",
  "sha2",
- "thiserror 2.0.16",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
 name = "reqsign-file-read-tokio"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "857154204885ec746f5f221393aec7dc47cbde9216b18774eb0a0c6e966f1ee0"
+checksum = "262eb485bb6e8213b13ef10e86ef8613539fb03daa2123b57d96675f784b15b6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3566,9 +3517,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-http-send-reqwest"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f388d66e254d67e570eba0a4a3fe39427ff7f1df26c73a8b7330e8ca1e639f80"
+checksum = "5ff9bb6507b23175dbda8a91ae1a0ad2317471f6ee117e500d1cf6b9ed1eeb0b"
 dependencies = [
  "anyhow",
  "async-trait",
