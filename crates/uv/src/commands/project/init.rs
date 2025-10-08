@@ -693,7 +693,7 @@ async fn determine_requires_python(
             None
         };
 
-        debug!("Using Python version `{requires_python}` from system interpreter");
+        debug!("Using Python version `{requires_python}` from default interpreter");
 
         Ok((requires_python, python_pin))
     }
