@@ -17,16 +17,6 @@ Installing and managing Python itself.
 
 See the [guide on installing Python](../guides/install-python.md) to get started.
 
-## Scripts
-
-Executing standalone Python scripts, e.g., `example.py`.
-
-- `uv run`: Run a script.
-- `uv add --script`: Add a dependency to a script.
-- `uv remove --script`: Remove a dependency from a script.
-
-See the [guide on running scripts](../guides/scripts.md) to get started.
-
 ## Projects
 
 Creating and working on Python projects, i.e., with a `pyproject.toml`.
@@ -42,6 +32,16 @@ Creating and working on Python projects, i.e., with a `pyproject.toml`.
 - `uv publish`: Publish the project to a package index.
 
 See the [guide on projects](../guides/projects.md) to get started.
+
+## Scripts
+
+Executing standalone Python scripts, e.g., `example.py`.
+
+- `uv run`: Run a script.
+- `uv add --script`: Add a dependency to a script.
+- `uv remove --script`: Remove a dependency from a script.
+
+See the [guide on running scripts](../guides/scripts.md) to get started.
 
 ## Tools
 
