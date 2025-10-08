@@ -7,11 +7,13 @@
 
 Released on 2025-10-07.
 
-### Breaking changes
-
 This breaking release is primarily motivated by the release of Python 3.14, which contains some breaking changes (we recommend reading the ["What's new in Python 3.14"](https://docs.python.org/3/whatsnew/3.14.html) page). uv may use Python 3.14 in cases where it previously used 3.13, e.g., if you have not pinned your Python version and do not have any Python versions installed on your machine. While we think this is uncommon, we prefer to be cautious. We've included some additional small changes that could break workflows.
 
+See our [Python 3.14](https://astral.sh/blog/python-3.14) blog post for some discussion of features we're excited about!
+
 There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts/build-backend/). If you have an upper bound in your `[build-system]` table, you should update it.
+
+### Breaking changes
 
 - **Python 3.14 is now the default stable version**
 
