@@ -289,7 +289,7 @@ requires-python = ">=3.12"
     Ok(())
 }
 
-// Preserve comments immediately preceding the version when bumping
+/// Preserve comments immediately preceding the version when bumping
 #[test]
 fn version_bump_preserves_preceding_comments() -> Result<()> {
     let context: TestContext = TestContext::new("3.12");
