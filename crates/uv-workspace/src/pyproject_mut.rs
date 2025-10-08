@@ -1144,17 +1144,14 @@ impl PyProjectTomlMut {
 
         if let Some(existing) = project.get_mut("version") {
             if let Some(value) = existing.as_value_mut() {
-                let mut formatted = Formatted::new(version.to_string());
+                let mut formatted = Value::from(version.to_string());
                 *formatted.decor_mut() = value.decor().clone();
-                *value = Value::String(formatted);
+                *value = formatted;
             } else {
-                *existing = Item::Value(Value::String(Formatted::new(version.to_string())));
+                *existing = Item::Value(Value::from(version.to_string()));
             }
         } else {
-            project.insert(
-                "version",
-                Item::Value(Value::String(Formatted::new(version.to_string()))),
-            );
+            project.insert("version", Item::Value(Value::from(version.to_string())));
         }
 
         Ok(())
