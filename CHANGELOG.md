@@ -49,7 +49,7 @@ There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts
 
 ### Enhancements
 
-- Don't warn when dependency is constraint by other dependency ([#16149](https://github.com/astral-sh/uv/pull/16149))
+- Don't warn when a dependency is constrained by another dependency ([#16149](https://github.com/astral-sh/uv/pull/16149))
 
 ### Bug fixes
 
