@@ -652,6 +652,7 @@ Used ephemeral environments like CI to install uv to a specific path while preve
 the installer from modifying shell profiles or environment variables.
 
 ### `UV_UPLOAD_HTTP_TIMEOUT`
+<small class="added-in">added in `0.9.1`</small>
 
 Timeout (in seconds) for only upload HTTP requests. (default: 900 s)
 
@@ -670,6 +671,7 @@ created by `uv venv`.
 Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
 
 ### `UV_WORKING_DIRECTORY`
+<small class="added-in">added in `0.9.1`</small>
 
 Equivalent to the `--directory` command-line argument.
 

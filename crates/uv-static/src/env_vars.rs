@@ -591,6 +591,7 @@ impl EnvVars {
     pub const NO_PROXY: &'static str = "NO_PROXY";
 
     /// Timeout (in seconds) for only upload HTTP requests. (default: 900 s)
+    #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
@@ -1085,6 +1086,7 @@ impl EnvVars {
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument.
+    #[attr_added_in("0.9.1")]
     pub const UV_WORKING_DIRECTORY: &'static str = "UV_WORKING_DIRECTORY";
 
     /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
