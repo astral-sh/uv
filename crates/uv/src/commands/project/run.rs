@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -1099,7 +1100,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Copy each entrypoint from the base environments to the ephemeral environment,
                 // updating the Python executable target to ensure they run in the ephemeral
                 // environment.
-                for entry in fs_err::read_dir(interpreter.scripts())? {
+                let scripts = match fs_err::read_dir(interpreter.scripts()) {
+                    Ok(scripts) => scripts,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err.into()),
+                };
+                for entry in scripts {
                     let entry = entry?;
                     if !entry.file_type()?.is_file() {
                         continue;
