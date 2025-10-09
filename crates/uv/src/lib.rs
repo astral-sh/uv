@@ -85,6 +85,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
         match &*cli.command {
@@ -170,12 +173,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            let settings = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+            let settings = GlobalSettings::resolve(
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
             let client_builder = BaseClientBuilder::new(
                 settings.network_settings.connectivity,
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
+                environment.http_timeout,
             )
             .retries_from_env()?;
             Some(
@@ -306,11 +314,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
-    // Load environment variables not handled by Clap
-    let environment = EnvironmentOptions::new()?;
-
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(
+        &cli.top_level.global_args,
+        filesystem.as_ref(),
+        &environment,
+    );
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
@@ -447,6 +456,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
+        environment.http_timeout,
     )
     .retries_from_env()?;
 
@@ -459,6 +469,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -481,6 +492,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -501,6 +513,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -1417,7 +1430,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1680,6 +1693,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
+                &environment,
                 &client_builder,
                 username,
                 password,

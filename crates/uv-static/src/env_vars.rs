@@ -590,6 +590,9 @@ impl EnvVars {
     #[attr_added_in("0.1.38")]
     pub const NO_PROXY: &'static str = "NO_PROXY";
 
+    /// Timeout (in seconds) for only upload HTTP requests. (default: 900 s)
+    pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
+
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     #[attr_added_in("0.1.7")]
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";

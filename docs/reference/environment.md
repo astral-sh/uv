@@ -651,6 +651,10 @@ Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`,
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
 
+### `UV_UPLOAD_HTTP_TIMEOUT`
+
+Timeout (in seconds) for only upload HTTP requests. (default: 900 s)
+
 ### `UV_VENV_CLEAR`
 <small class="added-in">added in `0.8.0`</small>
 

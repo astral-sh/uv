@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
@@ -18,6 +17,7 @@ use uv_publish::{
     files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user_once, write_error_chain};
 
 use crate::commands::reporters::PublishReporter;
@@ -29,6 +29,7 @@ pub(crate) async fn publish(
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    environment: &EnvironmentOptions,
     client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
     password: Option<String>,
@@ -123,9 +124,7 @@ pub(crate) async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
-        // Set a very high timeout for uploads, connections are often 10x slower on upload than
-        // download. 15 min is taken from the time a trusted publishing token is valid.
-        .default_timeout(Duration::from_secs(15 * 60))
+        .timeout(environment.upload_http_timeout)
         .build();
     let oidc_client = client_builder
         .clone()

@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
+use std::time::Duration;
 
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
@@ -78,8 +79,12 @@ pub(crate) struct GlobalSettings {
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let network_settings = NetworkSettings::resolve(args, workspace);
+    pub(crate) fn resolve(
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
+        let network_settings = NetworkSettings::resolve(args, workspace, environment);
         let python_preference = resolve_python_preference(args, workspace);
         Self {
             required_version: workspace
@@ -172,10 +177,15 @@ pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
+    pub(crate) timeout: Duration,
 }
 
 impl NetworkSettings {
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         let connectivity = if flag(args.offline, args.no_offline, "offline")
             .combine(workspace.and_then(|workspace| workspace.globals.offline))
             .unwrap_or(false)
@@ -184,6 +194,7 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
+        let timeout = environment.http_timeout;
         let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
             .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
             .unwrap_or(false);
@@ -208,6 +219,7 @@ impl NetworkSettings {
             connectivity,
             native_tls,
             allow_insecure_host,
+            timeout,
         }
     }
 }
@@ -746,7 +758,7 @@ impl ToolUpgradeSettings {
     pub(crate) fn resolve(
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> Self {
         let ToolUpgradeArgs {
             name,
@@ -834,6 +846,7 @@ impl ToolUpgradeSettings {
             filesystem: top_level,
             install_mirrors: environment
                 .install_mirrors
+                .clone()
                 .combine(filesystem_install_mirrors),
         }
     }
@@ -3662,11 +3675,12 @@ impl AuthLogoutSettings {
         args: AuthLogoutArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3687,11 +3701,12 @@ impl AuthTokenSettings {
         args: AuthTokenArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3714,13 +3729,14 @@ impl AuthLoginSettings {
         args: AuthLoginArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }

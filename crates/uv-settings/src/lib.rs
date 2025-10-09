@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_flags::EnvironmentFlags;
@@ -552,7 +553,8 @@ pub enum Error {
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1)]
+    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
+    )]
     PyprojectOnlyField(PathBuf, &'static str),
 
     #[error("Failed to parse environment variable `{name}` with invalid value `{value}`: {err}")]
@@ -574,6 +576,8 @@ pub struct EnvironmentOptions {
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
+    pub http_timeout: Duration,
+    pub upload_http_timeout: Duration,
     #[cfg(feature = "tracing-durations-export")]
     pub tracing_durations_file: Option<PathBuf>,
 }
@@ -581,6 +585,15 @@ pub struct EnvironmentOptions {
 impl EnvironmentOptions {
     /// Create a new [`EnvironmentOptions`] from environment variables.
     pub fn new() -> Result<Self, Error> {
+        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
+        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
+        let http_timeout = parse_integer_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
+            .or(parse_integer_environment_variable(
+                EnvVars::UV_REQUEST_TIMEOUT,
+            )?)
+            .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
+            .map(Duration::from_secs);
+
         Ok(Self {
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
@@ -601,6 +614,13 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
+            upload_http_timeout: parse_integer_environment_variable(
+                EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
+            )?
+            .map(Duration::from_secs)
+            .or(http_timeout)
+            .unwrap_or(Duration::from_secs(15 * 60)),
+            http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
@@ -679,6 +699,34 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
                 err: "expected a valid UTF-8 string".to_string(),
             }),
         },
+    }
+}
+
+/// Parse a integer environment variable.
+fn parse_integer_environment_variable(name: &'static str) -> Result<Option<u64>, Error> {
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: err.to_string_lossy().to_string(),
+                    err: "expected an integer".to_string(),
+                }),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    match value.parse::<u64>() {
+        Ok(v) => Ok(Some(v)),
+        Err(_) => Err(Error::InvalidEnvironmentVariable {
+            name: name.to_string(),
+            value,
+            err: "expected an integer".to_string(),
+        }),
     }
 }
 
