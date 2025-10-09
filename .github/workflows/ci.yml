@@ -2884,12 +2884,13 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
+        run: cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0b6e7a3d96c9d2a6057e7bcea6b45aaf2f7ce60b # v3.8.0
+        uses: CodSpeedHQ/action@6b43a0cd438f6ca5ad26f9ed03ed159ed2df7da9 # v4.1.1
         with:
           run: cargo codspeed run
+          mode: walltime
           token: ${{ secrets.CODSPEED_TOKEN }}
 
   benchmarks-instrumented:
@@ -2923,10 +2924,11 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
+        run: cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0b6e7a3d96c9d2a6057e7bcea6b45aaf2f7ce60b # v3.8.0
+        uses: CodSpeedHQ/action@6b43a0cd438f6ca5ad26f9ed03ed159ed2df7da9 # v4.1.1
         with:
           run: cargo codspeed run
+          mode: instrumentation
           token: ${{ secrets.CODSPEED_TOKEN }}
