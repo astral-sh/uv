@@ -174,9 +174,9 @@ of CPython such as its bytecode format.
 
 Introducing a `requires-python` upper bound to a project that previously wasn't using one will not
 prevent the project from being used on a too recent Python version. Instead of failing, the resolver
-will pick to the older version without the bound, circumventing the bound.
+will pick an older version without the bound, circumventing the bound.
 
-For a resolution that is as universally installable as possible, uv ensure that the selected
+For the resolution to be as universally installable as possible, uv ensures that the selected
 dependency versions are compatible with the `requires-python` range of the project. For example, for
 a project with `requires-python = ">=3.12"`, uv will not use a dependency version with
 `requires-python = ">=3.13"`, as otherwise the resolution is not installable on Python 3.12, which
@@ -187,17 +187,17 @@ the lower Python version bound has the inverse effect, it only increases the set
 dependency versions.)
 
 Note that this is different for Conda, as the Conda solver also determines the Python version, so it
-can choose a lower Python version instead. Similarly, Conda can change metadata after a release, so
-it can update compatibility for a new Python version, while metadata on PyPI cannot be changed once
+can choose a lower Python version instead. Conda can also change metadata after a release, so it can
+update compatibility for a new Python version, while metadata on PyPI cannot be changed once
 published.
 
-Ignoring an upper bound is a problem for packages that use the version-dependent C API of CPython,
-such as numpy. As of writing, each numpy release support 4 Python minor versions, e.g., numpy 2.0.0
+Ignoring an upper bound is a problem for packages such as numpy which use the version-dependent C
+API of CPython. As of writing, each numpy release support 4 Python minor versions, e.g., numpy 2.0.0
 has wheels for CPython 3.9 through 3.12 and declares `requires-python = ">=3.9"`, while numpy 2.1.0
 has wheels for CPython 3.10 through 3.13 and declares `requires-python = ">=3.10"`. The means that
-when we resolve a `numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, we
-resolve numpy 2.0.0 and the lockfile doesn't install on Python 3.13 or newer. To alleviate this,
-whenever we reject a version when it requires a newer Python version, we fork by splitting the
+when uv resolves a `numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, it
+selects numpy 2.0.0 and the lockfile doesn't install on Python 3.13 or newer. To alleviate this,
+whenever uv rejects a version that requires a newer Python version, we fork by splitting the
 resolution markers on that Python version. This behavior can be controlled by `--fork-strategy`. In
 the example case, upon encountering numpy 2.1.0 we fork into Python versions `>=3.9,<3.10` and
 `>=3.10` and resolve two different numpy versions:
@@ -207,10 +207,10 @@ numpy==2.0.0; python_version >= "3.9" and python_version < "3.10"
 numpy==2.1.0; python_version >= "3.10"
 ```
 
-There's one case where uv does consider the upper bound: When the project uses an upper on requires
-Python, such as `requires-python = "==3.13.*"` for an application that only deploys to Python 3.13,
-uv prunes wheels from the lockfile that are outside the range (e.g., `cp312` and `cp314`). This is
-post-processing step and does not influence the resolution itself.
+There's one case where uv does consider the upper bound: When the project uses an upper bound on
+requires Python, such as `requires-python = "==3.13.*"` for an application that only deploys to
+Python 3.13. uv prunes wheels from the lockfile that are outside the range (e.g., `cp312` and
+`cp314`) in a post-processing step, which does not influence the resolution itself.
 
 ## URL dependencies
 
