@@ -397,12 +397,12 @@ impl RequirementsSpecification {
             }
             if !constraints.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify additional requirements with a `pylock.toml` file"
+                    "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
             if !overrides.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify constraints with a `pylock.toml` file"
+                    "Cannot specify overrides with a `pylock.toml` file"
                 ));
             }
 

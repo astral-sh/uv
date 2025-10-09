@@ -11442,7 +11442,7 @@ fn pep_751_mix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify additional requirements with a `pylock.toml` file
+    error: Cannot specify constraints with a `pylock.toml` file
     "
     );
 
