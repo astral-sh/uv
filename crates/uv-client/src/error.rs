@@ -411,8 +411,14 @@ pub struct WrappedReqwestError {
 
 impl WrappedReqwestError {
     /// Create a new `WrappedReqwestError` with optional problem details
-    pub fn with_problem_details(error: reqwest_middleware::Error, problem_details: Option<ProblemDetails>) -> Self {
-        Self { error, problem_details }
+    pub fn with_problem_details(
+        error: reqwest_middleware::Error,
+        problem_details: Option<ProblemDetails>,
+    ) -> Self {
+        Self {
+            error,
+            problem_details,
+        }
     }
 
     /// Get the problem details if available
