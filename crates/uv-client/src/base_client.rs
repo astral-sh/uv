@@ -1029,12 +1029,12 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             }
 
             trace!("Cannot retry nested reqwest error");
-        } else if let Some(io_err) = source.downcast_ref::<io::Error>().or_else(|| {
-            // h2 may hide an IO error inside.
-            source
-                .downcast_ref::<h2::Error>()
-                .and_then(|err| err.get_io())
-        }) {
+        } else if source.downcast_ref::<h2::Error>().is_some() {
+            // All h2 errors look like errors that should be retried
+            // https://github.com/astral-sh/uv/issues/15916
+            trace!("Retrying nested h2 error");
+            return true;
+        } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
             let retryable_io_err_kinds = [
                 // https://github.com/astral-sh/uv/issues/12054
