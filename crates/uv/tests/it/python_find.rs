@@ -1335,3 +1335,101 @@ fn python_find_freethreaded_314() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn python_find_prerelease_version_specifiers() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    context.python_install().arg("3.14.0rc2").assert().success();
+    context.python_install().arg("3.14.0rc3").assert().success();
+
+    // `>=3.14` should allow pre-release versions
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // `>3.14rc2` should not match rc2
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // `>3.14rc3` should not match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc3"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >3.14.0rc3 in [PYTHON SOURCES]
+    ");
+
+    // `>=3.14.0rc3` should match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14.0rc3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // `<3.14.0rc3` should match rc2
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.14.0rc3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // `<=3.14.0rc3` should match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg("<=3.14.0rc3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Install the stable version
+    context.python_install().arg("3.14.0").assert().success();
+
+    // `>=3.14` should prefer stable
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // `>3.14rc2` should prefer stable
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+}
