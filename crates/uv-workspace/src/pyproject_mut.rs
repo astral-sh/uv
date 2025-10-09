@@ -1141,10 +1141,18 @@ impl PyProjectTomlMut {
             .get_mut("project")
             .and_then(Item::as_table_mut)
             .ok_or(Error::MalformedWorkspace)?;
-        project.insert(
-            "version",
-            Item::Value(Value::String(Formatted::new(version.to_string()))),
-        );
+
+        if let Some(existing) = project.get_mut("version") {
+            if let Some(value) = existing.as_value_mut() {
+                let mut formatted = Value::from(version.to_string());
+                *formatted.decor_mut() = value.decor().clone();
+                *value = formatted;
+            } else {
+                *existing = Item::Value(Value::from(version.to_string()));
+            }
+        } else {
+            project.insert("version", Item::Value(Value::from(version.to_string())));
+        }
 
         Ok(())
     }
