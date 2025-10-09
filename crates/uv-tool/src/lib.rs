@@ -251,7 +251,7 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir(&environment_path) {
+        match fs_err::remove_dir_all(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
