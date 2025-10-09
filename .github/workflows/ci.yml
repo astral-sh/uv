@@ -1290,7 +1290,7 @@ jobs:
       - name: "Install Python via Python Install manager"
         run: |
           # https://www.python.org/downloads/release/pymanager-250/
-          winget --accept-package-agreements --accept-source-agreements install 9NQ7512CXL7T
+          winget install --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
           py install 3.14
 
       # https://github.com/astral-sh/uv/issues/16204
