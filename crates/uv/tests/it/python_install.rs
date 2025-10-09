@@ -110,19 +110,14 @@ fn python_install() {
     bin_python.assert(predicate::path::exists());
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    error: No targets specified for uninstall
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
     success: true
@@ -741,19 +736,14 @@ fn python_install_preview() {
     bin_python.assert(predicate::path::is_symlink());
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    error: No targets specified for uninstall
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
     success: true
@@ -2254,19 +2244,14 @@ fn python_install_default_from_env() {
     ");
 
     // We should ignore `UV_PYTHON` here and complain there is not a target
-    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    error: No targets specified for uninstall
+    ");
 
     // We should ignore `UV_PYTHON` here and respect `--all`
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r"
@@ -2282,33 +2267,28 @@ fn python_install_default_from_env() {
     ");
 
     // Uninstall with no targets should error
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    error: No targets specified for uninstall
+    ");
 
     // Uninstall with conflicting options should error
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--all' cannot be used with '<TARGETS>...'
+    error: the argument '--all' cannot be used with '[TARGETS]...'
 
-    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> [TARGETS]...
 
     For more information, try '--help'.
-    "###);
+    ");
 }
 
 #[cfg(target_os = "macos")]
@@ -2615,19 +2595,14 @@ fn python_install_no_cache() {
     ");
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    error: No targets specified for uninstall
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
     success: true
