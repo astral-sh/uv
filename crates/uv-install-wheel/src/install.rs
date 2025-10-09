@@ -4,7 +4,6 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use fs_err as fs;
 use fs_err::File;
 use tracing::{instrument, trace};
 
@@ -65,7 +64,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     let wheel_file_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = fs::read_to_string(wheel_file_path)?;
+    let wheel_text = fs_err::read_to_string(wheel_file_path)?;
     let lib_kind = WheelFile::parse(&wheel_text)?.lib_kind();
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
