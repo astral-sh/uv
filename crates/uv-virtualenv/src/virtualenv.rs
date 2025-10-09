@@ -618,7 +618,7 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
             continue;
         }
         if path.is_dir() {
-            fs::remove_dir_all(&path)?;
+            fs_err::remove_dir_all(&path)?;
         } else {
             fs::remove_file(&path)?;
         }
@@ -629,7 +629,7 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(err.into()),
     }
-    fs::remove_dir_all(location)?;
+    fs_err::remove_dir_all(location)?;
 
     Ok(())
 }

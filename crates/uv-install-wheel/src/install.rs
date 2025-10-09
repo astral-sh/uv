@@ -130,7 +130,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
         // 2.e Remove empty distribution-1.0.data directory.
-        fs::remove_dir_all(data_dir)?;
+        fs_err::remove_dir_all(data_dir)?;
     } else {
         trace!(?name, "No data");
     }

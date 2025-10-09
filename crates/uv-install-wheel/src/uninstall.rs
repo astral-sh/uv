@@ -75,7 +75,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => match fs::remove_dir_all(&path) {
+            Err(err) => match fs_err::remove_dir_all(&path) {
                 Ok(()) => {
                     trace!("Removed directory: {}", path.display());
                     dir_count += 1;
@@ -108,7 +108,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             // may or may not be listed in the RECORD, but installers are expected to be smart
             // enough to remove it either way.
             let pycache = path.join("__pycache__");
-            match fs::remove_dir_all(&pycache) {
+            match fs_err::remove_dir_all(&pycache) {
                 Ok(()) => {
                     trace!("Removed directory: {}", pycache.display());
                     dir_count += 1;
