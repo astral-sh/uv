@@ -1,6 +1,6 @@
 //! Environment variables used or supported by uv.
 //! Used to generate `docs/reference/environment.md`.
-//! NOTICE: Upcoming release functionality should be documented with `#[attr_added_in("next release")]`.
+//! NOTICE: Upcoming release functionality should be documented with `#[attr_added_in("0.9.1")]`.
 use uv_macros::{attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata};
 
 /// Declares all environment variable used throughout `uv` and its crates.
