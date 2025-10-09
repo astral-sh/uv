@@ -1277,21 +1277,22 @@ jobs:
 
   integration-test-windows-python-install-manager:
     timeout-minutes: 10
-    #needs: build-binary-windows-x86_64
+    needs: build-binary-windows-x86_64
     name: "integration test | windows python install manager"
     runs-on: windows-latest
 
     steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ github.sha }}
+
       - name: "Install Python via Python Install manager"
         run: |
           # https://www.python.org/downloads/release/pymanager-250/
           winget install --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
           # Call Python Install Manager's py.exe by full path to avoid legacy py.exe
           & "$env:LOCALAPPDATA\Microsoft\WindowsApps\py.exe" install 3.14
-      - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: uv-windows-x86_64-${{ github.sha }}
 
       # https://github.com/astral-sh/uv/issues/16204
       - name: "Check temporary environment creation"
