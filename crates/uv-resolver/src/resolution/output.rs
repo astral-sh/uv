@@ -885,12 +885,27 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                 continue;
             };
             if dist.is_base() {
+                // Convert Metadata to ResolutionMetadata if available
+                let metadata = dist.metadata.as_ref().map(|meta| {
+                    Box::new(uv_pypi_types::ResolutionMetadata {
+                        name: meta.name.clone(),
+                        version: meta.version.clone(),
+                        requires_dist: meta.requires_dist.iter().map(|req| {
+                            uv_pep508::Requirement::from(req.clone())
+                        }).collect(),
+                        requires_python: meta.requires_python.clone(),
+                        provides_extra: meta.provides_extra.clone(),
+                        dynamic: meta.dynamic,
+                    })
+                });
+
                 inverse.insert(
                     &dist.name,
                     transformed.add_node(Node::Dist {
                         dist: dist.dist.clone(),
                         hashes: dist.hashes.clone(),
                         install: true,
+                        metadata,
                     }),
                 );
             }

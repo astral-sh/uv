@@ -1066,6 +1066,7 @@ impl<'lock> PylockToml {
                     dist,
                     hashes,
                     install: true,
+                    metadata: None,
                 }
             } else if let Some(sdist) = package.sdist.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::from(sdist.hashes.clone());
@@ -1083,6 +1084,7 @@ impl<'lock> PylockToml {
                     dist,
                     hashes,
                     install: true,
+                    metadata: None,
                 }
             } else if let Some(sdist) = package.directory.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
@@ -1097,6 +1099,7 @@ impl<'lock> PylockToml {
                     dist,
                     hashes,
                     install: true,
+                    metadata: None,
                 }
             } else if let Some(sdist) = package.vcs.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
@@ -1111,6 +1114,7 @@ impl<'lock> PylockToml {
                     dist,
                     hashes,
                     install: true,
+                    metadata: None,
                 }
             } else if let Some(dist) = package
                 .archive
@@ -1127,6 +1131,7 @@ impl<'lock> PylockToml {
                     dist,
                     hashes,
                     install: true,
+                    metadata: None,
                 }
             } else {
                 return match (no_binary, no_build) {

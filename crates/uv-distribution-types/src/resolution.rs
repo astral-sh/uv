@@ -53,6 +53,62 @@ impl Resolution {
             })
     }
 
+    /// Return the distributions with their hashes and metadata.
+    pub fn distributions_with_metadata(
+        &self,
+    ) -> impl Iterator<Item = (&ResolvedDist, &[HashDigest], Option<&uv_pypi_types::ResolutionMetadata>)> {
+        self.graph
+            .node_indices()
+            .filter_map(move |node| match &self.graph[node] {
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                    metadata,
+                } if *install => Some((dist, hashes.as_slice(), metadata.as_deref())),
+                _ => None,
+            })
+    }
+
+    /// Return the distributions with their hashes, metadata, and whether they are direct dependencies.
+    /// A direct dependency is one that is directly connected to the Root node in the resolution graph.
+    pub fn distributions_with_metadata_and_is_direct(
+        &self,
+    ) -> impl Iterator<Item = (&ResolvedDist, &[HashDigest], Option<&uv_pypi_types::ResolutionMetadata>, bool)> {
+        use petgraph::Direction;
+
+        // Find the root node
+        let root_node = self.graph
+            .node_indices()
+            .find(|&node| matches!(self.graph[node], Node::Root));
+
+        // Collect direct children of root node (if root exists)
+        let direct_children: std::collections::HashSet<_> = root_node
+            .map(|root| {
+                self.graph
+                    .neighbors_directed(root, Direction::Outgoing)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        self.graph
+            .node_indices()
+            .filter_map(move |node| match &self.graph[node] {
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                    metadata,
+                } if *install => {
+                    // Check if this node is a direct child of the Root node
+                    let is_direct = direct_children.contains(&node);
+
+                    Some((dist, hashes.as_slice(), metadata.as_deref(), is_direct))
+                }
+                _ => None,
+            })
+    }
+
     /// Iterate over the [`ResolvedDist`] entities in this resolution.
     pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
         self.graph
@@ -83,7 +139,7 @@ impl Resolution {
     #[must_use]
     pub fn filter(mut self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
         for node in self.graph.node_weights_mut() {
-            if let Node::Dist { dist, install, .. } = node {
+            if let Node::Dist { dist, install, metadata: _, .. } = node {
                 if !predicate(dist) {
                     *install = false;
                 }
@@ -99,7 +155,7 @@ impl Resolution {
     #[must_use]
     pub fn map(mut self, predicate: impl Fn(&ResolvedDist) -> Option<ResolvedDist>) -> Self {
         for node in self.graph.node_weights_mut() {
-            if let Node::Dist { dist, .. } = node {
+            if let Node::Dist { dist, metadata: _, .. } = node {
                 if let Some(transformed) = predicate(dist) {
                     *dist = transformed;
                 }
@@ -188,6 +244,9 @@ pub enum Node {
         dist: ResolvedDist,
         hashes: HashDigests,
         install: bool,
+        /// The metadata for this distribution, if available.
+        /// This is populated during resolution and used for report generation.
+        metadata: Option<Box<uv_pypi_types::ResolutionMetadata>>,
     },
 }
 

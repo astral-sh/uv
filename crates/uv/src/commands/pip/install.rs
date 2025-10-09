@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use anyhow::Context;
@@ -22,7 +22,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallReport, InstallationReportItem, InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
@@ -96,6 +96,7 @@ pub(crate) async fn pip_install(
     concurrency: Concurrency,
     cache: Cache,
     dry_run: DryRun,
+    report: Option<std::path::PathBuf>,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
@@ -658,6 +659,90 @@ pub(crate) async fn pip_install(
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
         operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
+    }
+
+    // Generate and write installation report if requested.
+    if let Some(report_path) = report {
+        let mut install_items = Vec::new();
+
+        // Collect information about packages from the resolution with metadata and is_direct flag
+        let dist_hashes_metadata_direct: Vec<_> = resolution.distributions_with_metadata_and_is_direct().collect();
+
+        for (dist, hashes, metadata, is_direct) in dist_hashes_metadata_direct {
+            // Skip packages that are already installed (matching pip's behavior)
+            // Only report packages that would be downloaded/installed
+            if matches!(dist, uv_distribution_types::ResolvedDist::Installed { .. }) {
+                continue;
+            }
+
+            if let Some(item) = InstallationReportItem::from_resolved_dist(
+                dist,
+                hashes,
+                metadata,
+                is_direct, // is_direct: true for packages directly connected to root
+                is_direct, // requested: same as is_direct - packages directly requested by the user
+            ) {
+                install_items.push(item);
+            }
+        }
+
+        // Build environment metadata
+        let mut environment_map = BTreeMap::new();
+        environment_map.insert(
+            "implementation_name".to_string(),
+            interpreter.implementation_name().to_string(),
+        );
+        environment_map.insert(
+            "implementation_version".to_string(),
+            interpreter.markers().implementation_version().to_string(),
+        );
+        environment_map.insert(
+            "os_name".to_string(),
+            interpreter.markers().os_name().to_string(),
+        );
+        environment_map.insert(
+            "platform_machine".to_string(),
+            interpreter.markers().platform_machine().to_string(),
+        );
+        environment_map.insert(
+            "platform_python_implementation".to_string(),
+            interpreter.markers().platform_python_implementation().to_string(),
+        );
+        environment_map.insert(
+            "platform_release".to_string(),
+            interpreter.markers().platform_release().to_string(),
+        );
+        environment_map.insert(
+            "platform_system".to_string(),
+            interpreter.markers().platform_system().to_string(),
+        );
+        environment_map.insert(
+            "platform_version".to_string(),
+            interpreter.markers().platform_version().to_string(),
+        );
+        environment_map.insert(
+            "python_full_version".to_string(),
+            interpreter.markers().python_full_version().to_string(),
+        );
+        environment_map.insert(
+            "python_version".to_string(),
+            interpreter.markers().python_version().to_string(),
+        );
+        environment_map.insert(
+            "sys_platform".to_string(),
+            interpreter.markers().sys_platform().to_string(),
+        );
+
+        // Create the installation report
+        let install_report = InstallReport::new(install_items, environment_map);
+
+        // Write the report to the specified file
+        let report_json = serde_json::to_string_pretty(&install_report)
+            .context("Failed to serialize installation report")?;
+        fs_err::write(&report_path, report_json)
+            .with_context(|| format!("Failed to write report to {}", report_path.display()))?;
+
+        debug!("Installation report written to {}", report_path.display());
     }
 
     Ok(ExitStatus::Success)

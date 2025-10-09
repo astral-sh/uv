@@ -2155,6 +2155,16 @@ pub struct PipInstallArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Write a detailed installation report to the specified path in JSON format.
+    ///
+    /// When combined with `--dry-run` and the environment is `--ignore-installed`, this can be
+    /// used to resolve a set of requirements without modifying the environment.
+    ///
+    /// The report includes metadata about installed packages, download information, and
+    /// environment details. The JSON format is compatible with pip's installation report format.
+    #[arg(long, value_parser = parse_file_path)]
+    pub report: Option<PathBuf>,
+
     /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
     ///
     /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,

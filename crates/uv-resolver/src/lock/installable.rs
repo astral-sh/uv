@@ -543,6 +543,7 @@ pub trait Installable<'lock> {
             dist,
             hashes,
             install: true,
+            metadata: None,
         })
     }
 
@@ -569,6 +570,7 @@ pub trait Installable<'lock> {
             dist,
             hashes,
             install: false,
+            metadata: None,
         })
     }
 

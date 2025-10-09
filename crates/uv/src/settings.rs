@@ -2419,6 +2419,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
+    pub(crate) report: Option<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
@@ -2471,6 +2472,7 @@ impl PipInstallSettings {
             strict,
             no_strict,
             dry_run,
+            report,
             torch_backend,
             compat_args: _,
         } = args;
@@ -2534,6 +2536,7 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             dry_run: DryRun::from_args(dry_run),
+            report,
             constraints_from_workspace,
             overrides_from_workspace,
             build_constraints_from_workspace,
