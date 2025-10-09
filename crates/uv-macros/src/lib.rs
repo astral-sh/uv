@@ -1,7 +1,8 @@
 mod options_metadata;
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
+use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, doc, option_group))]
@@ -109,14 +110,14 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                     return None;
                 };
                 let name = lit.value();
-                Some((name, doc, added_in))
+                Some((name, doc, added_in, item.ident.span()))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
                     let doc = get_doc_comment(&item.attrs);
                     let added_in = get_added_in(&item.attrs);
-                    Some((pattern, doc, added_in))
+                    Some((pattern, doc, added_in, item.sig.span()))
                 } else {
                     None // Skip if pattern extraction fails.
                 }
@@ -125,8 +126,25 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         })
         .collect();
 
+    // Look for missing attr_added_in and issue a compiler error if any are found.
+    let added_in_errors: Vec<_> = constants
+        .iter()
+        .filter_map(|(name, _, added_in, span)| {
+            added_in.is_none().then_some({
+                let msg = format!(
+                    "missing #[attr_added_in(\"x.y.z\")] on `{name}`\nnote: env vars for an upcoming release should be annotated with `#[attr_added_in(\"next release\")]`"
+                );
+                quote_spanned! {*span => compile_error!(#msg); }
+            })
+        })
+        .collect();
+
+    if !added_in_errors.is_empty() {
+        return quote! { #ast #(#added_in_errors)* }.into();
+    }
+
     let struct_name = &ast.self_ty;
-    let pairs = constants.iter().map(|(name, doc, added_in)| {
+    let pairs = constants.iter().map(|(name, doc, added_in, _span)| {
         if let Some(added_in) = added_in {
             quote! { (#name, #doc, Some(#added_in)) }
         } else {
