@@ -15,7 +15,9 @@
 
 name: Release
 permissions:
+  "attestations": "write"
   "contents": "write"
+  "id-token": "write"
 
 # This task will run whenever you workflow_dispatch with a tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
@@ -251,6 +253,15 @@ jobs:
         run: |
           # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
+      - name: Attest
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2
+        with:
+          subject-path: |
+            artifacts/*.json
+            artifacts/*.sh
+            artifacts/*.ps1
+            artifacts/*.zip
+            artifacts/*.tar.gz
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(needs.host.outputs.val).announcement_is_prerelease && '--prerelease' || '' }}"
