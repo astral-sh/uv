@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_git_types::GitOid;
 use uv_normalize::PackageName;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
-use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
+use uv_pypi_types::{DirInfo, DirectUrl, VcsExtensions, VcsInfo, VcsKind};
 
 use crate::InstallationStrategy;
 
@@ -173,6 +173,7 @@ impl RequirementSatisfaction {
                             vcs: VcsKind::Git,
                             requested_revision: _,
                             commit_id: installed_precise,
+                            extensions: installed_extensions,
                         },
                     subdirectory: installed_subdirectory,
                 } = direct_url.as_ref()
@@ -184,6 +185,25 @@ impl RequirementSatisfaction {
                     debug!(
                         "Subdirectory mismatch: {:?} vs. {:?}",
                         installed_subdirectory, requested_subdirectory
+                    );
+                    return Self::Mismatch;
+                }
+
+                if requested_git.lfs().enabled()
+                    != installed_extensions.contains(&VcsExtensions::GitLfs)
+                {
+                    debug!(
+                        "GitLFS mismatch: {} vs. {}",
+                        if installed_extensions.contains(&VcsExtensions::GitLfs) {
+                            "enabled (installed)"
+                        } else {
+                            "disabled (installed)"
+                        },
+                        if requested_git.lfs().enabled() {
+                            "enabled (requested)"
+                        } else {
+                            "disabled (requested)"
+                        },
                     );
                     return Self::Mismatch;
                 }
