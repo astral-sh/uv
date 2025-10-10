@@ -3735,6 +3735,10 @@ pub struct LockArgs {
     #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
     pub dry_run: bool,
 
+    /// Force rewrite
+    #[arg(long, conflicts_with = "dry_run")]
+    pub force: bool,
+
     /// Lock the specified Python script, rather than the current project.
     ///
     /// If provided, uv will lock the script (based on its inline metadata table, in adherence with
