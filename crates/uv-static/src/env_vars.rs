@@ -1,6 +1,5 @@
 //! Environment variables used or supported by uv.
 //! Used to generate `docs/reference/environment.md`.
-//! NOTICE: Upcoming release functionality should be documented with `#[attr_added_in("0.9.1")]`.
 use uv_macros::{attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata};
 
 /// Declares all environment variable used throughout `uv` and its crates.
@@ -591,6 +590,7 @@ impl EnvVars {
     pub const NO_PROXY: &'static str = "NO_PROXY";
 
     /// Timeout (in seconds) for only upload HTTP requests. (default: 900 s)
+    #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
@@ -1085,6 +1085,7 @@ impl EnvVars {
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument.
+    #[attr_added_in("0.9.1")]
     pub const UV_WORKING_DIRECTORY: &'static str = "UV_WORKING_DIRECTORY";
 
     /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
