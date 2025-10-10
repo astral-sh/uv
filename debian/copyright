@@ -1,0 +1,47 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: <url://example.com>
+Upstream-Name: uv
+Upstream-Contact: <preferred name and address to reach the upstream project>
+
+Files:
+ *
+Copyright:
+ <years> <put author's name and email here>
+ <years> <likewise for another author>
+License: <special license>
+ <Put the license of the package here indented by 1 space>
+ <This follows the format of Description: lines in control file>
+ .
+ <Including paragraphs>
+
+# If you want to use GPL v2 or later for the /debian/* files use
+# the following clauses, or change it to suit. Delete these two lines
+Files:
+ debian/*
+Copyright:
+ 2025 drozdov.m <openfix@example.com>
+License: GPL-2+
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <https://www.gnu.org/licenses/>
+Comment:
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+# Please also look if there are files or directories which have a
+# different copyright/license attached and list them here.
+# Please avoid picking licenses with terms that are more restrictive than the
+# packaged work, as it may make Debian's contributions unacceptable upstream.
+#
+# If you need, there are some extra license texts available in two places:
+#   /usr/share/debhelper/dh_make/licenses/
+#   /usr/share/common-licenses/
