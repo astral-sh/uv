@@ -227,10 +227,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         }
 
         // If a lockfile already exists, lock the script.
-        if let Some(target) = script
-            .as_script()
-            .map(LockTarget::from)
-            .filter(|target| target.lock_path().is_file())
+        if !isolated
+            && let Some(target) = script
+                .as_script()
+                .map(LockTarget::from)
+                .filter(|target| target.lock_path().is_file())
         {
             debug!("Found existing lockfile for script");
 
@@ -355,7 +356,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             Some(environment.into_interpreter())
         } else {
-            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            // If no lockfile is found or an isolated venv was requested, warn against `--locked` and `--frozen`.
             if locked {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
@@ -373,23 +374,58 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
                 let script_extra_build_requires =
                     script_extra_build_requires((&script).into(), &settings.resolver)?.into_inner();
-                let environment = ScriptEnvironment::get_or_init(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    no_config,
-                    active.map_or(Some(false), Some),
-                    &cache,
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
-                .await?
-                .into_environment()?;
+                let environment = if isolated {
+                    let interpreter = ScriptInterpreter::discover(
+                        (&script).into(),
+                        python.as_deref().map(PythonRequest::parse),
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        &install_mirrors,
+                        no_sync,
+                        no_config,
+                        active.map_or(Some(false), Some),
+                        &cache,
+                        printer,
+                        preview,
+                        isolated,
+                    )
+                    .await?
+                    .into_interpreter();
+
+                    temp_dir = cache.venv_dir()?;
+                    uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        uv_virtualenv::Prompt::None,
+                        false,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                        ),
+                        false,
+                        false,
+                        false,
+                        preview,
+                    )?
+                } else {
+                    ScriptEnvironment::get_or_init(
+                        (&script).into(),
+                        python.as_deref().map(PythonRequest::parse),
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        &install_mirrors,
+                        no_sync,
+                        no_config,
+                        active.map_or(Some(false), Some),
+                        &cache,
+                        DryRun::Disabled,
+                        printer,
+                        preview,
+                    )
+                    .await?
+                    .into_environment()?
+                };
 
                 let build_constraints = script
                     .metadata()
@@ -472,6 +508,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &cache,
                     printer,
                     preview,
+                    isolated,
                 )
                 .await?
                 .into_interpreter();
@@ -526,11 +563,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         if no_sync {
             warn_user!(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
-        }
-        if isolated {
-            warn_user!(
-                "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
 
