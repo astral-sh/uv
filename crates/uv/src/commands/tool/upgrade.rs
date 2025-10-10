@@ -341,7 +341,7 @@ async fn upgrade_tool(
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
     let (environment, outcome) = if let Some(interpreter) =
-        interpreter.filter(|interpreter| !environment.uses(interpreter))
+        interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
     {
         // If we're using a new interpreter, re-create the environment for each tool.
         let resolution = resolve_environment(
@@ -388,7 +388,7 @@ async fn upgrade_tool(
             environment,
             changelog,
         } = update_environment(
-            environment,
+            environment.into_environment(),
             spec,
             Modifications::Exact,
             python_platform,

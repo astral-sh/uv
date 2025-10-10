@@ -3047,6 +3047,7 @@ uv tool list [OPTIONS]
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-list--show-extras"><a href="#uv-tool-list--show-extras"><code>--show-extras</code></a></dt><dd><p>Whether to display the extra requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
+</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python version associated with run each tool</p>
 </dd><dt id="uv-tool-list--show-version-specifiers"><a href="#uv-tool-list--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 </dd><dt id="uv-tool-list--show-with"><a href="#uv-tool-list--show-with"><code>--show-with</code></a></dt><dd><p>Whether to display the additional requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>

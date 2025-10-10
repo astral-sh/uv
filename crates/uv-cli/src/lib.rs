@@ -4899,6 +4899,10 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_extras: bool,
 
+    /// Whether to display the Python version associated with run each tool.
+    #[arg(long)]
+    pub show_python: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
