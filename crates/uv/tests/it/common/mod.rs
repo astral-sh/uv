@@ -1560,10 +1560,12 @@ impl TestContext {
             "ALLUSERSPROFILE",           // C:\ProgramData
             "APPDATA",                   // C:\Users\{username}\AppData\Roaming
             "CD",                        // Current directory (dynamic, cmd.exe only)
+            "CLIENTNAME",                // C:\Windows\system32\cmd.exe
             "CMDCMDLINE",                // Command line that started cmd.exe (dynamic)
             "CMDEXTVERSION",             // Command extensions version (dynamic)
             "COMPUTERNAME",              // Computer name
             "COMSPEC",                   // C:\Windows\system32\cmd.exe
+            "ComSpec",                   // C:\Windows\system32\cmd.exe
             "CommonProgramFiles",        // C:\Program Files\Common Files
             "CommonProgramFiles(x86)",   // C:\Program Files (x86)\Common Files (64-bit only)
             "CommonProgramW6432",        // C:\Program Files\Common Files (64-bit only)
@@ -1577,6 +1579,7 @@ impl TestContext {
             "LOGONSERVER",               // \\{servername} (volatile)
             "NUMBER_OF_PROCESSORS",      // Number of processors
             "OS",                        // Windows_NT
+            "Path",                      // Executable search paths
             "PATH",                      // Executable search paths
             "PATHEXT",                   // Executable file extensions
             "PROCESSOR_ARCHITECTURE",    // AMD64, x86, etc.
@@ -1603,6 +1606,12 @@ impl TestContext {
             "USERPROFILE",               // C:\Users\{username}
             "windir",                    // C:\Windows (same as SystemRoot)
         ];
+        dbg!("====");
+        for (key, value) in env::vars_os() {
+            if !env_vars.contains(&key.to_str().unwrap()) {
+                dbg!((key, value));
+            }
+        }
         for env_var in env_vars {
             if let Some(system_root) = env::var_os(env_var) {
                 command.env(env_var, system_root);
