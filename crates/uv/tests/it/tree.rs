@@ -1703,3 +1703,99 @@ fn show_sizes() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn workspace_circular_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create workspace root
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#,
+    )?;
+
+    // Create package-a that depends on package-b
+    let package_a_dir = context.temp_dir.child("packages").child("package-a");
+    package_a_dir.create_dir_all()?;
+    let package_a_pyproject = package_a_dir.child("pyproject.toml");
+    package_a_pyproject.write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { workspace = true }
+    "#,
+    )?;
+
+    // Create package-b that depends on package-a (circular dependency)
+    let package_b_dir = context.temp_dir.child("packages").child("package-b");
+    package_b_dir.create_dir_all()?;
+    let package_b_pyproject = package_b_dir.child("pyproject.toml");
+    package_b_pyproject.write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+    "#,
+    )?;
+
+    // Test that package-a is at the root when requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a v0.1.0
+    └── package-b v0.1.0
+        └── package-a v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    // Test that package-b is at the root when requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-b"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v0.1.0
+    └── package-a v0.1.0
+        └── package-b v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    // Test that both packages are shown as roots when both are requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a").arg("--package").arg("package-b"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a v0.1.0
+    └── package-b v0.1.0
+        └── package-a v0.1.0 (*)
+    package-b v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
