@@ -85,6 +85,8 @@ impl VariantBuild {
         // Resolve and install the provider requirements.
         let requirements = backend
             .requires
+            .as_ref()
+            .ok_or_else(|| Error::MissingRequires(backend_name.clone()))?
             .iter()
             .cloned()
             .map(Requirement::from)
@@ -158,6 +160,8 @@ impl VariantBuild {
             let requires = self
                 .backend
                 .requires
+                .as_ref()
+                .ok_or_else(|| Error::MissingRequires(self.backend_name.clone()))?
                 .iter()
                 .filter(|requirement| {
                     requirement.evaluate_markers(

@@ -23,6 +23,8 @@ pub enum Error {
     RequirementsInstall(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
+    #[error("Provider plugin `{0}` is missing `requires`")]
+    MissingRequires(String),
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("The build backend returned an error")]
