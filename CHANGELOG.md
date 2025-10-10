@@ -3,6 +3,24 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.2
+
+Released on 2025-10-10.
+
+### Enhancements
+
+- publish: don't infer check URLs for pyx uploads ([#16234](https://github.com/astral-sh/uv/pull/16234))
+
+### Documentation
+
+- Add missing "added in" to new environment variables in reference ([#16217](https://github.com/astral-sh/uv/pull/16217))
+- Fix typo in resolver internal docs ([#16232](https://github.com/astral-sh/uv/pull/16232))
+
+### Other changes
+
+- Add uv tool list --show-python ([#15814](https://github.com/astral-sh/uv/pull/15814))
+- Sync latest Python releases ([#16229](https://github.com/astral-sh/uv/pull/16229))
+
 ## 0.9.1
 
 Released on 2025-10-09.
