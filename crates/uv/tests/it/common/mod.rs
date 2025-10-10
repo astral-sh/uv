@@ -1681,8 +1681,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 
 /// Create a virtual environment at the given path.
 pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
-    assert_cmd::Command::new(get_bin())
-        .env_clear()
+    TestContext::new_command_with(&get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
         .arg("--clear")
