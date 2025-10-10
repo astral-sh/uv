@@ -178,7 +178,7 @@ pub struct Provider {
     )]
     pub enable_if: MarkerTree,
     /// Dependency specifiers for how to install the plugin
-    pub requires: Vec<Requirement<VerbatimParsedUrl>>,
+    pub requires: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     /// Whether this plugin is run at install time.
     pub plugin_use: Option<PluginUse>,
 }

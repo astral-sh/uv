@@ -695,7 +695,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             } else {
                 Err(Error::VariantLockMissing {
                     variant_lock: PathBuf::from(variant_lock_path),
-                    requires: provider.requires.clone(),
+                    requires: provider.requires.clone().unwrap_or_default(),
                     plugin_api: provider.plugin_api.clone().unwrap_or_default().clone(),
                 })
             }
@@ -1548,7 +1548,10 @@ fn satisfies_provider_requires(
     {
         return false;
     }
-    requested_provider.requires.iter().all(|requested| {
+    let Some(requires) = &requested_provider.requires else {
+        return true;
+    };
+    requires.iter().all(|requested| {
         static_provider.resolved.iter().any(|resolved| {
             // We ignore extras for simplicity.
             &requested.name == resolved.name()
