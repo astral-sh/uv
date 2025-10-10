@@ -305,6 +305,9 @@ impl EnvVars {
     #[attr_added_in("0.4.10")]
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
 
+    /// The GitHub hostname. Defaults to `github.com`.
+    pub const GH_HOST: &'static str = "GH_HOST";
+
     /// Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
     /// `requirements.txt` files.
     #[attr_added_in("0.5.3")]
