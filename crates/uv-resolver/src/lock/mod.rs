@@ -5373,6 +5373,30 @@ impl WheelTagHint {
             }
         })
     }
+
+    fn suggest_environment_marker(tags: &BTreeSet<PlatformTag>) -> &'static str {
+        if let Some(first_tag) = tags.iter().next() {
+            let tag_str = first_tag.to_string();
+
+            if tag_str.contains("linux") && tag_str.contains("x86_64") {
+                "sys_platform == 'linux' and platform_machine == 'x86_64'"
+            } else if tag_str.contains("linux") && tag_str.contains("aarch64") {
+                "sys_platform == 'linux' and platform_machine == 'aarch64'"
+            } else if tag_str.contains("macosx") && tag_str.contains("x86_64") {
+                "sys_platform == 'darwin' and platform_machine == 'x86_64'"
+            } else if tag_str.contains("macosx") && tag_str.contains("arm64") {
+                "sys_platform == 'darwin' and platform_machine == 'arm64'"
+            } else if tag_str.contains("win") && tag_str.contains("amd64") {
+                "sys_platform == 'win32' and platform_machine == 'amd64'"
+            } else if tag_str.contains("win32") {
+                "sys_platform == 'win32'"
+            } else {
+                "sys_platform == 'linux' and platform_machine == 'x86_64'"
+            }
+        } else {
+            "sys_platform == 'linux' and platform_machine == 'x86_64'"
+        }
+    }
 }
 
 impl std::fmt::Display for WheelTagHint {
@@ -5530,6 +5554,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", package.cyan())
                     };
+                    let example_marker = Self::suggest_environment_marker(tags);
                     writeln!(
                         f,
                         "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
@@ -5541,7 +5566,21 @@ impl std::fmt::Display for WheelTagHint {
                             .map(|tag| format!("`{}`", tag.cyan()))
                             .join(", "),
                         "tool.uv.required-environments".green()
-                    )
+                    )?;
+                    writeln!(
+                        f,
+                        "{}",
+                        "For example, add this to your pyproject.toml:".dimmed()
+                    )?;
+                    writeln!(f, "    {}", "[tool.uv]".dimmed())?;
+                    writeln!(f, "    {} = [", "required-environments".green())?;
+                    writeln!(
+                        f,
+                        "        \"{}\",  {}",
+                        example_marker.cyan().dimmed(),
+                        "# Adjust the platform/architecture as needed".dimmed()
+                    )?;
+                    writeln!(f, "    {}", "]".dimmed())
                 } else {
                     if let Some(version) = version {
                         write!(
