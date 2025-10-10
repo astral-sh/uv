@@ -194,7 +194,7 @@ published.
 Ignoring an upper bound is a problem for packages such as numpy which use the version-dependent C
 API of CPython. As of writing, each numpy release support 4 Python minor versions, e.g., numpy 2.0.0
 has wheels for CPython 3.9 through 3.12 and declares `requires-python = ">=3.9"`, while numpy 2.1.0
-has wheels for CPython 3.10 through 3.13 and declares `requires-python = ">=3.10"`. The means that
+has wheels for CPython 3.10 through 3.13 and declares `requires-python = ">=3.10"`. This means that
 when uv resolves a `numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, it
 selects numpy 2.0.0 and the lockfile doesn't install on Python 3.13 or newer. To alleviate this,
 whenever uv rejects a version that requires a newer Python version, we fork by splitting the
