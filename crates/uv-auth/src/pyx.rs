@@ -15,6 +15,7 @@ use uv_small_str::SmallString;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
+use crate::credentials::Token;
 use crate::{AccessToken, Credentials, Realm};
 
 /// Retrieve the pyx API key from the environment variable, or return `None`.
@@ -84,7 +85,7 @@ impl From<PyxTokens> for Credentials {
 impl From<AccessToken> for Credentials {
     fn from(access_token: AccessToken) -> Self {
         Self::Bearer {
-            token: access_token.into_bytes(),
+            token: Token::new(access_token.into_bytes()),
         }
     }
 }
