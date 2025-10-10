@@ -23,8 +23,6 @@ Released on 2025-10-10.
 
 - Add missing "added in" to new environment variables in reference ([#16217](https://github.com/astral-sh/uv/pull/16217))
 
-### Other changes
-
 ## 0.9.1
 
 Released on 2025-10-09.
