@@ -40,8 +40,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Should be a no-op when already upgraded
@@ -61,8 +61,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     ~ cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     ~ cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Install an earlier pre-release version
@@ -142,8 +142,8 @@ fn python_upgrade_without_version() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.11.13-[PLATFORM] (python3.11)
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+     + cpython-3.11.14-[PLATFORM] (python3.11)
+     + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
 
     // Should be a no-op when every version is already upgraded
@@ -229,8 +229,8 @@ fn python_upgrade_transparent_from_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // First virtual environment should reflect upgraded patch
@@ -238,7 +238,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -250,7 +250,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -306,8 +306,8 @@ fn python_upgrade_transparent_from_venv_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Virtual environment should reflect upgraded patch
@@ -315,7 +315,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -369,8 +369,8 @@ fn python_upgrade_ignored_with_python_pin() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Virtual environment should continue to respect pinned patch version
