@@ -5257,7 +5257,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5469,7 +5469,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6756,7 +6756,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.9.1"
+version = "0.9.2"
 
 [[package]]
 name = "uv-virtualenv"
