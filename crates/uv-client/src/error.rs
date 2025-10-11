@@ -469,7 +469,7 @@ impl WrappedReqwestError {
 
     /// Check if the error chain contains a `reqwest` error that looks like this:
     /// * invalid peer certificate: `UnknownIssuer`
-    fn is_ssl(&self) -> bool {
+    pub(crate) fn is_ssl(&self) -> bool {
         if let Some(reqwest_err) = self.inner() {
             if !reqwest_err.is_connect() {
                 return false;

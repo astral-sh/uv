@@ -986,6 +986,14 @@ pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
+        // Never retry SSL certificate errors (e.g., invalid peer certificate: UnknownIssuer).
+        if let Err(err) = res {
+            if is_ssl_certificate_error(err) {
+                debug!("Not retrying due to SSL certificate error");
+                return Some(Retryable::Fatal);
+            }
+        }
+
         // Use the default strategy and check for additional transient error cases.
         let retryable = match DefaultRetryableStrategy.handle(res) {
             None | Some(Retryable::Fatal)
@@ -1019,6 +1027,28 @@ impl RetryableStrategy for UvRetryableStrategy {
     }
 }
 
+/// Detect SSL certificate validation errors in a reqwest middleware error chain.
+fn is_ssl_certificate_error(err: &reqwest_middleware::Error) -> bool {
+    // Try to find an inner reqwest::Error and inspect its sources for the rustls message
+    match err {
+        reqwest_middleware::Error::Reqwest(reqwest_err) => is_reqwest_ssl_error(reqwest_err),
+        reqwest_middleware::Error::Middleware(anyhow_err) => anyhow_err
+            .chain()
+            .find_map(|e| e.downcast_ref::<reqwest::Error>())
+            .is_some_and(is_reqwest_ssl_error),
+    }
+}
+
+fn is_reqwest_ssl_error(reqwest_err: &reqwest::Error) -> bool {
+    if !reqwest_err.is_connect() {
+        return false;
+    }
+    // The underlying error messages are opaque types; check the error chain text for rustls message
+    std::error::Error::source(reqwest_err)
+        .and_then(|e| e.source())
+        .is_some_and(|source| source.to_string().starts_with("invalid peer certificate: "))
+}
+
 /// Whether the error looks like a network error that should be retried.
 ///
 /// There are two cases that the default retry strategy is missing:
@@ -1033,6 +1063,14 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
         trace!("Considering retry of response HTTP {status} for {url}");
     } else {
         trace!("Considering retry of error: {err:?}");
+    }
+
+    // Do not retry SSL certificate validation errors.
+    if let Some(wrapped) = find_source::<WrappedReqwestError>(err) {
+        if wrapped.is_ssl() {
+            trace!("Not retrying SSL certificate error");
+            return false;
+        }
     }
 
     let mut has_known_error = false;
