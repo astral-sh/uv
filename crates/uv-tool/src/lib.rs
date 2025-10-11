@@ -258,7 +258,11 @@ impl InstalledTools {
                     environment_path.user_display()
                 );
             }
-            Err(uv_virtualenv::Error::Io(_)) => (),
+            Err(uv_virtualenv::Error::Io(err)) => {
+                if err.kind() != io::ErrorKind::NotFound {
+                    return Err(err.into());
+                }
+            }
             Err(err) => return Err(err.into()),
         }
 
