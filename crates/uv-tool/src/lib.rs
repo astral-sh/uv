@@ -258,6 +258,7 @@ impl InstalledTools {
                     environment_path.user_display()
                 );
             }
+            Err(uv_virtualenv::Error::Io(_)) => (),
             Err(err) => return Err(err.into()),
         }
 
