@@ -3777,6 +3777,10 @@ pub struct RunArgs {
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// Run the command and exit without waiting for the spawned process to finish.
+    #[arg(long, env = EnvVars::UV_NO_WAIT, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_wait: bool,
 }
 
 #[derive(Args)]
