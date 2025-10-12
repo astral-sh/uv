@@ -83,6 +83,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: Option<bool>,
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
@@ -373,6 +374,7 @@ pub(crate) async fn add(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    lfs,
                     marker,
                 )
             })
@@ -640,6 +642,7 @@ pub(crate) async fn add(
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
+        lfs,
         &extras_of_dependency,
         index,
         &mut toml,
@@ -771,6 +774,7 @@ fn edits(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    lfs: Option<bool>,
     extras: &[ExtraName],
     index: Option<&IndexName>,
     toml: &mut PyProjectTomlMut,
@@ -801,6 +805,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     script_dir,
                     existing_sources,
                 )?
@@ -825,6 +830,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     project.root(),
                     existing_sources,
                 )?
@@ -1183,6 +1189,7 @@ fn augment_requirement(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    lfs: Option<bool>,
     marker: Option<MarkerTree>,
 ) -> UnresolvedRequirement {
     match requirement {
@@ -1206,6 +1213,11 @@ fn augment_requirement(
                             git.with_reference(GitReference::Tag(tag.to_string()))
                         } else if let Some(branch) = branch {
                             git.with_reference(GitReference::Branch(branch.to_string()))
+                        } else {
+                            git
+                        };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(lfs.into())
                         } else {
                             git
                         };
@@ -1240,6 +1252,9 @@ fn augment_requirement(
                         if let Some(reference) = reference {
                             git.url = git.url.with_reference(reference);
                         }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(lfs.into());
+                        }
                         VerbatimParsedUrl {
                             parsed_url: ParsedUrl::Git(git),
                             verbatim: requirement.url.verbatim,
@@ -1262,6 +1277,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: Option<bool>,
     root: &Path,
     existing_sources: Option<&BTreeMap<PackageName, Sources>>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
@@ -1274,6 +1290,7 @@ fn resolve_requirement(
         rev,
         tag,
         branch,
+        lfs,
         root,
         existing_sources,
     );
