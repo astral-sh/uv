@@ -865,7 +865,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <ul>
 <li><code>disabled</code>:  Do not use keyring for credential lookup</li>
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
-</ul></dd><dt id="uv-add--link-mode"><a href="#uv-add--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
+</ul></dd><dt id="uv-add--lfs"><a href="#uv-add--lfs"><code>--lfs</code></a></dt><dd><p>Whether to use Git LFS when adding a dependency from Git</p>
+<p>May also be set with the <code>UV_GIT_LFS</code> environment variable.</p></dd><dt id="uv-add--link-mode"><a href="#uv-add--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 <p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>

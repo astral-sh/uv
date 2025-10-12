@@ -558,6 +558,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
+    /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
+
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
