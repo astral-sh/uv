@@ -2074,6 +2074,7 @@ async fn run_project(
                 args.rev,
                 args.tag,
                 args.branch,
+                args.lfs,
                 args.extras,
                 args.package,
                 args.python,
