@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
 use tracing::{debug, warn};
 use url::Url;
@@ -742,7 +742,17 @@ fn fetch_with_cli(
 ///
 /// Returns an error if Git LFS isn't available.
 /// Caching the command allows us to only check if LFS is installed once.
+///
+/// We also support a helper private environment variable to allow
+/// controlling the LFS extension from being loaded for testing purposes.
+/// Once installed, Git will always load `git-lfs` as a built-in alias
+/// which takes priority over loading from `PATH` which prevents us
+/// from shadowing the extension with other means.
 pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED).is_some() {
+        return Err(anyhow!("Git LFS extension has been forcefully disabled."));
+    }
+
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     cmd.arg("lfs");
 

@@ -1562,6 +1562,7 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) lfs: Option<bool>,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1604,6 +1605,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             no_sync,
             locked,
             frozen,
@@ -1703,6 +1705,7 @@ impl AddSettings {
             .unwrap_or_default();
 
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
+        let lfs = lfs.then_some(true);
 
         Self {
             lock_check: if locked {
@@ -1726,6 +1729,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             package,
             script,
             python: python.and_then(Maybe::into_option),
