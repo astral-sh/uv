@@ -17901,9 +17901,11 @@ async fn compile_with_remote_constraint_in_output() -> Result<()> {
     );
 
     // Append the constraint directive to the output file (simulating AWS MWAA requirement)
-    let mut output_content = fs::read_to_string(&requirements_txt)?;
-    output_content.push_str(&format!("--constraint \"{}/constraints.txt\"\n", server.uri()));
-    fs::write(&requirements_txt, output_content)?;
+    let mut output_content = fs_err::read_to_string(&requirements_txt)?;
+    output_content.push_str("--constraint \"");
+    output_content.push_str(&server.uri());
+    output_content.push_str("/constraints.txt\"\n");
+    fs_err::write(&requirements_txt, output_content)?;
 
     // Second compilation - should also work (this is where the bug occurs)
     // The bug is that uv tries to parse the constraint in offline mode when reading
