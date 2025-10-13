@@ -2,9 +2,6 @@ use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-#[allow(clippy::disallowed_types)]
-use std::fs::File;
-
 use anyhow::{Context, Result};
 use console::Term;
 use uv_fs::{CWD, Simplified};
@@ -174,12 +171,7 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a positional
     /// package (e.g., `uv pip install flask`).
-    ///
-    /// If the user provided a value that appears to be a `requirements.txt` file or a local
-    /// directory, prompt them to correct it (if the terminal is interactive).
     pub fn from_package_argument(name: &str) -> Result<Self> {
-        // If the user provided a `requirements.txt` file without `-r` (as in
-        // `uv pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
@@ -195,8 +187,6 @@ impl RequirementsSource {
             }
         }
 
-        // Similarly, if the user provided a `pyproject.toml` file without `-r` (as in
-        // `uv pip install pyproject.toml`), prompt them to correct it.
         if (name == "pyproject.toml"
             || name == "setup.py"
             || name == "setup.cfg"
@@ -222,14 +212,7 @@ impl RequirementsSource {
         Ok(Self::Package(requirement))
     }
 
-    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a `--with`
-    /// package (e.g., `uvx --with flask ruff`).
-    ///
-    /// If the user provided a value that appears to be a `requirements.txt` file or a local
-    /// directory, prompt them to correct it (if the terminal is interactive).
     pub fn from_with_package_argument(name: &str) -> Result<Self> {
-        // If the user provided a `requirements.txt` file without `--with-requirements` (as in
-        // `uvx --with requirements.txt ruff`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
@@ -245,8 +228,6 @@ impl RequirementsSource {
             }
         }
 
-        // Similarly, if the user provided a `pyproject.toml` file without `--with-requirements` (as in
-        // `uvx --with pyproject.toml ruff`), prompt them to correct it.
         if (name == "pyproject.toml"
             || name == "setup.py"
             || name == "setup.cfg"
@@ -272,23 +253,18 @@ impl RequirementsSource {
         Ok(Self::Package(requirement))
     }
 
-    /// Parse an editable [`RequirementsSource`] (e.g., `uv pip install -e .`).
     pub fn from_editable(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
-
         Ok(Self::Editable(requirement))
     }
 
-    /// Parse a package [`RequirementsSource`] (e.g., `uv pip install ruff`).
     pub fn from_package(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
-
         Ok(Self::Package(requirement))
     }
 
-    /// Returns `true` if the source allows extras to be specified.
     pub fn allows_extras(&self) -> bool {
         matches!(
             self,
@@ -296,7 +272,6 @@ impl RequirementsSource {
         )
     }
 
-    /// Returns `true` if the source allows groups to be specified.
     pub fn allows_groups(&self) -> bool {
         matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
     }
@@ -320,18 +295,11 @@ impl std::fmt::Display for RequirementsSource {
     }
 }
 
-/// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }
 
-/// Returns `true` if the provided path appears to be a uv-generated lockfile.
-///
-/// We use a simple heuristic: the path must end with `.lock`, and the file
-/// must contain both a `version =` assignment and a `[[package]]` header in the
-/// first few kilobytes. This mirrors the structure of `uv lock` outputs while
-/// avoiding the need to deserialize the entire document.
 fn is_uv_lock_file(path: &Path) -> Result<bool> {
     const PREFIX_LEN: usize = 8 * 1024;
 
@@ -350,7 +318,6 @@ fn is_uv_lock_file(path: &Path) -> Result<bool> {
         return Ok(false);
     }
 
-    // If uv_fs::File works in the repo, prefer it:
     #[allow(clippy::disallowed_types)]
     let mut file = std::fs::File::open(path).with_context(|| {
         format!(
