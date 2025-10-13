@@ -1374,7 +1374,7 @@ uv upgrade [OPTIONS] [REQUIREMENTS]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-upgrade--directory"><a href="#uv-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-upgrade--dry-run"><a href="#uv-upgrade--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the upgrades</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-upgrade--dry-run"><a href="#uv-upgrade--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the upgrades</p>
 </dd><dt id="uv-upgrade--help"><a href="#uv-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-upgrade--managed-python"><a href="#uv-upgrade--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
