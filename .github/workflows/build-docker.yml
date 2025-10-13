@@ -54,11 +54,15 @@ jobs:
     steps:
       - name: Set push variable
         env:
-          DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
-          TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
+          PLAN: ${{ inputs.plan }}
           IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
+          if [ "$PLAN" != "" ]; then
+            printf '%s' "$PLAN" | base64 -d | gunzip > $RUNNER_TEMP/manifest.json
+            DRY_RUN="$(jq -r .announcement_tag_is_implicit $RUNNER_TEMP/manifest.json)"
+            TAG="$(jq -r .announcement_tag $RUNNER_TEMP/manifest.json)"
+          fi
           if [ "${DRY_RUN}" == "false" ]; then
             echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"

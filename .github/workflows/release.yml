@@ -54,6 +54,9 @@ jobs:
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
+      pr_run_mode: ${{ steps.plan.outputs.pr_run_mode }}
+      announcement_is_prerelease: ${{ steps.plan.outputs.announcement_is_prerelease }}
+      publish_prereleases: ${{ steps.plan.outputs.publish_prereleases }}
       tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
       tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
       publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
@@ -84,7 +87,10 @@ jobs:
           dist ${{ (inputs.tag && inputs.tag != 'dry-run' && format('host --steps=create --tag={0}', inputs.tag)) || 'plan' }} --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
-          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "manifest=$(jq -c "." plan-dist-manifest.json | gzip | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "pr_run_mode=$(jq -r .ci.github.pr_run_mode plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "announcement_is_prerelease=$(jq -r .announcement_is_prerelease plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "publish_prereleases=$(jq -r .publish_prereleases plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
         with:
@@ -94,7 +100,7 @@ jobs:
   custom-build-binaries:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    if: ${{ needs.plan.outputs.publishing == 'true' || needs.plan.outputs.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     uses: ./.github/workflows/build-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -103,7 +109,7 @@ jobs:
   custom-build-docker:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    if: ${{ needs.plan.outputs.publishing == 'true' || needs.plan.outputs.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     uses: ./.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -212,7 +218,7 @@ jobs:
     needs:
       - plan
       - host
-    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    if: ${{ needs.plan.outputs.announcement_is_prerelease == 'false' || needs.plan.outputs.publish_prereleases == 'true' }}
     uses: ./.github/workflows/publish-pypi.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -253,13 +259,14 @@ jobs:
           rm -f artifacts/*-dist-manifest.json
       - name: Create GitHub Release
         env:
-          PRERELEASE_FLAG: "${{ fromJson(needs.host.outputs.val).announcement_is_prerelease && '--prerelease' || '' }}"
-          ANNOUNCEMENT_TITLE: "${{ fromJson(needs.host.outputs.val).announcement_title }}"
-          ANNOUNCEMENT_BODY: "${{ fromJson(needs.host.outputs.val).announcement_github_body }}"
+          PRERELEASE_FLAG: "${{ needs.host.outputs.announcement_is_prerelease && '--prerelease' || '' }}"
+          MANIFEST: "${{ needs.host.outputs.val }}"
           RELEASE_COMMIT: "${{ github.sha }}"
         run: |
           # Write and read notes from a file to avoid quoting breaking things
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
+          printf '%s' "$MANIFEST" | base64 -d | gunzip > $RUNNER_TEMP/manifest.json
+          jq -r .announcement_github_body < $RUNNER_TEMP/manifest.json > $RUNNER_TEMP/notes.txt
+          ANNOUNCEMENT_TITLE="$(jq -r .announcement_title < $RUNNER_TEMP/manifest.json)"
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
