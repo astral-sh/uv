@@ -117,15 +117,21 @@ impl GlobalSettings {
             },
             network_settings,
             concurrency: Concurrency {
-                downloads: env(env::CONCURRENT_DOWNLOADS)
+                downloads: environment
+                    .concurrency
+                    .downloads
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
                     .map(NonZeroUsize::get)
                     .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: env(env::CONCURRENT_BUILDS)
+                builds: environment
+                    .concurrency
+                    .builds
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-                installs: env(env::CONCURRENT_INSTALLS)
+                installs: environment
+                    .concurrency
+                    .installs
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
@@ -3747,16 +3753,6 @@ impl AuthLoginSettings {
 // Environment variables that are not exposed as CLI arguments.
 mod env {
     use uv_static::EnvVars;
-
-    pub(super) const CONCURRENT_DOWNLOADS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_DOWNLOADS, "a non-zero integer");
-
-    pub(super) const CONCURRENT_BUILDS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_BUILDS, "a non-zero integer");
-
-    pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_INSTALLS, "a non-zero integer");
-
     pub(super) const UV_PYTHON_DOWNLOADS: (&str, &str) = (
         EnvVars::UV_PYTHON_DOWNLOADS,
         "one of 'auto', 'true', 'manual', 'never', or 'false'",
