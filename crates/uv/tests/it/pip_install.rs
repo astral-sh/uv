@@ -11442,7 +11442,7 @@ fn pep_751_mix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify additional requirements with a `pylock.toml` file
+    error: Cannot specify constraints with a `pylock.toml` file
     "
     );
 
@@ -12358,6 +12358,87 @@ fn reject_invalid_short_usize_zip64() {
     );
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16068>
+#[test]
+fn already_installed_url_dependency_no_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar")
+        .child("src")
+        .child("bar")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install `foo`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    // Install `bar` with `--no-sources`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./bar").arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+    ");
+
+    Ok(())
+}
+
 /// Test that build dependencies respect locked versions from the resolution.
 #[test]
 fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
@@ -12844,4 +12925,68 @@ fn switch_platform() {
      ~ cffi==1.16.0
     "
     );
+}
+
+/// `uv pip install --no-sources` should allow non-registry installations, for compatibility with `pip install`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15190>
+#[test]
+fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a simple local package.
+    let local_pkg = context.temp_dir.child("local_pkg");
+    local_pkg.create_dir_all()?;
+
+    local_pkg.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "iniconfig"
+        version = "2.0.0"
+        description = "Local test package"
+        requires-python = ">=3.7"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    local_pkg.child("src").child("iniconfig").create_dir_all()?;
+    local_pkg
+        .child("src")
+        .child("iniconfig")
+        .child("__init__.py")
+        .write_str("__version__ = '2.0.0'")?;
+
+    // Step 1: Install as editable first.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--editable")
+        .arg("./local_pkg"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+    "
+    );
+
+    // Step 2: Use `--no-sources`; we should retain the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    Ok(())
 }

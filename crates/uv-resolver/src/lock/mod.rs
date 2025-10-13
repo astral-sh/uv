@@ -42,7 +42,7 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitUrl,
+    ParsedGitUrl, PyProjectToml,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -170,7 +170,7 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker
 });
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     /// The (major) version of the lockfile format.
@@ -1229,11 +1229,11 @@ impl Lock {
                     if let Some(requires_python) = metadata.requires_python.as_ref() {
                         table.insert("requires-python", value(requires_python.to_string()));
                     }
-                    if !metadata.provides_extras.is_empty() {
+                    if !metadata.provides_extra.is_empty() {
                         table.insert(
                             "provides-extras",
                             value(serde::Serialize::serialize(
-                                &metadata.provides_extras,
+                                &metadata.provides_extra,
                                 toml_edit::ser::ValueSerializer::new(),
                             )?),
                         );
@@ -1332,7 +1332,7 @@ impl Lock {
         }
 
         let expected: BTreeSet<_> = provides_extra.iter().collect();
-        let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
             let expected = Box::into_iter(provides_extra).collect();
@@ -1783,7 +1783,7 @@ impl Lock {
                 }
 
                 // Validate the `provides-extras` metadata.
-                match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                match self.satisfies_provides_extra(metadata.provides_extra, package) {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1808,13 +1808,29 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = database
-                    .requires_dist(root.join(source_tree))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?;
+                let parent = root.join(source_tree);
+                let path = parent.join("pyproject.toml");
+                let metadata =
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => {
+                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
+                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                                    path: path.clone(),
+                                    err,
+                                })?;
+                            database
+                                .requires_dist(&parent, &pyproject_toml)
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                        Err(err) => {
+                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                        }
+                    };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -1824,7 +1840,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extras, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -1905,7 +1921,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -2346,14 +2362,14 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
-        let provides_extras = if id.source.is_immutable() {
+        let provides_extra = if id.source.is_immutable() {
             Box::default()
         } else {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
-                .provides_extras
+                .provides_extra
                 .clone()
         };
         let dependency_groups = if id.source.is_immutable() {
@@ -2386,7 +2402,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
-                provides_extras,
+                provides_extra,
                 dependency_groups,
             },
         })
@@ -2995,10 +3011,10 @@ impl Package {
                 }
             }
 
-            if !self.metadata.provides_extras.is_empty() {
+            if !self.metadata.provides_extra.is_empty() {
                 let provides_extras = self
                     .metadata
-                    .provides_extras
+                    .provides_extra
                     .iter()
                     .map(|extra| {
                         serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
@@ -3056,6 +3072,14 @@ impl Package {
     /// Returns the [`Version`] of the package.
     pub fn version(&self) -> Option<&Version> {
         self.id.version.as_ref()
+    }
+
+    /// Returns the Git SHA of the package, if it is a Git source.
+    pub fn git_sha(&self) -> Option<&GitOid> {
+        match &self.id.source {
+            Source::Git(_, git) => Some(&git.precise),
+            _ => None,
+        }
     }
 
     /// Return the fork markers for this package, if any.
@@ -3128,7 +3152,7 @@ impl Package {
 
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
-        &self.metadata.provides_extras
+        &self.metadata.provides_extra
     }
 
     /// Returns the dependency groups the package provides, if any.
@@ -3203,38 +3227,10 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default)]
-    provides_extras: Box<[ExtraName]>,
+    #[serde(default, rename = "provides-extras")]
+    provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-}
-
-impl PackageMetadata {
-    fn unwire(self, requires_python: &RequiresPython) -> Self {
-        // We need to complexify these markers so things like
-        // `requires_python < '0'` get normalized to False
-        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
-            requirements
-                .into_iter()
-                .map(|mut requirement| {
-                    let complexified_marker =
-                        requires_python.complexify_markers(requirement.marker);
-                    requirement.marker = complexified_marker;
-                    requirement
-                })
-                .collect()
-        };
-
-        Self {
-            requires_dist: unwire_requirements(self.requires_dist),
-            provides_extras: self.provides_extras,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
-                .collect(),
-        }
-    }
 }
 
 impl PackageWire {
@@ -3244,20 +3240,22 @@ impl PackageWire {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
-        if let Some(version) = &self.id.version {
-            for wheel in &self.wheels {
-                if *version != wheel.filename.version
-                    && *version != wheel.filename.version.clone().without_local()
-                {
-                    return Err(LockError::from(LockErrorKind::InconsistentVersions {
-                        name: self.id.name,
-                        version: version.clone(),
-                        wheel: wheel.clone(),
-                    }));
+        if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
+            if let Some(version) = &self.id.version {
+                for wheel in &self.wheels {
+                    if *version != wheel.filename.version
+                        && *version != wheel.filename.version.clone().without_local()
+                    {
+                        return Err(LockError::from(LockErrorKind::InconsistentVersions {
+                            name: self.id.name,
+                            version: version.clone(),
+                            wheel: wheel.clone(),
+                        }));
+                    }
                 }
+                // We can't check the source dist version since it does not need to contain the version
+                // in the filename.
             }
-            // We can't check the source dist version since it does not need to contain the version
-            // in the filename.
         }
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
@@ -3268,7 +3266,7 @@ impl PackageWire {
 
         Ok(Package {
             id: self.id,
-            metadata: self.metadata.unwire(requires_python),
+            metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -4802,11 +4800,12 @@ impl Dependency {
     ) -> Self {
         let simplified_marker =
             SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
+        let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
             extra,
             simplified_marker,
-            complexified_marker,
+            complexified_marker: UniversalMarker::from_combined(complexified_marker),
         }
     }
 
@@ -5869,7 +5868,7 @@ enum LockErrorKind {
     },
     /// A package has inconsistent versions in a single entry
     // Using name instead of id since the version in the id is part of the conflict.
-    #[error("The entry for package `{name}` v{version} has wheel `{wheel_filename}` with inconsistent version: v{wheel_version} ", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version)]
+    #[error("The entry for package `{name}` ({version}) has wheel `{wheel_filename}` with inconsistent version ({wheel_version}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version, env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     InconsistentVersions {
         /// The name of the package with the inconsistent entry.
         name: PackageName,
@@ -5890,6 +5889,18 @@ enum LockErrorKind {
     },
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
+    #[error("Failed to read `{path}`")]
+    UnreadablePyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: std::io::Error,
+    },
+    #[error("Failed to parse `{path}`")]
+    InvalidPyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: toml::de::Error,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.

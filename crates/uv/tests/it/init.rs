@@ -2439,7 +2439,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2447,7 +2447,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
     insta::with_settings!({

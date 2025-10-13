@@ -7,8 +7,8 @@ use url::Url;
 use uuid::Uuid;
 
 use uv_auth::{
-    AccessToken, AuthBackend, Credentials, PyxOAuthTokens, PyxTokenStore, PyxTokens, Service,
-    TextCredentialStore,
+    AccessToken, AuthBackend, Credentials, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
+    Service, TextCredentialStore,
 };
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_distribution_types::IndexUrl;
@@ -38,19 +38,29 @@ pub(crate) async fn login(
             bail!("Cannot specify a password when logging in to pyx");
         }
 
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+        let client = BaseClientBuilder::new(
+            network_settings.connectivity,
+            network_settings.native_tls,
+            network_settings.allow_insecure_host.clone(),
+            preview,
+            network_settings.timeout,
+        )
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .build();
 
-        pyx_login_with_browser(&pyx_store, &client, &printer).await?;
-        writeln!(
-            printer.stderr(),
-            "Logged in to {}",
-            pyx_store.api().bold().cyan()
-        )?;
+        let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
+        let jwt = PyxJwt::decode(&access_token)?;
+
+        if let Some(name) = jwt.name.as_deref() {
+            writeln!(printer.stderr(), "Logged in to {}", name.bold().cyan())?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Logged in to {}",
+                pyx_store.api().bold().cyan()
+            )?;
+        }
+
         return Ok(ExitStatus::Success);
     }
 

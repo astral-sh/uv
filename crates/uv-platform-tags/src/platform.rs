@@ -151,21 +151,7 @@ pub enum Arch {
 
 impl fmt::Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Self::Aarch64 => write!(f, "aarch64"),
-            Self::Armv5TEL => write!(f, "armv5tel"),
-            Self::Armv6L => write!(f, "armv6l"),
-            Self::Armv7L => write!(f, "armv7l"),
-            Self::Powerpc64Le => write!(f, "ppc64le"),
-            Self::Powerpc64 => write!(f, "ppc64"),
-            Self::Powerpc => write!(f, "ppc"),
-            Self::X86 => write!(f, "i686"),
-            Self::X86_64 => write!(f, "x86_64"),
-            Self::S390X => write!(f, "s390x"),
-            Self::LoongArch64 => write!(f, "loongarch64"),
-            Self::Riscv64 => write!(f, "riscv64"),
-            Self::Wasm32 => write!(f, "wasm32"),
-        }
+        write!(f, "{}", self.name())
     }
 }
 
@@ -211,7 +197,7 @@ impl Arch {
         }
     }
 
-    /// Returns the canonical name of the architecture.
+    /// Returns the standard name of the architecture.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Aarch64 => "aarch64",
@@ -230,23 +216,22 @@ impl Arch {
         }
     }
 
-    /// Returns an iterator over all supported architectures.
-    pub fn iter() -> impl Iterator<Item = Self> {
-        [
-            Self::Aarch64,
-            Self::Armv5TEL,
-            Self::Armv6L,
-            Self::Armv7L,
-            Self::Powerpc64Le,
-            Self::Powerpc64,
-            Self::Powerpc,
-            Self::X86,
-            Self::X86_64,
-            Self::S390X,
-            Self::LoongArch64,
-            Self::Riscv64,
-        ]
-        .iter()
-        .copied()
+    /// Represents the hardware platform.
+    ///
+    /// This is the same as the native platform's `uname -m` output.
+    ///
+    /// Based on: <https://github.com/PyO3/maturin/blob/8ab42219247277fee513eac753a3e90e76cd46b9/src/target/mod.rs#L131>
+    pub fn machine(&self) -> &'static str {
+        match self {
+            Self::Aarch64 => "arm64",
+            Self::Armv5TEL | Self::Armv6L | Self::Armv7L => "arm",
+            Self::Powerpc | Self::Powerpc64Le | Self::Powerpc64 => "powerpc",
+            Self::X86 => "i386",
+            Self::X86_64 => "amd64",
+            Self::Riscv64 => "riscv",
+            Self::Wasm32 => "wasm32",
+            Self::S390X => "s390x",
+            Self::LoongArch64 => "loongarch64",
+        }
     }
 }

@@ -114,6 +114,7 @@ plugins:
           - guides/integration/alternative-indexes.md
           - guides/integration/dependency-bots.md
           - guides/integration/aws-lambda.md
+          - guides/integration/coiled.md
         Projects:
           - concepts/projects/layout.md
           - concepts/projects/init.md
@@ -192,6 +193,7 @@ nav:
           - Alternative indexes: guides/integration/alternative-indexes.md
           - Dependency bots: guides/integration/dependency-bots.md
           - AWS Lambda: guides/integration/aws-lambda.md
+          - Coiled: guides/integration/coiled.md
   - Concepts:
       - concepts/index.md
       - Projects:

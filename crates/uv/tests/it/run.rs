@@ -3313,9 +3313,9 @@ fn run_module_stdin() {
     "###);
 }
 
-/// When the `pyproject.toml` file is invalid.
+/// Test for how run reacts to a pyproject.toml without a `[project]`
 #[test]
-fn run_project_toml_error() -> Result<()> {
+fn virtual_empty() -> Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -3331,25 +3331,28 @@ fn run_project_toml_error() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // `run` should fail
+    // `run` should work fine
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    ");
-
-    // `run --no-project` should not
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Audited in [TIME]
     ");
+
+    // `run --no-project` should also work fine
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    "###);
 
     Ok(())
 }
@@ -5032,7 +5035,7 @@ fn run_groups_requires_python() -> Result<()> {
         dev = ["sniffio"]
 
         [tool.uv.dependency-groups]
-        foo = {requires-python=">=3.14"}
+        foo = {requires-python=">=3.100"}
         bar = {requires-python=">=3.13"}
         dev = {requires-python=">=3.12"}
         "#,
@@ -5101,10 +5104,10 @@ fn run_groups_requires_python() -> Result<()> {
     // See https://github.com/astral-sh/uv/issues/14160
     let output = context
         .run()
+        .arg("-vv")
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions")
-        .arg("-vv")
         .output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -5165,7 +5168,7 @@ fn run_groups_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
 
     Ok(())

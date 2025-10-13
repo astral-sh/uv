@@ -26,7 +26,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashDigest, HashDigests};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 
@@ -550,10 +550,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub async fn requires_dist(
         &self,
-        source_tree: impl AsRef<Path>,
+        path: &Path,
+        pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         self.builder
-            .source_tree_requires_dist(source_tree.as_ref())
+            .source_tree_requires_dist(path, pyproject_toml)
             .await
     }
 

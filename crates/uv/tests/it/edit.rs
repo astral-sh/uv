@@ -1838,6 +1838,7 @@ fn update_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1897,6 +1898,7 @@ fn add_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1953,6 +1955,7 @@ fn update_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2008,6 +2011,7 @@ fn add_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2069,6 +2073,7 @@ fn remove_both_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -2160,6 +2165,7 @@ fn remove_both_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -4789,6 +4795,306 @@ fn add_non_project() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_virtual_empty() -> Result<()> {
+    // testing how `uv add` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    // Add normal dep (doesn't make sense)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    // Add dependency-group (can make sense!)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+
+        [dependency-groups]
+        dev = [
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_virtual_dependency_group() -> Result<()> {
+    // testing basic `uv add --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // Add to existing group
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    // Add to new group
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Audited 2 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
+        baz = [
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn remove_virtual_empty() -> Result<()> {
+    // testing how `uv remove` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+
+        "#,
+    )?;
+
+    // Remove normal dep (doesn't make sense)
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `project.dependencies`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    // Remove dependency-group (can make sense, but nothing there!)
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn remove_virtual_dependency_group() -> Result<()> {
+    // testing basic `uv remove --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // Remove from group
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = []
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#
+        );
+    });
+
+    // Remove from non-existent group
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("baz"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `dependency-groups.baz`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = []
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Add the same requirement multiple times.
 #[test]
 fn add_repeat() -> Result<()> {
@@ -6494,17 +6800,18 @@ fn remove_repeated() -> Result<()> {
         anyio_local = anyio_local.portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6531,15 +6838,16 @@ fn remove_repeated() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6566,16 +6874,17 @@ fn remove_repeated() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 

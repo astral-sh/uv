@@ -99,6 +99,6 @@ However, uv supports `pylock.toml` as an export target and in the `uv pip` CLI. 
 
 - To export a `uv.lock` to the `pylock.toml` format, run: `uv export -o pylock.toml`
 - To generate a `pylock.toml` file from a set of requirements, run:
-  `uv pip compile -o pylock.toml -r requirements.in`
+  `uv pip compile requirements.in -o pylock.toml`
 - To install from a `pylock.toml` file, run: `uv pip sync pylock.toml` or
   `uv pip install -r pylock.toml`

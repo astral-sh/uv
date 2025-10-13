@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -18,14 +19,14 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
     InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -104,10 +105,9 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
-    env_file: Vec<PathBuf>,
-    no_env_file: bool,
+    env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
@@ -164,39 +164,37 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let workspace_cache = WorkspaceCache::default();
 
     // Read from the `.env` file, if necessary.
-    if !no_env_file {
-        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-            match dotenvy::from_path(env_file_path) {
-                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!(
-                        "No environment file found at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::Io(err)) => {
-                    bail!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::LineParse(content, position)) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}` at position {position}: {content}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Err(err) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}`: {err}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Ok(()) => {
-                    debug!(
-                        "Read environment file at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
+    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+        match dotenvy::from_path(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "No environment file found at: `{}`",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::Io(err)) => {
+                bail!(
+                    "Failed to read environment file `{}`: {err}",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::LineParse(content, position)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` at position {position}: {content}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Err(err) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {err}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Ok(()) => {
+                debug!(
+                    "Read environment file at: `{}`",
+                    env_file_path.simplified_display()
+                );
             }
         }
     }
@@ -247,7 +245,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
-                cache,
+                &cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -284,7 +282,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryResolveLogger)
                 },
                 concurrency,
-                cache,
+                &cache,
                 &workspace_cache,
                 printer,
                 preview,
@@ -331,7 +329,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
@@ -385,7 +383,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -440,7 +438,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -471,7 +469,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     printer,
                     preview,
                 )
@@ -484,7 +482,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -657,7 +657,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -684,7 +684,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -704,7 +706,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active,
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -757,7 +759,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryResolveLogger)
                     },
                     concurrency,
-                    cache,
+                    &cache,
                     &workspace_cache,
                     printer,
                     preview,
@@ -845,7 +847,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -895,7 +897,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -917,7 +919,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -999,7 +1003,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 printer,
                 preview,
             )
@@ -1043,7 +1047,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 base_interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -1094,7 +1100,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Copy each entrypoint from the base environments to the ephemeral environment,
                 // updating the Python executable target to ensure they run in the ephemeral
                 // environment.
-                for entry in fs_err::read_dir(interpreter.scripts())? {
+                let scripts = match fs_err::read_dir(interpreter.scripts()) {
+                    Ok(scripts) => scripts,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err.into()),
+                };
+                for entry in scripts {
                     let entry = entry?;
                     if !entry.file_type()?.is_file() {
                         continue;
@@ -1195,23 +1206,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
         )?;
 
-        #[allow(clippy::map_identity)]
-        let commands = interpreter
-            .scripts()
-            .read_dir()
-            .ok()
-            .into_iter()
-            .flatten()
-            .map(|entry| match entry {
-                Ok(entry) => Ok(entry),
-                Err(err) => {
-                    // If we can't read the entry, fail.
-                    // This could be a symptom of a more serious problem.
-                    warn!("Failed to read entry: {}", err);
-                    Err(err)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?
+        let scripts = match fs_err::read_dir(interpreter.scripts()) {
+            Ok(scripts) => scripts.into_iter().collect::<Result<Vec<_>, _>>()?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => return Err(err.into()),
+        };
+
+        let commands = scripts
             .into_iter()
             .filter(|entry| {
                 entry
@@ -1221,7 +1222,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows)
+                let path = if cfg!(windows)
                     && path
                         .extension()
                         .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
@@ -1230,9 +1231,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     path.with_extension("")
                 } else {
                     path
-                }
-            })
-            .map(|path| {
+                };
+
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -1355,6 +1355,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        InstallationStrategy::Permissive,
         &markers,
         tags,
         config_setting,

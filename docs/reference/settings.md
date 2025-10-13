@@ -1047,7 +1047,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 
@@ -2428,7 +2428,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 

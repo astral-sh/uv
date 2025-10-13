@@ -80,27 +80,31 @@ fn generate() -> String {
     // Partition and sort environment variables into UV_ and external variables.
     let (uv_vars, external_vars): (BTreeSet<_>, BTreeSet<_>) = EnvVars::metadata()
         .iter()
-        .partition(|(var, _)| var.starts_with("UV_"));
+        .partition(|(var, _, _)| var.starts_with("UV_"));
 
     output.push_str("uv defines and respects the following environment variables:\n\n");
 
-    for (var, doc) in uv_vars {
-        output.push_str(&render(var, doc));
+    for (var, doc, added_in) in uv_vars {
+        output.push_str(&render(var, doc, added_in));
     }
 
     output.push_str("\n\n## Externally defined variables\n\n");
     output.push_str("uv also reads the following externally defined environment variables:\n\n");
 
-    for (var, doc) in external_vars {
-        output.push_str(&render(var, doc));
+    for (var, doc, added_in) in external_vars {
+        output.push_str(&render(var, doc, added_in));
     }
 
     output
 }
 
 /// Render an environment variable and its documentation.
-fn render(var: &str, doc: &str) -> String {
-    format!("### `{var}`\n\n{doc}\n\n")
+fn render(var: &str, doc: &str, added_in: Option<&str>) -> String {
+    if let Some(added_in) = added_in {
+        format!("### `{var}`\n<small class=\"added-in\">added in `{added_in}`</small>\n\n{doc}\n\n")
+    } else {
+        format!("### `{var}`\n\n{doc}\n\n")
+    }
 }
 
 #[cfg(test)]
