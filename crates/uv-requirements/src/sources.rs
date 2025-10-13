@@ -3,14 +3,12 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[allow(clippy::disallowed_types)]
-use std::fs::File; // explicitly allowed for local file inspection and solve build binary | linux libc
+use std::fs::File;
 
 use anyhow::{Context, Result};
 use console::Term;
-
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
-
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
