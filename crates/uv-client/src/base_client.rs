@@ -160,9 +160,9 @@ impl BaseClientBuilder<'_> {
             preview,
             allow_insecure_host,
             native_tls,
+            retries,
             connectivity,
             timeout,
-            retries,
             ..Self::default()
         }
     }
