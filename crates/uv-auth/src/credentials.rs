@@ -621,4 +621,15 @@ mod tests {
             "Basic { username: Username(Some(\"user\")), password: Some(****) }"
         );
     }
+
+    #[test]
+    fn test_bearer_token_obfuscation() {
+        let token = "super_secret_token";
+        let credentials = Credentials::bearer(token.into());
+        let debugged = format!("{credentials:?}");
+        assert!(
+            !debugged.contains(token),
+            "Token should be obfuscated in Debug impl: {debugged}"
+        );
+    }
 }
