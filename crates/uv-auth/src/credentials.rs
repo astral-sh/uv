@@ -100,7 +100,7 @@ impl fmt::Debug for Password {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Deserialize)]
 #[serde(transparent)]
 pub struct Token(Vec<u8>);
 
