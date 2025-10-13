@@ -755,12 +755,12 @@ where
 
 /// Parse a integer environment variable.
 fn parse_u32_environment_variable(name: &'static str) -> Result<Option<u32>, Error> {
-    parse_integer_environment_variable(name, "expected an integer")
+    parse_integer_environment_variable(name, "expected an non-negative integer")
 }
 
 /// Parse a integer environment variable.
 fn parse_u64_environment_variable(name: &'static str) -> Result<Option<u64>, Error> {
-    parse_integer_environment_variable(name, "expected an integer")
+    parse_integer_environment_variable(name, "expected an non-negative integer")
 }
 
 /// Parse a non-zero usize environment variable.

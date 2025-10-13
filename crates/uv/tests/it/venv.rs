@@ -894,7 +894,7 @@ fn create_venv_with_invalid_http_timeout() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: expected an integer
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: expected an non-negative integer
     "###);
 }
 

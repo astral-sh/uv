@@ -323,7 +323,21 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: expected an integer
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: expected an non-negative integer
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "-1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `-1`: expected an non-negative integer
     "
     );
 
@@ -337,7 +351,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: expected an integer
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: expected an non-negative integer
     "
     );
 
