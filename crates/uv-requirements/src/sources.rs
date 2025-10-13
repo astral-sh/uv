@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
-use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use uv_fs::File;
 
 use anyhow::{Context, Result};
 use console::Term;
@@ -334,12 +334,14 @@ pub fn is_pylock_toml(file_name: &str) -> bool {
 fn is_uv_lock_file(path: &Path) -> Result<bool> {
     const PREFIX_LEN: usize = 8 * 1024;
 
-    let file_name = match path.file_name().and_then(OsStr::to_str) {
-        Some(file_name) => file_name,
-        None => return Ok(false),
+    let Some(file_name) = path.file_name().and_then(OsStr::to_str) else {
+        return Ok(false);
     };
 
-    if !file_name.ends_with(".lock") {
+    if !Path::new(file_name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+    {
         return Ok(false);
     }
 
@@ -347,8 +349,13 @@ fn is_uv_lock_file(path: &Path) -> Result<bool> {
         return Ok(false);
     }
 
-    let mut file = File::open(path).with_context(|| {
-        format!("Failed to open `{}` to inspect lockfile contents", path.user_display())
+    // If uv_fs::File works in the repo, prefer it:
+    #[allow(clippy::disallowed_types)]
+    let mut file = std::fs::File::open(path).with_context(|| {
+        format!(
+            "Failed to open `{}` to inspect lockfile contents",
+            path.user_display()
+        )
     })?;
 
     let mut buffer = Vec::with_capacity(PREFIX_LEN);
