@@ -201,6 +201,7 @@ which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.59.0", features = ["Win32_Globalization", "Win32_Security", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_IO", "Win32_System_Ioctl"] }
 windows-registry = { version = "0.5.0" }
 wiremock = { version = "0.6.4" }
+wmi = { version = "0.16.0", default-features = false }
 xz2 = { version = "0.1.7" }
 zeroize = { version = "1.8.1" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }

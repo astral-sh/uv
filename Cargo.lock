@@ -6714,6 +6714,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-static",
+ "wmi",
 ]
 
 [[package]]
@@ -7468,6 +7469,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags 2.9.4",
+]
+
+[[package]]
+name = "wmi"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d9189bc72f0e4d814d812216ec06636ce3ea5597ff5f1ff9f9f0e5ec781c027"
+dependencies = [
+ "futures",
+ "log",
+ "serde",
+ "thiserror 2.0.17",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
