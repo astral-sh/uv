@@ -184,7 +184,7 @@ pub(crate) struct NetworkSettings {
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) timeout: Duration,
-    pub(crate) retries: Option<u32>,
+    pub(crate) retries: u32,
 }
 
 impl NetworkSettings {

@@ -154,7 +154,7 @@ impl BaseClientBuilder<'_> {
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
         timeout: Duration,
-        retries: Option<u32>,
+        retries: u32,
     ) -> Self {
         Self {
             preview,
@@ -162,7 +162,7 @@ impl BaseClientBuilder<'_> {
             native_tls,
             connectivity,
             timeout,
-            retries: retries.unwrap_or(DEFAULT_RETRIES),
+            retries,
             ..Self::default()
         }
     }
