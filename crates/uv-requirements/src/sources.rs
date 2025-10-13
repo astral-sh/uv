@@ -1,4 +1,6 @@
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -60,6 +62,11 @@ impl RequirementsSource {
                 "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
                 path.user_display(),
             ))
+        } else if is_uv_lock_file(&path)? {
+            Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv-generated lockfile, but uv lockfiles aren't valid requirements inputs",
+                path.user_display(),
+            ))
         } else {
             Ok(Self::RequirementsTxt(path))
         }
@@ -94,6 +101,7 @@ impl RequirementsSource {
                 path.user_display(),
             ));
         }
+        ensure_not_uv_lock_file(&path)?;
         Ok(Self::RequirementsTxt(path))
     }
 
@@ -126,6 +134,7 @@ impl RequirementsSource {
                 path.user_display(),
             ));
         }
+        ensure_not_uv_lock_file(&path)?;
         Ok(Self::RequirementsTxt(path))
     }
 
@@ -158,6 +167,7 @@ impl RequirementsSource {
                 path.user_display(),
             ));
         }
+        ensure_not_uv_lock_file(&path)?;
         Ok(Self::RequirementsTxt(path))
     }
 
@@ -313,4 +323,56 @@ impl std::fmt::Display for RequirementsSource {
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
+}
+
+/// Returns `true` if the provided path appears to be a uv-generated lockfile.
+///
+/// We use a simple heuristic: the path must end with `.lock`, and the file
+/// must contain both a `version =` assignment and a `[[package]]` header in the
+/// first few kilobytes. This mirrors the structure of `uv lock` outputs while
+/// avoiding the need to deserialize the entire document.
+fn is_uv_lock_file(path: &Path) -> Result<bool> {
+    const PREFIX_LEN: usize = 8 * 1024;
+
+    let file_name = match path.file_name().and_then(OsStr::to_str) {
+        Some(file_name) => file_name,
+        None => return Ok(false),
+    };
+
+    if !file_name.ends_with(".lock") {
+        return Ok(false);
+    }
+
+    if !path.is_file() {
+        return Ok(false);
+    }
+
+    let mut file = File::open(path).with_context(|| {
+        format!("Failed to open `{}` to inspect lockfile contents", path.user_display())
+    })?;
+
+    let mut buffer = Vec::with_capacity(PREFIX_LEN);
+    file.by_ref()
+        .take(PREFIX_LEN as u64)
+        .read_to_end(&mut buffer)
+        .with_context(|| {
+            format!(
+                "Failed to read `{}` to inspect lockfile contents",
+                path.user_display()
+            )
+        })?;
+
+    let prefix = String::from_utf8_lossy(&buffer);
+    Ok(prefix.contains("version =") && prefix.contains("[[package]]"))
+}
+
+fn ensure_not_uv_lock_file(path: &Path) -> Result<()> {
+    if is_uv_lock_file(path)? {
+        anyhow::bail!(
+            "The file `{}` appears to be a uv-generated lockfile, but uv lockfiles aren't valid requirements inputs",
+            path.user_display()
+        );
+    }
+
+    Ok(())
 }

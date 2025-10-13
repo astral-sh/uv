@@ -822,6 +822,34 @@ fn install_with_dependencies_from_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_from_uv_lockfile() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let lockfile = context.temp_dir.child("script.py.lock");
+    lockfile.write_str(indoc! {r#"
+        version = 1
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("script.py.lock")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The file `script.py.lock` appears to be a uv-generated lockfile, but uv lockfiles aren't valid requirements inputs
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a `pyproject.toml` file with a `poetry` section.
 #[test]
 fn install_pyproject_toml_poetry() -> Result<()> {
