@@ -1,13 +1,16 @@
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use uv_fs::File;
+
+#[allow(clippy::disallowed_types)]
+use std::fs::File; // explicitly allowed for local file inspection and solve build binary | linux libc
 
 use anyhow::{Context, Result};
 use console::Term;
 
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
+
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
