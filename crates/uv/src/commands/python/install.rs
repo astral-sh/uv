@@ -11,11 +11,10 @@ use futures::stream::FuturesUnordered;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
-use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_client::{BaseClientBuilder, retries_from_env};
+use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeatures};
@@ -400,7 +399,7 @@ pub(crate) async fn install(
 
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
+    let retry_policy = client_builder.retry_policy();
     let client = client_builder.retries(0).build();
 
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
