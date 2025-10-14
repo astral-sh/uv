@@ -1983,7 +1983,7 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
     "###);
 
     // Test syncing from within foo works correctly
-    uv_snapshot!(context.filters(), context.sync().current_dir(workspace.join("packages/foo")), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(workspace.join("packages").join("foo")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
