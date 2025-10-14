@@ -41,6 +41,7 @@ pub struct ProblemDetails {
 }
 
 /// Default problem type URI as per RFC 9457
+#[inline]
 fn default_problem_type() -> String {
     "about:blank".to_string()
 }
