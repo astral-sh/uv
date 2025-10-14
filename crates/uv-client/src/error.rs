@@ -48,7 +48,8 @@ impl ProblemDetails {
         match self {
             ProblemDetails {
                 title: Some(title),
-                detail: Some(detail), ..
+                detail: Some(detail),
+                ..
             } => {
                 format!("{title}: {detail}")
             }
@@ -56,15 +57,15 @@ impl ProblemDetails {
                 title: Some(title), ..
             } => title.clone(),
             ProblemDetails {
-                detail: Some(detail), ..
-            } => {
-                detail.clone()
-            },
+                detail: Some(detail),
+                ..
+            } => detail.clone(),
             ProblemDetails {
-                status: Some(status), ..
+                status: Some(status),
+                ..
             } => {
                 format!("HTTP error {status}")
-            },
+            }
             _ => {
                 // If no detail, title, or status is provided, return a generic message
                 "An error occurred".to_string()
@@ -622,21 +623,26 @@ mod tests {
         }"#;
 
         let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
-        assert_eq!(problem_details.description(), "Error Title: Detailed error message");
+        assert_eq!(
+            problem_details.description(),
+            "Error Title: Detailed error message"
+        );
 
         let json_no_detail = r#"{
             "title": "Error Title",
             "status": 400
         }"#;
 
-        let problem_details: ProblemDetails = serde_json::from_slice(json_no_detail.as_bytes()).unwrap();
+        let problem_details: ProblemDetails =
+            serde_json::from_slice(json_no_detail.as_bytes()).unwrap();
         assert_eq!(problem_details.description(), "Error Title");
 
         let json_minimal = r#"{
             "status": 400
         }"#;
 
-        let problem_details: ProblemDetails = serde_json::from_slice(json_minimal.as_bytes()).unwrap();
+        let problem_details: ProblemDetails =
+            serde_json::from_slice(json_minimal.as_bytes()).unwrap();
         assert_eq!(problem_details.description(), "HTTP error 400");
     }
 
@@ -652,6 +658,9 @@ mod tests {
         }"#;
 
         let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
-        assert_eq!(problem_details.title, Some("You do not have enough credit.".to_string()))
+        assert_eq!(
+            problem_details.title,
+            Some("You do not have enough credit.".to_string())
+        )
     }
 }

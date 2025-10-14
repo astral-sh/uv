@@ -32,7 +32,7 @@ async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
         Err(_) => {
             warn!("Failed to read response body for problem details");
             None
-        },
+        }
     }
 }
 
@@ -568,7 +568,7 @@ impl CachedClient {
                 .headers()
                 .get("content-type")
                 .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct =="application/problem+json")
+                .map(|ct| ct == "application/problem+json")
                 .unwrap_or(false)
             {
                 extract_problem_details(response).await
