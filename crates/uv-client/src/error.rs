@@ -46,11 +46,6 @@ fn default_problem_type() -> String {
 }
 
 impl ProblemDetails {
-    /// Parse Problem Details from JSON bytes
-    pub fn from_json(bytes: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(bytes)
-    }
-
     /// Get a human-readable description of the problem
     pub fn description(&self) -> String {
         if let Some(detail) = &self.detail {
@@ -567,7 +562,7 @@ mod tests {
             "instance": "/account/12345/msgs/abc"
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
         assert_eq!(
             problem_details.problem_type,
             "https://example.com/probs/out-of-credit"
@@ -594,7 +589,7 @@ mod tests {
             "status": 500
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
         assert_eq!(problem_details.problem_type, "about:blank");
         assert_eq!(
             problem_details.detail,
@@ -611,7 +606,7 @@ mod tests {
             "status": 400
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
         assert_eq!(problem_details.description(), "Detailed error message");
 
         let json_no_detail = r#"{
@@ -619,14 +614,14 @@ mod tests {
             "status": 400
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json_no_detail.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json_no_detail.as_bytes()).unwrap();
         assert_eq!(problem_details.description(), "Error Title");
 
         let json_minimal = r#"{
             "status": 400
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json_minimal.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json_minimal.as_bytes()).unwrap();
         assert_eq!(problem_details.description(), "HTTP error 400");
     }
 
@@ -641,7 +636,7 @@ mod tests {
             "accounts": ["/account/12345", "/account/67890"]
         }"#;
 
-        let problem_details = ProblemDetails::from_json(json.as_bytes()).unwrap();
+        let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
         assert!(problem_details.extensions.contains_key("balance"));
         assert!(problem_details.extensions.contains_key("accounts"));
     }

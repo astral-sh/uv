@@ -28,7 +28,7 @@ use crate::{
 async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
     // Try to read the response body and parse it as problem details
     match response.bytes().await {
-        Ok(bytes) => ProblemDetails::from_json(&bytes).ok(),
+        Ok(bytes) => serde_json::from_slice(&bytes).ok(),
         Err(_) => {
             warn!("Failed to read response body for problem details");
             None
