@@ -34,10 +34,6 @@ pub struct ProblemDetails {
 
     /// A URI reference that identifies the specific occurrence of the problem.
     pub instance: Option<String>,
-
-    /// Additional problem-specific extension fields
-    #[serde(flatten)]
-    pub extensions: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Default problem type URI as per RFC 9457
@@ -638,7 +634,6 @@ mod tests {
         }"#;
 
         let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
-        assert!(problem_details.extensions.contains_key("balance"));
-        assert!(problem_details.extensions.contains_key("accounts"));
+        assert_eq!(problem_details.title, Some("You do not have enough credit.".to_string()))
     }
 }
