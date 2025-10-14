@@ -46,21 +46,21 @@ impl ProblemDetails {
     /// Get a human-readable description of the problem
     pub fn description(&self) -> String {
         match self {
-            ProblemDetails {
+            Self {
                 title: Some(title),
                 detail: Some(detail),
                 ..
             } => {
                 format!("{title}: {detail}")
             }
-            ProblemDetails {
+            Self {
                 title: Some(title), ..
             } => title.clone(),
-            ProblemDetails {
+            Self {
                 detail: Some(detail),
                 ..
             } => detail.clone(),
-            ProblemDetails {
+            Self {
                 status: Some(status),
                 ..
             } => {
@@ -661,6 +661,6 @@ mod tests {
         assert_eq!(
             problem_details.title,
             Some("You do not have enough credit.".to_string())
-        )
+        );
     }
 }
