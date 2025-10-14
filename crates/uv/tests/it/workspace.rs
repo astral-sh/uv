@@ -2017,7 +2017,11 @@ fn workspace_members_with_parent_directory() -> Result<()> {
     let deps = indoc! {r"
         dependencies = []
     "};
-    make_project(&context.temp_dir.join("external-package"), "external-package", deps)?;
+    make_project(
+        &context.temp_dir.join("external-package"),
+        "external-package",
+        deps,
+    )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
@@ -2058,7 +2062,11 @@ fn workspace_members_with_complex_relative_paths() -> Result<()> {
     let deps = indoc! {r"
         dependencies = []
     "};
-    make_project(&context.temp_dir.join("sibling-package"), "sibling-package", deps)?;
+    make_project(
+        &context.temp_dir.join("sibling-package"),
+        "sibling-package",
+        deps,
+    )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
