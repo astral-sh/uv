@@ -575,7 +575,7 @@ impl CachedClient {
                 .headers()
                 .get("content-type")
                 .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct.starts_with("application/problem+json"))
+                .map(|ct| ct =="application/problem+json")
                 .unwrap_or(false)
             {
                 extract_problem_details(response).await
