@@ -45,12 +45,30 @@ fn default_problem_type() -> String {
 impl ProblemDetails {
     /// Get a human-readable description of the problem
     pub fn description(&self) -> String {
-        if let Some(detail) = &self.detail {
-            detail.clone()
-        } else if let Some(title) = &self.title {
-            title.clone()
-        } else {
-            format!("HTTP error {}", self.status.unwrap_or(0))
+        match self {
+            ProblemDetails {
+                title: Some(title),
+                detail: Some(detail), ..
+            } => {
+                format!("{title}: {detail}")
+            }
+            ProblemDetails {
+                title: Some(title), ..
+            } => title.clone(),
+            ProblemDetails {
+                detail: Some(detail), ..
+            } => {
+                detail.clone()
+            },
+            ProblemDetails {
+                status: Some(status), ..
+            } => {
+                format!("HTTP error {status}")
+            },
+            _ => {
+                // If no detail, title, or status is provided, return a generic message
+                "An error occurred".to_string()
+            }
         }
     }
 }
@@ -604,7 +622,7 @@ mod tests {
         }"#;
 
         let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
-        assert_eq!(problem_details.description(), "Detailed error message");
+        assert_eq!(problem_details.description(), "Error Title: Detailed error message");
 
         let json_no_detail = r#"{
             "title": "Error Title",
