@@ -26,13 +26,6 @@ use crate::{
 ///
 /// Note: This consumes the response body, so it should only be called when there's an error status.
 async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
-    // Check if the response has the RFC 9457 content type
-    let content_type = response.headers().get("content-type")?.to_str().ok()?;
-
-    if !content_type.starts_with("application/problem+json") {
-        return None;
-    }
-
     // Try to read the response body and parse it as problem details
     match response.bytes().await {
         Ok(bytes) => ProblemDetails::from_json(&bytes).ok(),
