@@ -26,11 +26,18 @@ use crate::{
 ///
 /// Note: This consumes the response body, so it should only be called when there's an error status.
 async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
-    if let Ok(bytes) = response.bytes().await {
-        serde_json::from_slice(&bytes).ok()
-    } else {
-        warn!("Failed to read response body for problem details");
-        None
+    match response.bytes().await {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(details) => Some(details),
+            Err(err) => {
+                warn!("Failed to parse problem details: {err}");
+                None
+            }
+        },
+        Err(err) => {
+            warn!("Failed to read response body for problem details: {err}");
+            None
+        }
     }
 }
 

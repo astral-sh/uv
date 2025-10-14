@@ -44,32 +44,25 @@ fn default_problem_type() -> String {
 
 impl ProblemDetails {
     /// Get a human-readable description of the problem
-    pub fn description(&self) -> String {
+    pub fn description(&self) -> Option<String> {
         match self {
             Self {
                 title: Some(title),
                 detail: Some(detail),
                 ..
-            } => {
-                format!("{title}: {detail}")
-            }
+            } => Some(format!("Server message: {title}, {detail}")),
             Self {
                 title: Some(title), ..
-            } => title.clone(),
+            } => Some(format!("Server message: {title}")),
             Self {
                 detail: Some(detail),
                 ..
-            } => detail.clone(),
+            } => Some(format!("Server message: {detail}")),
             Self {
                 status: Some(status),
                 ..
-            } => {
-                format!("HTTP error {status}")
-            }
-            _ => {
-                // If no detail, title, or status is provided, return a generic message
-                "An error occurred".to_string()
-            }
+            } => Some(format!("HTTP error {status}")),
+            _ => None,
         }
     }
 }
@@ -432,20 +425,6 @@ impl WrappedReqwestError {
         }
     }
 
-    /// Get the problem details if available
-    pub fn problem_details(&self) -> Option<&ProblemDetails> {
-        self.problem_details.as_ref()
-    }
-
-    /// Get a user-friendly error message, preferring problem details if available
-    pub fn user_message(&self) -> String {
-        if let Some(problem_details) = &self.problem_details {
-            problem_details.description()
-        } else {
-            self.error.to_string()
-        }
-    }
-
     /// Return the inner [`reqwest::Error`] from the error chain, if it exists.
     fn inner(&self) -> Option<&reqwest::Error> {
         match &self.error {
@@ -541,7 +520,10 @@ impl Display for WrappedReqwestError {
             f.write_str("Could not connect, are you offline?")
         } else if let Some(problem_details) = &self.problem_details {
             // Show problem details if available
-            write!(f, "{}", problem_details.description())
+            match problem_details.description() {
+                None => Display::fmt(&self.error, f),
+                Some(message) => f.write_str(&message),
+            }
         } else {
             // Show the wrapped error
             Display::fmt(&self.error, f)
@@ -624,8 +606,8 @@ mod tests {
 
         let problem_details: ProblemDetails = serde_json::from_slice(json.as_bytes()).unwrap();
         assert_eq!(
-            problem_details.description(),
-            "Error Title: Detailed error message"
+            problem_details.description().unwrap(),
+            "Server message: Error Title, Detailed error message"
         );
 
         let json_no_detail = r#"{
@@ -635,7 +617,10 @@ mod tests {
 
         let problem_details: ProblemDetails =
             serde_json::from_slice(json_no_detail.as_bytes()).unwrap();
-        assert_eq!(problem_details.description(), "Error Title");
+        assert_eq!(
+            problem_details.description().unwrap(),
+            "Server message: Error Title"
+        );
 
         let json_minimal = r#"{
             "status": 400
@@ -643,7 +628,7 @@ mod tests {
 
         let problem_details: ProblemDetails =
             serde_json::from_slice(json_minimal.as_bytes()).unwrap();
-        assert_eq!(problem_details.description(), "HTTP error 400");
+        assert_eq!(problem_details.description().unwrap(), "HTTP error 400");
     }
 
     #[test]
