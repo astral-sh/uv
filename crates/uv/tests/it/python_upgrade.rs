@@ -385,8 +385,8 @@ fn python_upgrade_ignored_with_python_pin() {
     );
 }
 
-// Virtual environments only record minor versions. `uv venv -p 3.x.y` will
-// not prevent transparent upgrades.
+// Virtual environments record patch versions. `uv venv -p 3.x.y` will
+// prevent transparent upgrades.
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
@@ -438,7 +438,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
      + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
-    // The virtual environment Python version is transparently upgraded.
+    // The virtual environment Python version remains the same.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
     success: true
     exit_code: 0
