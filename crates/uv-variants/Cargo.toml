@@ -18,7 +18,6 @@ uv-pep508 = { workspace = true, features = ["serde"] }
 uv-pypi-types = { workspace = true }
 
 indexmap = { workspace = true }
-indoc = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
