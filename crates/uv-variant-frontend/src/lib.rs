@@ -2,6 +2,7 @@
 
 mod error;
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
@@ -67,6 +68,36 @@ impl VariantBuild {
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
+
+        // TODO(konsti): This is not the right location to parse the env var.
+        let plugin_api = Self::plugin_api(&backend_name, backend, interpreter)?;
+        let no_isolation =
+            env::var(EnvVars::UV_NO_PROVIDER_ISOLATION).is_ok_and(|no_provider_isolation| {
+                no_provider_isolation
+                    .split(",")
+                    .any(|api| (api) == plugin_api)
+            });
+
+        // TODO(konsti): Integrate this properly with the configuration system.
+        if no_isolation {
+            debug!("Querying provider plugin without isolation: {backend_name}");
+
+            let runner = PythonRunner::new(concurrent_builds, level);
+            let env = PythonEnvironment::from_interpreter(interpreter.clone());
+            // The unmodified path
+            let modified_path = OsString::from(env.scripts());
+
+            return Ok(Self {
+                temp_dir,
+                backend_name,
+                backend: backend.clone(),
+                venv: env,
+                level,
+                modified_path,
+                environment_variables,
+                runner,
+            });
+        }
 
         // Create a virtual environment.
         let venv = uv_virtualenv::create_venv(
@@ -149,36 +180,42 @@ impl VariantBuild {
         })
     }
 
-    pub fn import(&self) -> Result<String, Error> {
-        let import = if let Some(plugin_api) = &self.backend.plugin_api {
-            if let Some((path, object)) = plugin_api.split_once(':') {
-                format!("from {path} import {object} as backend")
-            } else {
-                format!("import {plugin_api} as backend")
-            }
+    // Not a method to be callable in the constructor.
+    pub fn plugin_api<'a>(
+        backend_name: &str,
+        backend: &'a Provider,
+        interpreter: &Interpreter,
+    ) -> Result<Cow<'a, str>, Error> {
+        if let Some(plugin_api) = &backend.plugin_api {
+            Ok(Cow::Borrowed(plugin_api))
         } else {
-            let requires = self
-                .backend
+            let requires = backend
                 .requires
                 .as_ref()
-                .ok_or_else(|| Error::MissingRequires(self.backend_name.clone()))?
+                .ok_or_else(|| Error::MissingRequires(backend_name.to_string()))?
                 .iter()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(
-                        self.venv.interpreter().markers(),
-                        &Vec::new().as_slice(),
-                        &[],
-                    )
+                    requirement.evaluate_markers(interpreter.markers(), &Vec::new().as_slice(), &[])
                 })
                 .collect::<Vec<_>>();
             if let [requires] = requires.as_slice() {
-                format!("import {} as backend", requires.name.as_dist_info_name())
+                Ok(requires.name.as_dist_info_name())
             } else {
-                return Err(Error::InvalidRequires {
-                    backend_name: self.backend_name.clone(),
+                Err(Error::InvalidRequires {
+                    backend_name: backend_name.to_string(),
                     matching: requires.len(),
-                });
+                })
             }
+        }
+    }
+
+    pub fn import(&self) -> Result<String, Error> {
+        let plugin_api =
+            Self::plugin_api(&self.backend_name, &self.backend, self.venv.interpreter())?;
+        let import = if let Some((path, object)) = plugin_api.split_once(':') {
+            format!("from {path} import {object} as backend")
+        } else {
+            format!("import {plugin_api} as backend")
         };
 
         Ok(formatdoc! {r#"
