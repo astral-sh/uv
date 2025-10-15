@@ -6797,7 +6797,6 @@ name = "uv-variants"
 version = "0.1.0"
 dependencies = [
  "indexmap",
- "indoc",
  "insta",
  "itertools 0.14.0",
  "rustc-hash",

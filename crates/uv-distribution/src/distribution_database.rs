@@ -1,5 +1,5 @@
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::OsString;
 use std::future::Future;
 use std::path::Path;
@@ -625,7 +625,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Query the install time provider.
         // TODO(konsti): Don't use threads if we're fully static.
-        let mut provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
+        let mut disabled_namespaces = FxHashSet::default();
+        let mut resolved_namespaces: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
                 provider.plugin_use.unwrap_or_default().run_on_install()
                     && provider
@@ -641,12 +642,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await?;
 
         // "Query" the non-install time providers, whose properties are all in the priorities
-        for (namespace, _provider) in variants_json.providers.iter().filter(|(_, provider)| {
-            !provider.plugin_use.unwrap_or_default().run_on_install()
-                && provider
-                    .enable_if
-                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
-        }) {
+        for (namespace, provider) in &variants_json.providers {
+            // Track disabled namespaces for consistency checks.
+            if !provider
+                .enable_if
+                .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+            {
+                disabled_namespaces.insert(namespace.clone());
+                continue;
+            }
+
+            if provider.plugin_use.unwrap_or_default().run_on_install() {
+                continue;
+            }
+
             let Some(features) = variants_json.default_priorities.property.get(namespace) else {
                 warn!(
                     "Missing namespace {namespace} in default properties for {}=={}",
@@ -654,7 +663,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 );
                 continue;
             };
-            provider_outputs.insert(
+            resolved_namespaces.insert(
                 namespace.clone(),
                 Arc::new(VariantProviderOutput {
                     namespace: namespace.clone(),
@@ -665,7 +674,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(ResolvedVariants {
             variants_json,
-            target_variants: provider_outputs,
+            resolved_namespaces,
+            disabled_namespaces,
         })
     }
 

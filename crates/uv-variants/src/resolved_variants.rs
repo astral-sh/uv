@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
-use tracing::{debug, warn};
+use rustc_hash::{FxHashMap, FxHashSet};
+use tracing::{debug, trace, warn};
 
 use uv_distribution_filename::VariantLabel;
 use uv_pep508::{VariantNamespace, VariantValue};
@@ -12,7 +12,9 @@ use crate::variants_json::{DefaultPriorities, Variant, VariantsJsonContent};
 #[derive(Debug, Clone)]
 pub struct ResolvedVariants {
     pub variants_json: VariantsJsonContent,
-    pub target_variants: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
+    pub resolved_namespaces: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
+    /// Namespaces where `enable-if` didn't match.
+    pub disabled_namespaces: FxHashSet<VariantNamespace>,
 }
 
 impl ResolvedVariants {
@@ -24,7 +26,8 @@ impl ResolvedVariants {
 
         score_variant(
             &self.variants_json.default_priorities,
-            &self.target_variants,
+            &self.resolved_namespaces,
+            &self.disabled_namespaces,
             variants_properties,
         )
     }
@@ -34,6 +37,7 @@ impl ResolvedVariants {
 pub fn score_variant(
     default_priorities: &DefaultPriorities,
     target_namespaces: &FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
+    disabled_namespaces: &FxHashSet<VariantNamespace>,
     variants_properties: &Variant,
 ) -> Option<Vec<usize>> {
     for (namespace, features) in &**variants_properties {
@@ -54,11 +58,15 @@ pub fn score_variant(
     // comparison function instead.
     let mut scores = Vec::new();
     for namespace in &default_priorities.namespace {
+        if disabled_namespaces.contains(namespace) {
+            trace!("Skipping disabled namespace: {}", namespace);
+            continue;
+        }
         // Explicit priorities are optional, but take priority over the provider
         let explicit_feature_priorities = default_priorities.feature.get(namespace);
         let Some(target_variants) = target_namespaces.get(namespace) else {
             // TODO(konsti): Can this even happen?
-            debug!("missing namespace priority {namespace}");
+            debug!("Missing namespace priority: {namespace}");
             continue;
         };
         let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
@@ -108,7 +116,7 @@ pub fn score_variant(
 mod tests {
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use rustc_hash::FxHashMap;
+    use rustc_hash::{FxHashMap, FxHashSet};
     use serde_json::json;
 
     use std::sync::Arc;
@@ -159,7 +167,12 @@ mod tests {
     }
 
     fn score(variant: &Variant) -> Option<String> {
-        let score = score_variant(&default_priorities(), &host(), variant)?;
+        let score = score_variant(
+            &default_priorities(),
+            &host(),
+            &FxHashSet::default(),
+            variant,
+        )?;
         Some(score.iter().map(ToString::to_string).join(", "))
     }
 
@@ -267,8 +280,13 @@ mod tests {
         // "shuffle"
         wheels2.reverse();
         wheels2.sort_by(|a, b| {
-            score_variant(&default_priorities(), &host(), a)
-                .cmp(&score_variant(&default_priorities(), &host(), b))
+            score_variant(&default_priorities(), &host(), &FxHashSet::default(), a)
+                .cmp(&score_variant(
+                    &default_priorities(),
+                    &host(),
+                    &FxHashSet::default(),
+                    b,
+                ))
                 // higher is better
                 .reverse()
         });

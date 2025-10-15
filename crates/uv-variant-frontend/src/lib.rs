@@ -74,7 +74,7 @@ impl VariantBuild {
         let no_isolation =
             env::var(EnvVars::UV_NO_PROVIDER_ISOLATION).is_ok_and(|no_provider_isolation| {
                 no_provider_isolation
-                    .split(",")
+                    .split(',')
                     .any(|api| (api) == plugin_api)
             });
 
