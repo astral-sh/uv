@@ -76,9 +76,14 @@ pub(crate) mod version;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
     )]
     LockMismatch(Option<Box<Lock>>, Box<Lock>),
+
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`."
+    )]
+    LockMismatchForLockCommand(Option<Box<Lock>>, Box<Lock>),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."

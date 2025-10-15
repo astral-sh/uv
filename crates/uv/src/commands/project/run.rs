@@ -291,6 +291,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await
             {
                 Ok(result) => result.into_lock(),
+                Err(ProjectError::LockMismatchForLockCommand(prev, cur)) => {
+                    return Err(ProjectError::LockMismatch(prev, cur).into());
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         client_builder.is_native_tls(),
@@ -768,6 +771,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(result) => result,
+                    Err(ProjectError::LockMismatchForLockCommand(prev, cur)) => {
+                        return Err(ProjectError::LockMismatch(prev, cur).into());
+                    }
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
                             client_builder.is_native_tls(),

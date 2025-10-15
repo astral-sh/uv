@@ -237,7 +237,7 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => {
+        Err(err @ ProjectError::LockMismatchForLockCommand(..)) => {
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
@@ -364,7 +364,7 @@ impl<'env> LockOperation<'env> {
 
                 // If the lockfile changed, return an error.
                 if let LockResult::Changed(prev, cur) = result {
-                    return Err(ProjectError::LockMismatch(
+                    return Err(ProjectError::LockMismatchForLockCommand(
                         prev.map(Box::new),
                         Box::new(cur),
                     ));

@@ -338,7 +338,7 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) => {
+        Err(ProjectError::LockMismatchForLockCommand(prev, cur)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
