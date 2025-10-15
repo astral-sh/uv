@@ -241,7 +241,11 @@ pub(crate) async fn pip_install(
                     "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.{}",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
-                    system.then_some("\nhint: This happens because you used the `--system` flag, which selects the system Python interpreter.").unwrap_or("")
+                    if system {
+                        "\nhint: This happens because you used the `--system` flag, which selects the system Python interpreter."
+                    } else {
+                        ""
+                    }
                 ),
                 None => anyhow::anyhow!(
                     "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
