@@ -956,7 +956,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     // Re-running the script with `--frozen` should also error, but at runtime.
@@ -2264,7 +2264,7 @@ fn run_locked() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     let updated = context.read("uv.lock");

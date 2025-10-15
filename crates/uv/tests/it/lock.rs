@@ -2468,7 +2468,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     //
     // ----- stderr -----
     // Resolved 7 packages in [TIME]
-    // error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    // error: The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     // "###);
 
     // Install from the lockfile.
@@ -8010,7 +8010,7 @@ fn lock_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Install from the lockfile.
@@ -13140,51 +13140,32 @@ fn check_no_lock() -> Result<()> {
 /// Checks the output of `uv lock --check` when the lock is outdated
 #[test]
 fn check_outdated_lock() -> Result<()> {
+    // Given a test context with a pyproject.toml
     let context = TestContext::new("3.12");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
         name = "myproject"
         version = "0.1.0"
-        requires-python = ">=3.11"
-        dependencies = ["sortedcollections"]
+        requires-python = ">=3.12"
+        dependencies = ["minilog"]
         "#,
     )?;
 
-    // Generate the lock
-    uv_snapshot!(context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    // Check the --check returns fine
-    uv_snapshot!(context.filters(), context.lock()
-        .arg("--check"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    // Edit dependencies so the lock is invalid
-    pyproject_toml.write_str(
+    // When I create an outdated lockfile
+    let uv_lock = context.temp_dir.child("uv.lock");
+    uv_lock.write_str(
         r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.11"
-        dependencies = ["iniconfig"]
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "#,
     )?;
 
+    // Then `uv lock --check` fails with relevant error message
     uv_snapshot!(context.filters(), context.lock()
         .arg("--check"), @r"
     success: false
@@ -13193,7 +13174,7 @@ fn check_outdated_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
     Ok(())
 }
@@ -13610,7 +13591,7 @@ fn lock_remove_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -13712,7 +13693,7 @@ fn lock_remove_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -13857,7 +13838,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
@@ -14065,7 +14046,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
@@ -14201,7 +14182,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -14427,7 +14408,7 @@ fn lock_redundant_add_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -14625,7 +14606,7 @@ fn lock_new_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -14835,7 +14816,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -14966,7 +14947,7 @@ fn lock_rename_project() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -15968,7 +15949,7 @@ fn lock_constrained_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -17239,7 +17220,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock the project.
@@ -17321,7 +17302,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock the project.
@@ -25263,7 +25244,7 @@ fn lock_dynamic_to_static() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -25394,7 +25375,7 @@ fn lock_static_to_dynamic() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -25496,7 +25477,7 @@ fn lock_bump_static_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -27312,7 +27293,7 @@ fn lock_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -29714,7 +29695,7 @@ fn lock_empty_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -29750,7 +29731,7 @@ fn lock_empty_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -30489,7 +30470,7 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -30580,7 +30561,7 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -30771,7 +30752,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` or `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r"
