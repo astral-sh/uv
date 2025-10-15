@@ -9,6 +9,7 @@ use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
@@ -64,6 +65,18 @@ pub enum PublishError {
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
     MixedCredentials(String),
+    #[error(
+        "Failed to query check URL due to a lack of valid authentication credentials ({}): {}.\n\n\
+        {}{} Check URL credentials must be configured separately from publish URL credentials",
+        status_code_detail.red(),
+        url.to_string().cyan(),
+        "hint".bold().cyan(),
+        ":".bold(),
+    )]
+    CheckUrlAuthentication {
+        url: DisplaySafeUrl,
+        status_code_detail: String,
+    },
     #[error("Failed to query check URL")]
     CheckUrlIndex(#[source] uv_client::Error),
     #[error(
@@ -543,12 +556,36 @@ pub async fn check_url(
         Ok(response) => response,
         Err(err) => {
             return match err.kind() {
-                uv_client::ErrorKind::PackageNotFound(_) => {
-                    // The package doesn't exist, so we can't have uploaded it.
+                uv_client::ErrorKind::PackageNotFound {
+                    status_code_error: false,
+                    ..
+                } => {
+                    // The package doesn't exist, it's the first upload of the package.
                     warn!(
                         "Package not found in the registry; skipping upload check for {filename}"
                     );
                     Ok(false)
+                }
+                uv_client::ErrorKind::PackageNotFound {
+                    status_code_error: true,
+                    ..
+                } => {
+                    // The package may or may not exist, there was an authentication failure.
+                    // TODO(konsti): We should show the real index error instead.
+                    let status_code_detail = if index_capabilities.unauthorized(index_url) {
+                        "401 Unauthorized"
+                    } else if index_capabilities.forbidden(index_url) {
+                        "403 Forbidden"
+                    } else {
+                        "Status code error"
+                    };
+                    warn!(
+                        "Package not found in the registry; skipping upload check for {filename}"
+                    );
+                    return Err(PublishError::CheckUrlAuthentication {
+                        url: index_url.url().clone(),
+                        status_code_detail: status_code_detail.to_string(),
+                    });
                 }
                 _ => Err(PublishError::CheckUrlIndex(err)),
             };
