@@ -12999,12 +12999,13 @@ fn install_with_system_interpreter() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pytest")?;
 
-    // Add a custom filter to replace the system Python path (works on Unix-like systems, Windows and for CPython, PyPy and GraalPy implementations)
+    // Add a custom filter to replace the system Python path 
+    // works on Unix-like systems, Windows and for CPython, PyPy and GraalPy implementations
     let filters: Vec<_> = context
         .filters()
         .into_iter()
         .chain(std::iter::once((
-            r"([\\/]).+([\\/])python([\\/])(?:cpython|pypy|graalpy)-\d+\.\d+\.\[X\][^\s]+",
+            r"(?:[A-Za-z]:)?([\\/]).+([\\/])python([\\/])(?:cpython|pypy|graalpy)-\d+\.\d+\.\[X\][^\s]+",
             "[PYTHON-PATH]",
         )))
         .collect();
