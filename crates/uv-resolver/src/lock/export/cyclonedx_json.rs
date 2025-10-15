@@ -1,16 +1,24 @@
 use std::collections::HashMap;
+use std::path::Path;
 
-use cyclonedx_bom::models::component::Classification;
-use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
-use cyclonedx_bom::models::metadata::Metadata;
-use cyclonedx_bom::models::tool::{Tool, Tools};
-use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
+use cyclonedx_bom::{
+    models::{
+        component::Classification,
+        dependency::{Dependencies, Dependency},
+        metadata::Metadata,
+        property::{Properties, Property},
+        tool::{Tool, Tools},
+    },
+    prelude::{Bom, Component, Components, NormalizedString},
+};
 use itertools::Itertools;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 
+use rustc_hash::FxHashSet;
 use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
+use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
@@ -53,7 +61,17 @@ pub fn from_lock<'lock>(
 
     nodes.sort_unstable_by_key(|node| &node.package.id);
 
-    let root = target.lock().root();
+    // CycloneDX requires exactly one root component in `metadata.component`.
+    let root = match target.roots().collect::<Vec<_>>().as_slice() {
+        // Single root: use it directly
+        [single_root] => nodes
+            .iter()
+            .find(|node| &node.package.id.name == *single_root)
+            .map(|node| node.package),
+        // Multiple roots or no roots: use fallback
+        _ => None,
+    }
+    .or_else(|| target.lock().root()); // Fallback to project root
 
     // Used as prefix in bom-ref generation, to ensure uniqueness
     let mut id_counter = 1;
@@ -63,7 +81,7 @@ pub fn from_lock<'lock>(
         component: root.map(|package| {
             create_and_register_component(
                 package,
-                Classification::Application,
+                PackageType::Root,
                 &mut id_counter,
                 &mut package_to_bom_ref,
             )
@@ -79,15 +97,44 @@ pub fn from_lock<'lock>(
         ..Metadata::default()
     };
 
-    let dependencies = nodes
+    let workspace_member_ids = nodes
         .iter()
-        .filter(|node| root.is_none_or(|package| package.id != node.package.id));
+        .filter_map(|node| {
+            if target.lock().members().contains(&node.package.id.name)
+                && node.package.id.source.is_local()
+            {
+                Some(&node.package.id)
+            } else {
+                None
+            }
+        })
+        .collect::<FxHashSet<_>>();
 
-    let components = dependencies
+    let components = nodes
+        .iter()
+        .filter(|node| root.is_none_or(|root_pkg| root_pkg.id != node.package.id)) // Filter out root package as this is included in `metadata`
         .map(|node| {
+            let package_type = if workspace_member_ids.contains(&node.package.id) {
+                let path = match &node.package.id.source {
+                    Source::Path(path)
+                    | Source::Directory(path)
+                    | Source::Editable(path)
+                    | Source::Virtual(path) => path,
+                    Source::Registry(_) | Source::Git(_, _) | Source::Direct(_, _) => {
+                        // Workspace packages are always local dependencies
+                        unreachable!(
+                            "Workspace member {:?} has non-local source {:?}",
+                            node.package.id.name, node.package.id.source,
+                        )
+                    }
+                };
+                PackageType::Workspace(path)
+            } else {
+                PackageType::Dependency
+            };
             create_and_register_component(
                 node.package,
-                Classification::Library,
+                package_type,
                 &mut id_counter,
                 &mut package_to_bom_ref,
             )
@@ -106,14 +153,21 @@ pub fn from_lock<'lock>(
     Ok(bom)
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PackageType<'a> {
+    Root,
+    Workspace(&'a Path),
+    Dependency,
+}
+
 /// Create and register a `CycloneDX` component, updating the counter and map.
 fn create_and_register_component<'a>(
     package: &'a Package,
-    classification: Classification,
+    package_type: PackageType,
     id_counter: &mut usize,
     package_to_bom_ref: &mut HashMap<&'a PackageId, Component>,
 ) -> Component {
-    let component = create_component_from_package(package, classification, *id_counter);
+    let component = create_component_from_package(package, package_type, *id_counter);
     package_to_bom_ref.insert(&package.id, component.clone());
     *id_counter += 1;
     component
@@ -183,15 +237,28 @@ fn format_qualifiers(qualifiers: &[(&str, &str)]) -> String {
 }
 
 /// Create a `CycloneDX` component from a package node with the given classification and ID.
+#[allow(clippy::needless_pass_by_value)]
 fn create_component_from_package(
     package: &Package,
-    classification: Classification,
+    package_type: PackageType,
     id: usize,
 ) -> Component {
     let name = get_package_name(package);
     let version = get_version_string(package);
     let bom_ref = create_bom_ref(id, name, version.as_deref());
     let purl = create_purl(package).and_then(|purl_string| purl_string.parse().ok());
+
+    let (classification, properties) = match package_type {
+        PackageType::Root => (Classification::Application, None),
+        PackageType::Workspace(path) => {
+            let properties = vec![
+                Property::new("uv:workspace", "true"),
+                Property::new("uv:workspace_path", &PortablePath::from(path).to_string()),
+            ];
+            (Classification::Application, Some(Properties(properties)))
+        }
+        PackageType::Dependency => (Classification::Library, None),
+    };
 
     Component {
         component_type: classification,
@@ -214,7 +281,7 @@ fn create_component_from_package(
         modified: None,
         pedigree: None,
         external_references: None,
-        properties: None,
+        properties,
         components: None,
         evidence: None,
         signature: None,
