@@ -687,13 +687,15 @@ impl CachedClient {
                 let total_retries = past_retries + middleware_retries;
                 let retry_decision = retry_policy.should_retry(start_time, total_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    debug!(
-                        "Transient failure while handling response from {}; retrying...",
-                        req.url(),
-                    );
                     let duration = execute_after
                         .duration_since(SystemTime::now())
                         .unwrap_or_else(|_| Duration::default());
+
+                    debug!(
+                        "Transient failure while handling response from {}; retrying after {:.1}s...",
+                        req.url(),
+                        duration.as_secs_f32(),
+                    );
                     tokio::time::sleep(duration).await;
                     past_retries += 1;
                     continue;
@@ -745,13 +747,14 @@ impl CachedClient {
                 let total_retries = past_retries + middleware_retries;
                 let retry_decision = retry_policy.should_retry(start_time, total_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    debug!(
-                        "Transient failure while handling response from {}; retrying...",
-                        req.url(),
-                    );
                     let duration = execute_after
                         .duration_since(SystemTime::now())
                         .unwrap_or_else(|_| Duration::default());
+                    debug!(
+                        "Transient failure while handling response from {}; retrying after {}s...",
+                        req.url(),
+                        duration.as_secs(),
+                    );
                     tokio::time::sleep(duration).await;
                     past_retries += 1;
                     continue;

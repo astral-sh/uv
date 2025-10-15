@@ -608,7 +608,11 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+        let mut builder = ExponentialBackoff::builder();
+        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+        }
+        builder.build_with_max_retries(self.retries)
     }
 }
 
