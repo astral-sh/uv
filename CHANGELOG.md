@@ -14,7 +14,7 @@ Released on 2025-10-14.
 
 ### Enhancements
 
-- Obfuscate Bearer Token values in logs ([#16164](https://github.com/astral-sh/uv/pull/16164))
+- Obfuscate secret token values in logs ([#16164](https://github.com/astral-sh/uv/pull/16164))
 
 ### Bug fixes
 
