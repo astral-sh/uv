@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
-use wiremock::matchers::{basic_auth, method, path};
+use wiremock::matchers::{basic_auth, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn dummy_wheel() -> PathBuf {
@@ -955,6 +955,115 @@ fn non_normalized_filename_skip() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
+    "
+    );
+}
+
+/// Capture the behavior for a simple index page for check URL that returns a status code error
+/// that is not specifically handled as 401 and 403 are.
+#[tokio::test]
+async fn check_url_400() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(400).set_body_string("Access to this page is forbidden"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg(dummy_wheel()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL
+      Caused by: Failed to fetch: `http://[LOCALHOST]/simple/ok/`
+      Caused by: HTTP status client error (400 Bad Request) for url (http://[LOCALHOST]/simple/ok/)
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_401() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(401).set_body_string("Access to this page is unauthorized"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg(dummy_wheel()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL due to a lack of valid authentication credentials (401 Unauthorized): http://[LOCALHOST]/simple.
+
+    hint: Check URL credentials must be configured separately from publish URL credentials
+    "
+    );
+}
+#[tokio::test]
+async fn check_url_403() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_string("Access to this page is forbidden"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg(dummy_wheel()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL due to a lack of valid authentication credentials (403 Forbidden): http://[LOCALHOST]/simple.
+
+    hint: Check URL credentials must be configured separately from publish URL credentials
     "
     );
 }

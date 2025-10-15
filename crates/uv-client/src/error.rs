@@ -405,8 +405,12 @@ pub enum ErrorKind {
     ///
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
-    #[error("Package `{0}` was not found in the registry")]
-    RemotePackageNotFound(PackageName),
+    #[error("Package `{package_name}` was not found in the registry")]
+    RemotePackageNotFound {
+        package_name: PackageName,
+        /// Not mentioned in the message, there's a separate hint with the details.
+        status_code_error: bool,
+    },
 
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]

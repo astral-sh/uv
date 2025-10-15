@@ -134,7 +134,7 @@ impl LatestClient<'_> {
             Err(err)
                 if matches!(
                     err.kind(),
-                    uv_client::ErrorKind::RemotePackageNotFound(_)
+                    uv_client::ErrorKind::RemotePackageNotFound { .. }
                         | uv_client::ErrorKind::NoIndex(_)
                         | uv_client::ErrorKind::Offline(_)
                 ) =>
