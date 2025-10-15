@@ -1452,6 +1452,7 @@ impl Lock {
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         tags: &Tags,
+        markers: &uv_pep508::MarkerEnvironment,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -1724,8 +1725,12 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist =
-                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
+                let dist = package.to_dist(
+                    root,
+                    TagPolicy::Preferred(tags),
+                    &BuildOptions::default(),
+                    markers,
+                )?;
 
                 let metadata = {
                     let id = dist.version_id();
@@ -1875,6 +1880,7 @@ impl Lock {
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
+                        markers,
                     )?;
 
                     let metadata = {
@@ -2511,6 +2517,7 @@ impl Package {
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
+        markers: &uv_pep508::MarkerEnvironment,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -2613,19 +2620,23 @@ impl Package {
                 kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
             (false, false) => Err(LockError {
                 kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
         }
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<WheelTagHint> {
+    fn tag_hint(
+        &self,
+        tag_policy: TagPolicy<'_>,
+        markers: &uv_pep508::MarkerEnvironment,
+    ) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -2636,6 +2647,7 @@ impl Package {
             self.id.version.as_ref(),
             &filenames,
             tag_policy.tags(),
+            markers,
         )
     }
 
@@ -5260,6 +5272,7 @@ enum WheelTagHint {
         version: Option<Version>,
         tags: BTreeSet<PlatformTag>,
         best: Option<PlatformTag>,
+        markers: uv_pep508::MarkerEnvironment,
     },
 }
 
@@ -5270,6 +5283,7 @@ impl WheelTagHint {
         version: Option<&Version>,
         filenames: &[&WheelFilename],
         tags: &Tags,
+        markers: &uv_pep508::MarkerEnvironment,
     ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
@@ -5322,17 +5336,18 @@ impl WheelTagHint {
             }
             TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
                 let best = tags.platform_tag().cloned();
-                let tags = Self::platform_tags(filenames.iter().copied(), tags)
+                let incompatible_tags = Self::platform_tags(filenames.iter().copied(), tags)
                     .cloned()
                     .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
+                if incompatible_tags.is_empty() {
                     None
                 } else {
                     Some(Self::PlatformTags {
                         package: name.clone(),
                         version: version.cloned(),
-                        tags,
+                        tags: incompatible_tags,
                         best,
+                        markers: markers.clone(),
                     })
                 }
             }
@@ -5374,27 +5389,15 @@ impl WheelTagHint {
         })
     }
 
-    fn suggest_environment_marker(tags: &BTreeSet<PlatformTag>) -> &'static str {
-        if let Some(first_tag) = tags.iter().next() {
-            let tag_str = first_tag.to_string();
+    fn suggest_environment_marker(markers: &uv_pep508::MarkerEnvironment) -> String {
+        let sys_platform = markers.sys_platform();
+        let platform_machine = markers.platform_machine();
 
-            if tag_str.contains("linux") && tag_str.contains("x86_64") {
-                "sys_platform == 'linux' and platform_machine == 'x86_64'"
-            } else if tag_str.contains("linux") && tag_str.contains("aarch64") {
-                "sys_platform == 'linux' and platform_machine == 'aarch64'"
-            } else if tag_str.contains("macosx") && tag_str.contains("x86_64") {
-                "sys_platform == 'darwin' and platform_machine == 'x86_64'"
-            } else if tag_str.contains("macosx") && tag_str.contains("arm64") {
-                "sys_platform == 'darwin' and platform_machine == 'arm64'"
-            } else if tag_str.contains("win") && tag_str.contains("amd64") {
-                "sys_platform == 'win32' and platform_machine == 'amd64'"
-            } else if tag_str.contains("win32") {
-                "sys_platform == 'win32'"
-            } else {
-                "sys_platform == 'linux' and platform_machine == 'x86_64'"
-            }
+        // Generate the marker string based on actual environment values
+        if platform_machine.is_empty() {
+            format!("sys_platform == '{sys_platform}'")
         } else {
-            "sys_platform == 'linux' and platform_machine == 'x86_64'"
+            format!("sys_platform == '{sys_platform}' and platform_machine == '{platform_machine}'")
         }
     }
 }
@@ -5541,9 +5544,11 @@ impl std::fmt::Display for WheelTagHint {
                 version,
                 tags,
                 best,
+                markers,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
                 if let Some(best) = best {
+                    let example_marker = Self::suggest_environment_marker(markers);
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
                     } else {
@@ -5554,7 +5559,6 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", package.cyan())
                     };
-                    let example_marker = Self::suggest_environment_marker(tags);
                     writeln!(
                         f,
                         "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",

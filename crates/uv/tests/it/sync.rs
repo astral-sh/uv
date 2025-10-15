@@ -12077,6 +12077,10 @@ fn sync_required_environment_hint() -> Result<()> {
         r"You're on [^ ]+ \(`.*`\)",
         "You're on [PLATFORM] (`[TAG]`)",
     ));
+    filters.push((
+        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+    ));
 
     uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
@@ -12091,7 +12095,7 @@ fn sync_required_environment_hint() -> Result<()> {
     For example, add this to your pyproject.toml:
         [tool.uv]
         required-environments = [
-            "sys_platform == 'linux' and platform_machine == 'x86_64'",  # Adjust the platform/architecture as needed
+            "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",  # Adjust the platform/architecture as needed
         ]
     "#);
 
