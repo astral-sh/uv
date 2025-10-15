@@ -30,7 +30,7 @@ pub enum Credentials {
     /// RFC 6750 Bearer Token Authentication
     Bearer {
         /// The token to use for authentication.
-        token: Vec<u8>,
+        token: Token,
     },
 }
 
@@ -102,6 +102,36 @@ impl fmt::Debug for Password {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[serde(transparent)]
+pub struct Token(Vec<u8>);
+
+impl Token {
+    pub fn new(token: Vec<u8>) -> Self {
+        Self(token)
+    }
+
+    /// Return the [`Token`] as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    /// Convert the [`Token`] into its underlying [`Vec<u8>`].
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    /// Return whether the [`Token`] is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "****")
+    }
+}
 impl Credentials {
     /// Create a set of HTTP Basic Authentication credentials.
     #[allow(dead_code)]
@@ -115,7 +145,9 @@ impl Credentials {
     /// Create a set of Bearer Authentication credentials.
     #[allow(dead_code)]
     pub fn bearer(token: Vec<u8>) -> Self {
-        Self::Bearer { token }
+        Self::Bearer {
+            token: Token::new(token),
+        }
     }
 
     pub fn username(&self) -> Option<&str> {
@@ -286,7 +318,7 @@ impl Credentials {
         // Parse a `Bearer` authentication header.
         if let Some(token) = header.as_bytes().strip_prefix(b"Bearer ") {
             return Some(Self::Bearer {
-                token: token.to_vec(),
+                token: Token::new(token.to_vec()),
             });
         }
 
@@ -589,6 +621,17 @@ mod tests {
         assert_eq!(
             debugged,
             "Basic { username: Username(Some(\"user\")), password: Some(****) }"
+        );
+    }
+
+    #[test]
+    fn test_bearer_token_obfuscation() {
+        let token = "super_secret_token";
+        let credentials = Credentials::bearer(token.into());
+        let debugged = format!("{credentials:?}");
+        assert!(
+            !debugged.contains(token),
+            "Token should be obfuscated in Debug impl: {debugged}"
         );
     }
 }

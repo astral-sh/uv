@@ -158,7 +158,7 @@ fn python_reinstall() {
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.12-[PLATFORM] (python3.12)
-     + cpython-3.13.8-[PLATFORM] (python3.13)
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Reinstall a single version
@@ -168,8 +168,8 @@ fn python_reinstall() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     ~ cpython-3.13.8-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     ~ cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Reinstall multiple versions
@@ -181,7 +181,7 @@ fn python_reinstall() {
     ----- stderr -----
     Installed 2 versions in [TIME]
      ~ cpython-3.12.12-[PLATFORM] (python3.12)
-     ~ cpython-3.13.8-[PLATFORM] (python3.13)
+     ~ cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Reinstalling a version that is not installed should also work
@@ -1077,8 +1077,8 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8+freethreaded-[PLATFORM] (python3.13t)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9+freethreaded-[PLATFORM] (python3.13t)
     ");
 
     let bin_python = context
@@ -1130,7 +1130,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.13.8
+    Using CPython 3.13.9
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -1189,8 +1189,8 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Should not work with older Python versions
@@ -1211,8 +1211,8 @@ fn python_install_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
-     - cpython-3.13.8+freethreaded-[PLATFORM] (python3.13t)
-     - cpython-3.13.8-[PLATFORM] (python3.13)
+     - cpython-3.13.9+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 }
 
@@ -1260,8 +1260,8 @@ fn python_install_debug() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8+debug-[PLATFORM] (python3.13d)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9+debug-[PLATFORM] (python3.13d)
     ");
 
     let bin_python = context
@@ -1313,8 +1313,8 @@ fn python_install_debug() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Now we should prefer the non-debug version without opt-in
@@ -1322,7 +1322,7 @@ fn python_install_debug() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.8-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1367,8 +1367,8 @@ fn python_install_debug() {
     Searching for Python installations
     Uninstalled 3 versions in [TIME]
      - cpython-3.12.12+debug-[PLATFORM] (python3.12d)
-     - cpython-3.13.8+debug-[PLATFORM] (python3.13d)
-     - cpython-3.13.8-[PLATFORM] (python3.13)
+     - cpython-3.13.9+debug-[PLATFORM] (python3.13d)
+     - cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 }
 
@@ -1388,8 +1388,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8+freethreaded+debug-[PLATFORM] (python3.13td)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9+freethreaded+debug-[PLATFORM] (python3.13td)
     ");
 
     let bin_python = context
@@ -1452,8 +1452,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // Should be distinct from 3.13t
@@ -1463,8 +1463,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8+freethreaded-[PLATFORM] (python3.13t)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9+freethreaded-[PLATFORM] (python3.13t)
     ");
 
     // Should be distinct from 3.13d
@@ -1474,8 +1474,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8+debug-[PLATFORM] (python3.13d)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9+debug-[PLATFORM] (python3.13d)
     ");
 
     // Now we should prefer the non-debug version without opt-in
@@ -1483,7 +1483,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.8-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1492,7 +1492,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.8+freethreaded-[PLATFORM]/bin/python3.13t
+    [TEMP_DIR]/managed/cpython-3.13.9+freethreaded-[PLATFORM]/bin/python3.13t
 
     ----- stderr -----
     ");
@@ -1515,10 +1515,10 @@ fn python_install_debug_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 4 versions in [TIME]
-     - cpython-3.13.8+freethreaded+debug-[PLATFORM] (python3.13td)
-     - cpython-3.13.8+freethreaded-[PLATFORM] (python3.13t)
-     - cpython-3.13.8+debug-[PLATFORM] (python3.13d)
-     - cpython-3.13.8-[PLATFORM] (python3.13)
+     - cpython-3.13.9+freethreaded+debug-[PLATFORM] (python3.13td)
+     - cpython-3.13.9+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.9+debug-[PLATFORM] (python3.13d)
+     - cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 }
 
@@ -2241,8 +2241,8 @@ fn python_install_broken_link() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     // We should replace the broken symlink
@@ -2250,7 +2250,7 @@ fn python_install_broken_link() {
         filters => context.filters(),
     }, {
         insta::assert_snapshot!(
-            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.8-[PLATFORM]/bin/python3.13"
+            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.9-[PLATFORM]/bin/python3.13"
         );
     });
 }
@@ -2391,7 +2391,6 @@ fn python_install_patch_dylib() {
 }
 
 #[test]
-#[ignore = "Update when 3.15a1 comes out"]
 fn python_install_prerelease() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -2400,32 +2399,30 @@ fn python_install_prerelease() {
         .with_filtered_python_install_bin()
         .with_filtered_exe_suffix();
 
-    // Install 3.14
+    // Install 3.15
     // For now, this provides test coverage of pre-release handling
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0rc3 in [TIME]
-     + cpython-3.14.0rc3-[PLATFORM] (python3.14)
+    Installed Python 3.15.0a1 in [TIME]
+     + cpython-3.15.0a1-[PLATFORM] (python3.15)
     ");
 
     // Install a specific pre-release
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0a4"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.15.0a1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0a4 in [TIME]
-     + cpython-3.14.0a4-[PLATFORM]
+    Python 3.15a1 is already installed
     ");
 }
 
 #[test]
-#[ignore = "Update when 3.15a1 comes out"]
 fn python_find_prerelease() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -2435,27 +2432,27 @@ fn python_find_prerelease() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    // See [`python_install_314`] coverage of these.
-    context.python_install().arg("3.14").assert().success();
-    context.python_install().arg("3.14.0a4").assert().success();
+    // See [`python_install_prerelease`] coverage of these.
+    context.python_install().arg("3.15").assert().success();
+    context.python_install().arg("3.15.0a1").assert().success();
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
-    uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.15"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
 
     // This also applies to `>=` requests, even though pre-releases aren't technically in the range
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.15"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2464,7 +2461,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2476,15 +2473,15 @@ fn python_find_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.7 in [TIME]
-     + cpython-3.13.7-[PLATFORM] (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.7-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.9-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2710,7 +2707,7 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.13.8-macos-aarch64-none    <download available>
+    cpython-3.13.9-macos-aarch64-none    <download available>
 
     ----- stderr -----
     ");
@@ -2722,8 +2719,8 @@ fn python_install_emulated_macos() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-macos-x86_64-none (python3.13)
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-macos-x86_64-none (python3.13)
     ");
 
     // It should be discoverable with `uv python find`
@@ -2731,7 +2728,7 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.8-macos-x86_64-none/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-macos-x86_64-none/bin/python3.13
 
     ----- stderr -----
     ");
@@ -2741,8 +2738,8 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.13.8-macos-aarch64-none    <download available>
-    cpython-3.13.8-macos-x86_64-none     managed/cpython-3.13.8-macos-x86_64-none/bin/python3.13
+    cpython-3.13.9-macos-aarch64-none    <download available>
+    cpython-3.13.9-macos-x86_64-none     managed/cpython-3.13.9-macos-x86_64-none/bin/python3.13
 
     ----- stderr -----
     ");
@@ -2753,8 +2750,8 @@ fn python_install_emulated_macos() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.8 in [TIME]
-     + cpython-3.13.8-macos-aarch64-none
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-macos-aarch64-none
     ");
 
     // Once we've installed the native version, it should be preferred over x86_64
@@ -2762,7 +2759,7 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.8-macos-aarch64-none/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-macos-aarch64-none/bin/python3.13
 
     ----- stderr -----
     ");

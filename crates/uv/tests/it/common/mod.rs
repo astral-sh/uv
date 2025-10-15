@@ -135,6 +135,15 @@ impl TestContext {
         self
     }
 
+    /// Set the "concurrent installs" for all commands in this context.
+    pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_INSTALLS.into(),
+            concurrent_installs.into(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for messages like "Resolved 10 packages" which
     /// can differ between platforms.
     ///

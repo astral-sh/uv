@@ -10,6 +10,7 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
 use crate::Credentials;
+use crate::credentials::Token;
 use crate::realm::{Realm, RealmRef};
 
 /// The [`Realm`] for the Hugging Face platform.
@@ -45,7 +46,7 @@ impl HuggingFaceProvider {
         if RealmRef::from(url) == *HUGGING_FACE_REALM {
             if let Some(token) = HUGGING_FACE_TOKEN.as_ref() {
                 return Some(Credentials::Bearer {
-                    token: token.clone(),
+                    token: Token::new(token.clone()),
                 });
             }
         }
