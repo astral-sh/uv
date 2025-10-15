@@ -973,13 +973,14 @@ impl ManagedPythonDownload {
                         if let reqwest_retry::RetryDecision::Retry { execute_after } =
                             retry_decision
                         {
-                            debug!(
-                                "Transient failure while handling response for {}; retrying...",
-                                self.key()
-                            );
                             let duration = execute_after
                                 .duration_since(SystemTime::now())
                                 .unwrap_or_else(|_| Duration::default());
+                            debug!(
+                                "Transient failure while handling response for {}; retrying after {}s...",
+                                self.key(),
+                                duration.as_secs()
+                            );
                             tokio::time::sleep(duration).await;
                             retried_here = true;
                             continue; // Retry.
