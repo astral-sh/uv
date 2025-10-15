@@ -41,6 +41,7 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        workspace_member_editable: Option<bool>,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         let discovery = match sources {
@@ -56,7 +57,7 @@ impl BuildRequires {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, locations, sources)
+        Self::from_project_workspace(metadata, &project_workspace, locations, sources, workspace_member_editable)
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
@@ -65,6 +66,7 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_member_editable: Option<bool>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -114,6 +116,7 @@ impl BuildRequires {
                         locations,
                         project_workspace.workspace(),
                         None,
+                        workspace_member_editable,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -185,6 +188,7 @@ impl BuildRequires {
                         group,
                         locations,
                         workspace,
+                        None,
                         None,
                     )
                     .map(move |requirement| match requirement {
@@ -270,6 +274,7 @@ impl LoweredExtraBuildDependencies {
                                     group,
                                     index_locations,
                                     workspace,
+                                    None,
                                     None,
                                 )
                                 .map(move |requirement| {

@@ -99,6 +99,15 @@ pub trait BuildContext {
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
+    /// Whether workspace members should be installed as editable.
+    ///
+    /// Returns `None` for default behavior (editable), or `Some(false)` to force non-editable
+    /// installations. This is primarily used by `uv tool install` to ensure workspace dependencies
+    /// are vendored rather than linked via `.pth` files.
+    fn workspace_member_editable(&self) -> Option<bool> {
+        None
+    }
+
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
 

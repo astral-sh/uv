@@ -139,6 +139,7 @@ impl CachedEnvironment {
                 resolve,
                 concurrency,
                 cache,
+                None,
                 printer,
                 preview,
             )

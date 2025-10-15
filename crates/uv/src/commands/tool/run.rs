@@ -801,6 +801,7 @@ async fn get_or_create_environment(
                         concurrency,
                         cache,
                         &workspace_cache,
+                        None,
                         printer,
                         preview,
                     )
@@ -892,6 +893,7 @@ async fn get_or_create_environment(
                 concurrency,
                 cache,
                 &workspace_cache,
+                None,
                 printer,
                 preview,
             )
@@ -918,6 +920,7 @@ async fn get_or_create_environment(
         concurrency,
         cache,
         &workspace_cache,
+        None,
         printer,
         preview,
     )

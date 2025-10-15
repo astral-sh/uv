@@ -145,6 +145,7 @@ pub(crate) async fn install(
                 concurrency,
                 &cache,
                 &workspace_cache,
+                Some(false),
                 printer,
                 preview,
             )
@@ -270,6 +271,7 @@ pub(crate) async fn install(
                 concurrency,
                 &cache,
                 &workspace_cache,
+                Some(false),
                 printer,
                 preview,
             )
@@ -295,6 +297,7 @@ pub(crate) async fn install(
         concurrency,
         &cache,
         &workspace_cache,
+        Some(false),
         printer,
         preview,
     )
@@ -516,6 +519,7 @@ pub(crate) async fn install(
             Box::new(DefaultResolveLogger),
             concurrency,
             &cache,
+            Some(false),
             printer,
             preview,
         )
@@ -571,6 +575,7 @@ pub(crate) async fn install(
                         Box::new(DefaultResolveLogger),
                         concurrency,
                         &cache,
+                        Some(false),
                         printer,
                         preview,
                     )

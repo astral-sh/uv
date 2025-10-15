@@ -612,6 +612,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources,
+        None,
         workspace_cache,
         concurrency,
         preview,

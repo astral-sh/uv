@@ -777,6 +777,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        None,
         workspace_cache.clone(),
         concurrency,
         preview,

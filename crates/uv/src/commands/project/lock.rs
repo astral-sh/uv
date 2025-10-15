@@ -734,6 +734,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer.clone(),
         *sources,
+        None,
         workspace_cache.clone(),
         concurrency,
         preview,

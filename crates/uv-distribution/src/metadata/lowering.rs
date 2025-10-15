@@ -44,6 +44,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
+        workspace_member_editable: Option<bool>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
@@ -313,7 +314,7 @@ impl LoweredRequirement {
                                     RequirementSource::Directory {
                                         install_path: install_path.into_boxed_path(),
                                         url,
-                                        editable: Some(editability.unwrap_or(true)),
+                                        editable: Some(editability.unwrap_or(workspace_member_editable.unwrap_or(true))),
                                         r#virtual: Some(false),
                                     }
                                 } else {

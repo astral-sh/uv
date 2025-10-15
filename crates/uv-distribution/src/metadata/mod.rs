@@ -90,6 +90,7 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        workspace_member_editable: Option<bool>,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -111,6 +112,7 @@ impl Metadata {
             git_source,
             locations,
             sources,
+            workspace_member_editable,
             cache,
         )
         .await?;

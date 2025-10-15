@@ -47,6 +47,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        workspace_member_editable: Option<bool>,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
@@ -69,7 +70,7 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources)
+        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources, workspace_member_editable)
     }
 
     fn from_project_workspace(
@@ -78,6 +79,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_member_editable: Option<bool>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -140,6 +142,7 @@ impl RequiresDist {
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
+                                workspace_member_editable,
                             )
                             .map(
                                 move |requirement| match requirement {
@@ -182,6 +185,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         git_member,
+                        workspace_member_editable,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -468,6 +472,7 @@ mod test {
             None,
             &IndexLocations::default(),
             SourceStrategy::default(),
+            None,
         )?)
     }
 
