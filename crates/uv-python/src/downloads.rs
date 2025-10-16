@@ -55,7 +55,7 @@ pub enum Error {
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Failed to download {0}")]
-    NetworkError(DisplaySafeUrl, #[source] Box<WrappedReqwestError>),
+    NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error("Request failed after {retries} retries")]
     NetworkErrorWithRetries {
         #[source]
@@ -1450,7 +1450,7 @@ impl Error {
         err: reqwest::Error,
         retries: Option<u32>,
     ) -> Self {
-        let err = Self::NetworkError(url, Box::new(WrappedReqwestError::from(err)));
+        let err = Self::NetworkError(url, WrappedReqwestError::from(err));
         if let Some(retries) = retries {
             Self::NetworkErrorWithRetries {
                 err: Box::new(err),
@@ -1470,7 +1470,7 @@ impl Error {
                 Self::NetworkMiddlewareError(url, error)
             }
             reqwest_middleware::Error::Reqwest(error) => {
-                Self::NetworkError(url, Box::new(WrappedReqwestError::from(error)))
+                Self::NetworkError(url, WrappedReqwestError::from(error))
             }
         }
     }
