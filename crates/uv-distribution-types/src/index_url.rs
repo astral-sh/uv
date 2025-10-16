@@ -27,6 +27,15 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
+static VARIANT_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://wheelnext.github.io/variants-index/v0.0.2").unwrap());
+
+static VARIANT_INDEX: LazyLock<Index> = LazyLock::new(|| {
+    Index::from_extra_index_url(IndexUrl::Url(Arc::new(VerbatimUrl::from_url(
+        VARIANT_URL.clone(),
+    ))))
+});
+
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
@@ -325,12 +334,24 @@ impl<'a> IndexLocations {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
+            // Determine whether the user defined a default index.
+            let mut seen = FxHashSet::default();
+            let has_default = self
+                .indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                .any(|index| index.default);
+
             let mut seen = FxHashSet::default();
             Either::Right(
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| !index.default && !index.explicit),
+                    .filter(|index| !index.default && !index.explicit)
+                    .chain(Some(&*VARIANT_INDEX).filter(move |_| {
+                        // If the user defined a default index, omit the variant index.
+                        !has_default
+                    })),
             )
         }
     }
@@ -412,6 +433,7 @@ impl<'a> IndexLocations {
                 indexes.push(index);
             }
             if !default {
+                indexes.push(&*VARIANT_INDEX);
                 indexes.push(&*DEFAULT_INDEX);
             }
 
@@ -434,6 +456,7 @@ impl<'a> IndexLocations {
         } else {
             Either::Right(
                 std::iter::once(&*DEFAULT_INDEX)
+                    .chain(std::iter::once(&*VARIANT_INDEX))
                     .chain(self.flat_index.iter().rev())
                     .chain(self.indexes.iter().rev()),
             )
@@ -542,12 +565,24 @@ impl<'a> IndexUrls {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
+            // Determine whether the user defined a default index.
+            let mut seen = FxHashSet::default();
+            let has_default = self
+                .indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                .any(|index| index.default);
+
             let mut seen = FxHashSet::default();
             Either::Right(
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| !index.default && !index.explicit),
+                    .filter(|index| !index.default && !index.explicit)
+                    .chain(Some(&*VARIANT_INDEX).filter(move |_| {
+                        // If the user defined a default index, omit the variant index.
+                        !has_default
+                    })),
             )
         }
     }
@@ -610,7 +645,7 @@ impl<'a> IndexUrls {
                 return index.status_code_strategy();
             }
         }
-        IndexStatusCodeStrategy::Default
+        IndexStatusCodeStrategy::from_index_url(url)
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
