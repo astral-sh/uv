@@ -2474,7 +2474,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86-64"
-    runs-on: macos-13 # github-macos-13-x86_64-4
+    runs-on: macos-15-intel # github-macos-15-x86_64-4
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
