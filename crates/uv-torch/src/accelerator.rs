@@ -6,9 +6,9 @@ use tracing::debug;
 use uv_pep440::Version;
 use uv_static::EnvVars;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 use serde::Deserialize;
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 use wmi::{COMLibrary, WMIConnection};
 
 #[derive(Debug, thiserror::Error)]
@@ -194,7 +194,7 @@ impl Accelerator {
         }
 
         // Detect Intel GPU via WMI on Windows
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             #[derive(Deserialize, Debug)]
             #[serde(rename = "Win32_VideoController")]
