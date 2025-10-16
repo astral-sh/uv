@@ -360,3 +360,52 @@ async fn install_http_retries() {
     "
     );
 }
+
+/// Test problem details with a 403 error containing license compliance information
+#[tokio::test]
+async fn rfc9457_problem_details_license_violation() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    let problem_json = r#"{
+        "type": "https://example.com/probs/license-violation",
+        "title": "License Compliance Issue",
+        "status": 403,
+        "detail": "This package version has a license that violates organizational policy."
+    }"#;
+
+    // Mock HEAD request to return 200 OK
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(StatusCode::OK))
+        .mount(&server)
+        .await;
+
+    // Mock GET request to return 403 with problem details
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(StatusCode::FORBIDDEN)
+                .set_body_raw(problem_json, "application/problem+json"),
+        )
+        .mount(&server)
+        .await;
+
+    let mock_server_uri = server.uri();
+    let tqdm_url = format!("{mock_server_uri}/packages/tqdm-4.67.1-py3-none-any.whl");
+
+    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ [SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Failed to fetch: `[SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
+      ╰─▶ HTTP status client error (403 Forbidden) for url ([SERVER]/packages/tqdm-4.67.1-py3-none-any.whl)
+    ");
+}

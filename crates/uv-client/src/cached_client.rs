@@ -15,11 +15,31 @@ use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
 use crate::base_client::is_transient_network_error;
+use crate::error::ProblemDetails;
 use crate::{
     Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
 };
+
+/// Extract problem details from an HTTP response if it has the correct content type
+///
+/// Note: This consumes the response body, so it should only be called when there's an error status.
+async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
+    match response.bytes().await {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(details) => Some(details),
+            Err(err) => {
+                warn!("Failed to parse problem details: {err}");
+                None
+            }
+        },
+        Err(err) => {
+            warn!("Failed to read response body for problem details: {err}");
+            None
+        }
+    }
+}
 
 /// A trait the generalizes (de)serialization at a high level.
 ///
@@ -544,9 +564,29 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
-            .error_for_status()
-            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+
+        // Check for HTTP error status and extract problem details if available
+        if let Err(status_error) = response.error_for_status_ref() {
+            // Clone the response to extract problem details before the error consumes it
+            let problem_details = if response
+                .headers()
+                .get("content-type")
+                .and_then(|ct| ct.to_str().ok())
+                .map(|ct| ct == "application/problem+json")
+                .unwrap_or(false)
+            {
+                extract_problem_details(response).await
+            } else {
+                None
+            };
+            return Err(ErrorKind::from_reqwest_with_problem_details(
+                url.clone(),
+                status_error,
+                problem_details,
+            )
+            .into());
+        }
 
         // If the user set a custom `Cache-Control` header, override it.
         if let CacheControl::Override(header) = cache_control {
@@ -611,9 +651,25 @@ impl CachedClient {
             .map(|retries| retries.value());
 
         if let Err(status_error) = response.error_for_status_ref() {
+            let problem_details = if response
+                .headers()
+                .get("content-type")
+                .and_then(|ct| ct.to_str().ok())
+                .map(|ct| ct.starts_with("application/problem+json"))
+                .unwrap_or(false)
+            {
+                extract_problem_details(response).await
+            } else {
+                None
+            };
             return Err(CachedClientError::<Error>::Client {
                 retries: retry_count,
-                err: ErrorKind::from_reqwest(url, status_error).into(),
+                err: ErrorKind::from_reqwest_with_problem_details(
+                    url,
+                    status_error,
+                    problem_details,
+                )
+                .into(),
             }
             .into());
         }
