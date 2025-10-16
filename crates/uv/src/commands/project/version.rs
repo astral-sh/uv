@@ -63,7 +63,7 @@ pub(crate) async fn project_version(
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -297,7 +297,7 @@ pub(crate) async fn project_version(
         Box::pin(lock_and_sync(
             project,
             project_dir,
-            locked,
+            lock_check,
             frozen,
             active,
             no_sync,
@@ -502,7 +502,7 @@ async fn print_frozen_version(
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -579,8 +579,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if matches!(locked, LockCheck::Enabled(_)) {
-        LockMode::Locked(target.interpreter(), locked.source().unwrap())
+    let mode = if matches!(lock_check, LockCheck::Enabled(_)) {
+        LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
     } else {
         LockMode::Write(target.interpreter())
     };

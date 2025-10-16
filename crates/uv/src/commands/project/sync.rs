@@ -58,7 +58,7 @@ use crate::settings::{
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     active: Option<bool>,
@@ -219,7 +219,7 @@ pub(crate) async fn sync(
                 ));
             }
 
-            if matches!(locked, LockCheck::Enabled(_)) {
+            if matches!(lock_check, LockCheck::Enabled(_)) {
                 return Err(anyhow::anyhow!(
                     "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
@@ -306,8 +306,8 @@ pub(crate) async fn sync(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if matches!(locked, LockCheck::Enabled(_)) {
-        LockMode::Locked(environment.interpreter(), locked.source().unwrap())
+    } else if matches!(lock_check, LockCheck::Enabled(_)) {
+        LockMode::Locked(environment.interpreter(), lock_check.source().unwrap())
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {

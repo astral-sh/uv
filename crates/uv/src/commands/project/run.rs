@@ -83,7 +83,7 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -264,8 +264,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if matches!(locked, LockCheck::Enabled(_)) {
-                LockMode::Locked(environment.interpreter(), locked.source().unwrap())
+            } else if matches!(lock_check, LockCheck::Enabled(_)) {
+                LockMode::Locked(environment.interpreter(), lock_check.source().unwrap())
             } else {
                 LockMode::Write(environment.interpreter())
             };
@@ -356,7 +356,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if matches!(locked, LockCheck::Enabled(_)) {
+            if matches!(lock_check, LockCheck::Enabled(_)) {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
@@ -588,7 +588,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if matches!(locked, LockCheck::Enabled(_)) {
+            if matches!(lock_check, LockCheck::Enabled(_)) {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
             }
             if frozen {
@@ -605,7 +605,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if matches!(locked, LockCheck::Enabled(_)) {
+            if matches!(lock_check, LockCheck::Enabled(_)) {
                 warn_user!("`--locked` has no effect when used outside of a project");
             }
             if no_sync {
@@ -740,8 +740,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if matches!(locked, LockCheck::Enabled(_)) {
-                    LockMode::Locked(venv.interpreter(), locked.source().unwrap())
+                } else if matches!(lock_check, LockCheck::Enabled(_)) {
+                    LockMode::Locked(venv.interpreter(), lock_check.source().unwrap())
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {

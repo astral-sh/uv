@@ -81,7 +81,7 @@ impl LockResult {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     refresh: Refresh,
@@ -177,8 +177,8 @@ pub(crate) async fn lock(
             .into_interpreter(),
         };
 
-        if matches!(locked, LockCheck::Enabled(_)) {
-            LockMode::Locked(&interpreter, locked.source().unwrap())
+        if matches!(lock_check, LockCheck::Enabled(_)) {
+            LockMode::Locked(&interpreter, lock_check.source().unwrap())
         } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {

@@ -65,7 +65,7 @@ use crate::settings::{LockCheck, ResolverInstallerSettings};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -177,7 +177,7 @@ pub(crate) async fn add(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if matches!(locked, LockCheck::Enabled(_)) {
+        if matches!(lock_check, LockCheck::Enabled(_)) {
             warn_user_once!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -728,7 +728,7 @@ pub(crate) async fn add(
         &edits,
         lock_state,
         sync_state,
-        locked,
+        lock_check,
         no_install_project,
         no_install_workspace,
         no_install_local,
@@ -959,7 +959,7 @@ async fn lock_and_sync(
     edits: &[DependencyEdit],
     lock_state: UniversalState,
     sync_state: PlatformState,
-    locked: LockCheck,
+    lock_check: LockCheck,
     no_install_project: bool,
     no_install_workspace: bool,
     no_install_local: bool,
@@ -977,8 +977,8 @@ async fn lock_and_sync(
     preview: Preview,
 ) -> Result<(), ProjectError> {
     let mut lock = project::lock::LockOperation::new(
-        if matches!(locked, LockCheck::Enabled(_)) {
-            LockMode::Locked(target.interpreter(), locked.source().unwrap())
+        if matches!(lock_check, LockCheck::Enabled(_)) {
+            LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
         } else {
             LockMode::Write(target.interpreter())
         },
@@ -1099,8 +1099,8 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::LockOperation::new(
-                if matches!(locked, LockCheck::Enabled(_)) {
-                    LockMode::Locked(target.interpreter(), locked.source().unwrap())
+                if matches!(lock_check, LockCheck::Enabled(_)) {
+                    LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
                 } else {
                     LockMode::Write(target.interpreter())
                 },

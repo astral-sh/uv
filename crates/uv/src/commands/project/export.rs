@@ -65,7 +65,7 @@ pub(crate) async fn export(
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     include_annotations: bool,
     include_header: bool,
@@ -172,8 +172,8 @@ pub(crate) async fn export(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if matches!(locked, LockCheck::Enabled(_)) {
-        LockMode::Locked(interpreter.as_ref().unwrap(), locked.source().unwrap())
+    } else if matches!(lock_check, LockCheck::Enabled(_)) {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check.source().unwrap())
     } else if matches!(target, ExportTarget::Script(_))
         && !LockTarget::from(&target).lock_path().is_file()
     {

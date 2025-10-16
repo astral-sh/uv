@@ -42,7 +42,7 @@ use crate::settings::{LockCheck, ResolverInstallerSettings};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -70,7 +70,7 @@ pub(crate) async fn remove(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if matches!(locked, LockCheck::Enabled(_)) {
+        if matches!(lock_check, LockCheck::Enabled(_)) {
             warn_user_once!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -291,8 +291,8 @@ pub(crate) async fn remove(
         .ok();
 
     // Determine the lock mode.
-    let mode = if matches!(locked, LockCheck::Enabled(_)) {
-        LockMode::Locked(target.interpreter(), locked.source().unwrap())
+    let mode = if matches!(lock_check, LockCheck::Enabled(_)) {
+        LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
     } else {
         LockMode::Write(target.interpreter())
     };

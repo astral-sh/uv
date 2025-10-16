@@ -37,7 +37,7 @@ use crate::settings::ResolverSettings;
 pub(crate) async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
-    locked: LockCheck,
+    lock_check: LockCheck,
     frozen: bool,
     universal: bool,
     depth: u8,
@@ -126,8 +126,8 @@ pub(crate) async fn tree(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if matches!(locked, LockCheck::Enabled(_)) {
-        LockMode::Locked(interpreter.as_ref().unwrap(), locked.source().unwrap())
+    } else if matches!(lock_check, LockCheck::Enabled(_)) {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check.source().unwrap())
     } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {
         // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
         LockMode::DryRun(interpreter.as_ref().unwrap())
