@@ -73,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -83,7 +83,7 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: bool,
+    locked: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -264,8 +264,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
+            } else if matches!(locked, LockCheck::Enabled(_)) {
+                LockMode::Locked(environment.interpreter(), locked.source().unwrap())
             } else {
                 LockMode::Write(environment.interpreter())
             };
@@ -291,9 +291,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::LockMismatchForLockCommand(prev, cur)) => {
-                    return Err(ProjectError::LockMismatch(prev, cur).into());
-                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         client_builder.is_native_tls(),
@@ -359,7 +356,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if locked {
+            if matches!(locked, LockCheck::Enabled(_)) {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
@@ -591,7 +588,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if locked {
+            if matches!(locked, LockCheck::Enabled(_)) {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
             }
             if frozen {
@@ -608,7 +605,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if locked {
+            if matches!(locked, LockCheck::Enabled(_)) {
                 warn_user!("`--locked` has no effect when used outside of a project");
             }
             if no_sync {
@@ -743,8 +740,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if locked {
-                    LockMode::Locked(venv.interpreter())
+                } else if matches!(locked, LockCheck::Enabled(_)) {
+                    LockMode::Locked(venv.interpreter(), locked.source().unwrap())
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {
@@ -771,9 +768,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::LockMismatchForLockCommand(prev, cur)) => {
-                        return Err(ProjectError::LockMismatch(prev, cur).into());
-                    }
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
                             client_builder.is_native_tls(),

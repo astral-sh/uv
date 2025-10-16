@@ -36,13 +36,13 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
-    locked: bool,
+    locked: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -70,7 +70,7 @@ pub(crate) async fn remove(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if locked {
+        if matches!(locked, LockCheck::Enabled(_)) {
             warn_user_once!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -291,8 +291,8 @@ pub(crate) async fn remove(
         .ok();
 
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if matches!(locked, LockCheck::Enabled(_)) {
+        LockMode::Locked(target.interpreter(), locked.source().unwrap())
     } else {
         LockMode::Write(target.interpreter())
     };
