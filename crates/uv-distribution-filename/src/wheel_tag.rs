@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::BuildTag;
+use crate::{BuildTag, VariantLabel};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_small_str::SmallString;
 
@@ -136,6 +136,8 @@ pub(crate) struct WheelTagLarge {
     pub(crate) abi_tag: TagSet<AbiTag>,
     /// The platform tag(s), e.g., `none` in `1.2.3-73-py3-none-any`.
     pub(crate) platform_tag: TagSet<PlatformTag>,
+    /// The optional variant tag.
+    pub(crate) variant: Option<VariantLabel>,
     /// The string representation of the tag.
     ///
     /// Preserves any unsupported tags that were filtered out when parsing the wheel filename.

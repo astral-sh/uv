@@ -1,0 +1,20 @@
+[metadata]
+created-by = "tool-that-created-the-file" # Freeform string
+version = "0.1" # PEP 440 version
+
+[[provider]]
+resolved = ["cpu_level_provider==0.1"]
+plugin-api = "cpu_level_provider"
+namespace = "cpu_level"
+
+[provider.properties]
+x86_64_level = ["v1", "v2"]
+
+[[provider]]
+resolved = ["nvidia-variant-provider==0.0.1"]
+plugin-api = "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+namespace = "nvidia"
+
+[provider.properties]
+cuda_version_lower_bound = ["12.8"]
+sm_arch = ["100_real", "120_real", "70_real", "75_real", "80_real", "86_real", "90_real"]
