@@ -291,7 +291,7 @@ pub enum ErrorKind {
 
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
-    WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
+    WrappedReqwestError(DisplaySafeUrl, #[source] Box<WrappedReqwestError>),
 
     /// Add the number of failed retries to the error.
     #[error("Request failed after {retries} retries")]
@@ -372,7 +372,7 @@ pub enum ErrorKind {
 impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
+        Self::WrappedReqwestError(url, Box::new(WrappedReqwestError::from(error)))
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
@@ -386,7 +386,7 @@ impl ErrorKind {
             }
         }
 
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(err))
+        Self::WrappedReqwestError(url, Box::new(WrappedReqwestError::from(err)))
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
@@ -397,7 +397,7 @@ impl ErrorKind {
     ) -> Self {
         Self::WrappedReqwestError(
             url,
-            WrappedReqwestError::with_problem_details(error.into(), problem_details),
+            Box::new(WrappedReqwestError::with_problem_details(error.into(), problem_details)),
         )
     }
 }
