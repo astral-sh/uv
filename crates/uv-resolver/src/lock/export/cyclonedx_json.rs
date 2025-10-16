@@ -20,6 +20,7 @@ use uv_configuration::{
 };
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
@@ -82,6 +83,7 @@ pub fn from_lock<'lock>(
             create_and_register_component(
                 package,
                 PackageType::Root,
+                None,
                 &mut id_counter,
                 &mut package_to_component_map,
             )
@@ -135,6 +137,7 @@ pub fn from_lock<'lock>(
             create_and_register_component(
                 node.package,
                 package_type,
+                Some(&node.marker),
                 &mut id_counter,
                 &mut package_to_component_map,
             )
@@ -164,10 +167,11 @@ enum PackageType<'a> {
 fn create_and_register_component<'a>(
     package: &'a Package,
     package_type: PackageType,
+    marker: Option<&MarkerTree>,
     id_counter: &mut usize,
     package_to_bom_ref: &mut HashMap<&'a PackageId, Component>,
 ) -> Component {
-    let component = create_component_from_package(package, package_type, *id_counter);
+    let component = create_component_from_package(package, package_type, marker, *id_counter);
     package_to_bom_ref.insert(&package.id, component.clone());
     *id_counter += 1;
     component
@@ -241,24 +245,34 @@ fn format_qualifiers(qualifiers: &[(&str, &str)]) -> String {
 fn create_component_from_package(
     package: &Package,
     package_type: PackageType,
+    marker: Option<&MarkerTree>,
     id: usize,
 ) -> Component {
     let name = get_package_name(package);
     let version = get_version_string(package);
     let bom_ref = create_bom_ref(id, name, version.as_deref());
     let purl = create_purl(package).and_then(|purl_string| purl_string.parse().ok());
+    let mut properties = vec![];
 
-    let (classification, properties) = match package_type {
-        PackageType::Root => (Classification::Application, None),
+    let classification = match package_type {
+        PackageType::Root => Classification::Application,
         PackageType::Workspace(path) => {
-            let properties = vec![
-                Property::new("uv:workspace", "true"),
-                Property::new("uv:workspace_path", &PortablePath::from(path).to_string()),
-            ];
-            (Classification::Application, Some(Properties(properties)))
+            properties.push(Property::new("uv:workspace", "true"));
+            properties.push(Property::new(
+                "uv:workspace_path",
+                &PortablePath::from(path).to_string(),
+            ));
+            Classification::Application
         }
-        PackageType::Dependency => (Classification::Library, None),
+        PackageType::Dependency => Classification::Library,
     };
+
+    if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
+        properties.push(Property::new(
+            "python:environment_marker",
+            &marker_contents.to_string(),
+        ));
+    }
 
     Component {
         component_type: classification,
@@ -281,7 +295,11 @@ fn create_component_from_package(
         modified: None,
         pedigree: None,
         external_references: None,
-        properties,
+        properties: if !properties.is_empty() {
+            Some(Properties(properties))
+        } else {
+            None
+        },
         components: None,
         evidence: None,
         signature: None,
