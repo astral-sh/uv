@@ -75,7 +75,7 @@ pub fn from_lock<'lock>(
 
     // Used as prefix in bom-ref generation, to ensure uniqueness
     let mut id_counter = 1;
-    let mut package_to_bom_ref = HashMap::<&PackageId, Component>::new();
+    let mut package_to_component_map = HashMap::<&PackageId, Component>::new();
 
     let metadata = Metadata {
         component: root.map(|package| {
@@ -83,7 +83,7 @@ pub fn from_lock<'lock>(
                 package,
                 PackageType::Root,
                 &mut id_counter,
-                &mut package_to_bom_ref,
+                &mut package_to_component_map,
             )
         }),
         timestamp: cyclonedx_bom::prelude::DateTime::now().ok(),
@@ -136,12 +136,12 @@ pub fn from_lock<'lock>(
                 node.package,
                 package_type,
                 &mut id_counter,
-                &mut package_to_bom_ref,
+                &mut package_to_component_map,
             )
         })
         .collect();
 
-    let dependencies = create_dependencies_from_mapping(&nodes, &package_to_bom_ref);
+    let dependencies = create_dependencies_from_mapping(&nodes, &package_to_component_map);
 
     let bom = Bom {
         metadata: Some(metadata),
@@ -292,36 +292,36 @@ fn create_component_from_package(
 
 fn create_dependencies_from_mapping(
     nodes: &[ExportableRequirement<'_>],
-    package_to_component: &HashMap<&PackageId, Component>,
+    package_to_component_map: &HashMap<&PackageId, Component>,
 ) -> Dependencies {
-    let dependencies = nodes.iter().filter_map(|node| {
-        package_to_component
+    let dependencies = nodes.iter().map(|node| {
+        let package_bom_ref = package_to_component_map
             .get(&node.package.id)
-            .map(|package_bom_ref| {
-                let immediate_deps = &node.package.dependencies;
-                let optional_deps = node.package.optional_dependencies.values().flatten();
-                let dep_groups = node.package.dependency_groups.values().flatten();
+            .expect("All nodes should have been added to package_to_bom_ref");
 
-                let package_deps = immediate_deps
-                    .iter()
-                    .chain(optional_deps)
-                    .chain(dep_groups)
-                    .filter_map(|dep| package_to_component.get(&dep.package_id));
+        let immediate_deps = &node.package.dependencies;
+        let optional_deps = node.package.optional_dependencies.values().flatten();
+        let dep_groups = node.package.dependency_groups.values().flatten();
 
-                let bom_refs = package_deps
-                    .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
-                    .sorted_unstable()
-                    .unique()
-                    .collect();
+        let package_deps = immediate_deps
+            .iter()
+            .chain(optional_deps)
+            .chain(dep_groups)
+            .filter_map(|dep| package_to_component_map.get(&dep.package_id));
 
-                Dependency {
-                    dependency_ref: package_bom_ref
-                        .bom_ref
-                        .clone()
-                        .expect("bom-ref should always exist"),
-                    dependencies: bom_refs,
-                }
-            })
+        let bom_refs = package_deps
+            .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
+            .sorted_unstable()
+            .unique()
+            .collect();
+
+        Dependency {
+            dependency_ref: package_bom_ref
+                .bom_ref
+                .clone()
+                .expect("bom-ref should always exist"),
+            dependencies: bom_refs,
+        }
     });
     Dependencies(dependencies.collect())
 }
