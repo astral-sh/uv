@@ -385,15 +385,13 @@ async fn rfc9457_problem_details_license_violation() {
     Mock::given(method("GET"))
         .respond_with(
             ResponseTemplate::new(StatusCode::FORBIDDEN)
-                .set_body_raw(problem_json, "application/problem+json")
+                .set_body_raw(problem_json, "application/problem+json"),
         )
         .mount(&server)
         .await;
 
     let mock_server_uri = server.uri();
-    let tqdm_url = format!(
-        "{mock_server_uri}/packages/tqdm-4.67.1-py3-none-any.whl"
-    );
+    let tqdm_url = format!("{mock_server_uri}/packages/tqdm-4.67.1-py3-none-any.whl");
 
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context

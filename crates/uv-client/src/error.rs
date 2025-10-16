@@ -397,7 +397,10 @@ impl ErrorKind {
     ) -> Self {
         Self::WrappedReqwestError(
             url,
-            Box::new(WrappedReqwestError::with_problem_details(error.into(), problem_details)),
+            Box::new(WrappedReqwestError::with_problem_details(
+                error.into(),
+                problem_details,
+            )),
         )
     }
 }
