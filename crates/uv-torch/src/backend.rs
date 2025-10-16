@@ -466,11 +466,10 @@ impl TorchStrategy {
                 ))),
             },
             Self::Xpu { os, source } => match os {
-                Os::Manylinux { .. } => Either::Right(Either::Right(Either::Left(
+                Os::Manylinux { .. } | Os::Windows => Either::Right(Either::Right(Either::Left(
                     std::iter::once(TorchBackend::Xpu.index_url(*source)),
                 ))),
-                Os::Windows
-                | Os::Musllinux { .. }
+                Os::Musllinux { .. }
                 | Os::Macos { .. }
                 | Os::FreeBsd { .. }
                 | Os::NetBsd { .. }
