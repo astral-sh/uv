@@ -2246,6 +2246,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
+    editable: Option<EditableMode>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2328,22 +2329,53 @@ pub(crate) async fn update_environment(
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
-                if recursive_requirements.is_empty() {
-                    debug!("No requirements to install");
+                // If an EditableMode is requested, and the installed environment
+                // contains any directory installs that don't match the requested mode, proceed
+                // with resolution and installation to correct them.
+                if let Some(mode) = editable {
+                    let mismatch = site_packages.iter().any(|dist| {
+                        if let uv_distribution_types::InstalledDistKind::Url(url_dist) = &dist.kind
+                        {
+                            if let uv_pypi_types::DirectUrl::LocalDirectory { dir_info, .. } =
+                                url_dist.direct_url.as_ref()
+                            {
+                                match mode {
+                                    EditableMode::Editable => dir_info.editable != Some(true),
+                                    EditableMode::NonEditable => dir_info.editable == Some(true),
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    });
+                    if mismatch {
+                        // Fall through to resolution to correct editable mode.
+                    } else {
+                        return Ok(EnvironmentUpdate {
+                            environment: venv,
+                            changelog: Changelog::default(),
+                        });
+                    }
                 } else {
-                    debug!(
-                        "All requirements satisfied: {}",
-                        recursive_requirements
-                            .iter()
-                            .map(ToString::to_string)
-                            .sorted()
-                            .join(" | ")
-                    );
+                    if recursive_requirements.is_empty() {
+                        debug!("No requirements to install");
+                    } else {
+                        debug!(
+                            "All requirements satisfied: {}",
+                            recursive_requirements
+                                .iter()
+                                .map(ToString::to_string)
+                                .sorted()
+                                .join(" | ")
+                        );
+                    }
+                    return Ok(EnvironmentUpdate {
+                        environment: venv,
+                        changelog: Changelog::default(),
+                    });
                 }
-                return Ok(EnvironmentUpdate {
-                    environment: venv,
-                    changelog: Changelog::default(),
-                });
             }
             SatisfiesResult::Unsatisfied(requirement) => {
                 debug!("At least one requirement is not satisfied: {requirement}");
@@ -2457,6 +2489,9 @@ pub(crate) async fn update_environment(
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => return Err(err.into()),
     };
+
+    // Apply editable mode override to the resolution, if any.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Sync the environment.
     let changelog = pip::operations::install(

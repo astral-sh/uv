@@ -34,8 +34,8 @@ use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::apply_editable_mode;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment,
+    EnvironmentSpecification, EnvironmentUpdate, PlatformState, ProjectError, resolve_environment,
+    resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
@@ -460,61 +460,38 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(tool_env) = existing_environment {
-        // Resolve with current interpreter, then apply editable mode, then sync.
-        let env_spec = EnvironmentSpecification::from(spec);
-        let resolution = match resolve_environment(
-            env_spec,
-            tool_env.environment().interpreter(),
-            python_platform.as_ref(),
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            concurrency,
-            &cache,
-            printer,
-            preview,
-        )
-        .await
-        {
-            Ok(resolution) => resolution,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
-        };
-
+    let environment = if let Some(existing_env) = existing_environment {
+        // Update existing environment with requested editable policy.
         let editable_mode = if editable {
             Some(uv_configuration::EditableMode::Editable)
         } else {
             Some(uv_configuration::EditableMode::NonEditable)
         };
-        let resolution = apply_editable_mode(resolution.into(), editable_mode);
 
-        let environment = match sync_environment(
-            tool_env.into_environment(),
-            &resolution,
+        let EnvironmentUpdate { environment, .. } = match update_environment(
+            existing_env.into_environment(),
+            spec,
             Modifications::Exact,
+            python_platform.as_ref(),
+            editable_mode,
             Constraints::from_requirements(build_constraints.iter().cloned()),
-            (&settings).into(),
+            uv_distribution_types::ExtraBuildRequires::default(),
+            &settings,
             &client_builder,
             &state,
+            Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
             installer_metadata,
             concurrency,
             &cache,
+            workspace_cache.clone(),
+            uv_configuration::DryRun::Disabled,
             printer,
             preview,
         )
         .await
         {
-            Ok(env) => env,
+            Ok(update) => update,
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(
                     client_builder.is_native_tls(),

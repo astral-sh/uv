@@ -250,6 +250,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
+                editable,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
