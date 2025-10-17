@@ -12,14 +12,15 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    ExtrasSpecification, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    DirectorySourceDist, Dist, ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement,
+    RequiresPython, Resolution, ResolvedDist, SourceDist, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -2168,6 +2169,74 @@ impl EnvironmentUpdate {
     /// Convert the [`EnvironmentUpdate`] into a [`PythonEnvironment`].
     pub(crate) fn into_environment(self) -> PythonEnvironment {
         self.environment
+    }
+}
+
+/// Apply an editable-mode to a resolution.
+///
+/// - `None`: leave the resolution unchanged.
+/// - `Some(EditableMode::Editable)`: convert any non-editable directory source distributions to
+///   editable.
+/// - `Some(EditableMode::NonEditable)`: convert any editable directory source distributions to
+///   non-editable.
+pub(crate) fn apply_editable_mode(
+    resolution: Resolution,
+    editable: Option<EditableMode>,
+) -> Resolution {
+    match editable {
+        None => resolution,
+        Some(EditableMode::Editable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(true),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
     }
 }
 

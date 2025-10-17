@@ -8,11 +8,10 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
+use uv_configuration::{Concurrency, Constraints, Reinstall, TargetTriple, Upgrade};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+    NameRequirementSpecification, Requirement, RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -34,7 +33,7 @@ use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    sync_environment,
 };
 use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
@@ -43,6 +42,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use crate::commands::project::apply_editable_mode;
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -459,30 +459,61 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(environment) = existing_environment {
-        let environment = match update_environment(
-            environment.into_environment(),
-            spec,
-            Modifications::Exact,
+    let environment = if let Some(tool_env) = existing_environment {
+        // Resolve with current interpreter, then apply editable mode, then sync.
+        let env_spec = EnvironmentSpecification::from(spec);
+        let resolution = match resolve_environment(
+            env_spec,
+            tool_env.environment().interpreter(),
             python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
-            ExtraBuildRequires::default(),
-            &settings,
+            &settings.resolver,
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            Box::new(DefaultInstallLogger),
-            installer_metadata,
             concurrency,
             &cache,
-            workspace_cache,
-            DryRun::Disabled,
             printer,
             preview,
         )
         .await
         {
-            Ok(update) => update.into_environment(),
+            Ok(resolution) => resolution,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        let editable_mode = if editable {
+            Some(uv_configuration::EditableMode::Editable)
+        } else {
+            Some(uv_configuration::EditableMode::NonEditable)
+        };
+        let resolution = apply_editable_mode(resolution.into(), editable_mode);
+
+        let environment = match sync_environment(
+            tool_env.into_environment(),
+            &resolution,
+            Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
+            (&settings).into(),
+            &client_builder,
+            &state,
+            Box::new(DefaultInstallLogger),
+            installer_metadata,
+            concurrency,
+            &cache,
+            printer,
+            preview,
+        )
+        .await
+        {
+            Ok(env) => env,
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(
                     client_builder.is_native_tls(),
@@ -599,10 +630,17 @@ pub(crate) async fn install(
             remove_entrypoints(&existing_receipt);
         }
 
-        // Sync the environment with the resolved requirements.
+        // Sync the environment with the resolved requirements, after applying editable mode.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(
+                resolution.into(),
+                if editable {
+                    Some(uv_configuration::EditableMode::Editable)
+                } else {
+                    Some(uv_configuration::EditableMode::NonEditable)
+                },
+            ),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
