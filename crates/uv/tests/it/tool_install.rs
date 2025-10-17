@@ -360,11 +360,11 @@ fn tool_install_no_editable_workspace_member() -> Result<()> {
     let root_src = context.temp_dir.child("src").child("root");
     root_src.create_dir_all()?;
     root_src.child("__init__.py").write_str(indoc! {
-        r#"
+        r"
         def main():
             import child
             print(child.MESSAGE)
-        "#
+        "
     })?;
 
     let child = context.temp_dir.child("child");
@@ -468,11 +468,11 @@ fn tool_install_workspace_editable() -> Result<()> {
     let root_src = context.temp_dir.child("src").child("root");
     root_src.create_dir_all()?;
     root_src.child("__init__.py").write_str(indoc! {
-        r#"
+        r"
         def main():
             import child
             print(child.MESSAGE)
-        "#
+        "
     })?;
 
     let child = context.temp_dir.child("child");
