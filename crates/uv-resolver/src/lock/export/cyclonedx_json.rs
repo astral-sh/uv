@@ -269,7 +269,7 @@ fn create_component_from_package(
 
     if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
         properties.push(Property::new(
-            "python:environment_marker",
+            "uv:marker",
             &marker_contents.to_string(),
         ));
     }
