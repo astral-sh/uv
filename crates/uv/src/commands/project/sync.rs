@@ -1,7 +1,6 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
