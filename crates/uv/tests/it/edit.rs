@@ -630,6 +630,16 @@ fn add_git_error() -> Result<()> {
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
     "###);
 
+    // Request lfs without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--lfs"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `flask` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    "###);
+
     Ok(())
 }
 
@@ -657,6 +667,103 @@ fn add_git_branch() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn add_git_lfs() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("test-lfs-repo @ git+https://github.com/samypr100/test-lfs-repo").arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424").arg("--lfs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#git_lfs=true)
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "test-lfs-repo",
+        ]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/samypr100/test-lfs-repo", rev = "657500f0703dc173ac5d68dfa1d7e8c985c84424", lfs = true }
+        "#
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "test-lfs-repo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/samypr100/test-lfs-repo?git_lfs=true&rev=657500f0703dc173ac5d68dfa1d7e8c985c84424" }]
+
+        [[package]]
+        name = "test-lfs-repo"
+        version = "0.1.0"
+        source = { git = "https://github.com/samypr100/test-lfs-repo?git_lfs=true&rev=657500f0703dc173ac5d68dfa1d7e8c985c84424#657500f0703dc173ac5d68dfa1d7e8c985c84424" }
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("test-lfs-repo @ git+https://github.com/samypr100/test-lfs-repo").arg("--rev").arg("4e82e85f6a8b8825d614ea23c550af55b2b7738c").arg("--lfs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#git_lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/samypr100/test-lfs-repo@4e82e85f6a8b8825d614ea23c550af55b2b7738c#git_lfs=true)
     ");
 
     Ok(())

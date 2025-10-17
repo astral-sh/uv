@@ -5572,6 +5572,7 @@ dependencies = [
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
+ "uv-git-types",
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
@@ -6024,6 +6025,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-redacted",
+ "uv-static",
 ]
 
 [[package]]

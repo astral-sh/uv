@@ -6,7 +6,7 @@ use url::{ParseError, Url};
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
-use uv_git_types::{GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitUrl, GitUrlParseError};
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
@@ -264,6 +264,7 @@ impl ParsedDirectoryUrl {
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
+/// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir&git_lfs=true`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
@@ -286,6 +287,7 @@ impl TryFrom<DisplaySafeUrl> for ParsedGitUrl {
     /// excluded, it's presumed to come from `tool.uv.sources`.
     fn try_from(url_in: DisplaySafeUrl) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url_in).map(PathBuf::into_boxed_path);
+        let lfs = get_git_lfs(&url_in);
 
         let url = url_in
             .as_str()
@@ -294,6 +296,7 @@ impl TryFrom<DisplaySafeUrl> for ParsedGitUrl {
         let url = DisplaySafeUrl::parse(url)
             .map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)?;
+        let url = url.with_lfs(lfs);
         Ok(Self { url, subdirectory })
     }
 }
@@ -363,6 +366,22 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
         .split('&')
         .find_map(|fragment| fragment.strip_prefix("subdirectory="))?;
     Some(PathBuf::from(subdirectory))
+}
+
+/// Determine if the URL is GitLFS-enabled:
+///   `git+https://git.example.com/MyProject.git@v1.0#git_lfs=true`
+///   `git+https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir&git_lfs=true`
+fn get_git_lfs(url: &Url) -> GitLfs {
+    let fragment = url.fragment().unwrap_or_default();
+    let lfs = fragment
+        .split('&')
+        .find_map(|fragment| fragment.strip_prefix("git_lfs="))
+        .unwrap_or_default();
+    if lfs.eq_ignore_ascii_case("true") {
+        GitLfs::Enabled
+    } else {
+        GitLfs::from_env()
+    }
 }
 
 impl TryFrom<DisplaySafeUrl> for ParsedUrl {
@@ -485,6 +504,7 @@ impl From<&ParsedGitUrl> for DirectUrl {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
                 requested_revision: value.url.reference().as_str().map(ToString::to_string),
+                git_lfs: value.url.lfs().enabled().then_some(true),
             },
             subdirectory: value.subdirectory.clone(),
         }
@@ -526,10 +546,18 @@ impl From<ParsedArchiveUrl> for DisplaySafeUrl {
 
 impl From<ParsedGitUrl> for DisplaySafeUrl {
     fn from(value: ParsedGitUrl) -> Self {
+        let lfs = value.url.lfs().enabled();
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
+        let mut frags: Vec<String> = Vec::new();
         if let Some(subdirectory) = value.subdirectory {
-            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+            frags.push(format!("subdirectory={}", subdirectory.display()));
+        }
+        if lfs {
+            frags.push("git_lfs=true".to_string());
+        }
+        if !frags.is_empty() {
+            url.set_fragment(Some(&frags.join("&")));
         }
         url
     }

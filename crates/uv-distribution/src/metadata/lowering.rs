@@ -166,6 +166,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -175,6 +176,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -407,6 +409,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -416,6 +419,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -580,6 +584,7 @@ fn git_source(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
@@ -595,19 +600,28 @@ fn git_source(
         let path = format!("{}@{}", url.path(), rev);
         url.set_path(&path);
     }
+    let mut frags: Vec<String> = Vec::new();
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
             .to_str()
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
-        url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+        frags.push(format!("subdirectory={subdirectory}"));
     }
+    // Persist only when git lfs support is explicitly requested
+    if let Some(true) = lfs {
+        frags.push("git_lfs=true".to_string());
+    }
+    if !frags.is_empty() {
+        url.set_fragment(Some(&frags.join("&")));
+    }
+
     let url = VerbatimUrl::from_url(url);
 
     let repository = git.clone();
 
     Ok(RequirementSource::Git {
         url,
-        git: GitUrl::from_reference(repository, reference)?,
+        git: GitUrl::from_fields(repository, reference, None, lfs.into())?,
         subdirectory,
     })
 }

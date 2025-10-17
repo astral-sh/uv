@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, cache_digest};
 use uv_distribution_types::IndexUrl;
+use uv_git_types::GitLfs;
 use uv_redacted::DisplaySafeUrl;
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
@@ -15,11 +16,11 @@ pub enum WheelCache<'a> {
     Path(&'a DisplaySafeUrl),
     /// An editable dependency, which we key by URL.
     Editable(&'a DisplaySafeUrl),
-    /// A Git dependency, which we key by URL and SHA.
+    /// A Git dependency, which we key by URL, SHA and LFS status.
     ///
     /// Note that this variant only exists for source distributions; wheels can't be delivered
     /// through Git.
-    Git(&'a DisplaySafeUrl, &'a str),
+    Git(&'a DisplaySafeUrl, &'a str, &'a GitLfs),
 }
 
 impl WheelCache<'_> {
@@ -39,10 +40,14 @@ impl WheelCache<'_> {
             Self::Editable(url) => WheelCacheKind::Editable
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url))),
-            Self::Git(url, sha) => WheelCacheKind::Git
+            Self::Git(url, sha, GitLfs::Disabled) => WheelCacheKind::Git
                 .root()
                 .join(cache_digest(&CanonicalUrl::new(url)))
                 .join(sha),
+            Self::Git(url, sha, GitLfs::Enabled) => WheelCacheKind::Git
+                .root()
+                .join(cache_digest(&CanonicalUrl::new(url)))
+                .join(format!("{sha}_lfs")),
         }
     }
 
