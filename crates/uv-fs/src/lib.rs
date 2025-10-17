@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use tempfile::NamedTempFile;
