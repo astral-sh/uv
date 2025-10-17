@@ -11,7 +11,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, Reinstall, TargetTriple, Upgrade};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    NameRequirementSpecification, Requirement, RequirementSource,
+    ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -475,7 +475,7 @@ pub(crate) async fn install(
             python_platform.as_ref(),
             editable_mode,
             Constraints::from_requirements(build_constraints.iter().cloned()),
-            uv_distribution_types::ExtraBuildRequires::default(),
+            ExtraBuildRequires::default(),
             &settings,
             &client_builder,
             &state,
