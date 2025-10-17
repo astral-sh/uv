@@ -8,7 +8,9 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, EditableMode, Reinstall, TargetTriple, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, EditableMode, Reinstall, TargetTriple, Upgrade,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
@@ -485,7 +487,7 @@ pub(crate) async fn install(
             concurrency,
             &cache,
             workspace_cache.clone(),
-            uv_configuration::DryRun::Disabled,
+            DryRun::Disabled,
             printer,
             preview,
         )
