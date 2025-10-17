@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.4
+
+Released on 2025-10-17.
+
+### Enhancements
+
+- Add CUDA 13.0 support ([#16321](https://github.com/astral-sh/uv/pull/16321))
+- Add auto-detection for Intel GPU on Windows ([#16280](https://github.com/astral-sh/uv/pull/16280))
+- Implement display of RFC 9457 HTTP error contexts ([#16199](https://github.com/astral-sh/uv/pull/16199))
+
+### Bug fixes
+
+- Avoid obfuscating pyx tokens in `uv auth token` output ([#16345](https://github.com/astral-sh/uv/pull/16345))
+
 ## 0.9.3
 
 Released on 2025-10-14.
