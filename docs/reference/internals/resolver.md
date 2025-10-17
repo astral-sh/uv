@@ -151,6 +151,58 @@ that use the local tag for different hardware accelerators such as torch. While 
 mapping between wheel tags and markers, we can do a mapping for well-known platforms, including
 Windows, Linux and macOS.
 
+## Metadata consistency
+
+uv, similar to poetry, requires that wheels of a single version of a package in a specific index
+have the same dependencies (`Requires-Dist` in `METADATA`), including wheels build from a source
+distribution. More generally, uv assumes that each wheel has the same `METADATA` file in its
+dist-info directory.
+
+numpy 2.3.2 for example has 73 wheels. Without this assumption, uv would have to make 73 network
+requests to fetch its metadata, instead of a single one. Another problem we would have without
+metadata consistency is the lack of a 1:1 mapping between markers and wheel tags. Wheel tags can
+include the glibc version while the PEP 508 markers cannot represent it. If wheels had different
+metadata, a universal resolver would have to track two dimensions simultaneously, PEP 508 markers
+and wheel tags. This would increase complexity a lot, and the correspondence between the two is not
+properly specified. PEP 508 markers have been introduced specifically to allow different
+dependencies between different platform, i.e. to have a single dependency declaration for all
+wheels, such as `project.[optional-]dependencies`. If the markers are not sufficient, we should
+extend PEP 508 markers instead of using a parallel system of wheel tags.
+
+Another aspect of metadata consistency is that a source distribution must build into a wheel with
+the same metadata as the wheels, or if there are no wheels, into the same metadata each time. If
+this assumption is violated, sound dependency locking becomes impossible: Consider a package A has a
+source distribution. During resolution, we build A v1 and obtain the dependencies `B>=2,<3`. We lock
+`A==1` and `B==2`. When installing the lockfile on the target machine, we build again and obtain
+dependencies `B>=3,<4` and `C>=1,<2`. The lockfile fails to install: Due to the changed constraints,
+the locked version of `B` is incompatible, and there's no locked candidate for `C`. Re-resolving
+after this would both be a reproducibility problem (the lockfile is effectively ignored) and a
+security concern (`C` has not been reviewed, neither was `B==3`). It's possible to fail on
+installation if that happens, but a late error, possibly during deployment, is a bad user
+experience. There is already a case where uv fails on installation, packages with no source
+distribution and only platform specific wheels incompatible with the current platform. While uv has
+[required environments](https://docs.astral.sh/uv/concepts/resolution/#required-environments) as
+mitigation, this requires a not well known configuration option, and questions around (un)supported
+environments are one of the most common problem for uv users. A similar situation with source
+distributions should be avoided.
+
+While older versions of torch and tensorflow had inconsistent metadata, all recent versions have
+consistent metadata, and we are not aware of any major package with inconsistent metadata. There is
+however no requirement in the Python packaging standards that metadata must be consistent, and
+requests to enforce this in the standards have been rejected
+(https://discuss.python.org/t/enforcing-consistent-metadata-for-packages/50008).
+
+There are packages that have native code that links against the native code in another package, such
+as torch. These package may support building against a range of torch versions, but once built, they
+are constrained to a specific torch version, and the runtime torch version must match the build-time
+version. These are currently a pain point across all package managers, as all major package managers
+from pip to uv cache source distribution builds. uv supports multiple builds depending on the
+version of the already installed package using
+[ `tool.uv.extra-build-dependencies`](https://docs.astral.sh/uv/concepts/projects/config/#augmenting-build-dependencies)
+with `match-runtime = true`. This is a workaround that needs to be made on the user side for each
+affected package, instead of library developers declaring this requirement, which would be possible
+with native standards support.
+
 ## Requires-python
 
 To ensure that a resolution with `requires-python = ">=3.9"` can actually be installed for the
