@@ -68,7 +68,7 @@ pub(crate) async fn login(
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
 
     // If the URL includes a known index URL suffix, strip it
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?

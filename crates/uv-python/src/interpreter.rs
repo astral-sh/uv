@@ -18,7 +18,9 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -666,17 +668,28 @@ impl Interpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                target.root().user_display(),
+            )
+            .await
         } else if let Some(prefix) = self.prefix() {
             // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+            LockedFile::acquire(
+                prefix.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                prefix.root().user_display(),
+            )
+            .await
         } else if self.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lockfile.
             LockedFile::acquire(
                 self.sys_prefix.join(".lock"),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -684,6 +697,7 @@ impl Interpreter {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -1272,8 +1286,8 @@ mod tests {
 
     use crate::Interpreter;
 
-    #[test]
-    fn test_cache_invalidation() {
+    #[tokio::test]
+    async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
@@ -1334,7 +1348,7 @@ mod tests {
         }
     "##};
 
-        let cache = Cache::temp().unwrap().init().unwrap();
+        let cache = Cache::temp().unwrap().init().await.unwrap();
 
         fs::write(
             &mocked_interpreter,

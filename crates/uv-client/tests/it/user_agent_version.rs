@@ -20,7 +20,7 @@ async fn test_user_agent_has_version() -> Result<()> {
     let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // Send request to our dummy server
@@ -152,7 +152,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     })?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let mut builder =
         RegistryClientBuilder::new(BaseClientBuilder::default(), cache).markers(&markers);
 

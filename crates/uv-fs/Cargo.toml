@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-static = { workspace = true }
+
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
@@ -26,6 +28,7 @@ same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 
