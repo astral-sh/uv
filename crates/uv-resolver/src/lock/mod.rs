@@ -5559,9 +5559,9 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", package.cyan())
                     };
-                    writeln!(
+                    write!(
                         f,
-                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
+                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
                         "hint".bold().cyan(),
                         ":".bold(),
                         best,
@@ -5569,22 +5569,9 @@ impl std::fmt::Display for WheelTagHint {
                         tags.iter()
                             .map(|tag| format!("`{}`", tag.cyan()))
                             .join(", "),
+                        format!("\"{example_marker}\"").cyan(),
                         "tool.uv.required-environments".green()
-                    )?;
-                    writeln!(
-                        f,
-                        "{}",
-                        "For example, add this to your pyproject.toml:".dimmed()
-                    )?;
-                    writeln!(f, "    {}", "[tool.uv]".dimmed())?;
-                    writeln!(f, "    {} = [", "required-environments".green())?;
-                    writeln!(
-                        f,
-                        "        \"{}\",  {}",
-                        example_marker.cyan().dimmed(),
-                        "# Adjust the platform/architecture as needed".dimmed()
-                    )?;
-                    writeln!(f, "    {}", "]".dimmed())
+                    )
                 } else {
                     if let Some(version) = version {
                         write!(
