@@ -17,7 +17,7 @@ use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_fs::{LockedFile, LockedFileError, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
@@ -38,6 +38,8 @@ use crate::{
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error(transparent)]

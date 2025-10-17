@@ -8,7 +8,7 @@ use crate::metadata::MetadataError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
-use uv_fs::Simplified;
+use uv_fs::{LockedFileError, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -39,6 +39,8 @@ pub enum Error {
     CacheRead(#[source] std::io::Error),
     #[error("Failed to write to the distribution cache")]
     CacheWrite(#[source] std::io::Error),
+    #[error("Failed to acquire lock on the distribution cache")]
+    CacheLock(#[source] LockedFileError),
     #[error("Failed to deserialize cache entry")]
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
