@@ -91,6 +91,27 @@ pub enum Error {
     ToolEnvironmentNotFound(PackageName, PathBuf),
 }
 
+impl Error {
+    pub fn as_io_error(&self) -> Option<&io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::VirtualEnvError(uv_virtualenv::Error::Io(err)) => Some(err),
+            Self::ReceiptWrite(_, _)
+            | Self::ReceiptRead(_, _)
+            | Self::VirtualEnvError(_)
+            | Self::EntrypointRead(_)
+            | Self::NoExecutableDirectory
+            | Self::ToolName(_)
+            | Self::EnvironmentError(_)
+            | Self::MissingToolReceipt(_, _)
+            | Self::EnvironmentRead(_, _)
+            | Self::MissingToolPackage(_)
+            | Self::ToolEnvironmentNotFound(_, _) => None,
+        }
+    }
+}
+
 /// A collection of uv-managed tools installed on the current system.
 #[derive(Debug, Clone)]
 pub struct InstalledTools {

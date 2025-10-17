@@ -39,7 +39,11 @@ impl AuthBackend {
         let path = TextCredentialStore::default_file()?;
         match TextCredentialStore::read(&path) {
             Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
-            Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+            {
                 Ok(Self::TextStore(
                     TextCredentialStore::default(),
                     TextCredentialStore::lock(&path)?,
@@ -84,6 +88,21 @@ pub enum TomlCredentialError {
     CredentialsDirError,
     #[error("Token is not valid unicode")]
     TokenNotUnicode(#[from] std::string::FromUtf8Error),
+}
+
+impl TomlCredentialError {
+    pub fn as_io_error(&self) -> Option<&std::io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::ParseError(_)
+            | Self::SerializeError(_)
+            | Self::BasicAuthError(_)
+            | Self::BearerAuthError(_)
+            | Self::CredentialsDirError
+            | Self::TokenNotUnicode(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Error)]

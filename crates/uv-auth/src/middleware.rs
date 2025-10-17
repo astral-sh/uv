@@ -22,7 +22,7 @@ use crate::{
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
-use crate::{Index, TextCredentialStore, TomlCredentialError};
+use crate::{Index, TextCredentialStore};
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -81,7 +81,11 @@ impl Default for TextStoreMode {
                     debug!("Loaded credential file {}", path.display());
                     Some(store)
                 }
-                Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                Err(err)
+                    if err
+                        .as_io_error()
+                        .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+                {
                     debug!("No credentials file found at {}", path.display());
                     None
                 }
