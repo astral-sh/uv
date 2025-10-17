@@ -1452,7 +1452,7 @@ impl Lock {
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         tags: &Tags,
-        markers: &uv_pep508::MarkerEnvironment,
+        markers: &MarkerEnvironment,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -2517,7 +2517,7 @@ impl Package {
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
-        markers: &uv_pep508::MarkerEnvironment,
+        markers: &MarkerEnvironment,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -2635,7 +2635,7 @@ impl Package {
     fn tag_hint(
         &self,
         tag_policy: TagPolicy<'_>,
-        markers: &uv_pep508::MarkerEnvironment,
+        markers: &MarkerEnvironment,
     ) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
@@ -5272,7 +5272,7 @@ enum WheelTagHint {
         version: Option<Version>,
         tags: BTreeSet<PlatformTag>,
         best: Option<PlatformTag>,
-        markers: uv_pep508::MarkerEnvironment,
+        markers: MarkerEnvironment,
     },
 }
 
@@ -5283,7 +5283,7 @@ impl WheelTagHint {
         version: Option<&Version>,
         filenames: &[&WheelFilename],
         tags: &Tags,
-        markers: &uv_pep508::MarkerEnvironment,
+        markers: &MarkerEnvironment,
     ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
@@ -5389,7 +5389,7 @@ impl WheelTagHint {
         })
     }
 
-    fn suggest_environment_marker(markers: &uv_pep508::MarkerEnvironment) -> String {
+    fn suggest_environment_marker(markers: &MarkerEnvironment) -> String {
         let sys_platform = markers.sys_platform();
         let platform_machine = markers.platform_machine();
 
