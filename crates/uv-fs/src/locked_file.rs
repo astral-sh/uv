@@ -5,7 +5,6 @@ use std::time::Duration;
 use std::{env, io, thread};
 
 use fs2::FileExt;
-use rustix::path::Arg;
 use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
 
@@ -21,8 +20,7 @@ static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
     };
 
     if let Some(lock_timeout) = lock_timeout
-        .as_str()
-        .ok()
+        .to_str()
         .and_then(|lock_timeout| lock_timeout.parse::<u64>().ok())
     {
         Duration::from_secs(lock_timeout)
