@@ -21,8 +21,10 @@ uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
+uv-fs = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
+
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 reqwest = { workspace = true }

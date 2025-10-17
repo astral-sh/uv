@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-use uv_fs::{LockedFile, with_added_extension};
+use uv_fs::{LockedFile, LockedFileError, with_added_extension};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
@@ -70,6 +70,8 @@ pub enum AuthScheme {
 pub enum TomlCredentialError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to parse TOML credential file: {0}")]
     ParseError(#[from] toml::de::Error),
     #[error("Failed to serialize credentials to TOML")]

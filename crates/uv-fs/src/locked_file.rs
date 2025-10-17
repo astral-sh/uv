@@ -1,10 +1,97 @@
-use crate::Simplified;
-
 use std::fmt::Display;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::Duration;
+use std::{env, io, thread};
 
 use fs2::FileExt;
-use tracing::{debug, error, info, trace};
+use rustix::path::Arg;
+use thiserror::Error;
+use tracing::{debug, error, info, trace, warn};
+
+use uv_static::EnvVars;
+
+use crate::Simplified;
+
+/// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
+static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
+    let default_timeout = Duration::from_secs(300);
+    let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
+        return default_timeout;
+    };
+
+    if let Some(lock_timeout) = lock_timeout
+        .as_str()
+        .ok()
+        .and_then(|lock_timeout| lock_timeout.parse::<u64>().ok())
+    {
+        Duration::from_secs(lock_timeout)
+    } else {
+        warn!(
+            "Could not parse value of {} as integer: {:?}",
+            EnvVars::UV_LOCK_TIMEOUT,
+            lock_timeout
+        );
+        default_timeout
+    }
+});
+
+#[derive(Debug, Error)]
+pub enum LockedFileError {
+    #[error(
+        "Timeout ({}s) when waiting for lock on `{}` at `{}`, is another uv process running? Set `{}` to increase the timeout.",
+        timeout.as_secs(),
+        resource,
+        path.user_display(),
+        EnvVars::UV_LOCK_TIMEOUT
+    )]
+    Timeout {
+        timeout: Duration,
+        resource: String,
+        path: PathBuf,
+    },
+    #[error(
+        "Could not acquire lock for `{}` at `{}`",
+        resource,
+        path.user_display()
+    )]
+    Lock {
+        resource: String,
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[cfg(feature = "tokio")]
+    #[error(transparent)]
+    JoinError(#[from] tokio::task::JoinError),
+}
+
+impl LockedFileError {
+    pub fn as_io_error(&self) -> Option<&io::Error> {
+        match self {
+            Self::Timeout { .. } | Self::JoinError(_) => None,
+            Self::Lock { source, .. } => Some(source),
+            Self::Io(err) => Some(err),
+        }
+    }
+}
+
+/// Runs a callback with a timeout by spawning a thread.
+fn run_with_timeout<Output: Send + 'static>(
+    workload: impl (FnOnce() -> Output) + Send + 'static,
+    timeout: Duration,
+) -> Option<Output> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let output = workload();
+        sender
+            .send(output)
+            .expect("Main thread went away, was there a panic?");
+    });
+    receiver.recv_timeout(timeout).ok()
+}
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
@@ -13,7 +100,7 @@ pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
     /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
+    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, LockedFileError> {
         trace!(
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
@@ -32,13 +119,25 @@ impl LockedFile {
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
-                file.file().lock_exclusive().map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire lock for `{resource}` at `{}`: {}",
-                        file.path().user_display(),
-                        err
-                    ))
+                let path = file.path().to_path_buf();
+                // Break deadlocks with a timeout.
+                let result = run_with_timeout(
+                    move || {
+                        file.file().lock_exclusive()?;
+                        Ok(file)
+                    },
+                    *LOCK_TIMEOUT,
+                )
+                .ok_or_else(|| LockedFileError::Timeout {
+                    timeout: *LOCK_TIMEOUT,
+                    resource: resource.to_string(),
+                    path: path.clone(),
+                })?;
+                // Not an fs_err method, we need to build our own path context
+                let file = result.map_err(|err| LockedFileError::Lock {
+                    resource: resource.to_string(),
+                    path,
+                    source: err,
                 })?;
 
                 debug!("Acquired lock for `{resource}`");
@@ -74,7 +173,7 @@ impl LockedFile {
     fn lock_file_shared_blocking(
         file: fs_err::File,
         resource: &str,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, LockedFileError> {
         trace!(
             "Checking shared lock for `{resource}` at `{}`",
             file.path().user_display()
@@ -94,13 +193,25 @@ impl LockedFile {
                     "Waiting to acquire shared lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
-                FileExt::lock_shared(file.file()).map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire shared lock for `{resource}` at `{}`: {}",
-                        file.path().user_display(),
-                        err
-                    ))
+                let path = file.path().to_path_buf();
+                // Break deadlocks with a timeout.
+                let result = run_with_timeout(
+                    move || {
+                        FileExt::lock_shared(file.file())?;
+                        Ok(file)
+                    },
+                    *LOCK_TIMEOUT,
+                )
+                .ok_or_else(|| LockedFileError::Timeout {
+                    timeout: *LOCK_TIMEOUT,
+                    resource: resource.to_string(),
+                    path: path.clone(),
+                })?;
+                // Not an fs_err method, we need to build our own path context
+                let file = result.map_err(|err| LockedFileError::Lock {
+                    resource: resource.to_string(),
+                    path,
+                    source: err,
                 })?;
 
                 debug!("Acquired shared lock for `{resource}`");
@@ -116,7 +227,7 @@ impl LockedFile {
     pub fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, LockedFileError> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
@@ -129,7 +240,7 @@ impl LockedFile {
     pub fn acquire_shared_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, LockedFileError> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_shared_blocking(file, &resource)
@@ -140,7 +251,7 @@ impl LockedFile {
     pub async fn acquire(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, LockedFileError> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
@@ -151,7 +262,7 @@ impl LockedFile {
     pub async fn acquire_shared(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, LockedFileError> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
