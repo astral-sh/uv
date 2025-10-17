@@ -486,7 +486,7 @@ pub(crate) async fn install(
             installer_metadata,
             concurrency,
             &cache,
-            workspace_cache.clone(),
+            workspace_cache,
             DryRun::Disabled,
             printer,
             preview,
