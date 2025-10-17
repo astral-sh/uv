@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, Reinstall, TargetTriple, Upgrade};
+use uv_configuration::{Concurrency, Constraints, EditableMode, Reinstall, TargetTriple, Upgrade};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
@@ -463,9 +463,9 @@ pub(crate) async fn install(
     let environment = if let Some(existing_env) = existing_environment {
         // Update existing environment with requested editable policy.
         let editable_mode = if editable {
-            Some(uv_configuration::EditableMode::Editable)
+            Some(EditableMode::Editable)
         } else {
-            Some(uv_configuration::EditableMode::NonEditable)
+            Some(EditableMode::NonEditable)
         };
 
         let EnvironmentUpdate { environment, .. } = match update_environment(
