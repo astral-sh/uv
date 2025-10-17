@@ -381,7 +381,9 @@ fn tool_install_no_editable_workspace_member() -> Result<()> {
     "#})?;
     let child_src = child.child("src").child("child");
     child_src.create_dir_all()?;
-    child_src.child("__init__.py").write_str("MESSAGE = 'OK'\n")?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
 
     // Install the tool from the workspace root (default: workspace deps non-editable).
     uv_snapshot!(context.filters(), context.tool_install()
@@ -413,7 +415,9 @@ fn tool_install_no_editable_workspace_member() -> Result<()> {
     ");
 
     // Modify the child source; since it's non-editable, the tool should still print the old value.
-    child_src.child("__init__.py").write_str("MESSAGE = 'CHANGED'\n")?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
 
     // The installed tool should still work with the original behavior (non-editable dependency).
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
@@ -485,7 +489,9 @@ fn tool_install_workspace_editable() -> Result<()> {
     "#})?;
     let child_src = child.child("src").child("child");
     child_src.create_dir_all()?;
-    child_src.child("__init__.py").write_str("MESSAGE = 'OK'\n")?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
 
     // Install the tool from the workspace root with --editable (workspace deps editable).
     uv_snapshot!(context.filters(), context.tool_install()
@@ -518,7 +524,9 @@ fn tool_install_workspace_editable() -> Result<()> {
     ");
 
     // Modify the child source; since it's editable, the tool should reflect the change.
-    child_src.child("__init__.py").write_str("MESSAGE = 'CHANGED'\n")?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: true

@@ -11,7 +11,8 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, Reinstall, TargetTriple, Upgrade};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    NameRequirementSpecification, Requirement, RequirementSource, UnresolvedRequirementSpecification,
+    NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -31,6 +32,7 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
+use crate::commands::project::apply_editable_mode;
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment,
@@ -42,7 +44,6 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
-use crate::commands::project::apply_editable_mode;
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
