@@ -163,6 +163,13 @@ pub struct PythonDownloadRequest {
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
     pub(crate) prereleases: Option<bool>,
+
+    /// Whether to include all Python variants (e.g., debug, freethreaded) in the results.
+    ///
+    /// If `true`, all variants matching the version request are included.
+    /// If `false`, only the variant specified in the [`Self::version`] request is included,
+    /// defaulting to the default variant if no variant is specified.
+    pub(crate) all_variants: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -254,6 +261,7 @@ impl PythonDownloadRequest {
         os: Option<Os>,
         libc: Option<Libc>,
         prereleases: Option<bool>,
+        all_variants: bool,
     ) -> Self {
         Self {
             version,
@@ -263,6 +271,7 @@ impl PythonDownloadRequest {
             libc,
             build: None,
             prereleases,
+            all_variants,
         }
     }
 
@@ -315,6 +324,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_prereleases(mut self, prereleases: bool) -> Self {
         self.prereleases = Some(prereleases);
+        self
+    }
+
+    #[must_use]
+    pub fn with_all_variants(mut self, all_variants: bool) -> Self {
+        self.all_variants = all_variants;
         self
     }
 
@@ -450,10 +465,10 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if let Some(variant) = version.variant() {
-                if variant != key.variant {
-                    return false;
-                }
+            // When all_variants is false, only match the variant from the version request.
+            // For example, `3.13+debug` will only match debug builds.
+            if !self.all_variants && version.variant().is_some_and(|v| v != key.variant) {
+                return false;
             }
         }
         true
@@ -565,6 +580,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(*key.os()),
             Some(*key.libc()),
             Some(key.prerelease.is_some()),
+            false,
         )
     }
 }
@@ -788,7 +804,15 @@ impl FromStr for PythonDownloadRequest {
             }
         }
 
-        Ok(Self::new(version, implementation, arch, os, libc, None))
+        Ok(Self::new(
+            version,
+            implementation,
+            arch,
+            os,
+            libc,
+            None,
+            false,
+        ))
     }
 }
 
