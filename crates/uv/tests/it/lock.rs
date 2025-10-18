@@ -13140,51 +13140,32 @@ fn check_no_lock() -> Result<()> {
 /// Checks the output of `uv lock --check` when the lock is outdated
 #[test]
 fn check_outdated_lock() -> Result<()> {
+    // Given a test context with a pyproject.toml
     let context = TestContext::new("3.12");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
         name = "myproject"
         version = "0.1.0"
-        requires-python = ">=3.11"
-        dependencies = ["sortedcollections"]
+        requires-python = ">=3.12"
+        dependencies = ["minilog"]
         "#,
     )?;
 
-    // Generate the lock
-    uv_snapshot!(context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    // Check the --check returns fine
-    uv_snapshot!(context.filters(), context.lock()
-        .arg("--check"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    // Edit dependencies so the lock is invalid
-    pyproject_toml.write_str(
+    // When I create an outdated lockfile
+    let uv_lock = context.temp_dir.child("uv.lock");
+    uv_lock.write_str(
         r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.11"
-        dependencies = ["iniconfig"]
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "#,
     )?;
 
+    // Then `uv lock --check` fails with relevant error message
     uv_snapshot!(context.filters(), context.lock()
         .arg("--check"), @r"
     success: false
@@ -13193,7 +13174,7 @@ fn check_outdated_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
     Ok(())
 }
