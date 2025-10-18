@@ -2691,3 +2691,273 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
 
     Ok(())
 }
+
+fn create_workspace(context: &TestContext) -> Result<()> {
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+    "#})?;
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.create_dir_all()?;
+    let foo_pyproject = foo_dir.child("pyproject.toml");
+    foo_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let bar_dir = context.temp_dir.child("bar");
+    bar_dir.create_dir_all()?;
+    let bar_pyproject = bar_dir.child("pyproject.toml");
+    bar_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    Ok(())
+}
+
+#[test]
+fn version_all_packages_get() -> Result<()> {
+    let context = TestContext::new("3.12");
+    create_workspace(&context)?;
+
+    uv_snapshot!(context.filters(), context.version().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    a 0.1.0
+    bar 0.1.0
+    foo 0.1.0
+
+    ----- stderr -----
+    "
+    );
+
+    let foo_pyproject = fs_err::read_to_string(context.temp_dir.child("foo/pyproject.toml"))?;
+    assert_snapshot!(
+        foo_pyproject,
+    @r#"
+    [project]
+    name = "foo"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    let bar_pyproject = fs_err::read_to_string(context.temp_dir.child("bar/pyproject.toml"))?;
+    assert_snapshot!(
+        bar_pyproject,
+    @r#"
+    [project]
+    name = "bar"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn version_all_packages_bump() -> Result<()> {
+    let context = TestContext::new("3.12");
+    create_workspace(&context)?;
+
+    uv_snapshot!(context.filters(), context.version().arg("--all-packages").arg("--bump").arg("patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    a 0.1.0 => 0.1.1
+    bar 0.1.0 => 0.1.1
+    foo 0.1.0 => 0.1.1
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    "
+    );
+
+    let foo_pyproject = fs_err::read_to_string(context.temp_dir.child("foo/pyproject.toml"))?;
+    assert_snapshot!(
+        foo_pyproject,
+    @r#"
+    [project]
+    name = "foo"
+    version = "0.1.1"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    let bar_pyproject = fs_err::read_to_string(context.temp_dir.child("bar/pyproject.toml"))?;
+    assert_snapshot!(
+        bar_pyproject,
+    @r#"
+    [project]
+    name = "bar"
+    version = "0.1.1"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn version_all_packages_set() -> Result<()> {
+    let context = TestContext::new("3.12");
+    create_workspace(&context)?;
+
+    uv_snapshot!(context.filters(), context.version().arg("--all-packages").arg("1.2.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    a 0.1.0 => 1.2.3
+    bar 0.1.0 => 1.2.3
+    foo 0.1.0 => 1.2.3
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    "
+    );
+
+    let foo_pyproject = fs_err::read_to_string(context.temp_dir.child("foo/pyproject.toml"))?;
+    assert_snapshot!(
+        foo_pyproject,
+    @r#"
+    [project]
+    name = "foo"
+    version = "1.2.3"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    let bar_pyproject = fs_err::read_to_string(context.temp_dir.child("bar/pyproject.toml"))?;
+    assert_snapshot!(
+        bar_pyproject,
+    @r#"
+    [project]
+    name = "bar"
+    version = "1.2.3"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn version_all_packages_dry_run() -> Result<()> {
+    let context = TestContext::new("3.12");
+    create_workspace(&context)?;
+
+    uv_snapshot!(context.filters(), context.version().arg("--all-packages").arg("--bump").arg("patch").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    a 0.1.0 => 0.1.1
+    bar 0.1.0 => 0.1.1
+    foo 0.1.0 => 0.1.1
+
+    ----- stderr -----
+    "
+    );
+
+    let foo_pyproject = fs_err::read_to_string(context.temp_dir.child("foo/pyproject.toml"))?;
+    assert_snapshot!(
+        foo_pyproject,
+    @r#"
+    [project]
+    name = "foo"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    let bar_pyproject = fs_err::read_to_string(context.temp_dir.child("bar/pyproject.toml"))?;
+    assert_snapshot!(
+        bar_pyproject,
+    @r#"
+    [project]
+    name = "bar"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn version_all_packages_missing_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+    create_workspace(&context)?;
+
+    // Remove the version from the 'bar' package
+    let bar_pyproject_path = context.temp_dir.child("bar/pyproject.toml");
+    bar_pyproject_path.write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        requires-python = ">=3.12"
+
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.version().arg("--all-packages").arg("--bump").arg("patch"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `bar/pyproject.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^^^^^^^^^
+    `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
+    "
+    );
+
+    // Check that foo's version remains unchanged
+    let foo_pyproject = fs_err::read_to_string(context.temp_dir.child("foo/pyproject.toml"))?;
+    assert_snapshot!(
+        foo_pyproject,
+    @r#"
+    [project]
+    name = "foo"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    // Check that bar's pyproject.toml remains unchanged
+    let bar_pyproject = fs_err::read_to_string(&bar_pyproject_path)?;
+    assert_snapshot!(
+        bar_pyproject,
+    @r#"
+    [project]
+    name = "bar"
+    requires-python = ">=3.12"
+    "#
+    );
+
+    Ok(())
+}
