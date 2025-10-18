@@ -215,7 +215,7 @@ fn run_no_args() -> Result<()> {
         "#
     })?;
 
-    // Run without specifying any argunments.
+    // Run without specifying any arguments.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.run(), @r###"
     success: false
