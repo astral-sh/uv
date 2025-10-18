@@ -1206,6 +1206,7 @@ impl ValidatedLock {
                 dependency_metadata,
                 indexes,
                 interpreter.tags()?,
+                interpreter.markers(),
                 hasher,
                 index,
                 database,

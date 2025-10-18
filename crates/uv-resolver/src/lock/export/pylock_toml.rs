@@ -1144,13 +1144,13 @@ impl<'lock> PylockToml {
                         kind: Box::new(PylockTomlErrorKind::IncompatibleWheelOnly(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                     (false, false) => Err(PylockTomlError {
                         kind: Box::new(PylockTomlErrorKind::NeitherSourceDistNorWheel(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                 };
             };
@@ -1279,7 +1279,7 @@ impl PylockTomlPackage {
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tags: &Tags) -> Option<WheelTagHint> {
+    fn tag_hint(&self, tags: &Tags, markers: &MarkerEnvironment) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -1287,7 +1287,7 @@ impl PylockTomlPackage {
             .filter_map(|wheel| wheel.filename(&self.name).ok())
             .collect::<Vec<_>>();
         let filenames = filenames.iter().map(Cow::as_ref).collect::<Vec<_>>();
-        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags)
+        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags, markers)
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
