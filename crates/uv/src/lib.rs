@@ -1577,6 +1577,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.install_dir,
                 args.targets,
                 args.all,
+                args.outdated,
                 printer,
                 globals.preview,
             )
