@@ -27,7 +27,7 @@ use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
-    RetryParsingError, UvRetryableStrategy, retries_from_env,
+    RetryParsingError, UvRetryableStrategy,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -382,6 +382,7 @@ pub async fn upload(
     filename: &DistFilename,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
+    retry_policy: ExponentialBackoff,
     credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
     download_concurrency: &Semaphore,
@@ -389,8 +390,6 @@ pub async fn upload(
 ) -> Result<bool, PublishError> {
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
-    // N.B. We cannot use the client policy here because it is set to zero retries.
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     loop {
         let (request, idx) = build_upload_request(
             file,

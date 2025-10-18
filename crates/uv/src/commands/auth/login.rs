@@ -44,6 +44,7 @@ pub(crate) async fn login(
             network_settings.allow_insecure_host.clone(),
             preview,
             network_settings.timeout,
+            network_settings.retries,
         )
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .build();

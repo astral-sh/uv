@@ -585,6 +585,7 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub http_timeout: Duration,
+    pub http_retries: u32,
     pub upload_http_timeout: Duration,
     pub concurrency: Concurrency,
     #[cfg(feature = "tracing-durations-export")]
@@ -635,6 +636,7 @@ impl EnvironmentOptions {
                 .or(http_timeout)
                 .unwrap_or(Duration::from_secs(15 * 60)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
+            http_retries: parse_u32_environment_variable(EnvVars::UV_HTTP_RETRIES)?.unwrap_or(3),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
@@ -752,8 +754,13 @@ where
 }
 
 /// Parse a integer environment variable.
+fn parse_u32_environment_variable(name: &'static str) -> Result<Option<u32>, Error> {
+    parse_integer_environment_variable(name, "expected an non-negative integer")
+}
+
+/// Parse a integer environment variable.
 fn parse_u64_environment_variable(name: &'static str) -> Result<Option<u64>, Error> {
-    parse_integer_environment_variable(name, "expected an integer")
+    parse_integer_environment_variable(name, "expected an non-negative integer")
 }
 
 /// Parse a non-zero usize environment variable.
