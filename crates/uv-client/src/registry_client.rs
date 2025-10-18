@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -324,6 +325,7 @@ impl RegistryClient {
         };
 
         let mut results = Vec::new();
+        let any_status_code_error = AtomicBool::new(false);
 
         match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
@@ -355,6 +357,7 @@ impl RegistryClient {
                                     debug!(
                                         "Indexes search failed because of status code failure: {status_code}"
                                     );
+                                    any_status_code_error.store(true, Ordering::Relaxed);
                                     break;
                                 }
                             }
@@ -390,7 +393,11 @@ impl RegistryClient {
                                     .await?
                                 {
                                     SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
-                                    _ => None,
+                                    SimpleMetadataSearchOutcome::NotFound => None,
+                                    SimpleMetadataSearchOutcome::StatusCodeFailure(_) => {
+                                        any_status_code_error.store(true, Ordering::Relaxed);
+                                        None
+                                    }
                                 };
                                 Ok((index.url, metadata.map(MetadataFormat::Simple)))
                             }
@@ -414,9 +421,11 @@ impl RegistryClient {
 
         if results.is_empty() {
             return match self.connectivity {
-                Connectivity::Online => {
-                    Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+                Connectivity::Online => Err(ErrorKind::PackageNotFound {
+                    package_name: package_name.to_string(),
+                    status_code_error: any_status_code_error.load(Ordering::Relaxed),
                 }
+                .into()),
                 Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
             };
         }

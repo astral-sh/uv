@@ -200,7 +200,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     .collect(),
             )),
             Err(err) => match err.kind() {
-                uv_client::ErrorKind::PackageNotFound(_) => {
+                uv_client::ErrorKind::PackageNotFound { .. } => {
                     if let Some(flat_index) = flat_index
                         .and_then(|flat_index| flat_index.get(package_name))
                         .cloned()
