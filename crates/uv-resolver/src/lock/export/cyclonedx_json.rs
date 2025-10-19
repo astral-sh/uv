@@ -257,9 +257,8 @@ fn create_component_from_package(
     let classification = match package_type {
         PackageType::Root => Classification::Application,
         PackageType::Workspace(path) => {
-            properties.push(Property::new("uv:workspace", "true"));
             properties.push(Property::new(
-                "uv:workspace_path",
+                "uv:workspace:path",
                 &PortablePath::from(path).to_string(),
             ));
             Classification::Application
@@ -269,7 +268,7 @@ fn create_component_from_package(
 
     if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
         properties.push(Property::new(
-            "uv:marker",
+            "cdx:python:package:marker",
             &marker_contents.to_string(),
         ));
     }
