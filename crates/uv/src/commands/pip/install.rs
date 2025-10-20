@@ -242,7 +242,7 @@ pub(crate) async fn pip_install(
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                     if system {
-                        "\nhint: This happens because you used the `--system` flag, which selects the system Python interpreter."
+                        "\nhint: This happens because the `--system` flag was used, which selects the system Python interpreter."
                     } else {
                         ""
                     }
