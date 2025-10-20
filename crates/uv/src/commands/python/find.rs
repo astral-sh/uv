@@ -139,6 +139,7 @@ pub(crate) async fn find_script(
         cache,
         printer,
         preview,
+        false,
     )
     .await
     {
