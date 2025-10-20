@@ -1549,7 +1549,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex { index } => {
                 write!(
                     f,
-                    "{}{} An index URL ({}) returned a {} error. This could indicate missing authentication credentials, or the package may not exist on this index.",
+                    "{}{} An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     index.without_credentials().cyan(),
