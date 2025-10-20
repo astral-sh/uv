@@ -12491,7 +12491,7 @@ fn add_empty_ignore_error_codes() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://download.pytorch.org/whl/cpu) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
+          hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
