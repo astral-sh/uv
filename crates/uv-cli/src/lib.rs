@@ -2639,6 +2639,13 @@ pub struct BuildArgs {
     #[arg(long)]
     pub clear: bool,
 
+    #[arg(long, overrides_with("no_gitignore"), hide = true)]
+    pub gitignore: bool,
+
+    /// Do not create a `.gitignore` file in the output directory
+    #[arg(long, overrides_with("gitignore"))]
+    pub no_gitignore: bool,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
