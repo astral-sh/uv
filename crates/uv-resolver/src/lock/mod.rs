@@ -3987,6 +3987,14 @@ enum SourceDist {
 }
 
 impl SourceDist {
+    pub(crate) fn metadata(&self) -> &SourceDistMetadata {
+        match self {
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata,
+        }
+    }
+
     fn filename(&self) -> Option<Cow<'_, str>> {
         match self {
             Self::Metadata { .. } => None,
@@ -4004,27 +4012,15 @@ impl SourceDist {
     }
 
     pub(crate) fn hash(&self) -> Option<&Hash> {
-        match self {
-            Self::Metadata { metadata } => metadata.hash.as_ref(),
-            Self::Url { metadata, .. } => metadata.hash.as_ref(),
-            Self::Path { metadata, .. } => metadata.hash.as_ref(),
-        }
+        self.metadata().hash.as_ref()
     }
 
     pub(crate) fn size(&self) -> Option<u64> {
-        match self {
-            Self::Metadata { metadata } => metadata.size,
-            Self::Url { metadata, .. } => metadata.size,
-            Self::Path { metadata, .. } => metadata.size,
-        }
+        self.metadata().size
     }
 
     pub(crate) fn upload_time(&self) -> Option<Timestamp> {
-        match self {
-            Self::Metadata { metadata } => metadata.upload_time,
-            Self::Url { metadata, .. } => metadata.upload_time,
-            Self::Path { metadata, .. } => metadata.upload_time,
-        }
+        self.metadata().upload_time
     }
 }
 

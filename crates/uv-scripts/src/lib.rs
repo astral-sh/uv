@@ -36,8 +36,7 @@ impl Pep723Item {
     pub fn metadata(&self) -> &Pep723Metadata {
         match self {
             Self::Script(script) => &script.metadata,
-            Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata, ..) => metadata,
+            Self::Stdin(metadata) | Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -45,8 +44,7 @@ impl Pep723Item {
     pub fn into_metadata(self) -> Pep723Metadata {
         match self {
             Self::Script(script) => script.metadata,
-            Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata, ..) => metadata,
+            Self::Stdin(metadata) | Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -54,8 +52,7 @@ impl Pep723Item {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Script(script) => Some(&script.path),
-            Self::Stdin(..) => None,
-            Self::Remote(..) => None,
+            Self::Stdin(..) | Self::Remote(..) => None,
         }
     }
 

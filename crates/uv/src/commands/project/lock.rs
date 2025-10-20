@@ -64,15 +64,13 @@ pub(crate) enum LockResult {
 impl LockResult {
     pub(crate) fn lock(&self) -> &Lock {
         match self {
-            Self::Unchanged(lock) => lock,
-            Self::Changed(_, lock) => lock,
+            Self::Unchanged(lock) | Self::Changed(_, lock) => lock,
         }
     }
 
     pub(crate) fn into_lock(self) -> Lock {
         match self {
-            Self::Unchanged(lock) => lock,
-            Self::Changed(_, lock) => lock,
+            Self::Unchanged(lock) | Self::Changed(_, lock) => lock,
         }
     }
 }
@@ -1384,10 +1382,10 @@ impl ValidatedLock {
     #[must_use]
     fn into_lock(self) -> Lock {
         match self {
-            Self::Unusable(lock) => lock,
-            Self::Satisfies(lock) => lock,
-            Self::Preferable(lock) => lock,
-            Self::Versions(lock) => lock,
+            Self::Unusable(lock)
+            | Self::Satisfies(lock)
+            | Self::Preferable(lock)
+            | Self::Versions(lock) => lock,
         }
     }
 }

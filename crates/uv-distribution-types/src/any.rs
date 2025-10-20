@@ -22,8 +22,7 @@ pub enum LocalDist {
 impl LocalDist {
     fn canonical_version(&self) -> &CanonicalVersion {
         match self {
-            Self::Cached(_, version) => version,
-            Self::Installed(_, version) => version,
+            Self::Cached(_, version) | Self::Installed(_, version) => version,
         }
     }
 }
