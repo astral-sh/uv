@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-use fs_err as fs;
 use std::sync::{LazyLock, Mutex};
 use tracing::trace;
 use uv_fs::write_atomic_sync;
@@ -20,7 +19,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     // Read the RECORD file.
     let record = {
         let record_path = dist_info.join("RECORD");
-        let mut record_file = match fs::File::open(&record_path) {
+        let mut record_file = match fs_err::File::open(&record_path) {
             Ok(record_file) => record_file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::MissingRecord(record_path));
@@ -66,7 +65,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             }
         }
 
-        match fs::remove_file(&path) {
+        match fs_err::remove_file(&path) {
             Ok(()) => {
                 trace!("Removed file: {}", path.display());
                 file_count += 1;
@@ -75,7 +74,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => match fs::remove_dir_all(&path) {
+            Err(err) => match fs_err::remove_dir_all(&path) {
                 Ok(()) => {
                     trace!("Removed directory: {}", path.display());
                     dir_count += 1;
@@ -108,7 +107,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             // may or may not be listed in the RECORD, but installers are expected to be smart
             // enough to remove it either way.
             let pycache = path.join("__pycache__");
-            match fs::remove_dir_all(&pycache) {
+            match fs_err::remove_dir_all(&pycache) {
                 Ok(()) => {
                     trace!("Removed directory: {}", pycache.display());
                     dir_count += 1;
@@ -119,7 +118,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
 
             // Try to read from the directory. If it doesn't exist, assume we deleted it in a
             // previous iteration.
-            let mut read_dir = match fs::read_dir(path) {
+            let mut read_dir = match fs_err::read_dir(path) {
                 Ok(read_dir) => read_dir,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => break,
                 Err(err) => return Err(err.into()),
@@ -130,7 +129,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 break;
             }
 
-            fs::remove_dir(path)?;
+            fs_err::remove_dir(path)?;
 
             trace!("Removed directory: {}", path.display());
             dir_count += 1;
@@ -256,7 +255,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
 
     // Find the target line in the `.egg-link` file.
-    let contents = fs::read_to_string(egg_link)?;
+    let contents = fs_err::read_to_string(egg_link)?;
     let target_line = contents
         .lines()
         .find_map(|line| {
@@ -268,7 +267,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     // This comes from `pkg_resources.normalize_path`
     let target_line = normcase(target_line);
 
-    match fs::remove_file(egg_link) {
+    match fs_err::remove_file(egg_link) {
         Ok(()) => {
             trace!("Removed file: {}", egg_link.display());
             file_count += 1;
@@ -287,7 +286,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     // is modified).
     let _guard = EASY_INSTALL_PTH.lock().unwrap();
 
-    let content = fs::read_to_string(&easy_install)?;
+    let content = fs_err::read_to_string(&easy_install)?;
     let mut new_content = String::with_capacity(content.len());
     let mut removed = false;
 

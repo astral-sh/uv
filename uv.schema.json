@@ -2517,6 +2517,11 @@
           "const": "cpu"
         },
         {
+          "description": "Use the PyTorch index for CUDA 13.0.",
+          "type": "string",
+          "const": "cu130"
+        },
+        {
           "description": "Use the PyTorch index for CUDA 12.9.",
           "type": "string",
           "const": "cu129"

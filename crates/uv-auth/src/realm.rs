@@ -75,7 +75,7 @@ impl Hash for Realm {
 
 /// A reference to a [`Realm`] that can be used for zero-allocation comparisons.
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct RealmRef<'a> {
+pub struct RealmRef<'a> {
     scheme: &'a str,
     host: Option<&'a str>,
     port: Option<u16>,

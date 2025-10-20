@@ -285,9 +285,9 @@ pub(crate) async fn install(
         .collect::<IndexSet<_>>();
 
     if upgrade
-        && requests
-            .iter()
-            .any(|request| request.request.includes_patch())
+        && requests.iter().any(|request| {
+            request.request.includes_patch() || request.request.includes_prerelease()
+        })
     {
         writeln!(
             printer.stderr(),
@@ -551,19 +551,28 @@ pub(crate) async fn install(
                 printer.stderr(),
                 "There are no installed versions to upgrade"
             )?;
-        } else if requests.len() > 1 {
+        } else if upgrade && is_unspecified_upgrade {
+            writeln!(
+                printer.stderr(),
+                "All versions already on latest supported patch release"
+            )?;
+        } else if let [request] = requests.as_slice() {
+            // Convert to the inner request
+            let request = &request.request;
             if upgrade {
-                if is_unspecified_upgrade {
-                    writeln!(
-                        printer.stderr(),
-                        "All versions already on latest supported patch release"
-                    )?;
-                } else {
-                    writeln!(
-                        printer.stderr(),
-                        "All requested versions already on latest supported patch release"
-                    )?;
-                }
+                writeln!(
+                    printer.stderr(),
+                    "{request} is already on the latest supported patch release"
+                )?;
+            } else {
+                writeln!(printer.stderr(), "{request} is already installed")?;
+            }
+        } else {
+            if upgrade {
+                writeln!(
+                    printer.stderr(),
+                    "All requested versions already on latest supported patch release"
+                )?;
             } else {
                 writeln!(printer.stderr(), "All requested versions already installed")?;
             }

@@ -6,7 +6,6 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use console::Term;
-use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -145,7 +144,7 @@ pub(crate) fn create(
                         .canonicalize()
                         .unwrap_or_else(|_| location.to_path_buf());
                     remove_virtualenv(&location)?;
-                    fs::create_dir_all(&location)?;
+                    fs_err::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => return err,
                 // If not a virtual environment, fail without prompting.
@@ -161,7 +160,7 @@ pub(crate) fn create(
                                 .canonicalize()
                                 .unwrap_or_else(|_| location.to_path_buf());
                             remove_virtualenv(&location)?;
-                            fs::create_dir_all(&location)?;
+                            fs_err::create_dir_all(&location)?;
                         }
                         Some(false) => return err,
                         // When we don't have a TTY, warn that the behavior will change in the future
@@ -184,7 +183,7 @@ pub(crate) fn create(
             )));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            fs::create_dir_all(location)?;
+            fs_err::create_dir_all(location)?;
         }
         Err(err) => return Err(Error::Io(err)),
     }
@@ -205,7 +204,7 @@ pub(crate) fn create(
     cachedir::ensure_tag(&location)?;
 
     // Create a `.gitignore` file to ignore all files in the venv.
-    fs::write(location.join(".gitignore"), "*")?;
+    fs_err::write(location.join(".gitignore"), "*")?;
 
     let mut using_minor_version_link = false;
     let executable_target = if upgradeable && interpreter.is_standalone() {
@@ -254,7 +253,7 @@ pub(crate) fn create(
     let python_home = python_home.as_path();
 
     // Different names for the python interpreter
-    fs::create_dir_all(&scripts)?;
+    fs_err::create_dir_all(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
     #[cfg(unix)]
@@ -479,7 +478,7 @@ pub(crate) fn create(
             )
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
-        fs::write(scripts.join(name), activator)?;
+        fs_err::write(scripts.join(name), activator)?;
     }
 
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
@@ -537,7 +536,7 @@ pub(crate) fn create(
 
     // Construct the path to the `site-packages` directory.
     let site_packages = location.join(&interpreter.virtualenv().purelib);
-    fs::create_dir_all(&site_packages)?;
+    fs_err::create_dir_all(&site_packages)?;
 
     // If necessary, create a symlink from `lib64` to `lib`.
     // See: https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L135C11-L135C16
@@ -556,8 +555,8 @@ pub(crate) fn create(
     }
 
     // Populate `site-packages` with a `_virtualenv.py` file.
-    fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-    fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+    fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
     Ok(VirtualEnvironment {
         scheme: Scheme {
@@ -611,25 +610,25 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
 
     // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
     // uv can still identify it as a Python virtual environment that can be deleted.
-    for entry in fs::read_dir(location)? {
+    for entry in fs_err::read_dir(location)? {
         let entry = entry?;
         let path = entry.path();
         if path == location.join("pyvenv.cfg") {
             continue;
         }
         if path.is_dir() {
-            fs::remove_dir_all(&path)?;
+            fs_err::remove_dir_all(&path)?;
         } else {
-            fs::remove_file(&path)?;
+            fs_err::remove_file(&path)?;
         }
     }
 
-    match fs::remove_file(location.join("pyvenv.cfg")) {
+    match fs_err::remove_file(location.join("pyvenv.cfg")) {
         Ok(()) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(err.into()),
     }
-    fs::remove_dir_all(location)?;
+    fs_err::remove_dir_all(location)?;
 
     Ok(())
 }

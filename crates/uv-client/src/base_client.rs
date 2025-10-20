@@ -79,7 +79,7 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
     indexes: Indexes,
-    default_timeout: Duration,
+    timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
@@ -137,7 +137,7 @@ impl Default for BaseClientBuilder<'_> {
             platform: None,
             auth_integration: AuthIntegration::default(),
             indexes: Indexes::new(),
-            default_timeout: Duration::from_secs(30),
+            timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
             redirect_policy: RedirectPolicy::default(),
@@ -153,12 +153,14 @@ impl BaseClientBuilder<'_> {
         native_tls: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
+        timeout: Duration,
     ) -> Self {
         Self {
             preview,
             allow_insecure_host,
             native_tls,
             connectivity,
+            timeout,
             ..Self::default()
         }
     }
@@ -246,8 +248,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
-        self.default_timeout = default_timeout;
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
         self
     }
 
@@ -299,21 +301,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> BaseClient {
-        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let timeout = env::var(EnvVars::UV_HTTP_TIMEOUT)
-            .or_else(|_| env::var(EnvVars::UV_REQUEST_TIMEOUT))
-            .or_else(|_| env::var(EnvVars::HTTP_TIMEOUT))
-            .and_then(|value| {
-                value.parse::<u64>()
-                    .map(Duration::from_secs)
-                    .or_else(|_| {
-                        // On parse error, warn and use the default timeout
-                        warn_user_once!("Ignoring invalid value from environment for `UV_HTTP_TIMEOUT`. Expected an integer number of seconds, got \"{value}\".");
-                        Ok(self.default_timeout)
-                    })
-            })
-            .unwrap_or(self.default_timeout);
+        let timeout = self.timeout;
         debug!("Using request timeout of {}s", timeout.as_secs());
 
         // Use the custom client if provided, otherwise create a new one
@@ -620,7 +608,11 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+        let mut builder = ExponentialBackoff::builder();
+        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+        }
+        builder.build_with_max_retries(self.retries)
     }
 }
 
@@ -1029,12 +1021,12 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             }
 
             trace!("Cannot retry nested reqwest error");
-        } else if let Some(io_err) = source.downcast_ref::<io::Error>().or_else(|| {
-            // h2 may hide an IO error inside.
-            source
-                .downcast_ref::<h2::Error>()
-                .and_then(|err| err.get_io())
-        }) {
+        } else if source.downcast_ref::<h2::Error>().is_some() {
+            // All h2 errors look like errors that should be retried
+            // https://github.com/astral-sh/uv/issues/15916
+            trace!("Retrying nested h2 error");
+            return true;
+        } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
             let retryable_io_err_kinds = [
                 // https://github.com/astral-sh/uv/issues/12054

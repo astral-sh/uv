@@ -2,6 +2,7 @@ use itertools::{Either, Itertools};
 use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -1668,9 +1669,19 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 impl PythonVariant {
     fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
-            // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
-            // backwards compatibility, but we may want to change this in the future.
-            Self::Default => !interpreter.gil_disabled(),
+            Self::Default => {
+                // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
+                // backwards compatibility, but we may want to change this in the future.
+                if (interpreter.python_major(), interpreter.python_minor()) >= (3, 14) {
+                    // For Python 3.14+, the free-threaded build is not considered experimental
+                    // and can satisfy the default variant without opt-in
+                    true
+                } else {
+                    // In Python 3.13 and earlier, the free-threaded build is considered
+                    // experimental and requires explicit opt-in
+                    !interpreter.gil_disabled()
+                }
+            }
             Self::Debug => interpreter.debug_enabled(),
             Self::Freethreaded => interpreter.gil_disabled(),
             Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
@@ -1932,6 +1943,24 @@ impl PythonRequest {
                 .version
                 .as_ref()
                 .is_some_and(|request| request.patch().is_some()),
+        }
+    }
+
+    /// Check if this request includes a specific prerelease version.
+    pub fn includes_prerelease(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Any => false,
+            Self::Version(version_request) => version_request.prerelease().is_some(),
+            Self::Directory(..) => false,
+            Self::File(..) => false,
+            Self::ExecutableName(..) => false,
+            Self::Implementation(..) => false,
+            Self::ImplementationVersion(_, version) => version.prerelease().is_some(),
+            Self::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.prerelease().is_some()),
         }
     }
 
@@ -2555,6 +2584,17 @@ impl VersionRequest {
         }
     }
 
+    /// Return the pre-release segment of the request, if any.
+    pub(crate) fn prerelease(&self) -> Option<&Prerelease> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Major(_, _) => None,
+            Self::MajorMinor(_, _, _) => None,
+            Self::MajorMinorPatch(_, _, _, _) => None,
+            Self::MajorMinorPrerelease(_, _, prerelease, _) => Some(prerelease),
+        }
+    }
+
     /// Check if the request is for a version supported by uv.
     ///
     /// If not, an `Err` is returned with an explanatory message.
@@ -2650,10 +2690,22 @@ impl VersionRequest {
                     interpreter.python_minor(),
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
+                    // When a patch version is included, we treat it as a request for a stable
+                    // release
+                    && interpreter.python_version().pre().is_none()
                     && variant.matches_interpreter(interpreter)
             }
             Self::Range(specifiers, variant) => {
-                let version = interpreter.python_version().only_release();
+                // If the specifier contains pre-releases, use the full version for comparison.
+                // Otherwise, strip pre-release so that, e.g., `>=3.14` matches `3.14.0rc3`.
+                let version = if specifiers
+                    .iter()
+                    .any(uv_pep440::VersionSpecifier::any_prerelease)
+                {
+                    Cow::Borrowed(interpreter.python_version())
+                } else {
+                    Cow::Owned(interpreter.python_version().only_release())
+                };
                 specifiers.contains(&version) && variant.matches_interpreter(interpreter)
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
@@ -2686,7 +2738,19 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.patch())
                     == (*major, *minor, Some(*patch))
             }
-            Self::Range(specifiers, _) => specifiers.contains(&version.version.only_release()),
+            Self::Range(specifiers, _) => {
+                // If the specifier contains pre-releases, use the full version for comparison.
+                // Otherwise, strip pre-release so that, e.g., `>=3.14` matches `3.14.0rc3`.
+                let version = if specifiers
+                    .iter()
+                    .any(uv_pep440::VersionSpecifier::any_prerelease)
+                {
+                    Cow::Borrowed(&version.version)
+                } else {
+                    Cow::Owned(version.version.only_release())
+                };
+                specifiers.contains(&version)
+            }
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
@@ -2753,6 +2817,9 @@ impl VersionRequest {
             }
             Self::MajorMinorPatch(self_major, self_minor, self_patch, _) => {
                 (*self_major, *self_minor, *self_patch) == (major, minor, patch)
+                    // When a patch version is included, we treat it as a request for a stable
+                    // release
+                    && prerelease.is_none()
             }
             Self::Range(specifiers, _) => specifiers.contains(
                 &Version::new([u64::from(major), u64::from(minor), u64::from(patch)])
@@ -2760,8 +2827,8 @@ impl VersionRequest {
             ),
             Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
                 // Pre-releases of Python versions are always for the zero patch version
-                (*self_major, *self_minor, 0) == (major, minor, patch)
-                    && prerelease.is_none_or(|pre| *self_prerelease == pre)
+                (*self_major, *self_minor, 0, Some(*self_prerelease))
+                    == (major, minor, patch, prerelease)
             }
         }
     }

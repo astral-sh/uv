@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.8.22"
+version = "0.9.4"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -67,6 +67,7 @@ version_files = [
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
   "crates/uv-build/pyproject.toml",
+  { target = "crates/uv-static/src/env_vars.rs", replace = "next release" },
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
@@ -75,6 +76,7 @@ version_files = [
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
+  { target = "docs/reference/environment.md", replace = "next release" },
 ]
 
 [tool.rooster.section-labels]

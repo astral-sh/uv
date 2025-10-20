@@ -13,7 +13,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
-use crate::credentials::{Password, Username};
+use crate::credentials::{Password, Token, Username};
 use crate::realm::Realm;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
@@ -142,7 +142,7 @@ impl From<TomlCredential> for TomlCredentialWire {
                 username: Username::new(None),
                 scheme: AuthScheme::Bearer,
                 password: None,
-                token: Some(String::from_utf8(token).expect("Token is valid UTF-8")),
+                token: Some(String::from_utf8(token.into_bytes()).expect("Token is valid UTF-8")),
             },
         }
     }
@@ -190,7 +190,7 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
                     ));
                 }
                 let credentials = Credentials::Bearer {
-                    token: value.token.unwrap().into_bytes(),
+                    token: Token::new(value.token.unwrap().into_bytes()),
                 };
                 Ok(Self {
                     service: value.service,

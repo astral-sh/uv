@@ -1,6 +1,6 @@
 [package]
-name = "uv-version"
-version = "0.9.4"
+name = "uv-flags"
+version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -16,3 +16,9 @@ doctest = false
 workspace = true
 
 [dependencies]
+bitflags = { workspace = true }
+
+[dev-dependencies]
+
+[features]
+default = []

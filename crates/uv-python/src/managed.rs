@@ -681,19 +681,22 @@ impl ManagedPythonInstallation {
         if (self.key.major, self.key.minor) != (other.key.major, other.key.minor) {
             return false;
         }
-        // Require a newer, or equal patch version (for pre-release upgrades)
+        // If the patch versions are the same, we're handling a pre-release upgrade
+        if self.key.patch == other.key.patch {
+            return match (self.key.prerelease, other.key.prerelease) {
+                // Require a newer pre-release, if present on both
+                (Some(self_pre), Some(other_pre)) => self_pre > other_pre,
+                // Allow upgrade from pre-release to stable
+                (None, Some(_)) => true,
+                // Do not upgrade from pre-release to stable, or for matching versions
+                (_, None) => false,
+            };
+        }
+        // Require a newer patch version
         if self.key.patch < other.key.patch {
             return false;
         }
-        if let Some(other_pre) = other.key.prerelease {
-            if let Some(self_pre) = self.key.prerelease {
-                return self_pre > other_pre;
-            }
-            // Do not upgrade from non-prerelease to prerelease
-            return false;
-        }
-        // Do not upgrade if the patch versions are the same
-        self.key.patch != other.key.patch
+        true
     }
 
     pub fn url(&self) -> Option<&str> {
@@ -1136,9 +1139,10 @@ mod tests {
             PythonVariant::Default,
         );
 
-        // Stable version should not upgrade from prerelease
-        assert!(!stable.is_upgrade_of(&prerelease));
-        // Prerelease should not upgrade to stable (same patch version)
+        // A stable version is an upgrade from prerelease
+        assert!(stable.is_upgrade_of(&prerelease));
+
+        // Prerelease are not upgrades of stable versions
         assert!(!prerelease.is_upgrade_of(&stable));
     }
 

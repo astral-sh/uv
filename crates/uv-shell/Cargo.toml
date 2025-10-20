@@ -3,6 +3,12 @@ name = "uv-shell"
 version = "0.0.1"
 edition = { workspace = true }
 description = "Utilities for detecting and manipulating shell environments"
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false

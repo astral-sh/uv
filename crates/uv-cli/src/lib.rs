@@ -339,7 +339,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -802,6 +802,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache prune` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache prune` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -4891,6 +4898,10 @@ pub struct ToolListArgs {
     /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
     pub show_extras: bool,
+
+    /// Whether to display the Python version associated with run each tool.
+    #[arg(long)]
+    pub show_python: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
