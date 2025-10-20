@@ -2806,6 +2806,7 @@ pub(crate) struct BuildSettings {
     pub(crate) wheel: bool,
     pub(crate) list: bool,
     pub(crate) build_logs: bool,
+    pub(crate) gitignore: bool,
     pub(crate) force_pep517: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
@@ -2838,6 +2839,8 @@ impl BuildSettings {
             no_verify_hashes,
             build_logs,
             no_build_logs,
+            gitignore,
+            no_gitignore,
             python,
             build,
             refresh,
@@ -2857,6 +2860,7 @@ impl BuildSettings {
             wheel,
             list,
             build_logs: flag(build_logs, no_build_logs, "build-logs").unwrap_or(true),
+            gitignore: flag(gitignore, no_gitignore, "gitignore").unwrap_or(true),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
