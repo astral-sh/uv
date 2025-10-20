@@ -6605,6 +6605,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache-info",
+ "uv-client",
  "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",

@@ -44,7 +44,6 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 use crate::{Connectivity, WrappedReqwestError};
 
-/// Do not use this value directly outside tests.
 pub const DEFAULT_RETRIES: u32 = 3;
 
 /// Maximum number of redirects to follow before giving up.

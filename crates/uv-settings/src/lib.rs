@@ -636,7 +636,8 @@ impl EnvironmentOptions {
                 .or(http_timeout)
                 .unwrap_or(Duration::from_secs(15 * 60)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
-            http_retries: parse_u32_environment_variable(EnvVars::UV_HTTP_RETRIES)?.unwrap_or(3),
+            http_retries: parse_u32_environment_variable(EnvVars::UV_HTTP_RETRIES)?
+                .unwrap_or(uv_client::DEFAULT_RETRIES),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
