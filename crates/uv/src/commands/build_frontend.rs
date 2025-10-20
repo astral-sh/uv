@@ -109,6 +109,7 @@ pub(crate) async fn build_frontend(
     list: bool,
     build_logs: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -134,6 +135,7 @@ pub(crate) async fn build_frontend(
         list,
         build_logs,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -177,6 +179,7 @@ async fn build_impl(
     list: bool,
     build_logs: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -342,6 +345,7 @@ async fn build_impl(
             hash_checking,
             build_logs,
             force_pep517,
+            clear,
             build_constraints,
             build_isolation,
             extra_build_dependencies,
@@ -449,6 +453,7 @@ async fn build_package(
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
@@ -480,6 +485,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);

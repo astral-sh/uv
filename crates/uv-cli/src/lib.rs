@@ -2635,6 +2635,10 @@ pub struct BuildArgs {
     #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
+    /// Remove build artifacts from the output directory after a successful build.
+    #[arg(long)]
+    pub clear: bool,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
