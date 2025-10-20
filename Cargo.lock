@@ -5291,7 +5291,6 @@ dependencies = [
  "predicates",
  "regex",
  "reqwest",
- "reqwest-retry",
  "rkyv",
  "rustc-hash",
  "self-replace",
