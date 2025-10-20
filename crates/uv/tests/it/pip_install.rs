@@ -13025,7 +13025,7 @@ fn install_with_system_interpreter() -> Result<()> {
       This Python installation is managed by uv and should not be modified.
     
     Consider creating a virtual environment with `uv venv`.
-    hint: This happens because the `--system` flag was used, which selects the system Python interpreter.
+    hint: This happens because the `--system` flag was used, which selected the system Python interpreter.
     "###
     );
 

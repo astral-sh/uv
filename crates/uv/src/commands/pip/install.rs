@@ -236,23 +236,27 @@ pub(crate) async fn pip_install(
         if break_system_packages {
             debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            let error = match externally_managed.into_error() {
+            let error: anyhow::Error = match externally_managed.into_error() {
                 Some(error) => anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.{}",
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
-                    if system {
-                        "\nhint: This happens because the `--system` flag was used, which selects the system Python interpreter."
-                    } else {
-                        ""
-                    }
                 ),
                 None => anyhow::anyhow!(
                     "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan()
                 ),
             };
-            return Err(error);
+            return Err(if system {
+                anyhow::anyhow!(
+                    "{}\n{}{} This happens because the `--system` flag was used, which selected the system Python interpreter.",
+                    error,
+                    "hint".bold().cyan(),
+                    ":".bold()
+                )
+            } else {
+                error
+            });
         }
     }
 
