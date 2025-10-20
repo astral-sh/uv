@@ -323,7 +323,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: expected an non-negative integer
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: invalid digit found in string
     "
     );
 
@@ -337,7 +337,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `-1`: expected an non-negative integer
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `-1`: invalid digit found in string
     "
     );
 
@@ -351,7 +351,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: expected an non-negative integer
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: number too large to fit in target type
     "
     );
 

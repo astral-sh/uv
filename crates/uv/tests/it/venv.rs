@@ -894,7 +894,7 @@ fn create_venv_with_invalid_http_timeout() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: expected an non-negative integer
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: invalid digit found in string
     "###);
 }
 
@@ -910,7 +910,7 @@ fn create_venv_with_invalid_concurrent_installs() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: expected a non-zero positive integer
+    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: number would be zero for non-zero type
     "###);
 }
 
