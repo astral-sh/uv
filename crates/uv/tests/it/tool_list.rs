@@ -224,6 +224,7 @@ fn tool_list_deprecated() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
