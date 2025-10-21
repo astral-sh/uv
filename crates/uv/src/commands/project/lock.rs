@@ -85,6 +85,7 @@ pub(crate) async fn lock(
     frozen: bool,
     dry_run: DryRun,
     refresh: Refresh,
+    force: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -182,7 +183,7 @@ pub(crate) async fn lock(
         } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {
-            LockMode::Write(&interpreter)
+            LockMode::Write(&interpreter, force)
         }
     };
 
@@ -253,7 +254,7 @@ pub(crate) async fn lock(
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LockMode<'env> {
     /// Write the lockfile to disk.
-    Write(&'env Interpreter),
+    Write(&'env Interpreter, bool),
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
@@ -359,6 +360,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    false,
                 )
                 .await?;
 
@@ -372,7 +374,7 @@ impl<'env> LockOperation<'env> {
 
                 Ok(result)
             }
-            LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+            LockMode::Write(interpreter, force) => {
                 // Read the existing lockfile.
                 let existing = match target.read().await {
                     Ok(Some(existing)) => Some(existing),
@@ -402,15 +404,49 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    force,
                 )
                 .await?;
 
-                // If the lockfile changed, write it to disk.
-                if !matches!(self.mode, LockMode::DryRun(_)) {
-                    if let LockResult::Changed(_, lock) = &result {
-                        target.commit(lock).await?;
-                    }
+                if let LockResult::Changed(_, lock) = &result {
+                    target.commit(lock).await?;
                 }
+
+                Ok(result)
+            }
+            LockMode::DryRun(interpreter) => {
+                // Read the existing lockfile.
+                let existing = match target.read().await {
+                    Ok(Some(existing)) => Some(existing),
+                    Ok(None) => None,
+                    Err(ProjectError::Lock(err)) => {
+                        warn_user!(
+                            "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                        );
+                        None
+                    }
+                    Err(err) => return Err(err),
+                };
+
+                // Perform the lock operation, but don't write the lockfile to disk.
+                let result = do_lock(
+                    target,
+                    interpreter,
+                    existing,
+                    self.constraints,
+                    self.refresh,
+                    self.settings,
+                    self.client_builder,
+                    self.state,
+                    self.logger,
+                    self.concurrency,
+                    self.cache,
+                    self.workspace_cache,
+                    self.printer,
+                    self.preview,
+                    false,
+                )
+                .await?;
 
                 Ok(result)
             }
@@ -434,6 +470,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    force: bool,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -767,6 +804,7 @@ async fn do_lock(
             state.index(),
             &database,
             printer,
+            force,
         )
         .await
         {
@@ -986,11 +1024,16 @@ impl ValidatedLock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
+        force: bool,
     ) -> Result<Self, ProjectError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and
         // finally `Self::Satisfies`).
+        if force {
+            return Ok(Self::Preferable(lock));
+        }
+        // Start with the most severe condition: a fundamental option changed between resolutions.
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
                 printer.stderr(),

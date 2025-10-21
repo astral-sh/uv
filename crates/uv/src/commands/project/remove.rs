@@ -294,7 +294,7 @@ pub(crate) async fn remove(
     let mode = if locked {
         LockMode::Locked(target.interpreter())
     } else {
-        LockMode::Write(target.interpreter())
+        LockMode::Write(target.interpreter(), false)
     };
 
     // Initialize any shared state.
