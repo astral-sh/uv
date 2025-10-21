@@ -6101,7 +6101,7 @@ fn add_group_to_unsorted() -> Result<()> {
     Ok(())
 }
 
-/// Remomve a requirement from a dependency group.
+/// Remove a requirement from a dependency group.
 #[test]
 fn remove_group() -> Result<()> {
     let context = TestContext::new("3.12");
