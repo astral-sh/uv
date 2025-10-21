@@ -3,6 +3,7 @@ use std::collections::{BTreeSet, VecDeque};
 use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde_json::json;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
@@ -284,6 +285,137 @@ impl TreeFormatter for TextFormatter {
 
     fn end_children(&mut self) {
         // Nothing to do for text output
+    }
+}
+
+/// A JSON tree formatter that produces structured JSON output.
+///
+/// This formatter produces output like:
+/// ```json
+/// {
+///   "name": "package-name",
+///   "version": "1.0.0",
+///   "dependencies": [
+///     {
+///       "name": "dependency-1",
+///       "version": "2.0.0",
+///       "dependencies": []
+///     }
+///   ]
+/// }
+/// ```
+#[derive(Debug)]
+struct JsonFormatter {
+    /// Stack of JSON objects being built.
+    /// The top of the stack is the current node being processed.
+    stack: Vec<serde_json::Value>,
+    /// The root nodes (top-level packages).
+    roots: Vec<serde_json::Value>,
+}
+
+impl JsonFormatter {
+    /// Create a new JSON formatter.
+    fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            roots: Vec::new(),
+        }
+    }
+}
+
+impl TreeFormatter for JsonFormatter {
+    type Output = serde_json::Value;
+
+    fn begin_tree(&mut self) {
+        // Nothing to do for JSON output
+    }
+
+    fn end_tree(&mut self) -> Self::Output {
+        // Return all roots as a JSON array
+        json!(self.roots)
+    }
+
+    fn begin_node(&mut self, info: &NodeInfo, _position: NodePosition) {
+        // Create a JSON object for this node
+        let mut node = json!({
+            "name": info.package_id.name.to_string(),
+        });
+
+        // Add optional fields
+        if let Some(version) = info.version {
+            node["version"] = json!(version.to_string());
+        }
+
+        if let Some(extras) = info.extras {
+            if !extras.is_empty() {
+                node["extras"] = json!(extras.iter().map(|e| e.to_string()).collect::<Vec<_>>());
+            }
+        }
+
+        if let Some(edge_type) = info.edge_type {
+            match edge_type {
+                EdgeType::Optional(extra) => {
+                    node["extra"] = json!(extra.to_string());
+                }
+                EdgeType::Dev(group) => {
+                    node["group"] = json!(group.to_string());
+                }
+                EdgeType::Prod => {}
+            }
+        }
+
+        if let Some(size) = info.size {
+            node["size"] = json!(size);
+        }
+
+        if let Some(latest) = info.latest_version {
+            node["latest"] = json!(latest.to_string());
+        }
+
+        // Initialize empty dependencies array
+        node["dependencies"] = json!([]);
+
+        // Push onto stack
+        self.stack.push(node);
+    }
+
+    fn end_node(&mut self) {
+        // Pop the current node from the stack
+        let node = self.stack.pop().expect("Stack should not be empty");
+
+        if self.stack.is_empty() {
+            // This is a root node - add to roots
+            self.roots.push(node);
+        } else {
+            // This is a child node - add to parent's dependencies
+            let parent = self.stack.last_mut().expect("Parent should exist");
+            parent["dependencies"]
+                .as_array_mut()
+                .expect("Dependencies should be an array")
+                .push(node);
+        }
+    }
+
+    fn mark_visited(&mut self) {
+        // Mark the current node as deduplicated
+        if let Some(node) = self.stack.last_mut() {
+            node["deduplicated"] = json!(true);
+        }
+    }
+
+    fn mark_cycle(&mut self) {
+        // Mark the current node as a cycle
+        if let Some(node) = self.stack.last_mut() {
+            node["cycle"] = json!(true);
+        }
+    }
+
+    fn begin_children(&mut self, _count: usize) {
+        // Nothing to do for JSON output
+    }
+
+    fn end_children(&mut self) {
+        // Nothing to do for JSON output
     }
 }
 
@@ -850,6 +982,62 @@ impl<'env> TreeDisplay<'env> {
         let mut visited =
             FxHashMap::with_capacity_and_hasher(self.graph.node_count(), FxBuildHasher);
         let mut formatter = TextFormatter::new(self.no_dedupe);
+
+        formatter.begin_tree();
+
+        for node in &self.roots {
+            match self.graph[*node] {
+                Node::Root => {
+                    let edges: Vec<_> = self.graph.edges_directed(*node, Direction::Outgoing).collect();
+                    let total_siblings = edges.len();
+                    for (index, edge) in edges.into_iter().enumerate() {
+                        let node = edge.target();
+                        path.clear();
+                        let position = NodePosition {
+                            depth: 0,
+                            is_first_child: index == 0,
+                            is_last_child: index == total_siblings - 1,
+                            child_index: index,
+                            total_siblings,
+                        };
+                        self.visit_with_formatter(
+                            Cursor::new(node, edge.id()),
+                            &mut formatter,
+                            &mut visited,
+                            &mut path,
+                            position,
+                        );
+                    }
+                }
+                Node::Package(_) => {
+                    path.clear();
+                    let position = NodePosition {
+                        depth: 0,
+                        is_first_child: true,
+                        is_last_child: true,
+                        child_index: 0,
+                        total_siblings: 1,
+                    };
+                    self.visit_with_formatter(
+                        Cursor::root(*node),
+                        &mut formatter,
+                        &mut visited,
+                        &mut path,
+                        position,
+                    );
+                }
+            }
+        }
+
+        formatter.end_tree()
+    }
+
+    /// Depth-first traverse the nodes to render the tree as JSON.
+    pub fn render_json(&self) -> serde_json::Value {
+        let mut path = Vec::new();
+        let mut visited =
+            FxHashMap::with_capacity_and_hasher(self.graph.node_count(), FxBuildHasher);
+        let mut formatter = JsonFormatter::new();
 
         formatter.begin_tree();
 
