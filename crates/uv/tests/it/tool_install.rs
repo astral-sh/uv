@@ -88,6 +88,7 @@ fn tool_install() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -173,6 +174,7 @@ fn tool_install() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -388,6 +390,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-05-04T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -572,6 +575,7 @@ fn tool_install_version() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -655,6 +659,7 @@ fn tool_install_editable() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -696,6 +701,7 @@ fn tool_install_editable() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -740,6 +746,7 @@ fn tool_install_editable() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -788,6 +795,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -879,6 +887,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -956,6 +965,7 @@ fn tool_install_editable_from() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1109,6 +1119,7 @@ fn tool_install_already_installed() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1145,6 +1156,7 @@ fn tool_install_already_installed() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1436,6 +1448,7 @@ fn tool_install_force() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1474,6 +1487,7 @@ fn tool_install_force() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1803,6 +1817,7 @@ fn tool_install_unnamed_package() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -1918,6 +1933,7 @@ fn tool_install_unnamed_from() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2012,6 +2028,7 @@ fn tool_install_unnamed_with() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2091,6 +2108,7 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "#);
     });
 
@@ -2145,6 +2163,7 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "#);
     });
 
@@ -2206,6 +2225,7 @@ fn tool_install_requirements_txt() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2251,6 +2271,7 @@ fn tool_install_requirements_txt() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -2315,6 +2336,7 @@ fn tool_install_requirements_txt_arguments() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2429,6 +2451,7 @@ fn tool_install_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2463,6 +2486,7 @@ fn tool_install_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2503,6 +2527,7 @@ fn tool_install_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -2543,6 +2568,7 @@ fn tool_install_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3011,6 +3037,7 @@ fn tool_install_malformed_dist_info() {
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3092,6 +3119,7 @@ fn tool_install_settings() {
         [tool.options]
         resolution = "lowest-direct"
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3125,6 +3153,7 @@ fn tool_install_settings() {
         [tool.options]
         resolution = "highest"
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3165,6 +3194,7 @@ fn tool_install_settings() {
         [tool.options]
         resolution = "highest"
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3214,6 +3244,7 @@ fn tool_install_at_version() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3280,6 +3311,7 @@ fn tool_install_at_latest() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3370,6 +3402,7 @@ fn tool_install_from_at_version() {
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3420,6 +3453,7 @@ fn tool_install_at_latest_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3454,6 +3488,7 @@ fn tool_install_at_latest_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3491,6 +3526,7 @@ fn tool_install_at_latest_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }
@@ -3553,6 +3589,7 @@ fn tool_install_constraints() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3660,6 +3697,7 @@ fn tool_install_overrides() -> Result<()> {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
@@ -3834,6 +3872,7 @@ fn tool_install_credentials() {
         [tool.options]
         index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
         exclude-newer = "2025-01-18T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "#);
     });
 }
@@ -3922,6 +3961,7 @@ fn tool_install_default_credentials() -> Result<()> {
         [tool.options]
         index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = true, format = "simple", authenticate = "always" }]
         exclude-newer = "2025-01-18T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "#);
     });
 
@@ -4033,6 +4073,7 @@ fn tool_install_with_executables_from() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 
