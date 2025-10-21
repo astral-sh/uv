@@ -7,6 +7,14 @@
 
 Released on 2025-10-21.
 
+This release contains an upgrade to `astral-tokio-tar`, which addresses a vulnerability in tar extraction on malformed archives with mismatching size information between the ustar header and PAX extensions. While the `astral-tokio-tar` advisory has been graded as "high" due its potential broader impact, the *specific* impact to uv is **low** due to a lack of novel attacker capability. Specifically, uv only processes tar archives from source distributions, which already possess the capability for full arbitrary code execution by design, meaning that an attacker gains no additional capabilities through `astral-tokio-tar`.
+
+Regardless, we take the hypothetical risk of parser differentials very seriously. Out of an abundance of caution, we have assigned this upgrade an advisory: https://github.com/astral-sh/uv/security/advisories/GHSA-w476-p2h3-79g9
+
+### Security
+
+* Upgrade `astral-tokio-tar` to 0.5.6 to address a parsing differential ([#16387](https://github.com/astral-sh/uv/pull/16387))
+
 ### Enhancements
 
 - Add required environment marker example to hint ([#16244](https://github.com/astral-sh/uv/pull/16244))
