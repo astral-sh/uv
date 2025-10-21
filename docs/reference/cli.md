@@ -1708,10 +1708,7 @@ uv lock [OPTIONS]
 <li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
 <li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
-</ul></dd><dt id="uv-lock--locked"><a href="#uv-lock--locked"><code>--locked</code></a></dt><dd><p>Check if the lockfile is up-to-date.</p>
-<p>Asserts that the <code>uv.lock</code> would remain unchanged after a resolution. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
-<p>Equivalent to <code>--check</code>.</p>
-<p>May also be set with the <code>UV_LOCKED</code> environment variable.</p></dd><dt id="uv-lock--managed-python"><a href="#uv-lock--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+</ul></dd><dt id="uv-lock--managed-python"><a href="#uv-lock--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-lock--native-tls"><a href="#uv-lock--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
