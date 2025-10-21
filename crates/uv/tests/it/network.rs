@@ -323,8 +323,21 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `UV_HTTP_RETRIES`
-      Caused by: invalid digit found in string
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: invalid digit found in string
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "-1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `-1`: invalid digit found in string
     "
     );
 
@@ -338,8 +351,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `UV_HTTP_RETRIES`
-      Caused by: number too large to fit in target type
+    error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: number too large to fit in target type
     "
     );
 

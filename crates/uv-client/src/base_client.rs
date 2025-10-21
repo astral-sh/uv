@@ -44,7 +44,6 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 use crate::{Connectivity, WrappedReqwestError};
 
-/// Do not use this value directly outside tests, use [`retries_from_env`] instead.
 pub const DEFAULT_RETRIES: u32 = 3;
 
 /// Maximum number of redirects to follow before giving up.
@@ -154,11 +153,13 @@ impl BaseClientBuilder<'_> {
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
         timeout: Duration,
+        retries: u32,
     ) -> Self {
         Self {
             preview,
             allow_insecure_host,
             native_tls,
+            retries,
             connectivity,
             timeout,
             ..Self::default()
@@ -200,15 +201,6 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
         self
-    }
-
-    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise use the default
-    /// retries.
-    ///
-    /// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
-    pub fn retries_from_env(mut self) -> Result<Self, RetryParsingError> {
-        self.retries = retries_from_env()?;
-        Ok(self)
     }
 
     #[must_use]
@@ -292,7 +284,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// Create a [`RetryPolicy`] for the client.
-    fn retry_policy(&self) -> ExponentialBackoff {
+    pub fn retry_policy(&self) -> ExponentialBackoff {
         let mut builder = ExponentialBackoff::builder();
         if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
             builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
@@ -1091,19 +1083,6 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
 pub enum RetryParsingError {
     #[error("Failed to parse `UV_HTTP_RETRIES`")]
     ParseInt(#[from] ParseIntError),
-}
-
-/// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
-///
-/// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
-pub fn retries_from_env() -> Result<u32, RetryParsingError> {
-    // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
-    // fit for it right now
-    if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
-        Ok(value.to_string_lossy().as_ref().parse::<u32>()?)
-    } else {
-        Ok(DEFAULT_RETRIES)
-    }
 }
 
 #[cfg(test)]

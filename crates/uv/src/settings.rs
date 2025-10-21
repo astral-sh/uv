@@ -184,6 +184,7 @@ pub(crate) struct NetworkSettings {
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) timeout: Duration,
+    pub(crate) retries: u32,
 }
 
 impl NetworkSettings {
@@ -200,7 +201,6 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
-        let timeout = environment.http_timeout;
         let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
             .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
             .unwrap_or(false);
@@ -225,7 +225,8 @@ impl NetworkSettings {
             connectivity,
             native_tls,
             allow_insecure_host,
-            timeout,
+            timeout: environment.http_timeout,
+            retries: environment.http_retries,
         }
     }
 }

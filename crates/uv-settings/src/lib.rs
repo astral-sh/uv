@@ -585,6 +585,7 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub http_timeout: Duration,
+    pub http_retries: u32,
     pub upload_http_timeout: Duration,
     pub concurrency: Concurrency,
     #[cfg(feature = "tracing-durations-export")]
@@ -596,9 +597,11 @@ impl EnvironmentOptions {
     pub fn new() -> Result<Self, Error> {
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let http_timeout = parse_u64_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
-            .or(parse_u64_environment_variable(EnvVars::UV_REQUEST_TIMEOUT)?)
-            .or(parse_u64_environment_variable(EnvVars::HTTP_TIMEOUT)?)
+        let http_timeout = parse_integer_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
+            .or(parse_integer_environment_variable(
+                EnvVars::UV_REQUEST_TIMEOUT,
+            )?)
+            .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
             .map(Duration::from_secs);
 
         Ok(Self {
@@ -610,13 +613,9 @@ impl EnvironmentOptions {
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
             concurrency: Concurrency {
-                downloads: parse_non_zero_usize_environment_variable(
-                    EnvVars::UV_CONCURRENT_DOWNLOADS,
-                )?,
-                builds: parse_non_zero_usize_environment_variable(EnvVars::UV_CONCURRENT_BUILDS)?,
-                installs: parse_non_zero_usize_environment_variable(
-                    EnvVars::UV_CONCURRENT_INSTALLS,
-                )?,
+                downloads: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_DOWNLOADS)?,
+                builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS)?,
+                installs: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_INSTALLS)?,
             },
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: parse_string_environment_variable(
@@ -630,11 +629,15 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
-            upload_http_timeout: parse_u64_environment_variable(EnvVars::UV_UPLOAD_HTTP_TIMEOUT)?
-                .map(Duration::from_secs)
-                .or(http_timeout)
-                .unwrap_or(Duration::from_secs(15 * 60)),
+            upload_http_timeout: parse_integer_environment_variable(
+                EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
+            )?
+            .map(Duration::from_secs)
+            .or(http_timeout)
+            .unwrap_or(Duration::from_secs(15 * 60)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
+            http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES)?
+                .unwrap_or(uv_client::DEFAULT_RETRIES),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
@@ -716,10 +719,7 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
     }
 }
 
-fn parse_integer_environment_variable<T>(
-    name: &'static str,
-    err_msg: &'static str,
-) -> Result<Option<T>, Error>
+fn parse_integer_environment_variable<T>(name: &'static str) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr + Copy,
     <T as std::str::FromStr>::Err: std::fmt::Display,
@@ -732,7 +732,7 @@ where
                 std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
                     name: name.to_string(),
                     value: err.to_string_lossy().to_string(),
-                    err: err_msg.to_string(),
+                    err: "expected a valid UTF-8 string".to_string(),
                 }),
             };
         }
@@ -743,24 +743,12 @@ where
 
     match value.parse::<T>() {
         Ok(v) => Ok(Some(v)),
-        Err(_) => Err(Error::InvalidEnvironmentVariable {
+        Err(err) => Err(Error::InvalidEnvironmentVariable {
             name: name.to_string(),
             value,
-            err: err_msg.to_string(),
+            err: err.to_string(),
         }),
     }
-}
-
-/// Parse a integer environment variable.
-fn parse_u64_environment_variable(name: &'static str) -> Result<Option<u64>, Error> {
-    parse_integer_environment_variable(name, "expected an integer")
-}
-
-/// Parse a non-zero usize environment variable.
-fn parse_non_zero_usize_environment_variable(
-    name: &'static str,
-) -> Result<Option<NonZeroUsize>, Error> {
-    parse_integer_environment_variable(name, "expected a non-zero positive integer")
 }
 
 #[cfg(feature = "tracing-durations-export")]

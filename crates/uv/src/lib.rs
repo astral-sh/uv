@@ -183,9 +183,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
-                environment.http_timeout,
-            )
-            .retries_from_env()?;
+                settings.network_settings.timeout,
+                settings.network_settings.retries,
+            );
             Some(
                 RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
                     .await?,
@@ -456,9 +456,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
-        environment.http_timeout,
-    )
-    .retries_from_env()?;
+        globals.network_settings.timeout,
+        globals.network_settings.retries,
+    );
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
