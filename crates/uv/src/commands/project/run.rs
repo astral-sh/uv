@@ -358,7 +358,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // If no lockfile is found, warn against `--locked` and `--frozen`.
             if matches!(lock_check, LockCheck::Enabled(_)) {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "No lockfile found for Python script (ignoring `{}`); run `{}` to generate a lockfile",
+                    lock_check.source().unwrap(),
                     "uv lock --script".green(),
                 );
             }
@@ -589,7 +590,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if matches!(lock_check, LockCheck::Enabled(_)) {
-                warn_user!("`--locked` has no effect when used alongside `--no-project`");
+                warn_user!(
+                    "`{}` has no effect when used alongside `--no-project`",
+                    lock_check.source().unwrap()
+                );
             }
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
@@ -606,7 +610,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if matches!(lock_check, LockCheck::Enabled(_)) {
-                warn_user!("`--locked` has no effect when used outside of a project");
+                warn_user!(
+                    "`{}` has no effect when used outside of a project",
+                    lock_check.source().unwrap()
+                );
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");

@@ -221,7 +221,8 @@ pub(crate) async fn sync(
 
             if matches!(lock_check, LockCheck::Enabled(_)) {
                 return Err(anyhow::anyhow!(
-                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    "`uv sync {}` requires a script lockfile; run `{}` to lock the script",
+                    lock_check.source().unwrap(),
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }

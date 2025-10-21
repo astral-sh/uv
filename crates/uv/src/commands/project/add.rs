@@ -179,7 +179,8 @@ pub(crate) async fn add(
         }
         if matches!(lock_check, LockCheck::Enabled(_)) {
             warn_user_once!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`{}` is a no-op for Python scripts with inline metadata, which always run in isolation",
+                lock_check.source().unwrap()
             );
         }
         if frozen {
