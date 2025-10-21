@@ -1844,7 +1844,7 @@ async fn run_project(
                 command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -1895,7 +1895,7 @@ async fn run_project(
 
             Box::pin(commands::sync(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.active,
@@ -1951,7 +1951,7 @@ async fn run_project(
 
             Box::pin(commands::lock(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.refresh,
@@ -2056,7 +2056,7 @@ async fn run_project(
 
             Box::pin(commands::add(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2114,7 +2114,7 @@ async fn run_project(
 
             Box::pin(commands::remove(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2158,7 +2158,7 @@ async fn run_project(
                 args.package,
                 explicit_project,
                 args.dry_run,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2195,7 +2195,7 @@ async fn run_project(
             Box::pin(commands::tree(
                 project_dir,
                 args.groups,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.universal,
                 args.depth,
@@ -2249,7 +2249,7 @@ async fn run_project(
                 args.extras,
                 args.groups,
                 args.editable,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.include_annotations,
                 args.include_header,

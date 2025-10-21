@@ -59,13 +59,13 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -177,9 +177,9 @@ pub(crate) async fn add(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if locked {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
@@ -728,7 +728,7 @@ pub(crate) async fn add(
         &edits,
         lock_state,
         sync_state,
-        locked,
+        lock_check,
         no_install_project,
         no_install_workspace,
         no_install_local,
@@ -959,7 +959,7 @@ async fn lock_and_sync(
     edits: &[DependencyEdit],
     lock_state: UniversalState,
     sync_state: PlatformState,
-    locked: bool,
+    lock_check: LockCheck,
     no_install_project: bool,
     no_install_workspace: bool,
     no_install_local: bool,
@@ -977,8 +977,8 @@ async fn lock_and_sync(
     preview: Preview,
 ) -> Result<(), ProjectError> {
     let mut lock = project::lock::LockOperation::new(
-        if locked {
-            LockMode::Locked(target.interpreter())
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(target.interpreter(), lock_check)
         } else {
             LockMode::Write(target.interpreter())
         },
@@ -1099,8 +1099,8 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::LockOperation::new(
-                if locked {
-                    LockMode::Locked(target.interpreter())
+                if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(target.interpreter(), lock_check)
                 } else {
                     LockMode::Write(target.interpreter())
                 },

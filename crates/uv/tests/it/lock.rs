@@ -13193,7 +13193,7 @@ fn check_outdated_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
     Ok(())
 }
