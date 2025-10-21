@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.5
+
+Released on 2025-10-21.
+
+### Enhancements
+
+- Add required environment marker example to hint ([#16244](https://github.com/astral-sh/uv/pull/16244))
+- Fix typo in MissingTopLevel warning ([#16351](https://github.com/astral-sh/uv/pull/16351))
+- Improve 403 Forbidden error message to indicate package may not exist ([#16353](https://github.com/astral-sh/uv/pull/16353))
+- Add a hint on `uv pip install` failure if the `--system` flag is used to select an externally managed interpreter ([#16318](https://github.com/astral-sh/uv/pull/16318))
+
+### Bug fixes
+
+- Fix backtick escaping for PowerShell ([#16307](https://github.com/astral-sh/uv/pull/16307))
+
+### Documentation
+
+- Document metadata consistency expectation ([#15683](https://github.com/astral-sh/uv/pull/15683))
+- Remove outdated aarch64 musl note ([#16385](https://github.com/astral-sh/uv/pull/16385))
+
 ## 0.9.4
 
 Released on 2025-10-17.
