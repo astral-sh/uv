@@ -347,10 +347,37 @@ impl InitSettings {
     }
 }
 
+/// The source of a lock check operation.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheckSource {
+    /// The user invoked `uv <command> --locked`
+    Locked,
+    /// The user invoked `uv <command> --check`
+    Check,
+}
+
+impl std::fmt::Display for LockCheckSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Locked => write!(f, "--locked"),
+            Self::Check => write!(f, "--check"),
+        }
+    }
+}
+
+// Has lock check been enabled?
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheck {
+    /// Lockfile check is enabled.
+    Enabled(LockCheckSource),
+    /// Lockfile check is disabled.
+    Disabled,
+}
+
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
@@ -439,7 +466,11 @@ impl RunSettings {
             .unwrap_or_default();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
@@ -1263,7 +1294,7 @@ impl PythonPinSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1345,10 +1376,15 @@ impl SyncSettings {
         } else {
             DryRun::from_args(dry_run)
         };
+        let lock_check = if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
 
         Self {
             output_format,
-            locked,
+            lock_check,
             frozen,
             dry_run,
             script,
@@ -1401,7 +1437,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1421,6 +1457,7 @@ impl LockSettings {
     ) -> Self {
         let LockArgs {
             check,
+            locked,
             check_exists,
             dry_run,
             script,
@@ -1435,8 +1472,16 @@ impl LockSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let lock_check = if check {
+            LockCheck::Enabled(LockCheckSource::Check)
+        } else if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
+
         Self {
-            locked: check,
+            lock_check,
             frozen: check_exists,
             dry_run: DryRun::from_args(dry_run),
             script,
@@ -1454,7 +1499,7 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1603,7 +1648,11 @@ impl AddSettings {
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1646,7 +1695,7 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1707,7 +1756,11 @@ impl RemoveSettings {
             .collect();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1737,7 +1790,7 @@ pub(crate) struct VersionSettings {
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1785,7 +1838,11 @@ impl VersionSettings {
             short,
             output_format,
             dry_run,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1807,7 +1864,7 @@ impl VersionSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
     pub(crate) groups: DependencyGroups,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
     pub(crate) depth: u8,
@@ -1870,7 +1927,11 @@ impl TreeSettings {
                 only_group,
                 all_groups,
             ),
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             universal,
             depth: tree.depth,
@@ -1906,7 +1967,7 @@ pub(crate) struct ExportSettings {
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
@@ -2001,7 +2062,11 @@ impl ExportSettings {
                 no_emit_package,
             ),
             output_file,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
             include_header: flag(header, no_header, "header").unwrap_or(true),

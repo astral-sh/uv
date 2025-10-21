@@ -21,4 +21,5 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
+        if: false # TODO(konsti): Reactivate once we figured out how to not get rate-limited
         uses: zizmorcore/zizmor-action@5ca5fc7a4779c5263a3ffa0e1f693009994446d1 # v0.1.2

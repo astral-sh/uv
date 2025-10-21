@@ -12991,43 +12991,31 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-managed")]
 #[test]
-fn install_with_system_interpreter() -> Result<()> {
-    let context = TestContext::new("3.12");
+fn install_with_system_interpreter() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
 
-    // A simple requirements.txt file with pytest
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("pytest")?;
+    // We use a managed Python version here to ensure consistent output across systems
+    context.python_install().arg("3.12").assert().success();
 
-    // Add a custom filter to replace the system Python path
-    // works on Unix-like systems, Windows and for CPython, PyPy and GraalPy implementations
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((
-            r"(?:[A-Za-z]:)?([\\/]).+([\\/])python([\\/])(?:cpython|pypy|graalpy)-\d+\.\d+\.\[X\][^\s]+",
-            "[PYTHON-PATH]",
-        )))
-        .collect();
-
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--system")
-        .arg("-r")
-        .arg("requirements.txt"), @r###"
+        .arg("anyio"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
-    
-    ----- stderr -----
-    Using Python 3.12.[X] environment at: [PYTHON-PATH]
-    error: The interpreter at [PYTHON-PATH] is externally managed, and indicates the following:
-    
-      This Python installation is managed by uv and should not be modified.
-    
-    Consider creating a virtual environment with `uv venv`.
-    hint: This happens because the `--system` flag was used, which selected the system Python interpreter.
-    "###
-    );
 
-    Ok(())
+    ----- stderr -----
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+
+      This Python installation is managed by uv and should not be modified.
+
+    hint: Virtual environments were not considered due to the `--system` flag
+    "
+    );
 }

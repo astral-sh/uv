@@ -7780,7 +7780,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -7894,7 +7894,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8008,7 +8008,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8122,7 +8122,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8236,7 +8236,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8352,7 +8352,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -9596,7 +9596,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9715,7 +9715,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9857,7 +9857,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9974,7 +9974,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -10081,7 +10081,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -10189,7 +10189,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,

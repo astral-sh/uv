@@ -38,7 +38,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -63,7 +63,7 @@ pub(crate) async fn project_version(
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -297,7 +297,7 @@ pub(crate) async fn project_version(
         Box::pin(lock_and_sync(
             project,
             project_dir,
-            locked,
+            lock_check,
             frozen,
             active,
             no_sync,
@@ -502,7 +502,7 @@ async fn print_frozen_version(
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -579,8 +579,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };

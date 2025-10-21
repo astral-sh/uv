@@ -29,6 +29,7 @@ use crate::commands::project::{
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
 
 /// Run a command.
@@ -36,7 +37,7 @@ use crate::settings::ResolverSettings;
 pub(crate) async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     universal: bool,
     depth: u8,
@@ -125,8 +126,8 @@ pub(crate) async fn tree(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(interpreter.as_ref().unwrap())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {
         // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
         LockMode::DryRun(interpreter.as_ref().unwrap())
