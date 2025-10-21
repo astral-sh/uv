@@ -397,9 +397,9 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
+    let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let retry_policy = client_builder.retry_policy();
     let client = client_builder.retries(0).build();
 
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
