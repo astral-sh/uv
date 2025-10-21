@@ -20,24 +20,24 @@ use crate::{Lock, PackageMap};
 
 /// Information about a node in the dependency tree.
 #[derive(Debug, Clone)]
-pub struct NodeInfo<'env> {
+struct NodeInfo<'env> {
     /// The package identifier.
-    pub package_id: &'env PackageId,
+    package_id: &'env PackageId,
     /// The package version, if available.
-    pub version: Option<&'env Version>,
+    version: Option<&'env Version>,
     /// The extras associated with this dependency edge.
-    pub extras: Option<&'env BTreeSet<ExtraName>>,
+    extras: Option<&'env BTreeSet<ExtraName>>,
     /// The type of dependency edge that led to this node.
-    pub edge_type: Option<EdgeType<'env>>,
+    edge_type: Option<EdgeType<'env>>,
     /// The compressed wheel size in bytes, if available.
-    pub size: Option<u64>,
+    size: Option<u64>,
     /// The latest available version of this package, if known.
-    pub latest_version: Option<&'env Version>,
+    latest_version: Option<&'env Version>,
 }
 
 /// The type of dependency edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EdgeType<'env> {
+enum EdgeType<'env> {
     /// A production dependency.
     Prod,
     /// An optional dependency (from an extra).
@@ -53,21 +53,24 @@ pub enum EdgeType<'env> {
 /// primarily uses `depth` and `is_last_child`), they are available for
 /// formatters that need more detailed position information.
 #[derive(Debug, Clone, Copy)]
-pub struct NodePosition {
+struct NodePosition {
     /// The depth of this node in the tree (0 = root).
-    pub depth: usize,
+    depth: usize,
     /// Whether this is the first child of its parent.
     /// Useful for formatters that want to apply special styling to first children.
-    pub is_first_child: bool,
+    #[allow(dead_code)]
+    is_first_child: bool,
     /// Whether this is the last child of its parent.
     /// Used by TextFormatter to determine tree connector characters.
-    pub is_last_child: bool,
+    is_last_child: bool,
     /// The index of this child among its siblings (0-based).
     /// Useful for formatters that want to number or identify children.
-    pub child_index: usize,
+    #[allow(dead_code)]
+    child_index: usize,
     /// The total number of siblings (including this node).
     /// Useful for formatters that want to show "X of Y" information.
-    pub total_siblings: usize,
+    #[allow(dead_code)]
+    total_siblings: usize,
 }
 
 /// A trait for formatting dependency trees in different output formats.
@@ -75,7 +78,7 @@ pub struct NodePosition {
 /// This trait uses the visitor pattern to emit structural events as the tree
 /// is traversed. Implementors can choose how to represent these events in their
 /// output format (e.g., text with tree characters, JSON, HTML, etc.).
-pub trait TreeFormatter {
+trait TreeFormatter {
     /// The type of output produced by this formatter.
     type Output;
 
@@ -127,7 +130,7 @@ pub trait TreeFormatter {
 /// └── dependency-2 v1.5.0 (*)
 /// ```
 #[derive(Debug)]
-pub struct TextFormatter {
+struct TextFormatter {
     /// The accumulated output lines.
     lines: Vec<String>,
     /// Stack of indentation strings for the current path in the tree.
@@ -146,7 +149,7 @@ impl TextFormatter {
     ///
     /// # Arguments
     /// * `no_dedupe` - If true, (*) markers indicate cycles; if false, they indicate deduplication.
-    pub fn new(no_dedupe: bool) -> Self {
+    fn new(no_dedupe: bool) -> Self {
         Self {
             lines: Vec::new(),
             indent_stack: Vec::new(),
