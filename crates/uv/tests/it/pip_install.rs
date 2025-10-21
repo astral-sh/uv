@@ -12990,3 +12990,44 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_with_system_interpreter() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // A simple requirements.txt file with pytest
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("pytest")?;
+
+    // Add a custom filter to replace the system Python path
+    // works on Unix-like systems, Windows and for CPython, PyPy and GraalPy implementations
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain(std::iter::once((
+            r"(?:[A-Za-z]:)?([\\/]).+([\\/])python([\\/])(?:cpython|pypy|graalpy)-\d+\.\d+\.\[X\][^\s]+",
+            "[PYTHON-PATH]",
+        )))
+        .collect();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--system")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [PYTHON-PATH]
+    error: The interpreter at [PYTHON-PATH] is externally managed, and indicates the following:
+    
+      This Python installation is managed by uv and should not be modified.
+    
+    Consider creating a virtual environment with `uv venv`.
+    hint: This happens because the `--system` flag was used, which selected the system Python interpreter.
+    "###
+    );
+
+    Ok(())
+}
