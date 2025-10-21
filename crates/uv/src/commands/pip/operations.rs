@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-
+use std::time::Duration;
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -442,6 +442,7 @@ pub(crate) async fn install(
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
+    compile_bytecode_timeout: Option<Duration>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -580,7 +581,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
+        compile_bytecode(venv, compile_bytecode_timeout, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.

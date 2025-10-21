@@ -489,7 +489,7 @@ impl RunSettings {
             python_platform,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(installer, build, &environment),
                 filesystem,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
@@ -581,7 +581,7 @@ impl ToolRunSettings {
         }
 
         let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
+            resolver_installer_options(installer, build, &environment).combine(ResolverInstallerOptions::from(
                 filesystem
                     .clone()
                     .map(FilesystemOptions::into_options)
@@ -689,7 +689,7 @@ impl ToolInstallSettings {
         } = args;
 
         let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
+            resolver_installer_options(installer, build, &environment).combine(ResolverInstallerOptions::from(
                 filesystem
                     .clone()
                     .map(FilesystemOptions::into_options)
@@ -833,7 +833,7 @@ impl ToolUpgradeSettings {
             no_sources,
         };
 
-        let args = resolver_installer_options(installer, build);
+        let args = resolver_installer_options(installer, build, environment);
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -1335,7 +1335,7 @@ impl SyncSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::combine(
-            resolver_installer_options(installer, build),
+            resolver_installer_options(installer, build, &environment),
             filesystem,
         );
 
@@ -1632,7 +1632,7 @@ impl AddSettings {
             refresh: Refresh::from(refresh),
             indexes,
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(installer, build, &environment),
                 filesystem,
             ),
             install_mirrors: environment
@@ -1718,7 +1718,7 @@ impl RemoveSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(installer, build, &environment),
                 filesystem,
             ),
             install_mirrors: environment
@@ -1793,7 +1793,7 @@ impl VersionSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(installer, build, &environment),
                 filesystem,
             ),
             install_mirrors: environment
@@ -2971,6 +2971,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) exclude_newer: &'a ExcludeNewer,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) compile_bytecode_timeout: Option<Duration>,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
     pub(crate) sources: SourceStrategy,
@@ -3071,6 +3072,7 @@ impl From<ResolverOptions> for ResolverSettings {
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) resolver: ResolverSettings,
     pub(crate) compile_bytecode: bool,
+    pub(crate) compile_bytecode_timeout: Option<Duration>,
     pub(crate) reinstall: Reinstall,
 }
 
@@ -3146,6 +3148,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
+            compile_bytecode_timeout: value.compile_bytecode_timeout,
             reinstall: value.reinstall.unwrap_or_default(),
         }
     }
@@ -3202,6 +3205,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) compile_bytecode_timeout: Option<Duration>,
     pub(crate) sources: SourceStrategy,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
@@ -3514,6 +3518,7 @@ impl PipSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
+            compile_bytecode_timeout: environment.compile_bytecode_timeout,
             sources: SourceStrategy::from_args(
                 args.no_sources.combine(no_sources).unwrap_or_default(),
             ),
@@ -3581,6 +3586,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             exclude_newer: &settings.resolver.exclude_newer,
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
+            compile_bytecode_timeout: settings.compile_bytecode_timeout,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
             sources: settings.resolver.sources,

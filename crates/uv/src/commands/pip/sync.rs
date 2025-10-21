@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
-
+use std::time::Duration;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
@@ -57,6 +57,7 @@ pub(crate) async fn pip_sync(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    compile_bytecode_timeout: Option<Duration>,
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
@@ -539,6 +540,7 @@ pub(crate) async fn pip_sync(
         &build_options,
         link_mode,
         compile,
+        compile_bytecode_timeout,
         &hasher,
         &tags,
         &client,

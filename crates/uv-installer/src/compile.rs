@@ -2,7 +2,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use std::{env, io, panic};
+use std::{io, panic};
 
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
@@ -19,8 +19,6 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
-/// This is longer than any compilation should ever take.
-const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Error)]
 pub enum CompileError {
@@ -73,6 +71,7 @@ pub enum CompileError {
 pub async fn compile_tree(
     dir: &Path,
     python_executable: &Path,
+    compile_bytecode_timeout: Option<Duration>,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
@@ -90,22 +89,7 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
-    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => match value.as_str() {
-            "0" => None,
-            _ => match value.parse::<u64>().map(Duration::from_secs) {
-                Ok(duration) => Some(duration),
-                Err(_) => {
-                    return Err(CompileError::EnvironmentError {
-                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
-                        message: format!("Expected an integer number of seconds, got \"{value}\""),
-                    });
-                }
-            },
-        },
-        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
-    };
-    if let Some(duration) = timeout {
+    if let Some(duration) = compile_bytecode_timeout {
         debug!(
             "Using bytecode compilation timeout of {}s",
             duration.as_secs()
@@ -124,7 +108,7 @@ pub async fn compile_tree(
             python_executable.to_path_buf(),
             pip_compileall_py.clone(),
             receiver.clone(),
-            timeout,
+            compile_bytecode_timeout,
         );
 
         // Spawn each worker on a dedicated thread.
