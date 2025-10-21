@@ -83,7 +83,7 @@ anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
-astral-tokio-tar = { version = "0.5.5" }
+astral-tokio-tar = { version = "0.5.6" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
