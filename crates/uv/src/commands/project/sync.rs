@@ -219,10 +219,9 @@ pub(crate) async fn sync(
                 ));
             }
 
-            if matches!(lock_check, LockCheck::Enabled(_)) {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
-                    "`uv sync {}` requires a script lockfile; run `{}` to lock the script",
-                    lock_check.source().unwrap(),
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
@@ -307,8 +306,8 @@ pub(crate) async fn sync(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if matches!(lock_check, LockCheck::Enabled(_)) {
-        LockMode::Locked(environment.interpreter(), lock_check.source().unwrap())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {

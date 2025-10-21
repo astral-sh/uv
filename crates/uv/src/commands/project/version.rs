@@ -579,8 +579,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if matches!(lock_check, LockCheck::Enabled(_)) {
-        LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };

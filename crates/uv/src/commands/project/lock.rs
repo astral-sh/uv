@@ -177,8 +177,8 @@ pub(crate) async fn lock(
             .into_interpreter(),
         };
 
-        if matches!(lock_check, LockCheck::Enabled(_)) {
-            LockMode::Locked(&interpreter, lock_check.source().unwrap())
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(&interpreter, lock_check)
         } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {

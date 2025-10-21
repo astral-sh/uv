@@ -172,8 +172,8 @@ pub(crate) async fn export(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if matches!(lock_check, LockCheck::Enabled(_)) {
-        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check.source().unwrap())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))
         && !LockTarget::from(&target).lock_path().is_file()
     {

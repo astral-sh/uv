@@ -264,8 +264,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if matches!(lock_check, LockCheck::Enabled(_)) {
-                LockMode::Locked(environment.interpreter(), lock_check.source().unwrap())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(environment.interpreter(), lock_check)
             } else {
                 LockMode::Write(environment.interpreter())
             };
@@ -356,10 +356,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if matches!(lock_check, LockCheck::Enabled(_)) {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `{}`); run `{}` to generate a lockfile",
-                    lock_check.source().unwrap(),
+                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
@@ -589,11 +588,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if matches!(lock_check, LockCheck::Enabled(_)) {
-                warn_user!(
-                    "`{}` has no effect when used alongside `--no-project`",
-                    lock_check.source().unwrap()
-                );
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
@@ -609,11 +605,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if matches!(lock_check, LockCheck::Enabled(_)) {
-                warn_user!(
-                    "`{}` has no effect when used outside of a project",
-                    lock_check.source().unwrap()
-                );
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project",);
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
@@ -747,8 +740,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if matches!(lock_check, LockCheck::Enabled(_)) {
-                    LockMode::Locked(venv.interpreter(), lock_check.source().unwrap())
+                } else if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {

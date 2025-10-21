@@ -373,15 +373,6 @@ pub(crate) enum LockCheck {
     Disabled,
 }
 
-impl LockCheck {
-    pub(crate) fn source(self) -> Option<LockCheckSource> {
-        match self {
-            Self::Enabled(source) => Some(source),
-            Self::Disabled => None,
-        }
-    }
-}
-
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {

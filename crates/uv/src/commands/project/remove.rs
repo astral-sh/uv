@@ -70,10 +70,9 @@ pub(crate) async fn remove(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if matches!(lock_check, LockCheck::Enabled(_)) {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`{}` is a no-op for Python scripts with inline metadata, which always run in isolation",
-                lock_check.source().unwrap()
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation",
             );
         }
         if frozen {
@@ -292,8 +291,8 @@ pub(crate) async fn remove(
         .ok();
 
     // Determine the lock mode.
-    let mode = if matches!(lock_check, LockCheck::Enabled(_)) {
-        LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };

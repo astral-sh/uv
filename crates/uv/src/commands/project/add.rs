@@ -177,10 +177,9 @@ pub(crate) async fn add(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if matches!(lock_check, LockCheck::Enabled(_)) {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`{}` is a no-op for Python scripts with inline metadata, which always run in isolation",
-                lock_check.source().unwrap()
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
@@ -978,8 +977,8 @@ async fn lock_and_sync(
     preview: Preview,
 ) -> Result<(), ProjectError> {
     let mut lock = project::lock::LockOperation::new(
-        if matches!(lock_check, LockCheck::Enabled(_)) {
-            LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(target.interpreter(), lock_check)
         } else {
             LockMode::Write(target.interpreter())
         },
@@ -1100,8 +1099,8 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::LockOperation::new(
-                if matches!(lock_check, LockCheck::Enabled(_)) {
-                    LockMode::Locked(target.interpreter(), lock_check.source().unwrap())
+                if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(target.interpreter(), lock_check)
                 } else {
                     LockMode::Write(target.interpreter())
                 },
