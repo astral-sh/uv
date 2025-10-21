@@ -453,8 +453,7 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 
 These distributions have some behavior quirks, generally as a consequence of portability; see the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details. Additionally, some platforms may not be supported (e.g., distributions
-are not yet available for musl Linux on ARM).
+documentation for details.
 
 ### PyPy distributions
 
