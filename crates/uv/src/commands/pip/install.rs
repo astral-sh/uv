@@ -1,9 +1,9 @@
-use std::collections::BTreeSet;
-use std::fmt::Write;
-use std::time::Duration;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::time::Duration;
 use tracing::{Level, debug, enabled, warn};
 
 use uv_cache::Cache;

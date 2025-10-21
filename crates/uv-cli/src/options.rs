@@ -4,7 +4,9 @@ use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{Combine, EnvironmentOptions, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_settings::{
+    Combine, EnvironmentOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
+};
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{

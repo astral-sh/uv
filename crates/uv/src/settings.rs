@@ -580,14 +580,15 @@ impl ToolRunSettings {
             }
         }
 
-        let options =
-            resolver_installer_options(installer, build, &environment).combine(ResolverInstallerOptions::from(
+        let options = resolver_installer_options(installer, build, &environment).combine(
+            ResolverInstallerOptions::from(
                 filesystem
                     .clone()
                     .map(FilesystemOptions::into_options)
                     .map(|options| options.top_level)
                     .unwrap_or_default(),
-            ));
+            ),
+        );
 
         let filesystem_install_mirrors = filesystem
             .map(FilesystemOptions::into_options)
@@ -688,14 +689,15 @@ impl ToolInstallSettings {
             python_platform,
         } = args;
 
-        let options =
-            resolver_installer_options(installer, build, &environment).combine(ResolverInstallerOptions::from(
+        let options = resolver_installer_options(installer, build, &environment).combine(
+            ResolverInstallerOptions::from(
                 filesystem
                     .clone()
                     .map(FilesystemOptions::into_options)
                     .map(|options| options.top_level)
                     .unwrap_or_default(),
-            ));
+            ),
+        );
 
         let filesystem_install_mirrors = filesystem
             .map(FilesystemOptions::into_options)

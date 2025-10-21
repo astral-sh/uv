@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
+use owo_colors::OwoColorize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::time::Duration;
-use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
