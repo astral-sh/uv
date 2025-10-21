@@ -368,6 +368,72 @@ $ uv publish
 Note this method is not preferable because uv cannot check if the package is already published
 before uploading artifacts.
 
+## Cloudsmith
+
+uv can pull and push packages from Cloudsmith by using
+[API token](https://docs.cloudsmith.com/accounts-and-teams/api-key#getting-your-api-key)
+authentication.
+
+First, add the index `cloudsmith` to your project, replacing `WORKSPACE` and `REPOSITORY` in the
+`url` and `publish-url` fields with your workspace and repository names:
+
+```toml title="pyproject.toml"
+[[tool.uv.index]]
+name = "cloudsmith"
+url  = "https://dl.cloudsmith.io/basic/WORKSPACE/REPOSITORY/python/simple/"
+
+# optional, but recommended for publish:
+publish-url = "https://python.cloudsmith.io/WORKSPACE/REPOSITORY/"
+default = true
+```
+
+!!! note
+
+    Add the `default = true` option to set the Cloudsmith repository as the main one, skipping PyPI. Learn more about this and other options in the uv [Package indexes](https://docs.astral.sh/uv/concepts/indexes/#defining-an-index) documentation.
+
+### Authenticate with a Cloudsmith access token
+
+First, set the next environment variables with your Cloudsmith credentials.
+
+For **pulling dependencies** from your new `cloudsmith` index:
+
+```console
+$ export UV_INDEX_CLOUDSMITH_USERNAME=token
+$ export UV_INDEX_CLOUDSMITH_PASSWORD=<CLOUDSMITH_TOKEN>
+```
+
+For **publishing your artifacts**:
+
+```console
+$ export UV_PUBLISH_USERNAME=token
+$ export UV_PUBLISH_PASSWORD=<CLOUDSMITH_TOKEN>
+```
+
+uv will use them to authenticate against your Cloudsmith repository.
+
+### Fetching dependencies from Cloudsmith
+
+To fetch and install all the required dependencies to your project from a Cloudsmith repository, use
+the previously defined index `cloudsmith` when running the `uv sync` command:
+
+```console
+$ uv sync --index cloudsmith
+```
+
+### Publishing packages to Cloudsmith
+
+You can
+[use the `uv build` command for packaging your project](https://docs.astral.sh/uv/guides/package/).
+Once your project's artifacts (wheel package and the source distribution `.tar.gz` files) are ready,
+push them to your Cloudsmith repository specifying the `cloudsmith` index:
+
+```console
+$ uv publish --index cloudsmith dist/*
+```
+
+Browse to your Cloudsmith [web app](https://app.cloudsmith.com/) to see the newly-published
+packages.
+
 ## JFrog Artifactory
 
 uv can install packages from JFrog Artifactory, either by using a username and password or a JWT
