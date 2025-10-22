@@ -96,6 +96,14 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
+### MacPorts
+
+uv is available via [MacPorts](https://ports.macports.org/port/uv/).
+
+```console
+$ sudo port install uv
+```
+
 ### WinGet
 
 uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
