@@ -1,8 +1,8 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use indoc::{formatdoc, indoc};
 
+use uv_cache::Cache;
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot};
@@ -236,41 +236,8 @@ fn clean_package_index() -> Result<()> {
 fn cache_timeout() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Write a test package that builds for a while
-    let child_pyproject_toml = context.temp_dir.child("pyproject.toml");
-    child_pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "child"
-        version = "0.1.0"
-        requires-python = ">=3.9"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#})?;
-    // File to wait until the lock is acquired from starting the build.
-    let ready_file = context.temp_dir.child("ready_file.txt");
-    let build_backend = context.temp_dir.child("build_backend.py");
-    build_backend.write_str(&formatdoc! {r#"
-        import time
-        from pathlib import Path
-
-        Path(r"{}").touch()
-
-        # Make the test fail quickly if something goes wrong
-        time.sleep(10)
-        "#,
-        // Don't run tests in directories with double quotes, please.
-        ready_file.display(),
-    })?;
-
-    let mut child = context.pip_install().arg(".").spawn()?;
-
-    // Wait until we've acquired the lock in the first process.
-    while !ready_file.exists() {
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
+    // Simulate another uv process running and locking the cache, e.g., with a source build.
+    let _cache = Cache::from_path(context.cache_dir.path()).with_exclusive_lock();
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @r"
     success: false
@@ -281,9 +248,6 @@ fn cache_timeout() -> Result<()> {
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
-
-    // Cleanup
-    child.kill()?;
 
     Ok(())
 }
