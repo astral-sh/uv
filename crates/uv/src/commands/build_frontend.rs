@@ -116,6 +116,7 @@ pub(crate) async fn build_frontend(
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
+    keep_on_error: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -141,6 +142,7 @@ pub(crate) async fn build_frontend(
         settings,
         client_builder,
         no_config,
+        keep_on_error,
         python_preference,
         python_downloads,
         concurrency,
@@ -184,6 +186,7 @@ async fn build_impl(
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
+    keep_on_error: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -332,6 +335,7 @@ async fn build_impl(
             python_request,
             install_mirrors.clone(),
             no_config,
+            keep_on_error,
             workspace.as_ref(),
             python_preference,
             python_downloads,
@@ -439,6 +443,7 @@ async fn build_package(
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     no_config: bool,
+    keep_on_error: bool,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -727,8 +732,18 @@ async fn build_package(
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
             )
-            .await?;
-            build_results.push(wheel_build);
+            .await;
+
+            if keep_on_error && wheel_build.is_err() {
+                let path = temp_dir.into_path();
+                writeln!(
+                    printer.stderr(),
+                    "`--keep-on-error` was provided, build can be found in {}",
+                    path.display()
+                )?;
+            }
+
+            build_results.push(wheel_build?);
         }
         BuildPlan::Sdist => {
             let sdist_build = build_sdist(
@@ -842,8 +857,17 @@ async fn build_package(
                 build_output,
                 version.as_ref(),
             )
-            .await?;
-            build_results.push(wheel_build);
+            .await;
+
+            if keep_on_error && wheel_build.is_err() {
+                let path = temp_dir.into_path();
+                writeln!(
+                    printer.stderr(),
+                    "`--keep-on-error` was provided, build can be found in {}",
+                    path.display()
+                )?;
+            }
+            build_results.push(wheel_build?);
         }
     }
 

@@ -1080,6 +1080,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings,
                 &client_builder,
                 cli.top_level.no_config,
+                args.keep_on_error,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,

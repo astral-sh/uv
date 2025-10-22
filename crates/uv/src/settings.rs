@@ -2873,6 +2873,7 @@ pub(crate) struct BuildSettings {
     pub(crate) list: bool,
     pub(crate) build_logs: bool,
     pub(crate) force_pep517: bool,
+    pub(crate) keep_on_error: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -2904,6 +2905,7 @@ impl BuildSettings {
             no_verify_hashes,
             build_logs,
             no_build_logs,
+            keep_on_error,
             python,
             build,
             refresh,
@@ -2928,6 +2930,7 @@ impl BuildSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             force_pep517,
+            keep_on_error,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes"),
                 flag(verify_hashes, no_verify_hashes, "verify-hashes"),
