@@ -233,7 +233,7 @@ fn clean_package_index() -> Result<()> {
 }
 
 #[test]
-fn cache_timeout() -> Result<()> {
+fn cache_timeout() -> () {
     let context = TestContext::new("3.12");
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
@@ -248,6 +248,4 @@ fn cache_timeout() -> Result<()> {
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
-
-    Ok(())
 }
