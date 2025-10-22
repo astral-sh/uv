@@ -37,7 +37,7 @@ static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
 #[derive(Debug, Error)]
 pub enum LockedFileError {
     #[error(
-        "Timeout ({}s) when waiting for lock on `{}` at `{}`, is another uv process running? Set `{}` to increase the timeout.",
+        "Timeout ({}s) when waiting for lock on `{}` at `{}`, is another uv process running? You can set `{}` to increase the timeout.",
         timeout.as_secs(),
         resource,
         path.user_display(),

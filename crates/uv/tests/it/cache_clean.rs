@@ -279,7 +279,7 @@ fn cache_timeout() -> Result<()> {
 
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
-    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? Set `UV_LOCK_TIMEOUT` to increase the timeout.
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
 
     // Cleanup
