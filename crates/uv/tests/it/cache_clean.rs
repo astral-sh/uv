@@ -233,7 +233,7 @@ fn clean_package_index() -> Result<()> {
 }
 
 #[test]
-fn cache_timeout() -> () {
+fn cache_timeout() {
     let context = TestContext::new("3.12");
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
