@@ -6094,3 +6094,36 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_gh_host_environment_variable() {
+    let context = TestContext::new("3.12");
+
+    // Test 1: GH_HOST environment variable with enterprise GitHub gist URL
+    uv_snapshot!(context.filters(), context.run()
+        .arg("https://enterprise.github.com/gist/abcd1234efgh5678")
+        .env("GH_HOST", "enterprise.github.com"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: HTTP status client error (404 Not Found) for url (https://enterprise.github.com/api/v3/gists/abcd1234efgh5678)
+    "###);
+}
+
+#[test]
+fn test_gist_enterprise_subdomain() {
+    let context = TestContext::new("3.12");
+
+    // Test 2: Enterprise subdomain pattern
+    uv_snapshot!(context.filters(), context.run()
+        .arg("https://gist.enterprise.github.com/user/abcd1234"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: HTTP status client error (404 Not Found) for url (https://enterprise.github.com/api/v3/gists/abcd1234)
+    "###);
+}
