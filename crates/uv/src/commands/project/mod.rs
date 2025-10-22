@@ -88,6 +88,11 @@ pub(crate) enum ProjectError {
     MissingLockfile,
 
     #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
+
+    #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
     UnsupportedLockVersion(u32, u32),

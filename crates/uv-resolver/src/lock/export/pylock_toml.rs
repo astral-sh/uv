@@ -631,7 +631,7 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
