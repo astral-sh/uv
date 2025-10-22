@@ -58,6 +58,13 @@ impl FilesystemOptions {
                         | std::io::ErrorKind::PermissionDenied
                 ) =>
             {
+                // For PermissionDenied, warn the user about inaccessible config.
+                if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    warn_user!(
+                        "Permission denied while reading user configuration in `{}`; using defaults.",
+                        file.user_display().cyan()
+                    );
+                }
                 Ok(None)
             }
             Err(err) => Err(err),
@@ -69,10 +76,35 @@ impl FilesystemOptions {
             return Ok(None);
         };
 
-        tracing::debug!("Found system configuration in: `{}`", file.display());
-        let options = read_file(&file)?;
-        validate_uv_toml(&file, &options)?;
-        Ok(Some(Self(options)))
+        tracing::debug!(
+            "Searching for system configuration in: `{}`",
+            file.display()
+        );
+        match read_file(&file) {
+            Ok(options) => {
+                tracing::debug!("Found system configuration in: `{}`", file.display());
+                validate_uv_toml(&file, &options)?;
+                Ok(Some(Self(options)))
+            }
+            Err(Error::Io(err))
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                // For PermissionDenied, warn the user about inaccessible config.
+                if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    warn_user!(
+                        "Permission denied while reading system configuration in `{}`; using defaults.",
+                        file.user_display().cyan()
+                    );
+                }
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
@@ -95,6 +127,23 @@ impl FilesystemOptions {
                         path.user_display().cyan(),
                         textwrap::indent(&err.to_string(), "  ")
                     );
+                }
+                Err(Error::Io(err))
+                    if matches!(
+                        err.kind(),
+                        std::io::ErrorKind::NotFound
+                            | std::io::ErrorKind::NotADirectory
+                            | std::io::ErrorKind::PermissionDenied
+                    ) =>
+                {
+                    // For PermissionDenied, warn the user about inaccessible workspace config.
+                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        warn_user!(
+                            "Permission denied while reading workspace configuration in `{}`; continuing search.",
+                            ancestor.user_display().cyan()
+                        );
+                    }
+                    // Continue traversing the directory tree.
                 }
                 Err(err) => {
                     // Otherwise, warn and stop.
