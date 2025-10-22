@@ -15,9 +15,6 @@ pub use crate::settings::*;
 mod combine;
 mod settings;
 
-/// This is longer than any compilation should ever take.
-const DEFAULT_COMPILE_BYTECODE_TIMEOUT: Duration = Duration::from_secs(60);
-
 /// The [`Options`] as loaded from a configuration file on disk.
 #[derive(Debug, Clone)]
 pub struct FilesystemOptions(Options);
@@ -615,9 +612,7 @@ impl EnvironmentOptions {
             compile_bytecode_timeout: parse_integer_environment_variable(
                 EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
             )?
-            .map(Duration::from_secs)
-            .or(Some(DEFAULT_COMPILE_BYTECODE_TIMEOUT))
-            .filter(|&v| v != Duration::from_secs(0)),
+            .map(Duration::from_secs),
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,

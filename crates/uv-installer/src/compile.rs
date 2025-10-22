@@ -19,6 +19,8 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
+/// This is longer than any compilation should ever take.
+const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Error)]
 pub enum CompileError {
@@ -89,7 +91,17 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
-    if let Some(duration) = compile_bytecode_timeout {
+    let timeout = if let Some(timeout) = compile_bytecode_timeout {
+        if timeout.is_zero() {
+            None
+        } else {
+            Some(timeout)
+        }
+    } else {
+        Some(DEFAULT_COMPILE_TIMEOUT)
+    };
+
+    if let Some(duration) = timeout {
         debug!(
             "Using bytecode compilation timeout of {}s",
             duration.as_secs()
@@ -108,7 +120,7 @@ pub async fn compile_tree(
             python_executable.to_path_buf(),
             pip_compileall_py.clone(),
             receiver.clone(),
-            compile_bytecode_timeout,
+            timeout,
         );
 
         // Spawn each worker on a dedicated thread.
