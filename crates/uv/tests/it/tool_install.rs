@@ -3357,6 +3357,7 @@ fn tool_install_from_at_latest() {
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
+        compile-bytecode-timeout = { secs = 60, nanos = 0 }
         "###);
     });
 }

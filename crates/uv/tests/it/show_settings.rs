@@ -237,7 +237,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            
+            compile_bytecode_timeout: Some(
+                [TIME],
+            ),
             sources: Enabled,
             hash_checking: Some(
                 Verify,
@@ -439,6 +441,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
+            compile_bytecode_timeout: Some(
+                [TIME],
+            ),
             sources: Enabled,
             hash_checking: Some(
                 Verify,
@@ -3575,6 +3580,9 @@ fn resolve_tool() -> anyhow::Result<()> {
                 Clone,
             ),
             compile_bytecode: None,
+            compile_bytecode_timeout: Some(
+                [TIME],
+            ),
             no_sources: None,
             upgrade: None,
             reinstall: None,
