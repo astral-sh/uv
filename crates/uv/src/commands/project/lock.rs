@@ -334,6 +334,17 @@ impl<'env> LockOperation<'env> {
                     .read()
                     .await?
                     .ok_or_else(|| ProjectError::MissingLockfile)?;
+                // Check if the discovered workspace members match the locked workspace members.
+                if let LockTarget::Workspace(workspace) = target {
+                    for package_name in workspace.packages().keys() {
+                        existing
+                            .find_by_name(package_name)
+                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
+                            .ok_or_else(|| {
+                                ProjectError::LockWorkspaceMismatch(package_name.clone())
+                            })?;
+                    }
+                }
                 Ok(LockResult::Unchanged(existing))
             }
             LockMode::Locked(interpreter, lock_source) => {
