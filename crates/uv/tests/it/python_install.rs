@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::{env, path::Path, process::Command};
 
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
@@ -3949,4 +3950,49 @@ fn python_install_upgrade_version_file() {
 
     hint: The version request came from a `.python-version` file; change the patch version in the file to upgrade instead
     ");
+}
+
+/// Show a fitting error message for
+/// <https://github.com/astral-sh/python-build-standalone/issues/380>.
+#[cfg(unix)]
+#[test]
+fn missing_python_home_error_message() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a Python project so we can use `uv sync`
+    context.init().assert().success();
+
+    // Create a broken venv from a symlink.
+    let sys_executable = fs_err::canonicalize(context.venv.join("bin").join("python"))?;
+    fs_err::os::unix::fs::symlink(sys_executable, context.temp_dir.join("python-link"))?;
+    fs_err::remove_dir_all(context.venv.as_ref())?;
+    Command::new(context.temp_dir.join("python-link"))
+        .arg("-m")
+        .arg("venv")
+        .arg("--without-pip")
+        .arg(context.venv.as_ref())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("-p").arg(context.venv.join("bin").join("python")), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `.venv/bin/python`
+      Caused by: Can't use Python at `[VENV]/bin/python`
+      Caused by: Python is missing PYTHONHOME. If you are using a managed Python interpreter, this is a known bug (https://github.com/astral-sh/python-build-standalone/issues/380). You can recreate the virtual environment with `uv venv`.
+    ");
+
+    // By default, we skip broken interpreters
+    uv_snapshot!(context.filters(), context.pip_list(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
