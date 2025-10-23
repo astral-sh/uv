@@ -411,6 +411,10 @@ impl PythonDownloadRequest {
         self.libc.as_ref()
     }
 
+    pub fn take_version(&mut self) -> Option<VersionRequest> {
+        self.version.take()
+    }
+
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads<'a>(
         &'a self,

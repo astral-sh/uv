@@ -1,5 +1,6 @@
 use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::FileTouch;
 use assert_fs::prelude::PathChild;
 
@@ -30,7 +31,7 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.10.17
     ");
 
     // Upgrade patch version
@@ -736,4 +737,28 @@ fn python_upgrade_force_install() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn python_upgrade_implementation() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_empty_python_install_mirror()
+        .with_managed_python_dirs();
+
+    // Install pypy
+    context.python_install().arg("pypy@3.11").assert().success();
+
+    // Run the upgrade, we should not install cpython
+    uv_snapshot!(context.filters(), context.python_upgrade(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
+    All versions already on latest supported patch release
+    ");
 }
