@@ -1230,7 +1230,7 @@ fn python_upgrade_not_allowed() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.13.0
     ");
 
     // Request a pre-release upgrade
@@ -1240,7 +1240,7 @@ fn python_upgrade_not_allowed() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.14rc3
     ");
 }
 

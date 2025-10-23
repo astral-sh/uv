@@ -37,7 +37,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -2457,9 +2457,26 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
-    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
-    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
-        Self::MajorMinor(key.major, key.minor, key.variant)
+    /// Drop any patch or prerelease information from the version request.
+    #[must_use]
+    pub fn only_minor(self) -> Self {
+        match self {
+            Self::Any => self,
+            Self::Default => self,
+            Self::Range(specifiers, variant) => Self::Range(
+                specifiers
+                    .into_iter()
+                    .map(|s| s.only_minor_release())
+                    .collect(),
+                variant,
+            ),
+            Self::Major(..) => self,
+            Self::MajorMinor(..) => self,
+            Self::MajorMinorPatch(major, minor, _, variant)
+            | Self::MajorMinorPrerelease(major, minor, _, variant) => {
+                Self::MajorMinor(major, minor, variant)
+            }
+        }
     }
 
     /// Return possible executable names for the given version request.
