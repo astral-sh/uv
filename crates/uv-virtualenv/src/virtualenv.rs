@@ -628,7 +628,21 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(err.into()),
     }
-    fs_err::remove_dir_all(location)?;
+
+    // Remove the virtual environment directory itself
+    match fs_err::remove_dir_all(location) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        // If the virtual environment is a mounted file system, e.g., in a Docker container, we
+        // cannot delete it — but that doesn't need to be a fatal error
+        Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
+            debug!(
+                "Skipping removal of `{}` directory due to {err}",
+                location.display(),
+            );
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(())
 }
