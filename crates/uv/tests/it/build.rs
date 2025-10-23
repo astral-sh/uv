@@ -2146,3 +2146,70 @@ fn test_workspace_trailing_slash() {
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
 }
+
+/// Test `uv build --clear`.
+#[test]
+fn build_clear() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Regular build
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    // Add a marker file to verify `--clear` removes it
+    fs_err::write(project.child("dist").child("marker.txt"), "marker")?;
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    // Build with `--clear` to remove the marker file
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}

@@ -1073,6 +1073,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.list,
                 args.build_logs,
                 args.force_pep517,
+                args.clear,
                 build_constraints,
                 args.hash_checking,
                 args.python,
