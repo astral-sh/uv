@@ -794,7 +794,7 @@ impl Display for StatusCodeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Querying Python at `{}` failed with exit status {}",
+            "Querying Python at `{}` failed with {}",
             self.path.display(),
             self.code
         )?;
