@@ -5221,7 +5221,7 @@ pub struct ToolUpgradeArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, env = EnvVars::UV_NO_SOURCES, help_heading = "Resolver options")]
     pub no_sources: bool,
 
     #[command(flatten)]
@@ -6139,7 +6139,7 @@ pub struct InstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, env = EnvVars::UV_NO_SOURCES, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 
@@ -6327,7 +6327,7 @@ pub struct ResolverArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, env = EnvVars::UV_NO_SOURCES, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 
@@ -6565,7 +6565,7 @@ pub struct ResolverInstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, env = EnvVars::UV_NO_SOURCES, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 

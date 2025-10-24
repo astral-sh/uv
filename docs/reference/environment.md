@@ -374,6 +374,11 @@ alias, for backwards compatibility.
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
 
+### `UV_NO_SOURCES`
+
+Equivalent to the `--no-sources` command-line argument. If set, uv will
+not use the sources for any operations.
+
 ### `UV_NO_SYNC`
 <small class="added-in">added in `0.4.18`</small>
 
