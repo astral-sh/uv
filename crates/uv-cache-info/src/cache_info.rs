@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -263,7 +263,7 @@ impl CacheInfo {
             }
         }
 
-        debug!(
+        trace!(
             "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
         );
 

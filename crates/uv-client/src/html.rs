@@ -1374,4 +1374,63 @@ mod tests {
         }
         "#);
     }
+
+    #[test]
+    fn parse_variants_json() {
+        // A variants.json without wheels doesn't make much sense, but it's sufficient to test
+        // parsing.
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Links for jinja2</h1>
+<a href="/whl/jinja2-3.1.2-variants.json#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61">jinja2-3.1.2-variants.json</a><br/>
+</body>
+</html>
+<!--TIMESTAMP 1703347410-->
+    "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                PypiFile {
+                    core_metadata: None,
+                    filename: "jinja2-3.1.2-variants.json",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/jinja2-3.1.2-variants.json",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
+    }
 }
