@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, Simplified, cachedir, directories};
+use uv_fs::{LockedFile, LockedFileError, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -80,7 +80,7 @@ impl CacheEntry {
     }
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         fs_err::create_dir_all(self.dir())?;
         LockedFile::acquire(self.path(), self.path().display()).await
     }
@@ -109,7 +109,7 @@ impl CacheShard {
     }
 
     /// Acquire the cache entry as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         fs_err::create_dir_all(self.as_ref())?;
         LockedFile::acquire(self.join(".lock"), self.display()).await
     }
@@ -182,7 +182,7 @@ impl Cache {
     }
 
     /// Acquire a lock that allows removing entries from the cache.
-    pub fn with_exclusive_lock(self) -> Result<Self, io::Error> {
+    pub fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
         let Self {
             root,
             refresh,
@@ -373,7 +373,7 @@ impl Cache {
     }
 
     /// Initialize the [`Cache`].
-    pub fn init(self) -> Result<Self, io::Error> {
+    pub fn init(self) -> Result<Self, LockedFileError> {
         let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
@@ -390,7 +390,7 @@ impl Cache {
         {
             Ok(mut file) => file.write_all(b"*")?,
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
 
         // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
@@ -406,7 +406,7 @@ impl Cache {
             ) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
 
         // Add a phony .git, if it doesn't exist, to ensure that the cache isn't considered to be
@@ -427,7 +427,11 @@ impl Cache {
             root.simplified_display(),
         ) {
             Ok(lock_file) => Some(Arc::new(lock_file)),
-            Err(err) if err.kind() == io::ErrorKind::Unsupported => {
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == io::ErrorKind::Unsupported) =>
+            {
                 warn!(
                     "Shared locking is not supported by the current platform or filesystem, \
                     reduced parallel process safety with `uv cache clean` and `uv cache prune`."

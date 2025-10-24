@@ -2,6 +2,9 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
+use uv_cache::Cache;
+use uv_static::EnvVars;
+
 use crate::common::{TestContext, uv_snapshot};
 
 /// `cache clean` should remove all packages.
@@ -227,4 +230,22 @@ fn clean_package_index() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn cache_timeout() {
+    let context = TestContext::new("3.12");
+
+    // Simulate another uv process running and locking the cache, e.g., with a source build.
+    let _cache = Cache::from_path(context.cache_dir.path()).with_exclusive_lock();
+
+    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
 }

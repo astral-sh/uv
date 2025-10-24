@@ -18,7 +18,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{LockedFile, LockedFileError, PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -666,7 +666,7 @@ impl Interpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
             LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
