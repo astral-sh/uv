@@ -336,20 +336,22 @@ impl<'a> FlatIndexClient<'a> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Write;
     use tempfile::tempdir;
 
     #[test]
     fn read_from_directory_sorts_distributions() {
         let dir = tempdir().unwrap();
 
-        let expected = [
-            "alpha-1.0.0-py3-none-any.whl",
-            "alpha-1.0.0.tar.gz",
+        let filenames = [
             "beta-2.0.0-py3-none-any.whl",
+            "alpha-1.0.0.tar.gz",
+            "alpha-1.0.0-py3-none-any.whl",
         ];
 
-        for name in &expected {
-            fs::write(dir.path().join(name), b"").unwrap();
+        for name in &filenames {
+            let mut file = fs::File::create(dir.path().join(name)).unwrap();
+            file.write_all(b"").unwrap();
         }
 
         let entries = FlatIndexClient::read_from_directory(
@@ -362,6 +364,18 @@ mod tests {
             .entries
             .iter()
             .map(|entry| entry.filename.to_string())
+            .collect::<Vec<_>>();
+
+        let mut expected = filenames
+            .iter()
+            .map(|name| DistFilename::try_from_normalized_filename(name).unwrap())
+            .collect::<Vec<_>>();
+
+        expected.sort();
+
+        let expected = expected
+            .into_iter()
+            .map(|filename| filename.to_string())
             .collect::<Vec<_>>();
 
         assert_eq!(actual, expected);
