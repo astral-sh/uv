@@ -5,6 +5,7 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -179,11 +180,12 @@ fn list_outdated_json() -> Result<()> {
 
 #[test]
 fn list_outdated_find_links() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    let links_dir = context.workspace_root.join("scripts/links");
+    let links_dir = context.workspace_root.join("test/links");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("validation==1.0.0")
         .arg("--find-links")
         .arg(&links_dir)
@@ -201,6 +203,7 @@ fn list_outdated_find_links() {
     );
 
     uv_snapshot!(context.filters(), context.pip_list()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--outdated")
         .arg("--find-links")
         .arg(&links_dir)
@@ -213,9 +216,6 @@ fn list_outdated_find_links() {
     validation 1.0.0   3.0.0  wheel
 
     ----- stderr -----
-    warning: validation-1.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
-    warning: validation-2.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
-    warning: validation-3.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     "###
     );
 }
