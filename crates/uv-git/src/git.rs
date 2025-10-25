@@ -219,6 +219,7 @@ impl GitRepository {
             return false;
         };
 
+        // Requires Git LFS 3.x (2021 release)
         let result = cmd
             .arg("fsck")
             .arg("--objects")
