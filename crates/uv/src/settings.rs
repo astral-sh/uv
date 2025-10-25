@@ -547,6 +547,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
+    pub(crate) lfs: Option<bool>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -582,6 +583,7 @@ impl ToolRunSettings {
             installer,
             build,
             refresh,
+            lfs,
             python,
             python_platform,
             generate_shell_completion: _,
@@ -628,6 +630,7 @@ impl ToolRunSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
+        let lfs = lfs.then_some(true);
 
         Self {
             command,
@@ -658,6 +661,7 @@ impl ToolRunSettings {
                 .collect(),
             isolated,
             show_resolution,
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::from(refresh),
@@ -685,6 +689,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) lfs: Option<bool>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
@@ -715,6 +720,7 @@ impl ToolInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            lfs,
             installer,
             force,
             build,
@@ -738,6 +744,7 @@ impl ToolInstallSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
+        let lfs = lfs.then_some(true);
 
         Self {
             package,
@@ -774,6 +781,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             force,
