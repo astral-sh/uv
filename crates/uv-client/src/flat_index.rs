@@ -321,6 +321,49 @@ impl<'a> FlatIndexClient<'a> {
                 index: flat_index.clone(),
             });
         }
+
+        dists.sort_by(|a, b| {
+            a.filename
+                .cmp(&b.filename)
+                .then_with(|| a.index.cmp(&b.index))
+        });
+
         Ok(FlatIndexEntries::from_entries(dists))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn read_from_directory_sorts_distributions() {
+        let dir = tempdir().unwrap();
+
+        let expected = [
+            "alpha-1.0.0-py3-none-any.whl",
+            "alpha-1.0.0.tar.gz",
+            "beta-2.0.0-py3-none-any.whl",
+        ];
+
+        for name in &expected {
+            fs::write(dir.path().join(name), b"").unwrap();
+        }
+
+        let entries = FlatIndexClient::read_from_directory(
+            dir.path(),
+            &IndexUrl::parse(&dir.path().to_string_lossy(), None).unwrap(),
+        )
+        .unwrap();
+
+        let actual = entries
+            .entries
+            .iter()
+            .map(|entry| entry.filename.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
     }
 }
