@@ -1075,7 +1075,7 @@ fn pyproject_build_backend_prerequisites(
                     [package]
                     name = "{module_name}"
                     version = "0.1.0"
-                    edition = "2021"
+                    edition = "2024"
 
                     [lib]
                     name = "_core"
@@ -1085,7 +1085,7 @@ fn pyproject_build_backend_prerequisites(
                     [dependencies]
                     # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
                     # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-                    pyo3 = {{ version = "0.22.4", features = ["extension-module", "abi3-py39"] }}
+                    pyo3 = {{ version = "0.27.1", features = ["extension-module", "abi3-py39"] }}
                 "#},
                 )?;
             }
@@ -1174,18 +1174,17 @@ fn generate_package_scripts(
                     indoc::formatdoc! {r#"
                     use pyo3::prelude::*;
 
-                    #[pyfunction]
-                    fn hello_from_bin() -> String {{
-                        "Hello from {package}!".to_string()
-                    }}
-
-                    /// A Python module implemented in Rust. The name of this function must match
+                    /// A Python module implemented in Rust. The name of this module must match
                     /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
                     /// import the module.
                     #[pymodule]
-                    fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {{
-                        m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-                        Ok(())
+                    mod _core {{
+                        use pyo3::prelude::*;
+
+                        #[pyfunction]
+                        fn hello_from_bin() -> String {{
+                            "Hello from {package}!".to_string()
+                        }}
                     }}
                 "#},
                 )?;
