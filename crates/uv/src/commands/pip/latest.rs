@@ -1,7 +1,7 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{FlatIndexEntry, MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
@@ -34,6 +34,70 @@ impl LatestClient<'_> {
     ) -> Option<jiff::Timestamp> {
         self.exclude_newer
             .exclude_newer_package_for_index(package, self.index_locations.exclude_newer_for(index))
+    }
+
+    fn consider_candidate(
+        &self,
+        filename: &DistFilename,
+        file: &File,
+        exclude_newer: Option<&jiff::Timestamp>,
+    ) -> bool {
+        // Respect any exclude-newer cutoffs that were provided.
+        if let Some(exclude_newer) = exclude_newer {
+            match file.upload_time_utc_ms.as_ref() {
+                Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
+                    return false;
+                }
+                None => {
+                    warn_user_once!(
+                        "{} is missing an upload date, but user provided: {}",
+                        file.filename,
+                        exclude_newer
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        // Unless explicitly allowed, skip pre-release artifacts.
+        if !filename.version().is_stable() {
+            if !matches!(self.prerelease, PrereleaseMode::Allow) {
+                return false;
+            }
+        }
+
+        // Avoid yanked or otherwise withdrawn files.
+        if file
+            .yanked
+            .as_ref()
+            .is_some_and(|yanked| yanked.is_yanked())
+        {
+            return false;
+        }
+
+        // Enforce the interpreter's `Requires-Python` constraints.
+        if let Some(requires_python) = self.requires_python
+            && file
+                .requires_python
+                .as_ref()
+                .is_some_and(|file_requires_python| {
+                    !requires_python.is_contained_by(file_requires_python)
+                })
+        {
+            return false;
+        }
+
+        // Skip wheels that aren't compatible with the current platform.
+        if let DistFilename::WheelFilename(filename) = filename {
+            if self
+                .tags
+                .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
+            {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Find the latest version of a package from an index.
@@ -89,59 +153,6 @@ impl LatestClient<'_> {
         for (index, archive) in archives {
             let exclude_newer = self.effective_exclude_newer(package, index);
 
-            let consider_candidate = |filename: &DistFilename, file: &File| {
-                if let Some(exclude_newer) = &exclude_newer {
-                    match file.upload_time_utc_ms.as_ref() {
-                        Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
-                            return false;
-                        }
-                        None => {
-                            warn_user_once!(
-                                "{} is missing an upload date, but user provided: {}",
-                                file.filename,
-                                exclude_newer
-                            );
-                        }
-                        _ => {}
-                    }
-                }
-
-                if !filename.version().is_stable()
-                    && !matches!(self.prerelease, PrereleaseMode::Allow)
-                {
-                    return false;
-                }
-
-                if file
-                    .yanked
-                    .as_ref()
-                    .is_some_and(|yanked| yanked.is_yanked())
-                {
-                    return false;
-                }
-
-                if let Some(requires_python) = self.requires_python
-                    && file
-                        .requires_python
-                        .as_ref()
-                        .is_some_and(|file_requires_python| {
-                            !requires_python.is_contained_by(file_requires_python)
-                        })
-                {
-                    return false;
-                }
-
-                if let DistFilename::WheelFilename(filename) = filename
-                    && self
-                        .tags
-                        .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
-                {
-                    return false;
-                }
-
-                true
-            };
-
             match archive {
                 MetadataFormat::Simple(archive) => {
                     for datum in archive.iter().rev() {
@@ -151,7 +162,7 @@ impl LatestClient<'_> {
 
                         let mut best: Option<DistFilename> = None;
                         for (filename, file) in files.all() {
-                            if !consider_candidate(&filename, &file) {
+                            if !self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
                                 continue;
                             }
 
@@ -173,8 +184,9 @@ impl LatestClient<'_> {
                     }
                 }
                 MetadataFormat::Flat(entries) => {
-                    for FlatIndexEntry { filename, file, .. } in entries {
-                        if consider_candidate(&filename, &file) {
+                    for entry in entries {
+                        let (filename, file, _) = entry.into_parts();
+                        if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
                             update_latest(filename);
                         }
                     }
