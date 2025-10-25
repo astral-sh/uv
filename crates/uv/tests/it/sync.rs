@@ -1409,8 +1409,11 @@ fn sync_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if source-distribution is first-party
+          [build-system]
+          requires = ["hatchling"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           source-distribution = ["hatchling"]
 
@@ -1497,8 +1500,11 @@ fn sync_build_isolation_package_order() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if source-distribution is first-party
+          [build-system]
+          requires = ["hatchling"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           source-distribution = ["hatchling"]
 
@@ -1667,8 +1673,11 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if source-distribution is first-party
+          [build-system]
+          requires = ["hatchling"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           source-distribution = ["hatchling"]
 
@@ -2567,8 +2576,11 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import anyio
           ModuleNotFoundError: No module named 'anyio'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if child is first-party
+          [build-system]
+          requires = ["anyio"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           child = ["anyio"]
 
