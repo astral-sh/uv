@@ -74,3 +74,4 @@ hyper-util = { workspace = true }
 insta = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
+tempfile = { workspace = true }
