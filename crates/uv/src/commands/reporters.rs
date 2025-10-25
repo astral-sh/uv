@@ -637,16 +637,13 @@ pub(crate) struct PythonDownloadReporter {
 impl PythonDownloadReporter {
     /// Initialize a [`PythonDownloadReporter`] for a single Python download.
     pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, 1)
+        Self::new(printer, None)
     }
 
     /// Initialize a [`PythonDownloadReporter`] for multiple Python downloads.
-    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+    pub(crate) fn new(printer: Printer, length: Option<u64>) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(
-            Some(length),
-            printer.target(),
-        ));
+        let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
