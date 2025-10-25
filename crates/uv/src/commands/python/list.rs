@@ -58,6 +58,7 @@ pub(crate) async fn list(
     all_versions: bool,
     all_platforms: bool,
     all_arches: bool,
+    all_variants: bool,
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
@@ -68,11 +69,27 @@ pub(crate) async fn list(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
+
+    // Reject --all-variants with explicit non-default variant requests
+    if all_variants
+        && request
+            .as_ref()
+            .and_then(uv_python::PythonRequest::variant)
+            .is_some_and(|v| v != uv_python::PythonVariant::Default)
+    {
+        return Err(anyhow::anyhow!(
+            "`--all-variants` cannot be used with a request that specifies a variant\n\n{}{} Use `--all-variants` to show all variants for a Python version, or specify an exact variant like `3.13t` or `3.13+freethreaded`, but not both",
+            "hint".bold().cyan(),
+            ":".bold()
+        ));
+    }
+
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+            .map(|request| request.with_all_variants(all_variants))
     };
 
     let mut output = BTreeSet::new();
@@ -110,8 +127,17 @@ pub(crate) async fn list(
             .transpose()?
             .into_iter()
             .flatten()
-            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
-            .filter(|download| !download.key().variant().is_debug());
+            .filter(|download| {
+                // Show all variants when --all-variants is set
+                all_variants
+                    // Show all variants when a specific non-default variant was requested
+                    || !matches!(
+                        request.as_ref().and_then(uv_python::PythonRequest::variant),
+                        Some(uv_python::PythonVariant::Default) | None
+                    )
+                    // Otherwise, hide debug builds by default
+                    || !download.key().variant().is_debug()
+            });
 
         for download in downloads {
             output.insert((
