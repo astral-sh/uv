@@ -90,6 +90,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    lfs: Option<bool>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -276,6 +277,7 @@ pub(crate) async fn run(
         &settings,
         &client_builder,
         isolated,
+        lfs,
         python_preference,
         python_downloads,
         installer_metadata,
@@ -691,6 +693,7 @@ async fn get_or_create_environment(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
+    lfs: Option<bool>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -803,6 +806,7 @@ async fn get_or_create_environment(
                         &workspace_cache,
                         printer,
                         preview,
+                        lfs,
                     )
                     .await?
                     .pop()
@@ -894,6 +898,7 @@ async fn get_or_create_environment(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -920,6 +925,7 @@ async fn get_or_create_environment(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 
