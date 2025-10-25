@@ -2647,8 +2647,11 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import sklearn
           ModuleNotFoundError: No module named 'sklearn'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if child is first-party
+          [build-system]
+          requires = ["scikit-learn"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           child = ["scikit-learn"]
 
