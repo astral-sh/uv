@@ -67,9 +67,7 @@ impl LatestClient<'_> {
         if file
             .requires_python
             .as_ref()
-            .is_some_and(|requires_python| {
-                !self.requires_python.is_contained_by(requires_python)
-            })
+            .is_some_and(|requires_python| !self.requires_python.is_contained_by(requires_python))
         {
             return false;
         }
