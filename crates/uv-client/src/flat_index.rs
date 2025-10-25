@@ -335,7 +335,7 @@ impl<'a> FlatIndexClient<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use fs_err::File;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -350,7 +350,7 @@ mod tests {
         ];
 
         for name in &filenames {
-            let mut file = fs::File::create(dir.path().join(name)).unwrap();
+            let mut file = File::create(dir.path().join(name)).unwrap();
             file.write_all(b"").unwrap();
         }
 
