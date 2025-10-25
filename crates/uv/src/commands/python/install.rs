@@ -407,7 +407,7 @@ pub(crate) async fn install(
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build();
 
-    let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
+    let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
     let mut tasks = FuturesUnordered::new();
 
     for download in &downloads {
