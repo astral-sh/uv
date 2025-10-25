@@ -50,6 +50,10 @@ impl EnvVars {
     #[attr_added_in("0.4.19")]
     pub const UV_FIND_LINKS: &'static str = "UV_FIND_LINKS";
 
+    /// Equivalent to the `--no-sources` command-line argument. If set, uv will
+    /// not use the sources for any operations.
+    pub const UV_NO_SOURCES: &'static str = "UV_NO_SOURCES";
+
     /// Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
     /// directory for caching instead of the default cache directory.
     #[attr_added_in("0.0.5")]
