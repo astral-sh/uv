@@ -779,7 +779,7 @@ impl Display for StatusCodeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Querying Python at `{}` failed with exit status {}",
+            "Querying Python at `{}` failed with {}",
             self.path.display(),
             self.code
         )?;
@@ -903,6 +903,27 @@ pub enum InterpreterInfoError {
     },
     #[error("Only Pyodide is support for Emscripten Python")]
     EmscriptenNotPyodide,
+    #[error("Python is missing PYTHONHOME. If you are using a managed Python interpreter, this is a known bug (https://github.com/astral-sh/python-build-standalone/issues/380). You can recreate the virtual environment with `{}`.", "uv venv".green())]
+    PythonHomeNotFound,
+}
+
+impl InterpreterInfoError {
+    /// Check whether the stderr of `python` matches a known pattern.
+    pub(crate) fn from_query_stderr(stderr: &str) -> Option<Self> {
+        // If the Python version is too old, we may not even be able to invoke the query script
+        if stderr.contains("Unknown option: -I") {
+            return Some(Self::UnsupportedPython);
+        }
+
+        // Until we fixed the PBS bug, inform the user that this is bug on our side and can be fixed
+        // with `uv venv`.
+        // https://github.com/astral-sh/python-build-standalone/issues/380
+        if stderr.contains("ModuleNotFoundError: No module named 'encodings'") {
+            return Some(Self::PythonHomeNotFound);
+        }
+
+        None
+    }
 }
 
 #[allow(clippy::struct_excessive_bools)]
@@ -979,10 +1000,9 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // If the Python version is too old, we may not even be able to invoke the query script
-            if stderr.contains("Unknown option: -I") {
+            if let Some(query_error) = InterpreterInfoError::from_query_stderr(&stderr) {
                 return Err(Error::QueryScript {
-                    err: InterpreterInfoError::UnsupportedPython,
+                    err: query_error,
                     path: interpreter.to_path_buf(),
                 });
             }
@@ -999,20 +1019,19 @@ impl InterpreterInfo {
             serde_json::from_slice(&output.stdout).map_err(|err| {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-                // If the Python version is too old, we may not even be able to invoke the query script
-                if stderr.contains("Unknown option: -I") {
-                    Error::QueryScript {
-                        err: InterpreterInfoError::UnsupportedPython,
+                if let Some(query_error) = InterpreterInfoError::from_query_stderr(&stderr) {
+                    return Error::QueryScript {
+                        err: query_error,
                         path: interpreter.to_path_buf(),
-                    }
-                } else {
-                    Error::UnexpectedResponse(UnexpectedResponseError {
-                        err,
-                        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                        stderr,
-                        path: interpreter.to_path_buf(),
-                    })
+                    };
                 }
+
+                Error::UnexpectedResponse(UnexpectedResponseError {
+                    err,
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr,
+                    path: interpreter.to_path_buf(),
+                })
             })?;
 
         match result {
