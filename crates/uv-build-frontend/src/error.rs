@@ -630,8 +630,11 @@ mod test {
 
         error: invalid command 'bdist_wheel'
 
-        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+        # if pygraphviz-1.11 is first-party
+        [build-system]
+        requires = ["wheel"]
+        # otherwise
         [tool.uv.extra-build-dependencies]
         "pygraphviz-1.11" = ["wheel"]
 
