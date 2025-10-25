@@ -4,7 +4,9 @@ use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_settings::{
+    Combine, EnvironmentOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
+};
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
@@ -378,6 +380,7 @@ pub fn resolver_options(
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
+    environment: &EnvironmentOptions,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -482,6 +485,7 @@ pub fn resolver_installer_options(
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+        compile_bytecode_timeout: environment.compile_bytecode_timeout,
         no_build: flag(no_build, build, "build"),
         no_build_package: if no_build_package.is_empty() {
             None

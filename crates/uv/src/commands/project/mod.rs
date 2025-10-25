@@ -1716,6 +1716,7 @@ pub(crate) async fn resolve_names(
                 upgrade: _,
             },
         compile_bytecode: _,
+        compile_bytecode_timeout: _,
         reinstall: _,
     } = settings;
 
@@ -2053,6 +2054,7 @@ pub(crate) async fn sync_environment(
         exclude_newer,
         link_mode,
         compile_bytecode,
+        compile_bytecode_timeout,
         reinstall,
         build_options,
         sources,
@@ -2140,6 +2142,7 @@ pub(crate) async fn sync_environment(
         build_options,
         link_mode,
         compile_bytecode,
+        compile_bytecode_timeout,
         &hasher,
         tags,
         &client,
@@ -2223,6 +2226,7 @@ pub(crate) async fn update_environment(
                 upgrade,
             },
         compile_bytecode,
+        compile_bytecode_timeout,
         reinstall,
     } = settings;
 
@@ -2406,6 +2410,7 @@ pub(crate) async fn update_environment(
         build_options,
         *link_mode,
         *compile_bytecode,
+        *compile_bytecode_timeout,
         &hasher,
         &tags,
         &client,
