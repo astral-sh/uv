@@ -5,6 +5,7 @@ use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
 use crate::common::{TestContext, uv_snapshot};
+use uv_static::EnvVars;
 
 #[test]
 fn list_empty_columns() {
@@ -183,6 +184,7 @@ fn list_outdated_find_links() {
     let links_dir = context.workspace_root.join("scripts/links");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("validation==1.0.0")
         .arg("--find-links")
         .arg(&links_dir)
@@ -200,6 +202,7 @@ fn list_outdated_find_links() {
     );
 
     uv_snapshot!(context.filters(), context.pip_list()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--outdated")
         .arg("--find-links")
         .arg(&links_dir)
@@ -212,9 +215,6 @@ fn list_outdated_find_links() {
     validation 1.0.0   3.0.0  wheel
 
     ----- stderr -----
-    warning: validation-1.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
-    warning: validation-2.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
-    warning: validation-3.0.0-py3-none-any.whl is missing an upload date, but user provided: global: 2024-03-25T00:00:00Z
     "###
     );
 }
