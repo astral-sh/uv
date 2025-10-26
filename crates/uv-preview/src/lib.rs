@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -134,7 +136,7 @@ pub mod test {
         let state = PREVIEW.get_or_init(|| PreviewMode::Test(RwLock::new(None)));
         match state {
             PreviewMode::Test(rwlock) => {
-                *rwlock.write().unwrap() = Some(Preview::new(features));
+                *rwlock.write().unwrap() = Some(Preview::from_iter(features));
             }
             PreviewMode::Normal(_) => {
                 panic!(
@@ -238,6 +240,56 @@ impl Display for PreviewFeature {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PreviewFeature {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeature")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let choices: Vec<&str> = BitFlags::<Self>::all().iter().map(Self::as_str).collect();
+        schemars::json_schema!({
+            "type": "string",
+            "enum": choices,
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PreviewFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PreviewFeature;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                PreviewFeature::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl serde::Serialize for PreviewFeature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Error, Clone)]
 #[error("Unknown feature flag")]
 pub struct PreviewFeatureParseError;
@@ -293,28 +345,10 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
-        Self {
-            flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
-        }
-    }
-
     pub fn all() -> Self {
         Self {
             flags: BitFlags::all(),
         }
-    }
-
-    pub fn from_args(preview: bool, no_preview: bool, preview_features: &[PreviewFeature]) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        Self::new(preview_features)
     }
 
     /// Check if a single feature is enabled.
@@ -330,6 +364,22 @@ impl Preview {
     /// Check if any preview feature is enabled.
     pub fn any_enabled(&self) -> bool {
         !self.flags.is_empty()
+    }
+}
+
+impl<'flag> FromIterator<&'flag PreviewFeature> for Preview {
+    fn from_iter<T: IntoIterator<Item = &'flag PreviewFeature>>(iter: T) -> Self {
+        let flags = iter
+            .into_iter()
+            .copied()
+            .fold(BitFlags::empty(), BitOr::bitor);
+        Self { flags }
+    }
+}
+
+impl From<bool> for Preview {
+    fn from(value: bool) -> Self {
+        if value { Self::all() } else { Self::default() }
     }
 }
 
@@ -424,7 +474,7 @@ mod tests {
         // Test disabled
         let preview = Preview::default();
         assert_eq!(preview.to_string(), "disabled");
-        let preview = Preview::new(&[]);
+        let preview = Preview::from_iter(&[]);
         assert_eq!(preview.to_string(), "disabled");
 
         // Test enabled (all features)
@@ -432,31 +482,18 @@ mod tests {
         assert_eq!(preview.to_string(), "enabled");
 
         // Test single feature
-        let preview = Preview::new(&[PreviewFeature::PythonInstallDefault]);
+        let preview = Preview::from_iter(&[PreviewFeature::PythonInstallDefault]);
         assert_eq!(preview.to_string(), "python-install-default");
 
         // Test multiple features
-        let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
+        let preview = Preview::from_iter(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
         assert_eq!(preview.to_string(), "python-upgrade,pylock");
     }
 
     #[test]
-    fn test_preview_from_args() {
-        // Test no preview and no no_preview, and no features
-        let preview = Preview::from_args(false, false, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
-        assert_eq!(preview.to_string(), "enabled");
-
-        // Test specific features
-        let features = vec![PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput];
-        let preview = Preview::from_args(false, false, &features);
+    fn test_preview_from_iter() {
+        let preview =
+            Preview::from_iter(&[PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput]);
         assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
         assert!(!preview.is_enabled(PreviewFeature::Pylock));

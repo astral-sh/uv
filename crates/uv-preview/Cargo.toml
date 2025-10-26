@@ -23,6 +23,8 @@ uv-warnings = { workspace = true }
 
 enumflags2 = { workspace = true }
 itertools = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

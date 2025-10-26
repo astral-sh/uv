@@ -1353,7 +1353,7 @@ mod tests {
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
                         &context.cache,
-                        Preview::new(&[PreviewFeature::SpecialCondaEnvNames]),
+                        Preview::from_iter(&[PreviewFeature::SpecialCondaEnvNames]),
                     )
                 },
             )?
