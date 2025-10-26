@@ -1823,7 +1823,7 @@ declared specifiers (`if-necessary-or-explicit`).
 
 ### [`preview`](#preview) {: #preview }
 
-Whether to enable experimental, preview features.
+Whether to enable all experimental, preview features.
 
 **Default value**: `false`
 
@@ -1841,6 +1841,30 @@ Whether to enable experimental, preview features.
 
     ```toml
     preview = true
+    ```
+
+---
+
+### [`preview-features`](#preview-features) {: #preview-features }
+
+Whether to enable specific experimental, preview features.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    preview-features = ["python-upgrade"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    preview-features = ["python-upgrade"]
     ```
 
 ---
