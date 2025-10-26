@@ -475,11 +475,21 @@
       ]
     },
     "preview": {
-      "description": "Whether to enable experimental, preview features.",
+      "description": "Whether to enable all experimental, preview features.",
       "type": [
         "boolean",
         "null"
       ]
+    },
+    "preview-features": {
+      "description": "Whether to enable specific experimental, preview features.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PreviewFeatures"
+      }
     },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
@@ -1791,6 +1801,29 @@
           "type": "string",
           "const": "if-necessary-or-explicit"
         }
+      ]
+    },
+    "PreviewFeatures": {
+      "type": "string",
+      "enum": [
+        "python-install-default",
+        "python-upgrade",
+        "json-output",
+        "pylock",
+        "add-bounds",
+        "package-conflicts",
+        "extra-build-dependencies",
+        "detect-module-conflicts",
+        "format",
+        "native-auth",
+        "s3-endpoint",
+        "cache-size",
+        "init-project-flag",
+        "workspace-metadata",
+        "workspace-dir",
+        "workspace-list",
+        "sbom-export",
+        "auth-helper"
       ]
     },
     "PythonDownloads": {

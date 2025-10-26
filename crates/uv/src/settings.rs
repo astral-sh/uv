@@ -38,7 +38,7 @@ use uv_distribution_types::{
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeaturesMode};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -139,13 +139,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                flag(args.preview, args.no_preview, "preview")
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: Preview::from(resolve_preview_settings(args, workspace)),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -176,6 +170,28 @@ fn resolve_python_preference(
         args.python_preference
             .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
             .unwrap_or_default()
+    }
+}
+
+fn resolve_preview_settings(
+    args: &GlobalArgs,
+    workspace: Option<&FilesystemOptions>,
+) -> PreviewFeaturesMode {
+    if let Some(preview) = flag(args.preview, args.no_preview, "preview") {
+        return PreviewFeaturesMode::from_bool(preview);
+    }
+    match workspace.and_then(|workspace| workspace.globals.preview) {
+        Some(true) => PreviewFeaturesMode::EnableAll,
+        // Disable workspace `preview-features` but keep any CLI `--preview-features`
+        Some(false) => PreviewFeaturesMode::from(args.preview_features.iter()),
+        None => {
+            let features = args.preview_features.iter().chain(
+                workspace
+                    .and_then(|workspace| workspace.globals.preview_features.as_deref())
+                    .unwrap_or_default(),
+            );
+            PreviewFeaturesMode::from(features)
+        }
     }
 }
 
