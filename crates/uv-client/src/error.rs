@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
+use http::StatusCode;
 use reqwest::Response;
+use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use tracing::warn;
 
@@ -413,7 +415,7 @@ pub enum ErrorKind {
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
     #[error("Package `{0}` was not found in the registry")]
-    RemotePackageStatusCodeError(PackageName),
+    RemotePackageStatusCodeError(PackageName, FxHashSet<StatusCode>),
 
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]
