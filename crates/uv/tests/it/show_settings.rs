@@ -8965,10 +8965,10 @@ fn preview_boolean_still_works() {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(indoc! {r"
         [tool.uv]
         preview = true
-    "#}).unwrap();
+    "}).unwrap();
 
     uv_snapshot!(context.filters(), context.version().arg("--show-settings"), @r#"
     success: true
