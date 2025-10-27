@@ -441,11 +441,13 @@ impl RegistryClient {
 
         if results.is_empty() {
             return match self.connectivity {
-                Connectivity::Online => Err(ErrorKind::RemotePackageNotFound {
-                    package_name: package_name.clone(),
-                    status_code_error: any_status_code_error.load(Ordering::Relaxed),
+                Connectivity::Online => {
+                    if any_status_code_error.load(Ordering::Relaxed) {
+                        Err(ErrorKind::RemotePackageStatusCodeError(package_name.clone()).into())
+                    } else {
+                        Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
+                    }
                 }
-                .into()),
                 Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
             };
         }
