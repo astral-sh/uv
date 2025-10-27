@@ -2907,8 +2907,8 @@ impl BuildSettings {
             no_verify_hashes,
             build_logs,
             no_build_logs,
-            gitignore,
-            no_gitignore,
+            create_gitignore,
+            no_create_gitignore,
             python,
             build,
             refresh,
@@ -2930,7 +2930,8 @@ impl BuildSettings {
             build_logs: flag(build_logs, no_build_logs, "build-logs").unwrap_or(true),
             force_pep517,
             clear,
-            gitignore: flag(gitignore, no_gitignore, "gitignore").unwrap_or(true),
+            gitignore: flag(create_gitignore, no_create_gitignore, "create-gitignore")
+                .unwrap_or(true),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)

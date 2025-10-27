@@ -2214,7 +2214,7 @@ fn build_clear() -> Result<()> {
     Ok(())
 }
 
-/// Test `uv build --no-gitignore`.
+/// Test `uv build --no-create-gitignore`.
 #[test]
 fn build_no_gitignore() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2243,8 +2243,8 @@ fn build_no_gitignore() -> Result<()> {
 
     fs_err::remove_dir_all(project.child("dist"))?;
 
-    // Build with `--no-gitignore` that does not create `.gitignore`
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-gitignore").arg("--no-build-logs"), @r###"
+    // Build with `--no-create-gitignore` that does not create `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

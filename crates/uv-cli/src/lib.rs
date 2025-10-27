@@ -2639,12 +2639,16 @@ pub struct BuildArgs {
     #[arg(long)]
     pub clear: bool,
 
-    #[arg(long, overrides_with("no_gitignore"), hide = true)]
-    pub gitignore: bool,
+    #[arg(long, overrides_with("no_create_gitignore"), hide = true)]
+    pub create_gitignore: bool,
 
-    /// Do not create a `.gitignore` file in the output directory
-    #[arg(long, overrides_with("gitignore"))]
-    pub no_gitignore: bool,
+    /// Do not create a `.gitignore` file in the output directory.
+    ///
+    /// By default, uv creates a `.gitignore` file in the output directory to exclude build
+    /// artifacts from version control. When this flag is used, the file will be omitted and only
+    /// the build artifacts (source distributions and wheels) are stored in the output directory.
+    #[arg(long, overrides_with("create_gitignore"))]
+    pub no_create_gitignore: bool,
 
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
