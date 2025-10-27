@@ -563,16 +563,18 @@ pub async fn check_url(
                     );
                     Ok(false)
                 }
-                uv_client::ErrorKind::StatusCodeError(_) => {
+                uv_client::ErrorKind::StatusCodeError(_, status_code_error) => {
+                    // TODO(konsti): We currently can't track that this must be exactly one status
+                    // error with check URL.
+                    debug_assert!(
+                        status_code_error.len() == 1,
+                        "Check URL must only check a single URL"
+                    );
+                    let status_code = status_code_error.iter().next();
                     // The package may or may not exist, there was an authentication failure.
-                    // TODO(konsti): We should show the real index error instead.
-                    let status_code_detail = if index_capabilities.unauthorized(index_url) {
-                        "401 Unauthorized"
-                    } else if index_capabilities.forbidden(index_url) {
-                        "403 Forbidden"
-                    } else {
-                        "Status code error"
-                    };
+                    let status_code_detail = status_code
+                        .map(ToString::to_string)
+                        .unwrap_or("Status code error".to_string());
                     warn!(
                         "Package not found in the registry; skipping upload check for {filename}"
                     );

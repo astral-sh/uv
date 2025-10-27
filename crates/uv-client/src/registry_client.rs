@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -11,7 +10,7 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
@@ -325,7 +324,7 @@ impl RegistryClient {
         };
 
         let mut results = Vec::new();
-        let any_status_code_error = AtomicBool::new(false);
+        let status_code_errors = Arc::new(Mutex::new(FxHashSet::default()));
 
         match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
@@ -357,7 +356,7 @@ impl RegistryClient {
                                     debug!(
                                         "Indexes search failed because of status code failure: {status_code}"
                                     );
-                                    any_status_code_error.store(true, Ordering::Relaxed);
+                                    status_code_errors.lock().await.insert(status_code);
                                     break;
                                 }
                             }
@@ -394,8 +393,8 @@ impl RegistryClient {
                                 {
                                     SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
                                     SimpleMetadataSearchOutcome::NotFound => None,
-                                    SimpleMetadataSearchOutcome::StatusCodeFailure(_) => {
-                                        any_status_code_error.store(true, Ordering::Relaxed);
+                                    SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                        status_code_errors.lock().await.insert(status_code);
                                         None
                                     }
                                 };
@@ -422,8 +421,13 @@ impl RegistryClient {
         if results.is_empty() {
             return match self.connectivity {
                 Connectivity::Online => {
-                    if any_status_code_error.load(Ordering::Relaxed) {
-                        Err(ErrorKind::StatusCodeError(package_name.clone()).into())
+                    let status_code_errors = status_code_errors.lock().await;
+                    if !status_code_errors.is_empty() {
+                        Err(ErrorKind::StatusCodeError(
+                            package_name.clone(),
+                            status_code_errors.clone(),
+                        )
+                        .into())
                     } else {
                         Err(ErrorKind::PackageNotFound(package_name.clone()).into())
                     }

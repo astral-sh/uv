@@ -47,7 +47,7 @@ impl LatestClient<'_> {
             Err(err) => {
                 return match err.kind() {
                     uv_client::ErrorKind::PackageNotFound(_)
-                    | uv_client::ErrorKind::StatusCodeError(_)
+                    | uv_client::ErrorKind::StatusCodeError(..)
                     | uv_client::ErrorKind::NoIndex(_)
                     | uv_client::ErrorKind::Offline(_) => Ok(None),
                     _ => Err(err),
