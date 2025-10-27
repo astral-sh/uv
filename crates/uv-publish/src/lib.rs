@@ -556,20 +556,14 @@ pub async fn check_url(
         Ok(response) => response,
         Err(err) => {
             return match err.kind() {
-                uv_client::ErrorKind::PackageNotFound {
-                    status_code_error: false,
-                    ..
-                } => {
+                uv_client::ErrorKind::PackageNotFound(_) => {
                     // The package doesn't exist, it's the first upload of the package.
                     warn!(
                         "Package not found in the registry; skipping upload check for {filename}"
                     );
                     Ok(false)
                 }
-                uv_client::ErrorKind::PackageNotFound {
-                    status_code_error: true,
-                    ..
-                } => {
+                uv_client::ErrorKind::StatusCodeError(_) => {
                     // The package may or may not exist, there was an authentication failure.
                     // TODO(konsti): We should show the real index error instead.
                     let status_code_detail = if index_capabilities.unauthorized(index_url) {
