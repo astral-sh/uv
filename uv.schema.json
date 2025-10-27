@@ -471,6 +471,16 @@
         "null"
       ]
     },
+    "preview-features": {
+      "description": "Enable experimental preview features.\n\nPreview features may change without warning.\n\nUse comma-separated values or pass multiple times to enable multiple features.\n\nThe following features are available: `python-install-default`, `python-upgrade`,\n`json-output`, `pylock`, `add-bounds`, `package-conflicts`, `extra-build-dependencies`,\n`detect-module-conflicts`, `format`, `native-auth`, `s3-endpoint`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
