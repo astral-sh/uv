@@ -329,7 +329,9 @@ fn backtick_escape(s: &str) -> String {
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
-            '\\' | '"' | '$' => escaped.push('`'),
+            // Need to also escape unicode double quotes that PowerShell treats
+            // as the ASCII double quote.
+            '"' | '`' | '\u{201C}' | '\u{201D}' | '\u{201E}' | '$' => escaped.push('`'),
             _ => {}
         }
         escaped.push(c);

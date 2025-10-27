@@ -27,13 +27,16 @@ pub(crate) async fn token(
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
-
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+        let client = BaseClientBuilder::new(
+            network_settings.connectivity,
+            network_settings.native_tls,
+            network_settings.allow_insecure_host.clone(),
+            preview,
+            network_settings.timeout,
+            network_settings.retries,
+        )
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .build();
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);
@@ -128,6 +131,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         }
     };
 
-    writeln!(printer.stdout(), "{}", token.cyan())?;
+    writeln!(printer.stdout(), "{}", token.as_str().cyan())?;
     Ok(())
 }

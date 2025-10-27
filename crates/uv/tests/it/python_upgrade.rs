@@ -1,5 +1,6 @@
 use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::FileTouch;
 use assert_fs::prelude::PathChild;
 
@@ -8,6 +9,7 @@ use uv_static::EnvVars;
 #[test]
 fn python_upgrade() {
     let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -30,7 +32,7 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.10.17
     ");
 
     // Upgrade patch version
@@ -40,8 +42,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Should be a no-op when already upgraded
@@ -51,6 +53,7 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Python 3.10 is already on the latest supported patch release
     ");
 
     // Should reinstall on `--reinstall`
@@ -60,8 +63,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     ~ cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     ~ cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Install an earlier pre-release version
@@ -83,14 +86,15 @@ fn python_upgrade() {
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    Installed Python 3.14.0rc3 in [TIME]
-     + cpython-3.14.0rc3-[PLATFORM] (python3.14)
+    Installed Python 3.14.0 in [TIME]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
     ");
 }
 
 #[test]
 fn python_upgrade_without_version() {
     let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -141,8 +145,8 @@ fn python_upgrade_without_version() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.11.13-[PLATFORM] (python3.11)
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+     + cpython-3.11.14-[PLATFORM] (python3.11)
+     + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
 
     // Should be a no-op when every version is already upgraded
@@ -159,6 +163,7 @@ fn python_upgrade_without_version() {
 #[test]
 fn python_upgrade_transparent_from_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -228,8 +233,8 @@ fn python_upgrade_transparent_from_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // First virtual environment should reflect upgraded patch
@@ -237,7 +242,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -249,7 +254,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -261,6 +266,7 @@ fn python_upgrade_transparent_from_venv() {
 #[test]
 fn python_upgrade_transparent_from_venv_preview() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -305,8 +311,8 @@ fn python_upgrade_transparent_from_venv_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Virtual environment should reflect upgraded patch
@@ -314,7 +320,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -324,6 +330,7 @@ fn python_upgrade_transparent_from_venv_preview() {
 #[test]
 fn python_upgrade_ignored_with_python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -368,8 +375,8 @@ fn python_upgrade_ignored_with_python_pin() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Virtual environment should continue to respect pinned patch version
@@ -384,11 +391,12 @@ fn python_upgrade_ignored_with_python_pin() {
     );
 }
 
-// Virtual environments only record minor versions. `uv venv -p 3.x.y` will
-// not prevent transparent upgrades.
+// Virtual environments record patch versions. `uv venv -p 3.x.y` will
+// prevent transparent upgrades.
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -433,11 +441,11 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
-    // The virtual environment Python version is transparently upgraded.
+    // The virtual environment Python version remains the same.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
     success: true
     exit_code: 0
@@ -454,6 +462,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 #[test]
 fn python_transparent_upgrade_venv_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
@@ -524,8 +533,8 @@ fn python_transparent_upgrade_venv_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Should have transparently upgraded in second virtual environment
@@ -535,7 +544,7 @@ fn python_transparent_upgrade_venv_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -547,6 +556,7 @@ fn python_transparent_upgrade_venv_venv() {
 #[test]
 fn python_upgrade_transparent_from_venv_module() {
     let context = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -592,8 +602,8 @@ fn python_upgrade_transparent_from_venv_module() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
     "
     );
 
@@ -602,7 +612,7 @@ fn python_upgrade_transparent_from_venv_module() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.11
+    Python 3.12.12
 
     ----- stderr -----
     "
@@ -614,6 +624,7 @@ fn python_upgrade_transparent_from_venv_module() {
 #[test]
 fn python_upgrade_transparent_from_venv_module_in_venv() {
     let context = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -677,8 +688,8 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.18 in [TIME]
-     + cpython-3.10.18-[PLATFORM] (python3.10)
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     "
     );
 
@@ -689,7 +700,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.18
+    Python 3.10.19
 
     ----- stderr -----
     "
@@ -701,6 +712,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 #[test]
 fn python_upgrade_force_install() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.13"])
+        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -719,8 +731,8 @@ fn python_upgrade_force_install() -> Result<()> {
 
     ----- stderr -----
     warning: Executable already exists at `[BIN]/python3.12` but is not managed by uv; use `uv python install 3.12 --force` to replace it
-    Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM]
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM]
     ");
 
     // Force the `bin` install.
@@ -730,9 +742,33 @@ fn python_upgrade_force_install() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
 
     Ok(())
+}
+
+#[test]
+fn python_upgrade_implementation() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_empty_python_install_mirror()
+        .with_managed_python_dirs();
+
+    // Install pypy
+    context.python_install().arg("pypy@3.11").assert().success();
+
+    // Run the upgrade, we should not install cpython
+    uv_snapshot!(context.filters(), context.python_upgrade(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
+    All versions already on latest supported patch release
+    ");
 }

@@ -12,7 +12,7 @@ use thiserror::Error;
 use tracing::debug;
 use uv_platform::Arch;
 use uv_warnings::{warn_user, warn_user_once};
-use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_KEY_DELETED};
 use windows::Win32::System::Registry::{KEY_WOW64_32KEY, KEY_WOW64_64KEY};
 use windows::core::HRESULT;
 use windows_registry::{CURRENT_USER, HSTRING, Key, LOCAL_MACHINE, Value};
@@ -213,7 +213,9 @@ pub fn remove_registry_entry<'a>(
     if all {
         debug!("Removing registry key HKCU:\\{}", astral_key);
         if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
                 debug!("No registry entries to remove, no registry key {astral_key}");
             } else {
                 warn_user!("Failed to clear registry entries under {astral_key}: {err}");
@@ -227,7 +229,9 @@ pub fn remove_registry_entry<'a>(
         let python_entry = format!("{astral_key}\\{python_tag}");
         debug!("Removing registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
                 debug!(
                     "No registry entries to remove for {}, no registry key {}",
                     installation.key(),
@@ -253,7 +257,10 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     let key = match CURRENT_USER.open(&astral_key) {
         Ok(subkeys) => subkeys,
-        Err(err) if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) => {
+        Err(err)
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+        {
             return;
         }
         Err(err) => {
@@ -265,7 +272,10 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
-        Err(err) if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) => {
+        Err(err)
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+        {
             return;
         }
         Err(err) => {
@@ -281,7 +291,9 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
                 continue;
             }
             // TODO(konsti): We don't have an installation key here.

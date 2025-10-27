@@ -178,45 +178,45 @@ jobs:
         # Mapping of base image followed by a comma followed by one or more base tags (comma separated)
         # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
         image-mapping:
-          - alpine:3.21,alpine3.21,alpine
-          - alpine:3.22,alpine3.22
-          - debian:bookworm-slim,bookworm-slim,debian-slim
-          - buildpack-deps:bookworm,bookworm,debian
-          - debian:trixie-slim,trixie-slim
-          - buildpack-deps:trixie,trixie
-          - python:3.14-rc-alpine,python3.14-rc-alpine
+          - alpine:3.22,alpine3.22,alpine
+          - alpine:3.21,alpine3.21
+          - debian:trixie-slim,trixie-slim,debian-slim
+          - buildpack-deps:trixie,trixie,debian
+          - debian:bookworm-slim,bookworm-slim
+          - buildpack-deps:bookworm,bookworm
+          - python:3.14-alpine,python3.14-alpine
           - python:3.13-alpine,python3.13-alpine
           - python:3.12-alpine,python3.12-alpine
           - python:3.11-alpine,python3.11-alpine
           - python:3.10-alpine,python3.10-alpine
           - python:3.9-alpine,python3.9-alpine
           - python:3.8-alpine,python3.8-alpine
-          - python:3.14-rc-bookworm,python3.14-rc-bookworm
+          - python:3.14-trixie,python3.14-trixie
+          - python:3.13-trixie,python3.13-trixie
+          - python:3.12-trixie,python3.12-trixie
+          - python:3.11-trixie,python3.11-trixie
+          - python:3.10-trixie,python3.10-trixie
+          - python:3.9-trixie,python3.9-trixie
+          - python:3.14-slim-trixie,python3.14-trixie-slim
+          - python:3.13-slim-trixie,python3.13-trixie-slim
+          - python:3.12-slim-trixie,python3.12-trixie-slim
+          - python:3.11-slim-trixie,python3.11-trixie-slim
+          - python:3.10-slim-trixie,python3.10-trixie-slim
+          - python:3.9-slim-trixie,python3.9-trixie-slim
+          - python:3.14-bookworm,python3.14-bookworm
           - python:3.13-bookworm,python3.13-bookworm
           - python:3.12-bookworm,python3.12-bookworm
           - python:3.11-bookworm,python3.11-bookworm
           - python:3.10-bookworm,python3.10-bookworm
           - python:3.9-bookworm,python3.9-bookworm
           - python:3.8-bookworm,python3.8-bookworm
-          - python:3.14-rc-slim-bookworm,python3.14-rc-bookworm-slim
+          - python:3.14-slim-bookworm,python3.14-bookworm-slim
           - python:3.13-slim-bookworm,python3.13-bookworm-slim
           - python:3.12-slim-bookworm,python3.12-bookworm-slim
           - python:3.11-slim-bookworm,python3.11-bookworm-slim
           - python:3.10-slim-bookworm,python3.10-bookworm-slim
           - python:3.9-slim-bookworm,python3.9-bookworm-slim
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
-          - python:3.14-rc-trixie,python3.14-rc-trixie
-          - python:3.13-trixie,python3.13-trixie
-          - python:3.12-trixie,python3.12-trixie
-          - python:3.11-trixie,python3.11-trixie
-          - python:3.10-trixie,python3.10-trixie
-          - python:3.9-trixie,python3.9-trixie
-          - python:3.14-rc-slim-trixie,python3.14-rc-trixie-slim
-          - python:3.13-slim-trixie,python3.13-trixie-slim
-          - python:3.12-slim-trixie,python3.12-trixie-slim
-          - python:3.11-slim-trixie,python3.11-trixie-slim
-          - python:3.10-slim-trixie,python3.10-trixie-slim
-          - python:3.9-slim-trixie,python3.9-trixie-slim
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0

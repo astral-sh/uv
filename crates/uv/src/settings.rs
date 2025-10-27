@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
+use std::time::Duration;
 
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
@@ -78,8 +79,12 @@ pub(crate) struct GlobalSettings {
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let network_settings = NetworkSettings::resolve(args, workspace);
+    pub(crate) fn resolve(
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
+        let network_settings = NetworkSettings::resolve(args, workspace, environment);
         let python_preference = resolve_python_preference(args, workspace);
         Self {
             required_version: workspace
@@ -112,15 +117,21 @@ impl GlobalSettings {
             },
             network_settings,
             concurrency: Concurrency {
-                downloads: env(env::CONCURRENT_DOWNLOADS)
+                downloads: environment
+                    .concurrency
+                    .downloads
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
                     .map(NonZeroUsize::get)
                     .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: env(env::CONCURRENT_BUILDS)
+                builds: environment
+                    .concurrency
+                    .builds
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-                installs: env(env::CONCURRENT_INSTALLS)
+                installs: environment
+                    .concurrency
+                    .installs
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
@@ -172,10 +183,16 @@ pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
+    pub(crate) timeout: Duration,
+    pub(crate) retries: u32,
 }
 
 impl NetworkSettings {
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         let connectivity = if flag(args.offline, args.no_offline, "offline")
             .combine(workspace.and_then(|workspace| workspace.globals.offline))
             .unwrap_or(false)
@@ -208,6 +225,8 @@ impl NetworkSettings {
             connectivity,
             native_tls,
             allow_insecure_host,
+            timeout: environment.http_timeout,
+            retries: environment.http_retries,
         }
     }
 }
@@ -328,10 +347,37 @@ impl InitSettings {
     }
 }
 
+/// The source of a lock check operation.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheckSource {
+    /// The user invoked `uv <command> --locked`
+    Locked,
+    /// The user invoked `uv <command> --check`
+    Check,
+}
+
+impl std::fmt::Display for LockCheckSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Locked => write!(f, "--locked"),
+            Self::Check => write!(f, "--check"),
+        }
+    }
+}
+
+// Has lock check been enabled?
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheck {
+    /// Lockfile check is enabled.
+    Enabled(LockCheckSource),
+    /// Lockfile check is disabled.
+    Disabled,
+}
+
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
@@ -420,7 +466,11 @@ impl RunSettings {
             .unwrap_or_default();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
@@ -746,7 +796,7 @@ impl ToolUpgradeSettings {
     pub(crate) fn resolve(
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> Self {
         let ToolUpgradeArgs {
             name,
@@ -834,6 +884,7 @@ impl ToolUpgradeSettings {
             filesystem: top_level,
             install_mirrors: environment
                 .install_mirrors
+                .clone()
                 .combine(filesystem_install_mirrors),
         }
     }
@@ -846,6 +897,7 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_version_specifiers: bool,
     pub(crate) show_with: bool,
     pub(crate) show_extras: bool,
+    pub(crate) show_python: bool,
 }
 
 impl ToolListSettings {
@@ -857,6 +909,7 @@ impl ToolListSettings {
             show_version_specifiers,
             show_with,
             show_extras,
+            show_python,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -866,6 +919,7 @@ impl ToolListSettings {
             show_version_specifiers,
             show_with,
             show_extras,
+            show_python,
         }
     }
 }
@@ -1240,7 +1294,7 @@ impl PythonPinSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1322,10 +1376,15 @@ impl SyncSettings {
         } else {
             DryRun::from_args(dry_run)
         };
+        let lock_check = if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
 
         Self {
             output_format,
-            locked,
+            lock_check,
             frozen,
             dry_run,
             script,
@@ -1378,7 +1437,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1398,6 +1457,7 @@ impl LockSettings {
     ) -> Self {
         let LockArgs {
             check,
+            locked,
             check_exists,
             dry_run,
             script,
@@ -1412,8 +1472,16 @@ impl LockSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let lock_check = if check {
+            LockCheck::Enabled(LockCheckSource::Check)
+        } else if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
+
         Self {
-            locked: check,
+            lock_check,
             frozen: check_exists,
             dry_run: DryRun::from_args(dry_run),
             script,
@@ -1431,7 +1499,7 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1580,7 +1648,11 @@ impl AddSettings {
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1623,7 +1695,7 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1684,7 +1756,11 @@ impl RemoveSettings {
             .collect();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1714,7 +1790,7 @@ pub(crate) struct VersionSettings {
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1762,7 +1838,11 @@ impl VersionSettings {
             short,
             output_format,
             dry_run,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1784,7 +1864,7 @@ impl VersionSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
     pub(crate) groups: DependencyGroups,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
     pub(crate) depth: u8,
@@ -1847,7 +1927,11 @@ impl TreeSettings {
                 only_group,
                 all_groups,
             ),
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             universal,
             depth: tree.depth,
@@ -1883,7 +1967,7 @@ pub(crate) struct ExportSettings {
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
@@ -1978,7 +2062,11 @@ impl ExportSettings {
                 no_emit_package,
             ),
             output_file,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
             include_header: flag(header, no_header, "header").unwrap_or(true),
@@ -3662,11 +3750,12 @@ impl AuthLogoutSettings {
         args: AuthLogoutArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3687,11 +3776,12 @@ impl AuthTokenSettings {
         args: AuthTokenArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3714,13 +3804,14 @@ impl AuthLoginSettings {
         args: AuthLoginArgs,
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            network_settings: NetworkSettings::resolve(global_args, filesystem),
+            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3728,16 +3819,6 @@ impl AuthLoginSettings {
 // Environment variables that are not exposed as CLI arguments.
 mod env {
     use uv_static::EnvVars;
-
-    pub(super) const CONCURRENT_DOWNLOADS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_DOWNLOADS, "a non-zero integer");
-
-    pub(super) const CONCURRENT_BUILDS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_BUILDS, "a non-zero integer");
-
-    pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
-        (EnvVars::UV_CONCURRENT_INSTALLS, "a non-zero integer");
-
     pub(super) const UV_PYTHON_DOWNLOADS: (&str, &str) = (
         EnvVars::UV_PYTHON_DOWNLOADS,
         "one of 'auto', 'true', 'manual', 'never', or 'false'",

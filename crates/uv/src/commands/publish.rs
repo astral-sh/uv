@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
@@ -12,12 +11,12 @@ use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
-use uv_pep508::VerbatimUrl;
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
     files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user_once, write_error_chain};
 
 use crate::commands::reporters::PublishReporter;
@@ -29,6 +28,7 @@ pub(crate) async fn publish(
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    environment: &EnvironmentOptions,
     client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
     password: Option<String>,
@@ -74,16 +74,15 @@ pub(crate) async fn publish(
             .publish_url
             .clone()
             .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
-        let check_url = index.url.clone();
-        (publish_url, Some(check_url))
-    } else if token_store.is_known_url(&publish_url) {
-        // If the user is publishing to a known index, construct the check URL from the publish
-        // URL.
-        let check_url = check_url.or_else(|| {
-            infer_check_url(&publish_url)
-                .inspect(|check_url| debug!("Inferred check URL: {check_url}"))
-        });
-        (publish_url, check_url)
+
+        // pyx has the same behavior as PyPI where uploads of identical
+        // files + contents are idempotent, so we don't need to pre-check.
+        if token_store.is_known_url(&publish_url) {
+            (publish_url, None)
+        } else {
+            let check_url = index.url.clone();
+            (publish_url, Some(check_url))
+        }
     } else {
         (publish_url, check_url)
     };
@@ -123,15 +122,14 @@ pub(crate) async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
-        // Set a very high timeout for uploads, connections are often 10x slower on upload than
-        // download. 15 min is taken from the time a trusted publishing token is valid.
-        .default_timeout(Duration::from_secs(15 * 60))
+        .timeout(environment.upload_http_timeout)
         .build();
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
 
+    let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
@@ -225,6 +223,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
+            retry_policy,
             &credentials,
             check_url_client.as_ref(),
             &download_concurrency,
@@ -440,50 +439,6 @@ fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
     Ok((Some(username), Some(password)))
 }
 
-/// Construct a Simple Index URL from a publish URL, if possible.
-///
-/// Matches against a publish URL of the form `/v1/upload/{workspace}/{registry}` and returns
-/// `/simple/{workspace}/{registry}`.
-fn infer_check_url(publish_url: &DisplaySafeUrl) -> Option<IndexUrl> {
-    let mut segments = publish_url.path_segments()?;
-
-    let v1 = segments.next()?;
-    if v1 != "v1" {
-        return None;
-    }
-
-    let upload = segments.next()?;
-    if upload != "upload" {
-        return None;
-    }
-
-    let workspace = segments.next()?;
-    if workspace.is_empty() {
-        return None;
-    }
-
-    let registry = segments.next()?;
-    if registry.is_empty() {
-        return None;
-    }
-
-    // Skip any empty segments (trailing slash handling)
-    for remaining in segments {
-        if !remaining.is_empty() {
-            return None;
-        }
-    }
-
-    // Reconstruct the URL with `/simple/{workspace}/{registry}`.
-    let mut check_url = publish_url.clone();
-    {
-        let mut segments = check_url.path_segments_mut().ok()?;
-        segments.clear();
-        segments.push("simple").push(workspace).push(registry);
-    }
-    Some(IndexUrl::from(VerbatimUrl::from(check_url)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,34 +550,5 @@ mod tests {
             err.to_string(),
             @"The password can't be set both in the publish URL and in the CLI"
         );
-    }
-
-    #[test]
-    fn test_infer_check_url() {
-        let url =
-            DisplaySafeUrl::from_str("https://example.com/v1/upload/workspace/registry").unwrap();
-        let check_url = infer_check_url(&url);
-        assert_eq!(
-            check_url,
-            Some(IndexUrl::from_str("https://example.com/simple/workspace/registry").unwrap())
-        );
-
-        let url =
-            DisplaySafeUrl::from_str("https://example.com/v1/upload/workspace/registry/").unwrap();
-        let check_url = infer_check_url(&url);
-        assert_eq!(
-            check_url,
-            Some(IndexUrl::from_str("https://example.com/simple/workspace/registry").unwrap())
-        );
-
-        let url =
-            DisplaySafeUrl::from_str("https://example.com/upload/workspace/registry").unwrap();
-        let check_url = infer_check_url(&url);
-        assert_eq!(check_url, None);
-
-        let url = DisplaySafeUrl::from_str("https://example.com/upload/workspace/registry/package")
-            .unwrap();
-        let check_url = infer_check_url(&url);
-        assert_eq!(check_url, None);
     }
 }

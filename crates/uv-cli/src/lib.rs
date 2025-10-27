@@ -339,7 +339,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -802,6 +802,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache prune` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache prune` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -3712,20 +3719,34 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--locked`.
-    #[arg(long, alias = "locked", env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"])]
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade", "locked"])]
     pub check: bool,
+
+    /// Check if the lockfile is up-to-date.
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--check`.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade", "check"], hide = true)]
+    pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date.
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "check")]
+    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
-    #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked"
+    )]
     pub dry_run: bool,
 
     /// Lock the specified Python script, rather than the current project.
@@ -4891,6 +4912,10 @@ pub struct ToolListArgs {
     /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
     pub show_extras: bool,
+
+    /// Whether to display the Python version associated with run each tool.
+    #[arg(long)]
+    pub show_python: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]

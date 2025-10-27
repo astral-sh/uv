@@ -411,6 +411,10 @@ impl PythonDownloadRequest {
         self.libc.as_ref()
     }
 
+    pub fn take_version(&mut self) -> Option<VersionRequest> {
+        self.version.take()
+    }
+
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads<'a>(
         &'a self,
@@ -792,7 +796,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
     OnceCell::new();
 
@@ -972,13 +977,14 @@ impl ManagedPythonDownload {
                         if let reqwest_retry::RetryDecision::Retry { execute_after } =
                             retry_decision
                         {
-                            debug!(
-                                "Transient failure while handling response for {}; retrying...",
-                                self.key()
-                            );
                             let duration = execute_after
                                 .duration_since(SystemTime::now())
                                 .unwrap_or_else(|_| Duration::default());
+                            debug!(
+                                "Transient failure while handling response for {}; retrying after {}s...",
+                                self.key(),
+                                duration.as_secs()
+                            );
                             tokio::time::sleep(duration).await;
                             retried_here = true;
                             continue; // Retry.
