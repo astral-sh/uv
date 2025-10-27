@@ -637,16 +637,13 @@ pub(crate) struct PythonDownloadReporter {
 impl PythonDownloadReporter {
     /// Initialize a [`PythonDownloadReporter`] for a single Python download.
     pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, 1)
+        Self::new(printer, None)
     }
 
     /// Initialize a [`PythonDownloadReporter`] for multiple Python downloads.
-    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+    pub(crate) fn new(printer: Printer, length: Option<u64>) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(
-            Some(length),
-            printer.target(),
-        ));
+        let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
@@ -680,16 +677,13 @@ pub(crate) struct PublishReporter {
 impl PublishReporter {
     /// Initialize a [`PublishReporter`] for a single upload.
     pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, 1)
+        Self::new(printer, None)
     }
 
     /// Initialize a [`PublishReporter`] for multiple uploads.
-    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+    pub(crate) fn new(printer: Printer, length: Option<u64>) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(
-            Some(length),
-            printer.target(),
-        ));
+        let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
@@ -758,8 +752,8 @@ pub(crate) struct CleaningDirectoryReporter {
 
 impl CleaningDirectoryReporter {
     /// Initialize a [`CleaningDirectoryReporter`] for cleaning the cache directory.
-    pub(crate) fn new(printer: Printer, max: usize) -> Self {
-        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+    pub(crate) fn new(printer: Printer, max: Option<usize>) -> Self {
+        let bar = ProgressBar::with_draw_target(max.map(|m| m as u64), printer.target());
         bar.set_style(
             ProgressStyle::with_template("{prefix} [{bar:20}] {percent}%")
                 .unwrap()
@@ -787,8 +781,8 @@ pub(crate) struct CleaningPackageReporter {
 
 impl CleaningPackageReporter {
     /// Initialize a [`CleaningPackageReporter`] for cleaning packages from the cache.
-    pub(crate) fn new(printer: Printer, max: usize) -> Self {
-        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+    pub(crate) fn new(printer: Printer, max: Option<usize>) -> Self {
+        let bar = ProgressBar::with_draw_target(max.map(|m| m as u64), printer.target());
         bar.set_style(
             ProgressStyle::with_template("{prefix} [{bar:20}] {pos}/{len}{msg}")
                 .unwrap()
@@ -841,7 +835,7 @@ impl BinaryDownloadReporter {
     /// Initialize a [`BinaryDownloadReporter`] for a single binary download.
     pub(crate) fn single(printer: Printer) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(Some(1), printer.target()));
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
