@@ -160,8 +160,8 @@ impl GlobalSettings {
 
                 // Add configuration features if no command line or environment features were specified
                 if all_preview_features.is_empty() {
-                    if let Some(config_features) = workspace
-                        .and_then(|workspace| workspace.globals.preview_features.as_ref())
+                    if let Some(config_features) =
+                        workspace.and_then(|workspace| workspace.globals.preview_features.as_ref())
                     {
                         for feature in config_features {
                             if let Ok(parsed) = feature.parse::<uv_preview::PreviewFeatures>() {

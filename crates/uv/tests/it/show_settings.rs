@@ -8434,10 +8434,12 @@ fn preview_features_from_pyproject_toml() {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml
+        .write_str(indoc! {r#"
         [tool.uv]
         preview-features = ["json-output", "format"]
-    "#}).unwrap();
+    "#})
+        .unwrap();
 
     uv_snapshot!(context.filters(), context.version().arg("--show-settings"), @r#"
     success: true
@@ -8568,9 +8570,11 @@ fn preview_features_from_uv_toml() {
     let context = TestContext::new("3.12");
 
     let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(indoc! {r#"
+    uv_toml
+        .write_str(indoc! {r#"
         preview-features = ["pylock", "add-bounds"]
-    "#}).unwrap();
+    "#})
+        .unwrap();
 
     uv_snapshot!(context.filters(), context.version().arg("--show-settings"), @r#"
     success: true
@@ -8701,10 +8705,12 @@ fn preview_features_precedence_command_line_over_config() {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml
+        .write_str(indoc! {r#"
         [tool.uv]
         preview-features = ["json-output", "format"]
-    "#}).unwrap();
+    "#})
+        .unwrap();
 
     // Command line should override configuration
     uv_snapshot!(context.filters(), context.version().arg("--show-settings").arg("--preview-features").arg("pylock"), @r#"
@@ -8965,10 +8971,12 @@ fn preview_boolean_still_works() {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r"
+    pyproject_toml
+        .write_str(indoc! {r"
         [tool.uv]
         preview = true
-    "}).unwrap();
+    "})
+        .unwrap();
 
     uv_snapshot!(context.filters(), context.version().arg("--show-settings"), @r#"
     success: true
@@ -9099,11 +9107,13 @@ fn no_preview_overrides_everything() {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml
+        .write_str(indoc! {r#"
         [tool.uv]
         preview = true
         preview-features = ["json-output", "format"]
-    "#}).unwrap();
+    "#})
+        .unwrap();
 
     // --no-preview should disable everything regardless of config
     uv_snapshot!(context.filters(), context.version().arg("--show-settings").arg("--no-preview"), @r#"
