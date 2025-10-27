@@ -119,3 +119,5 @@ release-job:
 ```
 
 The items in the PyPI registry of the GitLab project will also be available via the PyPI registry of the corresponding GitLab group.
+
+Note also the [package request forwarding behaviour](https://docs.gitlab.com/user/packages/pypi_repository/#package-request-forwarding-security-notice) of GitLab, which might forward your request automatically to `pypi.org`, even when using the `--default-index` flag.
