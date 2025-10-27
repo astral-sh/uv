@@ -2635,7 +2635,7 @@ pub struct BuildArgs {
     #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
-    /// Remove build artifacts from the output directory after a successful build.
+    /// Clear the output directory before the build, removing stale artifacts.
     #[arg(long)]
     pub clear: bool,
 
