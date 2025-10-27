@@ -21,7 +21,7 @@ use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, LockedFileError, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
@@ -751,6 +751,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    LockedFileMode::Exclusive,
                     script.path.simplified_display(),
                 )
                 .await
@@ -758,6 +759,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Remote(.., url) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    LockedFileMode::Exclusive,
                     url.to_string(),
                 )
                 .await
@@ -765,6 +767,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Stdin(metadata) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    LockedFileMode::Exclusive,
                     "stdin".to_string(),
                 )
                 .await
@@ -1043,6 +1046,7 @@ impl ProjectInterpreter {
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
+            LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
         )
         .await

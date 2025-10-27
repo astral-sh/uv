@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
-use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -202,7 +202,12 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Add a receipt for a tool.

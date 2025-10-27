@@ -41,7 +41,7 @@ pub(crate) async fn token(
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
     let url = service.url();
 
     // Extract credentials from URL if present

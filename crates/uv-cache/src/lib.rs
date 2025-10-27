@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, LockedFileError, Simplified, cachedir, directories};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -82,7 +82,12 @@ impl CacheEntry {
     /// Acquire the [`CacheEntry`] as an exclusive lock.
     pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         fs_err::create_dir_all(self.dir())?;
-        LockedFile::acquire(self.path(), self.path().display()).await
+        LockedFile::acquire(
+            self.path(),
+            LockedFileMode::Exclusive,
+            self.path().display(),
+        )
+        .await
     }
 }
 
@@ -111,7 +116,12 @@ impl CacheShard {
     /// Acquire the cache entry as an exclusive lock.
     pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         fs_err::create_dir_all(self.as_ref())?;
-        LockedFile::acquire(self.join(".lock"), self.display()).await
+        LockedFile::acquire(
+            self.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.display(),
+        )
+        .await
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
@@ -182,7 +192,7 @@ impl Cache {
     }
 
     /// Acquire a lock that allows removing entries from the cache.
-    pub fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
+    pub async fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
         let Self {
             root,
             refresh,
@@ -198,8 +208,12 @@ impl Cache {
                 ),
             );
         }
-        let lock_file =
-            LockedFile::acquire_blocking(root.join(".lock"), root.simplified_display())?;
+        let lock_file = LockedFile::acquire(
+            root.join(".lock"),
+            LockedFileMode::Exclusive,
+            root.simplified_display(),
+        )
+        .await?;
 
         Ok(Self {
             root,
@@ -220,7 +234,11 @@ impl Cache {
             lock_file,
         } = self;
 
-        match LockedFile::acquire_no_wait(root.join(".lock"), root.simplified_display()) {
+        match LockedFile::acquire_no_wait(
+            root.join(".lock"),
+            LockedFileMode::Exclusive,
+            root.simplified_display(),
+        ) {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
@@ -372,10 +390,8 @@ impl Cache {
         self.temp_dir.is_some()
     }
 
-    /// Initialize the [`Cache`].
-    pub fn init(self) -> Result<Self, LockedFileError> {
-        let root = &self.root;
-
+    /// Populate the cache scaffold.
+    fn create_base_files(root: &PathBuf) -> Result<(), io::Error> {
         // Create the cache directory, if it doesn't exist.
         fs_err::create_dir_all(root)?;
 
@@ -390,7 +406,7 @@ impl Cache {
         {
             Ok(mut file) => file.write_all(b"*")?,
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(err),
         }
 
         // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
@@ -406,7 +422,7 @@ impl Cache {
             ) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(err),
         }
 
         // Add a phony .git, if it doesn't exist, to ensure that the cache isn't considered to be
@@ -421,11 +437,23 @@ impl Cache {
                 .join(".git"),
         )?;
 
+        Ok(())
+    }
+
+    /// Initialize the [`Cache`].
+    pub async fn init(self) -> Result<Self, LockedFileError> {
+        let root = &self.root;
+
+        Self::create_base_files(root)?;
+
         // Block cache removal operations from interfering.
-        let lock_file = match LockedFile::acquire_shared_blocking(
+        let lock_file = match LockedFile::acquire(
             root.join(".lock"),
+            LockedFileMode::Shared,
             root.simplified_display(),
-        ) {
+        )
+        .await
+        {
             Ok(lock_file) => Some(Arc::new(lock_file)),
             Err(err)
                 if err
@@ -434,7 +462,7 @@ impl Cache {
             {
                 warn!(
                     "Shared locking is not supported by the current platform or filesystem, \
-                    reduced parallel process safety with `uv cache clean` and `uv cache prune`."
+                        reduced parallel process safety with `uv cache clean` and `uv cache prune`."
                 );
                 None
             }
@@ -446,6 +474,27 @@ impl Cache {
             lock_file,
             ..self
         })
+    }
+
+    /// Initialize the [`Cache`], assuming that there are no other uv processes running.
+    pub fn init_no_wait(self) -> Result<Option<Self>, io::Error> {
+        let root = &self.root;
+
+        Self::create_base_files(root)?;
+
+        // Block cache removal operations from interfering.
+        let Some(lock_file) = LockedFile::acquire_no_wait(
+            root.join(".lock"),
+            LockedFileMode::Shared,
+            root.simplified_display(),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            root: std::path::absolute(root)?,
+            lock_file: Some(Arc::new(lock_file)),
+            ..self
+        }))
     }
 
     /// Clear the cache, removing all entries.

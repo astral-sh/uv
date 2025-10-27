@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-use uv_fs::{LockedFile, LockedFileError, with_added_extension};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, with_added_extension};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
@@ -29,7 +29,7 @@ pub enum AuthBackend {
 }
 
 impl AuthBackend {
-    pub fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
+    pub async fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
         // If preview is enabled, we'll use the system-native store
         if preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
             return Ok(Self::System(KeyringProvider::native()));
@@ -37,7 +37,7 @@ impl AuthBackend {
 
         // Otherwise, we'll use the plaintext credential store
         let path = TextCredentialStore::default_file()?;
-        match TextCredentialStore::read(&path) {
+        match TextCredentialStore::read(&path).await {
             Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
             Err(err)
                 if err
@@ -46,7 +46,7 @@ impl AuthBackend {
             {
                 Ok(Self::TextStore(
                     TextCredentialStore::default(),
-                    TextCredentialStore::lock(&path)?,
+                    TextCredentialStore::lock(&path).await?,
                 ))
             }
             Err(err) => Err(err),
@@ -255,12 +255,12 @@ impl TextCredentialStore {
     }
 
     /// Acquire a lock on the credentials file at the given path.
-    pub fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
+    pub async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let lock = with_added_extension(path, ".lock");
-        Ok(LockedFile::acquire_blocking(lock, "credentials store")?)
+        Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
     }
 
     /// Read credentials from a file.
@@ -291,8 +291,8 @@ impl TextCredentialStore {
     /// Returns [`TextCredentialStore`] and a [`LockedFile`] to hold if mutating the store.
     ///
     /// If the store will not be written to following the read, the lock can be dropped.
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
-        let lock = Self::lock(path.as_ref())?;
+    pub async fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
+        let lock = Self::lock(path.as_ref()).await?;
         let store = Self::from_file(path)?;
         Ok((store, lock))
     }
@@ -468,8 +468,8 @@ mod tests {
         assert!(store.get_credentials(&url, None).is_none());
     }
 
-    #[test]
-    fn test_file_operations() {
+    #[tokio::test]
+    async fn test_file_operations() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(
             temp_file,
@@ -505,7 +505,7 @@ password = "pass2"
         store
             .write(
                 temp_output.path(),
-                TextCredentialStore::lock(temp_file.path()).unwrap(),
+                TextCredentialStore::lock(temp_file.path()).await.unwrap(),
             )
             .unwrap();
 

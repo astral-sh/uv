@@ -2,9 +2,8 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
-use std::{env, io, thread};
+use std::{env, io};
 
-use fs2::FileExt;
 use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
 
@@ -61,7 +60,6 @@ pub enum LockedFileError {
     },
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[cfg(feature = "tokio")]
     #[error(transparent)]
     JoinError(#[from] tokio::task::JoinError),
 }
@@ -76,83 +74,112 @@ impl LockedFileError {
     }
 }
 
-/// Runs a callback with a timeout by spawning a thread.
-fn run_with_timeout<Output: Send + 'static>(
-    workload: impl (FnOnce() -> Output) + Send + 'static,
-    timeout: Duration,
-) -> Option<Output> {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    thread::spawn(move || {
-        let output = workload();
-        sender
-            .send(output)
-            .expect("Main thread went away, was there a panic?");
-    });
-    receiver.recv_timeout(timeout).ok()
+/// Whether to acquire a shared (read) lock or exclusive (write) lock.
+#[derive(Debug, Clone, Copy)]
+pub enum LockedFileMode {
+    Shared,
+    Exclusive,
+}
+
+impl LockedFileMode {
+    /// Try to lock the file and return an error if the lock is already acquired by another process
+    /// and cannot be acquired immediately.
+    fn try_lock(self, file: &fs_err::File) -> Result<(), io::Error> {
+        match self {
+            // TODO(konsti): Update to fs_err methods once the MSRV is 1.88.
+            Self::Exclusive => fs2::FileExt::try_lock_exclusive(file.file())?,
+            Self::Shared => fs2::FileExt::try_lock_shared(file.file())?,
+        }
+        Ok(())
+    }
+
+    /// Lock the file, blocking until the lock becomes available if necessary.
+    fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
+        match self {
+            Self::Exclusive => fs2::FileExt::lock_exclusive(file.file())?,
+            Self::Shared => fs2::FileExt::lock_shared(file.file())?,
+        }
+        Ok(())
+    }
+}
+
+impl Display for LockedFileMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Shared => write!(f, "shared"),
+            Self::Exclusive => write!(f, "exclusive"),
+        }
+    }
 }
 
 /// A file lock that is automatically released when dropped.
+#[cfg(feature = "tokio")]
 #[derive(Debug)]
 #[must_use]
 pub struct LockedFile(fs_err::File);
 
+#[cfg(feature = "tokio")]
 impl LockedFile {
-    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, LockedFileError> {
+    /// Inner implementation for [`LockedFile::acquire`].
+    async fn lock_file(
+        file: fs_err::File,
+        mode: LockedFileMode,
+        resource: &str,
+    ) -> Result<Self, LockedFileError> {
         trace!(
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
         );
-        match file.file().try_lock_exclusive() {
-            Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
-                Ok(Self(file))
+        // If there's no contention, return directly.
+        let try_lock_exclusive = tokio::task::spawn_blocking(move || (mode.try_lock(&file), file));
+        let file = match try_lock_exclusive.await? {
+            (Ok(()), file) => {
+                debug!("Acquired {mode} lock for `{resource}`");
+                return Ok(Self(file));
             }
-            Err(err) => {
+            (Err(err), file) => {
                 // Log error code and enum kind to help debugging more exotic failures.
                 if !crate::is_known_already_locked_error(&err) {
-                    debug!("Try lock error: {err:?}");
+                    debug!("Try lock {mode} error: {err:?}");
                 }
-                info!(
-                    "Waiting to acquire lock for `{resource}` at `{}`",
-                    file.path().user_display(),
-                );
-                let path = file.path().to_path_buf();
-                // Break deadlocks with a timeout.
-                let result = run_with_timeout(
-                    move || {
-                        file.file().lock_exclusive()?;
-                        Ok(file)
-                    },
-                    *LOCK_TIMEOUT,
-                )
-                .ok_or_else(|| LockedFileError::Timeout {
-                    timeout: *LOCK_TIMEOUT,
-                    resource: resource.to_string(),
-                    path: path.clone(),
-                })?;
-                // Not an fs_err method, we need to build our own path context
-                let file = result.map_err(|err| LockedFileError::Lock {
-                    resource: resource.to_string(),
-                    path,
-                    source: err,
-                })?;
-
-                debug!("Acquired lock for `{resource}`");
-                Ok(Self(file))
+                file
             }
-        }
+        };
+
+        // If there's lock contention, wait and break deadlocks with a timeout if necessary.
+        info!(
+            "Waiting to acquire {mode} lock for `{resource}` at `{}`",
+            file.path().user_display(),
+        );
+        let path = file.path().to_path_buf();
+        let lock_exclusive = tokio::task::spawn_blocking(move || (mode.lock(&file), file));
+        let (result, file) = tokio::time::timeout(*LOCK_TIMEOUT, lock_exclusive)
+            .await
+            .map_err(|_| LockedFileError::Timeout {
+                timeout: *LOCK_TIMEOUT,
+                resource: resource.to_string(),
+                path: path.clone(),
+            })??;
+        // Not an fs_err method, we need to build our own path context
+        result.map_err(|err| LockedFileError::Lock {
+            resource: resource.to_string(),
+            path,
+            source: err,
+        })?;
+
+        debug!("Acquired {mode} lock for `{resource}`");
+        Ok(Self(file))
     }
 
     /// Inner implementation for [`LockedFile::acquire_no_wait`].
-    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
+    fn lock_file_no_wait(file: fs_err::File, mode: LockedFileMode, resource: &str) -> Option<Self> {
         trace!(
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
         );
-        match file.file().try_lock_exclusive() {
+        match mode.try_lock(&file) {
             Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
+                debug!("Acquired {mode} lock for `{resource}`");
                 Some(Self(file))
             }
             Err(err) => {
@@ -166,105 +193,15 @@ impl LockedFile {
         }
     }
 
-    /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
-    /// [`LockedFile::acquire_blocking`].
-    fn lock_file_shared_blocking(
-        file: fs_err::File,
-        resource: &str,
-    ) -> Result<Self, LockedFileError> {
-        trace!(
-            "Checking shared lock for `{resource}` at `{}`",
-            file.path().user_display()
-        );
-        // TODO(konsti): Update fs_err to support this.
-        match FileExt::try_lock_shared(file.file()) {
-            Ok(()) => {
-                debug!("Acquired shared lock for `{resource}`");
-                Ok(Self(file))
-            }
-            Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures.
-                if !crate::is_known_already_locked_error(&err) {
-                    debug!("Try lock error: {err:?}");
-                }
-                info!(
-                    "Waiting to acquire shared lock for `{resource}` at `{}`",
-                    file.path().user_display(),
-                );
-                let path = file.path().to_path_buf();
-                // Break deadlocks with a timeout.
-                let result = run_with_timeout(
-                    move || {
-                        FileExt::lock_shared(file.file())?;
-                        Ok(file)
-                    },
-                    *LOCK_TIMEOUT,
-                )
-                .ok_or_else(|| LockedFileError::Timeout {
-                    timeout: *LOCK_TIMEOUT,
-                    resource: resource.to_string(),
-                    path: path.clone(),
-                })?;
-                // Not an fs_err method, we need to build our own path context
-                let file = result.map_err(|err| LockedFileError::Lock {
-                    resource: resource.to_string(),
-                    path,
-                    source: err,
-                })?;
-
-                debug!("Acquired shared lock for `{resource}`");
-                Ok(Self(file))
-            }
-        }
-    }
-
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts.
-    ///
-    /// Do not use from an async context, as this can block the runtime while waiting for another
-    /// process to release the lock.
-    pub fn acquire_blocking(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        Self::lock_file_blocking(file, &resource)
-    }
-
-    /// The same as [`LockedFile::acquire_blocking`], but for synchronous contexts.
-    ///
-    /// Do not use from an async context, as this can block the runtime while waiting for another
-    /// process to release the lock.
-    pub fn acquire_shared_blocking(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        Self::lock_file_shared_blocking(file, &resource)
-    }
-
     /// Acquire a cross-process lock for a resource using a file at the provided path.
-    #[cfg(feature = "tokio")]
     pub async fn acquire(
         path: impl AsRef<Path>,
+        mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
-        tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
-    }
-
-    /// Acquire a cross-process read lock for a shared resource using a file at the provided path.
-    #[cfg(feature = "tokio")]
-    pub async fn acquire_shared(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
-            .await?
+        Self::lock_file(file, mode, &resource).await
     }
 
     /// Acquire a cross-process lock for a resource using a file at the provided path
@@ -272,10 +209,14 @@ impl LockedFile {
     /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
     ///
     /// If the lock is not immediately available, [`None`] is returned.
-    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
+    pub fn acquire_no_wait(
+        path: impl AsRef<Path>,
+        mode: LockedFileMode,
+        resource: impl Display,
+    ) -> Option<Self> {
         let file = Self::create(path).ok()?;
         let resource = resource.to_string();
-        Self::lock_file_no_wait(file, &resource)
+        Self::lock_file_no_wait(file, mode, &resource)
     }
 
     #[cfg(unix)]
@@ -333,7 +274,9 @@ impl LockedFile {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl Drop for LockedFile {
+    /// Unlock the file.
     fn drop(&mut self) {
         if let Err(err) = fs2::FileExt::unlock(self.0.file()) {
             error!(

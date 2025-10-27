@@ -10,7 +10,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::{LockedFile, LockedFileError};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
@@ -171,6 +171,7 @@ impl GitResolver {
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_digest(&repository_url)),
+            LockedFileMode::Exclusive,
             &repository_url,
         )
         .await?;
