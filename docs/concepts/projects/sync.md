@@ -186,12 +186,17 @@ environment.
 
 ## Exporting the lockfile
 
-If you need to integrate uv with other tools or workflows, you can export `uv.lock` to the
-`requirements.txt` format with `uv export --format requirements-txt`. The generated
-`requirements.txt` file can then be installed via `uv pip install`, or with other tools like `pip`.
+If you need to integrate uv with other tools or workflows, you can export `uv.lock` to different
+formats including `requirements.txt`, `pylock.toml` (PEP 751), and CycloneDX SBOM.
 
-In general, we recommend against using both a `uv.lock` and a `requirements.txt` file. If you find
-yourself exporting a `uv.lock` file, consider opening an issue to discuss your use case.
+```console
+$ uv export --format requirements.txt
+$ uv export --format pylock.toml
+$ uv export --format cyclonedx1.5
+```
+
+See the [export guide](../../guides/export.md) for comprehensive documentation on all export formats
+and their use cases.
 
 ## Partial installations
 

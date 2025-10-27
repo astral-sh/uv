@@ -272,4 +272,4 @@ To learn more about working on projects with uv, see the
 [projects concept](../concepts/projects/index.md) page and the
 [command reference](../reference/cli.md#uv).
 
-Or, read on to learn how to [build and publish your project to a package index](./package.md).
+Or, read on to learn how to [export a uv lockfile to different formats](./export.md).
