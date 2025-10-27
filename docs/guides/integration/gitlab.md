@@ -113,8 +113,8 @@ release-job:
           GITLAB_HOST=$CI_SERVER_URL glab release create "$CI_COMMIT_TAG" \
             --repo "$CI_PROJECT_PATH" \
             --assets-links='[{"name": "'$(basename "${package%-*-*-*}")'",
-                             "url": "'"$UV_PUBLISH_URL/files/$(sha256sum "$package" | cut --delimiter=' ' --fields=1)/$(basename "$package")"'",
-                             "link_type": "package"}]'
+                              "url": "'"$UV_PUBLISH_URL/files/$(sha256sum "$package" | cut --delimiter=' ' --fields=1)/$(basename "$package")"'",
+                              "link_type": "package"}]'
       done
 ```
 
