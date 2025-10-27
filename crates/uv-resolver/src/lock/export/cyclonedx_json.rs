@@ -21,6 +21,8 @@ use uv_configuration::{
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
+use uv_preview::{Preview, PreviewFeatures};
+use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
@@ -55,7 +57,15 @@ pub fn from_lock<'lock>(
     groups: &DependencyGroupsWithDefaults,
     annotate: bool,
     install_options: &'lock InstallOptions,
+    preview: Preview,
 ) -> Result<Bom, LockError> {
+    if !preview.is_enabled(PreviewFeatures::SBOM_EXPORT) {
+        warn_user!(
+            "`uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::SBOM_EXPORT
+        );
+    }
+
     // Extract the packages from the lock file.
     let ExportableRequirements(mut nodes) =
         ExportableRequirements::from_lock(target, prune, extras, groups, annotate, install_options);
