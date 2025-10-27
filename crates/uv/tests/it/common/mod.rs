@@ -228,6 +228,10 @@ impl TestContext {
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
+            "search path or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
             "registry or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
