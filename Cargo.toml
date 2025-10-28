@@ -314,6 +314,7 @@ lto = false
 
 [profile.fast-build]
 inherits = "dev"
+opt-level = 1
 debug = 0
 strip = "debuginfo"
 
