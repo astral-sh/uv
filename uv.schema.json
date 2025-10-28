@@ -472,7 +472,7 @@
       ]
     },
     "preview-features": {
-      "description": "Enable experimental preview features.\n\nPreview features may change without warning.\n\nUse comma-separated values or pass multiple times to enable multiple features.\n\nThe following features are available: `python-install-default`, `python-upgrade`,\n`json-output`, `pylock`, `add-bounds`, `package-conflicts`, `extra-build-dependencies`,\n`detect-module-conflicts`, `format`, `native-auth`, `s3-endpoint`.",
+      "description": "Enable experimental preview features.\nPreview features may change without warning.\nUse comma-separated values or pass multiple times to enable multiple features.",
       "type": [
         "array",
         "null"
