@@ -278,7 +278,7 @@ fn create_component_from_package(
 
     if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
         properties.push(Property::new(
-            "cdx:python:package:marker",
+            "uv:package:marker",
             &marker_contents.to_string(),
         ));
     }
