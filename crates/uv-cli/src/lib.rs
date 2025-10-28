@@ -2645,8 +2645,7 @@ pub struct BuildArgs {
     /// Do not create a `.gitignore` file in the output directory.
     ///
     /// By default, uv creates a `.gitignore` file in the output directory to exclude build
-    /// artifacts from version control. When this flag is used, the file will be omitted and only
-    /// the build artifacts (source distributions and wheels) are stored in the output directory.
+    /// artifacts from version control. When this flag is used, the file will be omitted.
     #[arg(long, overrides_with("create_gitignore"))]
     pub no_create_gitignore: bool,
 
