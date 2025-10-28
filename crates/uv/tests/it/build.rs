@@ -2213,3 +2213,53 @@ fn build_clear() -> Result<()> {
 
     Ok(())
 }
+
+/// Test `uv build --no-create-gitignore`.
+#[test]
+fn build_no_gitignore() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Default build with `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::is_file());
+
+    fs_err::remove_dir_all(project.child("dist"))?;
+
+    // Build with `--no-create-gitignore` that does not create `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
