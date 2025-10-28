@@ -483,6 +483,9 @@ Distributions can be read from a local directory by using the `file://` URL sche
 Equivalent to the `--python` command-line argument. If set to a path, uv will use
 this Python interpreter for all operations.
 
+See the [Python version request documentation](../concepts/python-versions.md#requesting-a-version)
+ for the supported formats.
+
 ### `UV_PYTHON_BIN_DIR`
 <small class="added-in">added in `0.4.29`</small>
 
