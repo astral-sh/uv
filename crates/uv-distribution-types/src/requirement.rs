@@ -512,7 +512,7 @@ impl Display for VersionSpecifiersOrExact {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::VersionSpecifiers(specifiers) => Display::fmt(specifiers, f),
-            Self::Exact(version) => write!(f, "=={}", version),
+            Self::Exact(version) => write!(f, "=={version}"),
         }
     }
 }
