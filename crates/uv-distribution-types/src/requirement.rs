@@ -9,7 +9,7 @@ use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::VersionSpecifiers;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
@@ -201,9 +201,9 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
             marker: requirement.marker,
             origin: requirement.origin,
             version_or_url: match requirement.source {
-                RequirementSource::Registry { specifier, .. } => {
-                    Some(VersionOrUrl::VersionSpecifier(specifier))
-                }
+                RequirementSource::Registry { specifier, .. } => Some(
+                    VersionOrUrl::VersionSpecifier(specifier.to_version_specifiers()),
+                ),
                 RequirementSource::Url { url, .. }
                 | RequirementSource::Git { url, .. }
                 | RequirementSource::Path { url, .. }
@@ -222,9 +222,9 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
             marker: requirement.marker,
             origin: requirement.origin,
             version_or_url: match requirement.source {
-                RequirementSource::Registry { specifier, .. } => {
-                    Some(VersionOrUrl::VersionSpecifier(specifier))
-                }
+                RequirementSource::Registry { specifier, .. } => Some(
+                    VersionOrUrl::VersionSpecifier(specifier.to_version_specifiers()),
+                ),
                 RequirementSource::Url {
                     location,
                     subdirectory,
@@ -285,13 +285,13 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
     fn from(requirement: uv_pep508::Requirement<VerbatimParsedUrl>) -> Self {
         let source = match requirement.version_or_url {
             None => RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
+                specifier: VersionSpecifiersOrExact::VersionSpecifiers(VersionSpecifiers::empty()),
                 index: None,
                 conflict: None,
             },
             // The most popular case: just a name, a version range and maybe extras.
             Some(VersionOrUrl::VersionSpecifier(specifier)) => RequirementSource::Registry {
-                specifier,
+                specifier: VersionSpecifiersOrExact::VersionSpecifiers(specifier),
                 index: None,
                 conflict: None,
             },
@@ -393,6 +393,9 @@ impl CacheKey for Requirement {
                 conflict: _,
             } => {
                 0u8.cache_key(state);
+                // TODO(konsti): We should use the information whether this is an exact specifier
+                // or not here, but this changes the cache.
+                let specifier = specifier.to_version_specifiers();
                 specifier.len().cache_key(state);
                 for spec in specifier.iter() {
                     spec.operator().as_str().cache_key(state);
@@ -466,6 +469,54 @@ impl CacheKey for Requirement {
     }
 }
 
+/// A local version aware version specifier.
+///
+/// For checking installed requirements against a lockfile, we want to check that the local version
+/// matches, too. When checking whether the specifier `=={version}` contains `{version}+{local}`,
+/// the check will pass, which we avoid by doing an exact version comparison instead. An example
+/// is torch `2.9.0` in the lockfile vs. `2.9.0+cu128` installed.
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum VersionSpecifiersOrExact {
+    VersionSpecifiers(VersionSpecifiers),
+    Exact(Version),
+}
+
+impl VersionSpecifiersOrExact {
+    /// Note that this conversion is lossy wrt to local version matching.
+    pub fn to_version_specifiers(&self) -> VersionSpecifiers {
+        match self {
+            Self::VersionSpecifiers(specifier) => specifier.clone(),
+            Self::Exact(version) => {
+                VersionSpecifiers::from(VersionSpecifier::equals_version(version.clone()))
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::VersionSpecifiers(specifier) => specifier.is_empty(),
+            Self::Exact(_) => false,
+        }
+    }
+
+    pub fn contains(&self, other: &Version) -> bool {
+        match self {
+            Self::VersionSpecifiers(specifiers) => specifiers.contains(other),
+            // Compare including the version specifier
+            Self::Exact(version) => version == other,
+        }
+    }
+}
+
+impl Display for VersionSpecifiersOrExact {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VersionSpecifiers(specifiers) => Display::fmt(specifiers, f),
+            Self::Exact(version) => write!(f, "=={}", version),
+        }
+    }
+}
+
 /// The different locations with can install a distribution from: Version specifier (from an index),
 /// HTTP(S) URL, git repository, and path.
 ///
@@ -479,7 +530,7 @@ impl CacheKey for Requirement {
 pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
-        specifier: VersionSpecifiers,
+        specifier: VersionSpecifiersOrExact,
         /// Choose a version from the index at the given URL.
         index: Option<IndexMetadata>,
         /// The conflict item associated with the source, if any.
@@ -635,7 +686,9 @@ impl RequirementSource {
                 if specifier.is_empty() {
                     None
                 } else {
-                    Some(VersionOrUrl::VersionSpecifier(specifier.clone()))
+                    Some(VersionOrUrl::VersionSpecifier(
+                        specifier.to_version_specifiers(),
+                    ))
                 }
             }
             Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
@@ -666,9 +719,9 @@ impl RequirementSource {
     }
 
     /// If the source is the registry, return the version specifiers
-    pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
+    pub fn version_specifiers(&self) -> Option<VersionSpecifiers> {
         match self {
-            Self::Registry { specifier, .. } => Some(specifier),
+            Self::Registry { specifier, .. } => Some(specifier.to_version_specifiers()),
             Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
                 None
             }
@@ -817,7 +870,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                     index
                 });
                 Self::Registry {
-                    specifier,
+                    specifier: specifier.to_version_specifiers(),
                     index,
                     conflict,
                 }
@@ -922,7 +975,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 index,
                 conflict,
             } => Ok(Self::Registry {
-                specifier,
+                specifier: VersionSpecifiersOrExact::VersionSpecifiers(specifier),
                 index: index
                     .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
                 conflict,
@@ -1049,7 +1102,7 @@ mod tests {
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
 
-    use crate::{Requirement, RequirementSource};
+    use crate::{Requirement, RequirementSource, VersionSpecifiersOrExact};
 
     #[test]
     fn roundtrip() {
@@ -1059,7 +1112,7 @@ mod tests {
             groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Registry {
-                specifier: ">1,<2".parse().unwrap(),
+                specifier: VersionSpecifiersOrExact::VersionSpecifiers(">1,<2".parse().unwrap()),
                 index: None,
                 conflict: None,
             },

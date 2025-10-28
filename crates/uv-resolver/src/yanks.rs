@@ -26,6 +26,7 @@ impl AllowedYanks {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
+            let specifier = specifier.to_version_specifiers();
             let [specifier] = specifier.as_ref() else {
                 continue;
             };

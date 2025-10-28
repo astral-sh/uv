@@ -122,6 +122,7 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
+
                         match RequirementSatisfaction::check(
                             dist.name(),
                             installed,

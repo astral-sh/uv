@@ -14362,3 +14362,161 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that switching between indexes with local and non-local versions of the same package,
+/// the package is always reinstalled, not only when switching from a non-local to a local version.
+///
+/// <https://github.com/astral-sh/uv/issues/16368>
+#[test]
+fn install_non_local_version_when_local_version_is_installed() -> Result<()> {
+    let start = std::time::Instant::now();
+    dbg!(start.elapsed());
+    let context = TestContext::new("3.12");
+    dbg!(start.elapsed());
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "main"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        non-local = ["project"]
+        local = ["project"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "non-local" },
+            { extra = "local" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        project = [
+          { index = "non-local", extra = "non-local" },
+          { index = "local", extra = "local" },
+        ]
+
+        [[tool.uv.index]]
+        name = "non-local"
+        url = "./non-local/dist"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./local/dist"
+        format = "flat"
+        explicit = true
+        "#,
+    )?;
+    dbg!(start.elapsed());
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("--no-workspace")
+        .arg("--name")
+        .arg("project")
+        .arg("local")
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+    context
+        .version()
+        .arg("1.0.0+local")
+        .current_dir(context.temp_dir.child("local").as_ref())
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+    context
+        .build()
+        .arg("--wheel")
+        .current_dir(context.temp_dir.child("local").as_ref())
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+    context
+        .init()
+        .arg("--lib")
+        .arg("--no-workspace")
+        .arg("--name")
+        .arg("project")
+        .arg("non-local")
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+    context
+        .version()
+        .arg("1.0.0")
+        .current_dir(context.temp_dir.child("non-local").as_ref())
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+    context
+        .build()
+        .arg("--wheel")
+        .current_dir(context.temp_dir.child("non-local").as_ref())
+        .assert()
+        .success();
+    dbg!(start.elapsed());
+
+    // Install the non-local version.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("non-local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==1.0.0
+    ");
+    dbg!(start.elapsed());
+    // Check that switching to the local version
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==1.0.0
+     + project==1.0.0+local
+    ");
+    // Keeping the local version is a noop.
+    dbg!(start.elapsed());
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+    dbg!(start.elapsed());
+    // Check that switching to the non-local version invalidates the installed local version.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("non-local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==1.0.0+local
+     + project==1.0.0
+    ");
+    dbg!(start.elapsed());
+
+    Ok(())
+}
