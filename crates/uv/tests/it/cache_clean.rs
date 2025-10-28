@@ -84,9 +84,9 @@ async fn clean_force() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
+    DEBUG Lock is busy for `[CACHE_DIR]/`
+    DEBUG Cache is currently in use, proceeding due to `--force`
     Clearing cache at: [CACHE_DIR]/
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     Removed [N] files ([SIZE])
     ");
 
