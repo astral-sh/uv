@@ -267,7 +267,12 @@ impl PubGrubRequirement {
     ) -> Self {
         let (verbatim_url, parsed_url) = match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, group, requirement);
+                return Self::from_registry_requirement(
+                    specifier.to_version_specifiers(),
+                    extra,
+                    group,
+                    requirement,
+                );
             }
             RequirementSource::Url {
                 subdirectory,
@@ -345,7 +350,7 @@ impl PubGrubRequirement {
     }
 
     fn from_registry_requirement(
-        specifier: &VersionSpecifiers,
+        specifier: VersionSpecifiers,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
         requirement: &Requirement,
@@ -353,7 +358,7 @@ impl PubGrubRequirement {
         Self {
             package: Self::package_for_requirement(requirement, extra, group),
             source: DependencySource::from_requirement(requirement),
-            version: Ranges::from(specifier.clone()),
+            version: Ranges::from(specifier),
         }
     }
 }

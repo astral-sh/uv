@@ -83,6 +83,7 @@ impl PrereleaseStrategy {
                     };
 
                     if specifier
+                        .to_version_specifiers()
                         .iter()
                         .filter(|spec| {
                             !matches!(spec.operator(), Operator::NotEqual | Operator::NotEqualStar)

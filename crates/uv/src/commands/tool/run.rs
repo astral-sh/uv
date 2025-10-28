@@ -18,10 +18,10 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
-    IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
+    IndexCapabilities, IndexUrl, InstalledDist, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    VersionSpecifiersOrExact,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -839,9 +839,7 @@ async fn get_or_create_environment(
                         groups: Box::new([]),
                         marker: MarkerTree::default(),
                         source: RequirementSource::Registry {
-                            specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                                version.clone(),
-                            )),
+                            specifier: VersionSpecifiersOrExact::Exact(version.clone()),
                             index: None,
                             conflict: None,
                         },
@@ -861,7 +859,9 @@ async fn get_or_create_environment(
                         groups: Box::new([]),
                         marker: MarkerTree::default(),
                         source: RequirementSource::Registry {
-                            specifier: VersionSpecifiers::empty(),
+                            specifier: VersionSpecifiersOrExact::VersionSpecifiers(
+                                VersionSpecifiers::empty(),
+                            ),
                             index: None,
                             conflict: None,
                         },
@@ -928,7 +928,9 @@ async fn get_or_create_environment(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    specifier: VersionSpecifiersOrExact::VersionSpecifiers(
+                        VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    ),
                     index: None,
                     conflict: None,
                 },
