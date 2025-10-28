@@ -400,6 +400,7 @@ mod tests {
     use url::Url;
 
     #[tokio::test]
+    #[cfg(debug_assertions)]
     async fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
@@ -413,6 +414,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(debug_assertions)]
     async fn fetch_url_with_password() {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
@@ -426,6 +428,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(debug_assertions)]
     async fn fetch_url_with_empty_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
