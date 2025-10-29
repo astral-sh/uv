@@ -28,7 +28,7 @@ use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
 
-/// Character set for percent-encoding PURL components, copied from packageurl.rs.
+/// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
 const PURL_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
