@@ -44,7 +44,47 @@ RequirementsTxt {
                 fragment: None,
             },
             given: Some(
-                "https://download.pytorch.org/whl/nightly/cpu",
+                "https://download.pytorch.org/whl/nightly/cpu ; sys_platform == darwin",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/nightly/cpu",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/nightly/cpu; sys_platform == darwin",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/cu129",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/cu129; sys_platform  != 'darwin'",
             ),
         },
     ],

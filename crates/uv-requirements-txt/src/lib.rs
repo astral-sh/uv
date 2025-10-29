@@ -655,11 +655,6 @@ fn eat_option(s: &mut Scanner, option: &str) -> bool {
     }
 }
 
-/// Returns `true` if the character should terminate an option value (like `--extra-index-url`).
-const fn is_option_terminal(c: char) -> bool {
-    matches!(c, '\n' | '\r' | '#' | ';')
-}
-
 /// Parse a single entry, that is a requirement, an inclusion or a comment line.
 ///
 /// Consumes all preceding trivia (whitespace and comments). If it returns `None`, we've reached
@@ -680,11 +675,12 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let filename = parse_value("--requirement", content, s, |c: char| !is_option_terminal(c))?;
+        let filename = parse_value("--requirement", content, s, |c: char| !is_terminal(c))?;
         let filename = unquote(filename)
             .ok()
             .flatten()
             .unwrap_or_else(|| filename.to_string());
+        let filename = strip_markers(&filename).to_string();
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename,
@@ -692,11 +688,12 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let filename = parse_value("--constraint", content, s, |c: char| !is_option_terminal(c))?;
+        let filename = parse_value("--constraint", content, s, |c: char| !is_terminal(c))?;
         let filename = unquote(filename)
             .ok()
             .flatten()
             .unwrap_or_else(|| filename.to_string());
+        let filename = strip_markers(&filename).to_string();
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename,
@@ -739,13 +736,14 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value("--index-url", content, s, |c: char| !is_option_terminal(c))?;
+        let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let stripped = strip_markers(given.as_ref());
+        let expanded = expand_env_vars(stripped);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -768,17 +766,16 @@ fn parse_entry(
                 }
             })?
         };
-        // Consume any trailing content (like markers) until end of line.
-        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value("--extra-index-url", content, s, |c: char| !is_option_terminal(c))?;
+        let given = parse_value("--extra-index-url", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let stripped = strip_markers(given.as_ref());
+        let expanded = expand_env_vars(stripped);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -801,21 +798,20 @@ fn parse_entry(
                 }
             })?
         };
-        // Consume any trailing content (like markers) until end of line.
-        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::ExtraIndexUrl(url.with_given(given))
     } else if eat_option(s, "--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--require-hashes") {
         RequirementsTxtStatement::RequireHashes
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value("--find-links", content, s, |c: char| !is_option_terminal(c))?;
+        let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let given = strip_markers(given.as_ref());
+        let expanded = expand_env_vars(given);
         let input = if let Some(path) = requirements_txt
             .resolve_local_path(Path::new(expanded.as_ref()), working_dir)
             .and_then(|path| std::path::absolute(path).ok())
@@ -866,44 +862,40 @@ fn parse_entry(
                 });
             }
         };
-        // Consume any trailing content (like markers) until end of line.
-        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value("--no-binary", content, s, |c: char| !is_option_terminal(c))?;
+        let given = parse_value("--no-binary", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
+        let stripped = strip_markers(given.as_ref());
+        let specifier = PackageNameSpecifier::from_str(stripped).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
-                specifier: given.to_string(),
+                specifier: stripped.to_string(),
                 start,
                 end: s.cursor(),
             }
         })?;
-        // Consume any trailing content (like markers) until end of line.
-        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value("--only-binary", content, s, |c: char| !is_option_terminal(c))?;
+        let given = parse_value("--only-binary", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
+        let stripped = strip_markers(given.as_ref());
+        let specifier = PackageNameSpecifier::from_str(stripped).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
-                specifier: given.to_string(),
+                specifier: stripped.to_string(),
                 start,
                 end: s.cursor(),
             }
         })?;
-        // Consume any trailing content (like markers) until end of line.
-        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let source = match requirements_txt {
@@ -937,6 +929,45 @@ fn parse_entry(
         // EOF
         return Ok(None);
     }))
+}
+
+/// Remove any trailing markers from an option value.
+///
+/// For example, given `--index-url https://pypi,org/simple ; python_version < "3.8"`,
+/// remove the trailing marker and return `https://pypi,org/simple`.
+fn strip_markers(content: &str) -> &str {
+    let mut escaped = false;
+    for (i, c) in content.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        // Respect escape characters.
+        if c == '\\' {
+            escaped = true;
+            continue;
+        }
+
+        // If we see a semicolon, check if it's followed by whitespace (marker syntax).
+        // If so, stop parsing and omit the semicolon.
+        if c == ';' {
+            let rest = &content[i + 1..];
+            if rest.chars().next().is_some_and(char::is_whitespace) {
+                return &content[..i];
+            }
+        }
+
+        // If we see whitespace followed by a semicolon, stop parsing at the whitespace.
+        if c.is_whitespace() {
+            let rest = &content[i..];
+            if rest.trim_start().starts_with(';') {
+                return &content[..i];
+            }
+        }
+    }
+
+    content
 }
 
 /// Eat whitespace and ignore newlines escaped with a backslash
