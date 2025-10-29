@@ -3,6 +3,47 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.6
+
+Released on 2025-10-29.
+
+This release contains an upgrade to Astral's fork of `async_zip`, which addresses potential sources of ZIP parsing differentials between uv and other Python packaging tooling. See [GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64) for additional details.
+
+### Security
+
+* Address ZIP parsing differentials ([GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64))
+
+### Python
+
+- Upgrade GraalPy to 25.0.1 ([#16401](https://github.com/astral-sh/uv/pull/16401))
+
+### Enhancements
+
+- Add `--clear` to `uv build` to remove old build artifacts ([#16371](https://github.com/astral-sh/uv/pull/16371))
+- Add `--no-create-gitignore` to `uv build` ([#16369](https://github.com/astral-sh/uv/pull/16369))
+- Do not error when a virtual environment directory cannot be removed due to a busy error ([#16394](https://github.com/astral-sh/uv/pull/16394))
+- Improve hint on `pip install --system` when externally managed ([#16392](https://github.com/astral-sh/uv/pull/16392))
+- Running `uv lock --check` with outdated lockfile will print that `--check` was passed, instead of `--locked`  ([#16322](https://github.com/astral-sh/uv/pull/16322))
+- Update `uv init` template for Maturin ([#16449](https://github.com/astral-sh/uv/pull/16449))
+- Improve ordering of Python sources in logs ([#16463](https://github.com/astral-sh/uv/pull/16463))
+- Restore DockerHub release images and annotations ([#16441](https://github.com/astral-sh/uv/pull/16441))
+
+### Bug fixes
+
+- Check for matching Python implementation during `uv python upgrade` ([#16420](https://github.com/astral-sh/uv/pull/16420))
+- Deterministically order `--find-links` distributions ([#16446](https://github.com/astral-sh/uv/pull/16446))
+- Don't panic in `uv export --frozen` when the lockfile is outdated ([#16407](https://github.com/astral-sh/uv/pull/16407))
+- Fix root of `uv tree` when `--package` is used with circular dependencies ([#15908](https://github.com/astral-sh/uv/pull/15908))
+- Show package list with `pip freeze --quiet` ([#16491](https://github.com/astral-sh/uv/pull/16491))
+- Limit `uv auth login pyx.dev` retries to 60s ([#16498](https://github.com/astral-sh/uv/pull/16498))
+- Add an empty group with `uv add --group ... -r ...` ([#16490](https://github.com/astral-sh/uv/pull/16490))
+
+### Documentation
+
+- Update docs for maturin build backend init template ([#16469](https://github.com/astral-sh/uv/pull/16469))
+- Update docs to reflect previous changes to signal forwarding semantics ([#16430](https://github.com/astral-sh/uv/pull/16430))
+- Add instructions for installing via MacPorts ([#16039](https://github.com/astral-sh/uv/pull/16039))
+
 ## 0.9.5
 
 Released on 2025-10-21.
