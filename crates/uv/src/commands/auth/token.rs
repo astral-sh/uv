@@ -131,6 +131,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         }
     };
 
-    writeln!(printer.stdout(), "{}", token.as_str().cyan())?;
+    writeln!(printer.stdout(), "{}", token.as_str())?;
     Ok(())
 }
