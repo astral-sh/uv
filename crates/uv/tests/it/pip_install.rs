@@ -12190,6 +12190,25 @@ fn config_settings_package() -> Result<()> {
 }
 
 #[test]
+fn reject_invalid_archive_member_names() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheeldiff2==0.0.1`
+      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    "
+    );
+}
+
+#[test]
 fn reject_invalid_streaming_zip() {
     let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
 

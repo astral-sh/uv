@@ -299,7 +299,7 @@ dependencies = [
 [[package]]
 name = "async_zip"
 version = "0.0.17"
-source = "git+https://github.com/astral-sh/rs-async-zip?rev=285e48742b74ab109887d62e1ae79e7c15fd4878#285e48742b74ab109887d62e1ae79e7c15fd4878"
+source = "git+https://github.com/astral-sh/rs-async-zip?rev=f6a41d32866003c868d03ed791a89c794f61b703#f6a41d32866003c868d03ed791a89c794f61b703"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -5867,6 +5867,7 @@ dependencies = [
  "futures",
  "md-5",
  "rayon",
+ "regex",
  "reqwest",
  "rustc-hash",
  "sha2",
