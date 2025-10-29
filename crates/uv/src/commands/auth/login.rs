@@ -19,6 +19,9 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
+// We retry no more than this many times when polling for login status.
+const STATUS_RETRY_LIMIT: u32 = 60;
+
 /// Login to a service.
 pub(crate) async fn login(
     service: Service,
@@ -215,6 +218,7 @@ pub(crate) async fn pyx_login_with_browser(
         url
     };
 
+    let mut retry = 0;
     let credentials = loop {
         let response = client
             .for_host(store.api())
@@ -224,7 +228,8 @@ pub(crate) async fn pyx_login_with_browser(
         match response.status() {
             // Retry on 404.
             reqwest::StatusCode::NOT_FOUND => {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                retry += 1;
             }
             // Parse the credentials on success.
             _ if response.status().is_success() => {
@@ -235,6 +240,10 @@ pub(crate) async fn pyx_login_with_browser(
             status => {
                 break Err(anyhow::anyhow!("Failed to login with code `{status}`"));
             }
+        }
+
+        if retry >= STATUS_RETRY_LIMIT {
+            break Err(anyhow::anyhow!("Login session timed out"));
         }
     }?;
 
