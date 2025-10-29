@@ -6556,7 +6556,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "fs-err",
- "home",
  "nix",
  "same-file",
  "tempfile",

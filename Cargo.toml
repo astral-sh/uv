@@ -121,7 +121,6 @@ goblin = { version = "0.10.0", default-features = false, features = ["std", "elf
 h2 = { version = "0.4.7" }
 hashbrown = { version = "0.16.0" }
 hex = { version = "0.4.3" }
-home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }

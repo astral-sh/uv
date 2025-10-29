@@ -4,7 +4,9 @@ pub mod windows;
 
 pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
 
+use std::env::home_dir;
 use std::path::{Path, PathBuf};
+
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
@@ -145,7 +147,7 @@ impl Shell {
     ///
     /// See: <https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/shell.rs#L197>
     pub fn configuration_files(self) -> Vec<PathBuf> {
-        let Some(home_dir) = home::home_dir() else {
+        let Some(home_dir) = home_dir() else {
             return vec![];
         };
         match self {
@@ -232,7 +234,7 @@ impl Shell {
 
     /// Returns `true` if the given path is on the `PATH` in this shell.
     pub fn contains_path(path: &Path) -> bool {
-        let home_dir = home::home_dir();
+        let home_dir = home_dir();
         std::env::var_os(EnvVars::PATH)
             .as_ref()
             .iter()
