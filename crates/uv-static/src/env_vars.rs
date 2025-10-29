@@ -125,6 +125,10 @@ impl EnvVars {
     #[attr_added_in("0.1.36")]
     pub const UV_CONSTRAINT: &'static str = "UV_CONSTRAINT";
 
+    /// Equivalent to the `--package` command-line argument. If set, uv
+    /// will run the command in this workspace member.
+    pub const UV_PACKAGE: &'static str = "UV_PACKAGE";
+
     /// Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
     /// as constraints for any source distribution builds. Uses space-separated list of files.
     #[attr_added_in("0.2.34")]
