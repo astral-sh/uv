@@ -2822,7 +2822,7 @@ fn python_install_emulated_windows_x86_on_x64() {
 
     ----- stderr -----
     Installed Python 3.13.9 in [TIME]
-     + cpython-3.13.9-macos-x86_64-none
+     + cpython-3.13.9-windows-x86_64-none
     ");
 
     // Once we've installed the native version, it should be preferred over x86_32
