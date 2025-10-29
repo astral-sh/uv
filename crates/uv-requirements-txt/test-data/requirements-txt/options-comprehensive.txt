@@ -1,0 +1,34 @@
+# Comprehensive test for option parsing with various combinations
+
+# 1. Options with markers (space before semicolon)
+--index-url https://pypi.org/simple/ ; python_version > "3.8"
+
+# 2. Options with markers (no space before semicolon)
+--extra-index-url=https://download.pytorch.org/whl/cpu; sys_platform == "linux"
+
+# 3. Options with quoted values containing spaces
+--find-links "file:///path/with spaces/packages"
+
+# 4. Options with quoted values and markers
+--find-links="https://example.com/simple" ; python_version >= "3.9"
+
+# 5. Options with escaped quotes
+--extra-index-url='https://example.com/simple'
+
+# 6. Options with equals sign vs space separator
+--no-binary :all:
+--only-binary=numpy
+
+# 7. Options with markers on --no-binary and --only-binary (NOTE: semicolon with quotes can be confusing)
+--no-binary :all:; sys_platform == "win32"
+--only-binary scipy; python_version < "3.10"
+
+# 8. Multiple options on separate lines
+--extra-index-url https://example1.com/simple
+--extra-index-url https://example2.com/simple
+
+# 9. Options with comments after them (not markers)
+--extra-index-url https://test.pypi.org/simple/  # Test PyPI
+
+# Actual requirements
+requests>=2.28.0

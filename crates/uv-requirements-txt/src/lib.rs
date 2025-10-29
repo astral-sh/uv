@@ -1648,6 +1648,7 @@ mod test {
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
     #[test_case(Path::new("option-with-marker.txt"))]
+    #[test_case(Path::new("options-comprehensive.txt"))]
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
