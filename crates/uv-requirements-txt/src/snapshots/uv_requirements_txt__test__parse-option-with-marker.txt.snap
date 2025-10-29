@@ -44,7 +44,7 @@ RequirementsTxt {
                 fragment: None,
             },
             given: Some(
-                "https://download.pytorch.org/whl/nightly/cpu ; sys_platform == darwin",
+                "https://download.pytorch.org/whl/nightly/cpu",
             ),
         },
         VerbatimUrl {
@@ -64,7 +64,7 @@ RequirementsTxt {
                 fragment: None,
             },
             given: Some(
-                "https://download.pytorch.org/whl/nightly/cpu; sys_platform == darwin",
+                "https://download.pytorch.org/whl/nightly/cpu",
             ),
         },
         VerbatimUrl {
@@ -84,7 +84,7 @@ RequirementsTxt {
                 fragment: None,
             },
             given: Some(
-                "https://download.pytorch.org/whl/cu129; sys_platform  != 'darwin'",
+                "https://download.pytorch.org/whl/cu129",
             ),
         },
     ],
