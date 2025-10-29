@@ -243,7 +243,9 @@ pub(crate) async fn pyx_login_with_browser(
         }
 
         if retry >= STATUS_RETRY_LIMIT {
-            break Err(anyhow::anyhow!("Login session timed out"));
+            break Err(anyhow::anyhow!(
+                "Login session timed out after {STATUS_RETRY_LIMIT} seconds"
+            ));
         }
     }?;
 
