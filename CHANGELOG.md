@@ -7,11 +7,7 @@
 
 Released on 2025-10-29.
 
-This release contains an upgrade to Astral's fork of `async_zip`, which
-addresses potential sources of ZIP parsing differentials between uv and
-other Python packaging tooling. See
-[GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64)
-for additional details.
+This release contains an upgrade to Astral's fork of `async_zip`, which addresses potential sources of ZIP parsing differentials between uv and other Python packaging tooling. See [GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64) for additional details.
 
 ### Security
 
