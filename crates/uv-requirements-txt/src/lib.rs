@@ -62,7 +62,6 @@ use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
 
 mod requirement;
-mod shquote;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -593,7 +592,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let filename = parse_value("--requirement", content, s)?;
+        let filename = parse_value("--requirement", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename,
@@ -601,7 +600,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let filename = parse_value("--constraint", content, s)?;
+        let filename = parse_value("--constraint", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename,
@@ -644,7 +643,7 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value("--index-url", content, s)?;
+        let given = parse_value("--index-url", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -670,7 +669,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value("--extra-index-url", content, s)?;
+        let given = parse_value("--extra-index-url", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -698,7 +697,7 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value("--find-links", content, s)?;
+        let given = parse_value("--find-links", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -724,7 +723,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value("--no-binary", content, s)?;
+        let given = parse_value("--no-binary", content, s, requirements_txt)?;
         let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -735,7 +734,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value("--only-binary", content, s)?;
+        let given = parse_value("--only-binary", content, s, requirements_txt)?;
         let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -939,6 +938,7 @@ fn parse_value(
     option: &str,
     content: &str,
     s: &mut Scanner,
+    requirements_txt: &Path,
 ) -> Result<String, RequirementsTxtParserError> {
     // First, consume the separator (= or whitespace)
     if s.eat_if('=') {
@@ -955,7 +955,7 @@ fn parse_value(
         });
     }
 
-    parse_quoted_value_with_markers(option, content, s)
+    parse_quoted_value_with_markers(option, content, s, requirements_txt)
 }
 
 /// Parse a hash value (for --hash).
@@ -1005,6 +1005,7 @@ fn parse_quoted_value_with_markers(
     option: &str,
     content: &str,
     s: &mut Scanner,
+    requirements_txt: &Path,
 ) -> Result<String, RequirementsTxtParserError> {
     let start = s.cursor();
     let mut result = String::new();
@@ -1012,6 +1013,7 @@ fn parse_quoted_value_with_markers(
     let mut in_double_quote = false;
     let mut escape_next = false;
     let mut marker_start = None;
+    let mut marker_text = String::new();
 
     loop {
         let Some(ch) = s.peek() else {
@@ -1026,20 +1028,21 @@ fn parse_quoted_value_with_markers(
         }
 
         // Check for marker syntax: ` ; ` or `; `
-        // Markers are special even inside quotes!
-        if !escape_next {
+        // Only check for markers when NOT inside quotes
+        if !escape_next && !in_single_quote && !in_double_quote {
             if ch == ';' {
                 let rest = s.after();
                 if rest.len() > 1 && rest.chars().nth(1).is_some_and(char::is_whitespace) {
                     // Found "; " - this is a marker
                     marker_start = Some(result.len());
-                    s.eat(); // consume ';'
+                    marker_text.push(s.eat().unwrap()); // consume ';'
                     // Consume until we find the closing quote or end of line
                     while let Some(c) = s.peek() {
                         if matches!(c, '\n' | '\r' | '#') {
                             break;
                         }
                         let c = s.eat().unwrap();
+                        marker_text.push(c);
                         // Track quote state to avoid unterminated quote errors
                         if !escape_next {
                             if c == '\'' && !in_double_quote {
@@ -1066,6 +1069,7 @@ fn parse_quoted_value_with_markers(
                             break;
                         }
                         let c = s.eat().unwrap();
+                        marker_text.push(c);
                         // Track quote state to avoid unterminated quote errors
                         if !escape_next {
                             if c == '\'' && !in_double_quote {
@@ -1150,9 +1154,23 @@ fn parse_quoted_value_with_markers(
         });
     }
 
-    // If we found a marker, truncate the result there
+    // If we found a marker, truncate the result there and warn the user
     if let Some(trim_at) = marker_start {
         result.truncate(trim_at);
+
+        // Warn the user that we're ignoring the marker, showing the marker text
+        let (line, _) = calculate_row_column(content, start);
+        let marker_display = marker_text.trim();
+        if requirements_txt == Path::new("-") {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in stdin at line {line}: `{marker_display}` (environment markers are not supported for requirements file options)"
+            );
+        } else {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in `{path}` at line {line}: `{marker_display}` (environment markers are not supported for requirements file options)",
+                path = requirements_txt.user_display().cyan()
+            );
+        }
     }
 
     // Trim trailing whitespace
