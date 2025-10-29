@@ -260,9 +260,6 @@ pub(crate) async fn export(
         },
     };
 
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&target, &extras, &groups)?;
-
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
@@ -289,6 +286,11 @@ pub(crate) async fn export(
             ExportFormat::RequirementsTxt
         }
     });
+
+    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
+    if !matches!(format, ExportFormat::CycloneDX1_5) {
+        detect_conflicts(&target, &extras, &groups)?;
+    }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, ExportFormat::PylockToml) {
