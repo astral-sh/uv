@@ -70,6 +70,11 @@ $ uv export --format pylock.toml
 
 uv can export your project's dependency lockfile as a Software Bill of Materials (SBOM) in CycloneDX format. SBOMs provide a comprehensive inventory of all software components in your application, which is useful for security auditing, compliance, and supply chain transparency.
 
+!!! important
+
+    Support for exporting to CycloneDX is in _preview_. This means the behavior is experimental
+    and subject to change.
+
 ### What is CycloneDX?
 
 [CycloneDX](https://cyclonedx.org/) is an industry-standard format for creating Software Bill of Materials. CycloneDX is machine readable and widely supported by security scanning tools, vulnerability databases, and Software Composition Analysis (SCA) platforms.
