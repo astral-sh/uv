@@ -655,6 +655,11 @@ fn eat_option(s: &mut Scanner, option: &str) -> bool {
     }
 }
 
+/// Returns `true` if the character should terminate an option value (like `--extra-index-url`).
+const fn is_option_terminal(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '#' | ';')
+}
+
 /// Parse a single entry, that is a requirement, an inclusion or a comment line.
 ///
 /// Consumes all preceding trivia (whitespace and comments). If it returns `None`, we've reached
@@ -675,7 +680,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let filename = parse_value("--requirement", content, s, |c: char| !is_terminal(c))?;
+        let filename = parse_value("--requirement", content, s, |c: char| !is_option_terminal(c))?;
         let filename = unquote(filename)
             .ok()
             .flatten()
@@ -687,7 +692,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let filename = parse_value("--constraint", content, s, |c: char| !is_terminal(c))?;
+        let filename = parse_value("--constraint", content, s, |c: char| !is_option_terminal(c))?;
         let filename = unquote(filename)
             .ok()
             .flatten()
@@ -734,7 +739,7 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
+        let given = parse_value("--index-url", content, s, |c: char| !is_option_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
@@ -763,9 +768,11 @@ fn parse_entry(
                 }
             })?
         };
+        // Consume any trailing content (like markers) until end of line.
+        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value("--extra-index-url", content, s, |c: char| !is_terminal(c))?;
+        let given = parse_value("--extra-index-url", content, s, |c: char| !is_option_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
@@ -794,13 +801,15 @@ fn parse_entry(
                 }
             })?
         };
+        // Consume any trailing content (like markers) until end of line.
+        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::ExtraIndexUrl(url.with_given(given))
     } else if eat_option(s, "--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--require-hashes") {
         RequirementsTxtStatement::RequireHashes
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
+        let given = parse_value("--find-links", content, s, |c: char| !is_option_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
@@ -857,9 +866,11 @@ fn parse_entry(
                 });
             }
         };
+        // Consume any trailing content (like markers) until end of line.
+        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value("--no-binary", content, s, |c: char| !is_terminal(c))?;
+        let given = parse_value("--no-binary", content, s, |c: char| !is_option_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
@@ -873,9 +884,11 @@ fn parse_entry(
                 end: s.cursor(),
             }
         })?;
+        // Consume any trailing content (like markers) until end of line.
+        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value("--only-binary", content, s, |c: char| !is_terminal(c))?;
+        let given = parse_value("--only-binary", content, s, |c: char| !is_option_terminal(c))?;
         let given = unquote(given)
             .ok()
             .flatten()
@@ -889,6 +902,8 @@ fn parse_entry(
                 end: s.cursor(),
             }
         })?;
+        // Consume any trailing content (like markers) until end of line.
+        s.eat_until(['\r', '\n']);
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let source = match requirements_txt {
@@ -1578,6 +1593,7 @@ mod test {
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
+    #[test_case(Path::new("option-with-marker.txt"))]
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
