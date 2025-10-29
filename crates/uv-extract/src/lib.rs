@@ -12,7 +12,7 @@ mod sync;
 mod vendor;
 
 static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
-static REPLACEMENT_CHARACTER: &'static str = "\u{FFFD}";
+static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
 
 /// Validate that a given filename (e.g. reported by a ZIP archive's
 /// local file entries or central directory entries) is "safe" to use.
