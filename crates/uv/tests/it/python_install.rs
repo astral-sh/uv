@@ -2799,7 +2799,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86-none/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86-none/python
 
     ----- stderr -----
     ");
@@ -2810,7 +2810,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     exit_code: 0
     ----- stdout -----
     cpython-3.13.9-windows-x86_64-none    <download available>
-    cpython-3.13.9-windows-x86-none       managed/cpython-3.13.9-windows-x86-none/python3.13
+    cpython-3.13.9-windows-x86-none       managed/cpython-3.13.9-windows-x86-none/python
 
     ----- stderr -----
     ");
@@ -2830,7 +2830,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86_64-none/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86_64-none/python
 
     ----- stderr -----
     ");
