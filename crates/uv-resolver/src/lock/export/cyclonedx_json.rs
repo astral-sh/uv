@@ -67,8 +67,14 @@ pub fn from_lock<'lock>(
     }
 
     // Extract the packages from the lock file.
-    let ExportableRequirements(mut nodes) =
-        ExportableRequirements::from_lock(target, prune, extras, groups, annotate, install_options);
+    let ExportableRequirements(mut nodes) = ExportableRequirements::from_lock(
+        target,
+        prune,
+        extras,
+        groups,
+        annotate,
+        install_options,
+    )?;
 
     nodes.sort_unstable_by_key(|node| &node.package.id);
 
