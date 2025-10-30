@@ -72,8 +72,7 @@ uv can export your project's dependency lockfile as a Software Bill of Materials
 
 !!! important
 
-    Support for exporting to CycloneDX is in _preview_. This means the behavior is experimental
-    and subject to change.
+    Support for exporting to CycloneDX is in [preview](../concepts/preview.md), so may be subject to change.
 
 ### What is CycloneDX?
 
