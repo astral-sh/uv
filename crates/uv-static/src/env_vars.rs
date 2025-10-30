@@ -135,6 +135,11 @@ impl EnvVars {
     #[attr_added_in("0.2.22")]
     pub const UV_OVERRIDE: &'static str = "UV_OVERRIDE";
 
+    /// Equivalent to the `--exclude` command-line argument. If set, uv will use this
+    /// as the excludes file. Uses space-separated list of files.
+    #[attr_added_in("next release")]
+    pub const UV_EXCLUDE: &'static str = "UV_EXCLUDE";
+
     /// Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
     /// a link mode.
     #[attr_added_in("0.1.40")]

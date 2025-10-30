@@ -113,6 +113,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes: _,
         pylock,
         source_trees,
         groups,
@@ -127,6 +128,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        &[],  // No excludes for pip sync
         extras,
         Some(groups),
         &client_builder,

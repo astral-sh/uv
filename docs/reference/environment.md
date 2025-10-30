@@ -103,6 +103,12 @@ compatibility.
 
 `.env` files from which to load environment variables when executing `uv run` commands.
 
+### `UV_EXCLUDE`
+<small class="added-in">added in `next release`</small>
+
+Equivalent to the `--exclude` command-line argument. If set, uv will use this
+as the excludes file. Uses space-separated list of files.
+
 ### `UV_EXCLUDE_NEWER`
 <small class="added-in">added in `0.2.12`</small>
 

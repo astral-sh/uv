@@ -61,6 +61,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The excludes for the project.
+    pub excludes: Vec<UnresolvedRequirementSpecification>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -345,6 +347,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        excludes: &[RequirementsSource],
         groups: Option<&GroupsSpecification>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
@@ -374,6 +377,20 @@ impl RequirementsSpecification {
         }) {
             return Err(anyhow::anyhow!(
                 "Cannot use `{}` as an override file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // Disallow `pylock.toml` files as excludes.
+        if let Some(pylock_toml) = excludes.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an exclude file",
                 pylock_toml.user_display()
             ));
         }
@@ -582,6 +599,13 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
+        // Collect excludes.
+        for source in excludes {
+            let source = Self::from_source(source, client_builder).await?;
+            spec.excludes.extend(source.requirements);
+            spec.excludes.extend(source.excludes);
+        }
+
         Ok(spec)
     }
 
@@ -597,7 +621,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], None, client_builder).await
+        Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].

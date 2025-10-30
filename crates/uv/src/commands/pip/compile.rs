@@ -62,6 +62,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
@@ -203,6 +204,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes: _,
         pylock,
         source_trees,
         groups,
@@ -217,6 +219,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         Some(&groups),
         &client_builder,
     )

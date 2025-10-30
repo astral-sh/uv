@@ -1246,6 +1246,17 @@ pub struct PipCompileArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Exclude dependencies from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
+    /// from the resolution. When a dependency is excluded, it will be omitted from the
+    /// dependency list entirely, regardless of whether it's requested by any other package.
+    ///
+    /// This can be useful for removing optional dependencies or working around packages with
+    /// broken dependencies.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -1896,6 +1907,17 @@ pub struct PipInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude dependencies from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
+    /// from the resolution. When a dependency is excluded, it will be omitted from the
+    /// dependency list entirely, regardless of whether it's requested by any other package.
+    ///
+    /// This can be useful for removing optional dependencies or working around packages with
+    /// broken dependencies.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -4847,6 +4869,17 @@ pub struct ToolInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude dependencies from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
+    /// from the resolution. When a dependency is excluded, it will be omitted from the
+    /// dependency list entirely, regardless of whether it's requested by any other package.
+    ///
+    /// This can be useful for removing optional dependencies or working around packages with
+    /// broken dependencies.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.

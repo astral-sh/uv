@@ -681,6 +681,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -710,6 +711,7 @@ impl ToolInstallSettings {
             with_executables_from,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             installer,
             force,
@@ -759,6 +761,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -2119,6 +2125,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
@@ -2140,6 +2147,7 @@ impl PipCompileSettings {
             src_file,
             constraints,
             overrides,
+            excludes,
             extra,
             all_extras,
             no_all_extras,
@@ -2263,6 +2271,10 @@ impl PipCompileSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -2433,6 +2445,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editables: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
@@ -2457,6 +2470,7 @@ impl PipInstallSettings {
             editable,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             extra,
             all_extras,
@@ -2557,6 +2571,10 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
