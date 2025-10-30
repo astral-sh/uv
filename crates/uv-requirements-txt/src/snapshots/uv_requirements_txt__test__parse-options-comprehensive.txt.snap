@@ -3,37 +3,7 @@ source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxt {
-    requirements: [
-        RequirementEntry {
-            requirement: Named(
-                Requirement {
-                    name: PackageName(
-                        "requests",
-                    ),
-                    extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: GreaterThanEqual,
-                                        version: "2.28.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
-                    marker: true,
-                    origin: Some(
-                        File(
-                            "<REQUIREMENTS_DIR>/options-comprehensive.txt",
-                        ),
-                    ),
-                },
-            ),
-            hashes: [],
-        },
-    ],
+    requirements: [],
     constraints: [],
     editables: [],
     index_url: Some(
@@ -97,46 +67,6 @@ RequirementsTxt {
             },
             given: Some(
                 "https://example.com/simple",
-            ),
-        },
-        VerbatimUrl {
-            url: DisplaySafeUrl {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "example1.com",
-                    ),
-                ),
-                port: None,
-                path: "/simple",
-                query: None,
-                fragment: None,
-            },
-            given: Some(
-                "https://example1.com/simple",
-            ),
-        },
-        VerbatimUrl {
-            url: DisplaySafeUrl {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "example2.com",
-                    ),
-                ),
-                port: None,
-                path: "/simple",
-                query: None,
-                fragment: None,
-            },
-            given: Some(
-                "https://example2.com/simple",
             ),
         },
         VerbatimUrl {
