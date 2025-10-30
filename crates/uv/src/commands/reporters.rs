@@ -230,7 +230,7 @@ impl ProgressReporter {
             // Ignore spinners, such as for builds.
             if let ProgressBarKind::Numeric { progress, .. } = progress {
                 let template = format!(
-                    "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                    "{{msg:{max_len}.dim}} {{bar:30.green/black.dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
                 );
                 progress.set_style(
                     ProgressStyle::with_template(&template)
@@ -252,7 +252,7 @@ impl ProgressReporter {
             progress.set_style(
                 ProgressStyle::with_template(
                     &format!(
-                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                        "{{msg:{}.dim}} {{bar:30.green/black.dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
                     ),
                 )
                     .unwrap()
