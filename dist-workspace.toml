@@ -4,7 +4,7 @@ members = ["cargo:."]
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.30.0"
+cargo-dist-version = "0.30.1"
 # Whether to consider the binaries in a package for distribution (defaults true)
 dist = false
 # CI backends to support
@@ -46,6 +46,12 @@ pr-run-mode = "plan"
 dispatch-releases = true
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
+# Whether to enable GitHub Attestations
+github-attestations = true
+# When to generate GitHub Attestations
+github-attestations-phase = "host"
+# Patterns to attest when creating attestations for release artifacts
+github-attestations-filters = ["*.json", "*.sh", "*.ps1", "*.zip", "*.tar.gz"]
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
