@@ -311,9 +311,9 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
-        // explicit, etc.
-        if self.index_urls.no_index() {
+        // If `--no-index` is specified and no flat indexes are available, avoid fetching
+        // regardless of whether the index is implicit, explicit, etc.
+        if self.index_urls.no_indexes() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
@@ -413,6 +413,10 @@ impl RegistryClient {
         }
 
         if results.is_empty() {
+            if self.index_urls.simple_indexes_disabled() {
+                return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+            }
+
             return match self.connectivity {
                 Connectivity::Online => {
                     Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
