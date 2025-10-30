@@ -4985,6 +4985,7 @@ fn cyclonedx_export() -> Result<()> {
     }
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5060,6 +5061,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     }
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5230,6 +5232,7 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
     }
     ----- stderr -----
     Resolved 9 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5291,6 +5294,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
     }
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5538,6 +5542,7 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
     }
     ----- stderr -----
     Resolved 15 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5617,6 +5622,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5745,6 +5751,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -5929,6 +5936,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
     }
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6025,6 +6033,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6143,6 +6152,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
     }
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
@@ -6212,6 +6222,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
     }
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6293,9 +6304,8 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         ],
         "component": {
           "type": "application",
-          "bom-ref": "1-project@0.1.0",
-          "name": "project",
-          "version": "0.1.0"
+          "bom-ref": "7-uv-workspace",
+          "name": "uv-workspace"
         }
       },
       "components": [
@@ -6338,6 +6348,12 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
         }
       ],
       "dependencies": [
@@ -6372,10 +6388,18 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         {
           "ref": "6-sniffio@1.3.1",
           "dependsOn": []
+        },
+        {
+          "ref": "7-uv-workspace",
+          "dependsOn": [
+            "3-child@0.1.0",
+            "1-project@0.1.0"
+          ]
         }
       ]
     }
     ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6455,9 +6479,8 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         ],
         "component": {
           "type": "application",
-          "bom-ref": "1-project@0.1.0",
-          "name": "project",
-          "version": "0.1.0"
+          "bom-ref": "8-uv-workspace",
+          "name": "uv-workspace"
         }
       },
       "components": [
@@ -6512,6 +6535,12 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
         }
       ],
       "dependencies": [
@@ -6551,11 +6580,20 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         {
           "ref": "7-sniffio@1.3.1",
           "dependsOn": []
+        },
+        {
+          "ref": "8-uv-workspace",
+          "dependsOn": [
+            "3-child1@0.1.0",
+            "4-child2@0.2.0",
+            "1-project@0.1.0"
+          ]
         }
       ]
     }
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6744,6 +6782,7 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
     }
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -6874,6 +6913,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
     }
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -7106,6 +7146,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
     }
     ----- stderr -----
     Resolved 10 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -7288,6 +7329,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
     }
     ----- stderr -----
     Resolved 10 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -7479,6 +7521,7 @@ fn cyclonedx_export_prune() -> Result<()> {
     }
     ----- stderr -----
     Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#
     );
 
@@ -7569,6 +7612,7 @@ fn cyclonedx_export_group() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export only specific group
@@ -7615,6 +7659,7 @@ fn cyclonedx_export_group() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export with additional group
@@ -7717,6 +7762,7 @@ fn cyclonedx_export_group() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -7765,6 +7811,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export with group specified
@@ -7831,6 +7878,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -7968,6 +8016,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Exclude `project`.
@@ -8068,6 +8117,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -8174,6 +8224,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -8366,6 +8417,7 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
     }
     ----- stderr -----
     Resolved 11 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -8483,6 +8535,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export without dev dependencies
@@ -8536,6 +8589,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export only dev dependencies
@@ -8608,6 +8662,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     Ok(())
@@ -8681,9 +8736,8 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
         ],
         "component": {
           "type": "application",
-          "bom-ref": "1-project@0.1.0",
-          "name": "project",
-          "version": "0.1.0"
+          "bom-ref": "3-uv-workspace",
+          "name": "uv-workspace"
         }
       },
       "components": [
@@ -8698,6 +8752,12 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
               "value": "child"
             }
           ]
+        },
+        {
+          "type": "application",
+          "bom-ref": "1-project@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
         }
       ],
       "dependencies": [
@@ -8708,6 +8768,13 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
         {
           "ref": "1-project@0.1.0",
           "dependsOn": []
+        },
+        {
+          "ref": "3-uv-workspace",
+          "dependsOn": [
+            "2-child@0.1.0",
+            "1-project@0.1.0"
+          ]
         }
       ]
     }
