@@ -494,7 +494,6 @@ async fn do_lock(
     // If necessary, lower the overrides and constraints.
     let requirements = target.lower(requirements, index_locations, *sources)?;
     let overrides = target.lower(overrides, index_locations, *sources)?;
-    let excludes = target.lower(excludes, index_locations, *sources)?;
     let constraints = target.lower(constraints, index_locations, *sources)?;
     let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
@@ -889,11 +888,7 @@ async fn do_lock(
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                excludes
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
+                uv_configuration::Excludes::from_package_names(excludes.clone()),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,

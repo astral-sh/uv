@@ -105,7 +105,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    excludes: Vec<UnresolvedRequirementSpecification>,
+    excludes: uv_configuration::Excludes,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -285,38 +285,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Resolve the excludes from the provided sources.
-    let excludes = {
-        // Partition the excludes into named and unnamed requirements.
-        let (mut excludes, unnamed): (Vec<_>, Vec<_>) =
-            excludes
-                .into_iter()
-                .partition_map(|spec| match spec.requirement {
-                    UnresolvedRequirement::Named(requirement) => {
-                        itertools::Either::Left(requirement)
-                    }
-                    UnresolvedRequirement::Unnamed(requirement) => {
-                        itertools::Either::Right(requirement)
-                    }
-                });
-
-        // Resolve any unnamed excludes.
-        if !unnamed.is_empty() {
-            excludes.extend(
-                NamedRequirementsResolver::new(
-                    hasher,
-                    index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-                )
-                .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                .resolve(unnamed.into_iter())
-                .await?,
-            );
-        }
-
-        excludes
-    };
-
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(
         constraints
@@ -325,7 +293,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let dependency_excludes = uv_configuration::Excludes::from_requirements(excludes);
+    let dependency_excludes = excludes;
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.

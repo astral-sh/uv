@@ -58,7 +58,7 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
-    excludes_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -120,7 +120,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        excludes: _,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -171,9 +171,9 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    let excludes: Vec<UnresolvedRequirementSpecification> = excludes_from_workspace
+    let excludes: Vec<uv_normalize::PackageName> = excludes
         .into_iter()
-        .map(UnresolvedRequirementSpecification::from)
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -559,7 +559,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
-            excludes,
+            uv_configuration::Excludes::from_package_names(excludes),
             source_trees,
             project,
             BTreeSet::default(),

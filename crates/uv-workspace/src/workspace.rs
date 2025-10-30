@@ -662,7 +662,7 @@ impl Workspace {
     }
 
     /// Returns the set of dependency exclusions for the workspace.
-    pub fn exclude_dependencies(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub fn exclude_dependencies(&self) -> Vec<uv_normalize::PackageName> {
         let Some(excludes) = self
             .pyproject_toml
             .tool

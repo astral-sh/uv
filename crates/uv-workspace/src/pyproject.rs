@@ -507,7 +507,7 @@ pub struct ToolUv {
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
+            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
         )
     )]
     #[option(
@@ -518,7 +518,7 @@ pub struct ToolUv {
             exclude-dependencies = ["werkzeug"]
         "#
     )]
-    pub exclude_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

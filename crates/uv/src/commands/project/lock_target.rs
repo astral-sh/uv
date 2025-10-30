@@ -63,7 +63,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of dependency exclusions for the [`LockTarget`].
-    pub(crate) fn exclude_dependencies(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub(crate) fn exclude_dependencies(self) -> Vec<uv_normalize::PackageName> {
         match self {
             Self::Workspace(workspace) => workspace.exclude_dependencies(),
             Self::Script(script) => script
