@@ -1050,6 +1050,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv workspace metadata` command with options shared across scenarios.
+    pub fn workspace_metadata(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("workspace").arg("metadata");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv export` command with options shared across scenarios.
     pub fn export(&self) -> Command {
         let mut command = Self::new_command();
