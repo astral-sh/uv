@@ -592,7 +592,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let filename = parse_value("--requirement", content, s, requirements_txt)?;
+        let filename = parse_option("--requirement", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename,
@@ -600,7 +600,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let filename = parse_value("--constraint", content, s, requirements_txt)?;
+        let filename = parse_option("--constraint", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename,
@@ -643,7 +643,7 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value("--index-url", content, s, requirements_txt)?;
+        let given = parse_option("--index-url", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -669,7 +669,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value("--extra-index-url", content, s, requirements_txt)?;
+        let given = parse_option("--extra-index-url", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -697,7 +697,7 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value("--find-links", content, s, requirements_txt)?;
+        let given = parse_option("--find-links", content, s, requirements_txt)?;
         let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -723,7 +723,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value("--no-binary", content, s, requirements_txt)?;
+        let given = parse_option("--no-binary", content, s, requirements_txt)?;
         let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -734,7 +734,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value("--only-binary", content, s, requirements_txt)?;
+        let given = parse_option("--only-binary", content, s, requirements_txt)?;
         let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -928,13 +928,13 @@ fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, Requireme
     Ok(hashes)
 }
 
-/// Parse an option value (for --index-url, --find-links, etc.).
+/// Parse an option value (for `--index-url`, `--find-links`, etc.).
 ///
 /// This function:
-/// - Handles quoting (single/double quotes with POSIX shell escaping)
-/// - Consumes and strips markers (` ; ` or `; ` followed by marker expression)
-/// - Returns the unquoted, unescaped value
-fn parse_value(
+/// - Handles quoting (single/double quotes with POSIX shell escaping).
+/// - Consumes and strips markers (` ; ` or `; ` followed by marker expression).
+/// - Returns the unquoted, unescaped value.
+fn parse_option(
     option: &str,
     content: &str,
     s: &mut Scanner,
@@ -955,7 +955,179 @@ fn parse_value(
         });
     }
 
-    parse_quoted_value_with_markers(option, content, s, requirements_txt)
+    let start = s.cursor();
+    let mut result = String::with_capacity(option.len());
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escape_next = false;
+    let mut marker_start = None;
+    let mut marker_text = String::new();
+
+    loop {
+        let Some(ch) = s.peek() else {
+            break;
+        };
+
+        // Check for terminal characters (always, even when quoted).
+        if !escape_next && matches!(ch, '\n' | '\r' | '#') {
+            break;
+        }
+
+        // Check for marker syntax: ` ; ` or `; `.
+        if !escape_next && !in_single_quote && !in_double_quote {
+            if ch == ';' {
+                // If the next character is whitespace, this is a marker.
+                if s.after().chars().nth(1).is_some_and(char::is_whitespace) {
+                    marker_start = Some(result.len());
+                    marker_text.push(s.eat().unwrap());
+
+                    // Consume until we find the closing quote or end of line.
+                    while let Some(c) = s.peek() {
+                        if matches!(c, '\n' | '\r' | '#') {
+                            break;
+                        }
+                        let c = s.eat().unwrap();
+                        marker_text.push(c);
+
+                        // Track quote state to avoid unterminated quote errors.
+                        if !escape_next {
+                            if c == '\'' && !in_double_quote {
+                                in_single_quote = !in_single_quote;
+                            } else if c == '"' && !in_single_quote {
+                                in_double_quote = !in_double_quote;
+                            } else if c == '\\' && !in_single_quote {
+                                escape_next = true;
+                            }
+                        } else {
+                            escape_next = false;
+                        }
+                    }
+                    break;
+                }
+            } else if ch == ' ' {
+                // If the next character is a semicolon, this is a marker.
+                if s.after().chars().nth(1) == Some(';') {
+                    marker_start = Some(result.len());
+
+                    // Consume until we find the closing quote or end of line.
+                    while let Some(c) = s.peek() {
+                        if matches!(c, '\n' | '\r' | '#') {
+                            break;
+                        }
+                        let c = s.eat().unwrap();
+                        marker_text.push(c);
+
+                        // Track quote state to avoid unterminated quote errors.
+                        if !escape_next {
+                            if c == '\'' && !in_double_quote {
+                                in_single_quote = !in_single_quote;
+                            } else if c == '"' && !in_single_quote {
+                                in_double_quote = !in_double_quote;
+                            } else if c == '\\' && !in_single_quote {
+                                escape_next = true;
+                            }
+                        } else {
+                            escape_next = false;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Consume the character
+        let ch = s.eat().unwrap();
+
+        if escape_next {
+            escape_next = false;
+            if in_double_quote {
+                match ch {
+                    // Inside double quotes, only specific characters are escaped.
+                    '"' | '\\' | '$' | '`' => result.push(ch),
+                    // Escaped newline is stripped (continuation).
+                    '\n' => {}
+                    // Unknown escape (preserve backslash and character).
+                    _ => {
+                        result.push('\\');
+                        result.push(ch);
+                    }
+                }
+            } else {
+                if ch != '\n' {
+                    // Escaped newline is stripped; everything else is a literal.
+                    result.push(ch);
+                }
+            }
+            continue;
+        }
+
+        match ch {
+            '\\' if !in_single_quote => {
+                // Start an escape sequence.
+                escape_next = true;
+            }
+            '\'' if !in_double_quote => {
+                // Toggle single quotes.
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                // Toggle double quotes.
+                in_double_quote = !in_double_quote;
+            }
+            _ => {
+                // Regular character
+                result.push(ch);
+            }
+        }
+    }
+
+    if in_single_quote {
+        let (line, column) = calculate_row_column(content, start);
+        return Err(RequirementsTxtParserError::Parser {
+            message: "Unterminated single quote".to_string(),
+            line,
+            column,
+        });
+    }
+    if in_double_quote {
+        let (line, column) = calculate_row_column(content, start);
+        return Err(RequirementsTxtParserError::Parser {
+            message: "Unterminated double quote".to_string(),
+            line,
+            column,
+        });
+    }
+
+    // If we found a marker, truncate the result.
+    if let Some(trim_at) = marker_start {
+        result.truncate(trim_at);
+
+        let (line, _) = calculate_row_column(content, start);
+        let marker_display = marker_text.trim();
+        if requirements_txt == Path::new("-") {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in stdin at line {line}: `{marker_display}`"
+            );
+        } else {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in `{path}` at line {line}: `{marker_display}`",
+                path = requirements_txt.user_display().cyan()
+            );
+        }
+    }
+
+    let result = result.trim().to_string();
+
+    if result.is_empty() {
+        let (line, column) = calculate_row_column(content, s.cursor());
+        return Err(RequirementsTxtParserError::Parser {
+            message: format!("`{option}` must be followed by an argument"),
+            line,
+            column,
+        });
+    }
+
+    Ok(result)
 }
 
 /// Parse a hash value (for --hash).
@@ -994,198 +1166,6 @@ fn parse_hash_value(
     }
 
     Ok(value.to_string())
-}
-
-/// Parse a quoted value that may contain markers.
-///
-/// This handles:
-/// - Quoted values (single/double quotes with POSIX shell escaping)
-/// - Markers - consumes the entire line but returns only the part before the marker
-fn parse_quoted_value_with_markers(
-    option: &str,
-    content: &str,
-    s: &mut Scanner,
-    requirements_txt: &Path,
-) -> Result<String, RequirementsTxtParserError> {
-    let start = s.cursor();
-    let mut result = String::new();
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
-    let mut escape_next = false;
-    let mut marker_start = None;
-    let mut marker_text = String::new();
-
-    loop {
-        let Some(ch) = s.peek() else {
-            // End of input
-            break;
-        };
-
-        // Check for terminal characters (always, even when quoted)
-        if !escape_next && matches!(ch, '\n' | '\r' | '#') {
-            // Terminal character - stop parsing
-            break;
-        }
-
-        // Check for marker syntax: ` ; ` or `; `
-        // Only check for markers when NOT inside quotes
-        if !escape_next && !in_single_quote && !in_double_quote {
-            if ch == ';' {
-                let rest = s.after();
-                if rest.len() > 1 && rest.chars().nth(1).is_some_and(char::is_whitespace) {
-                    // Found "; " - this is a marker
-                    marker_start = Some(result.len());
-                    marker_text.push(s.eat().unwrap()); // consume ';'
-                    // Consume until we find the closing quote or end of line
-                    while let Some(c) = s.peek() {
-                        if matches!(c, '\n' | '\r' | '#') {
-                            break;
-                        }
-                        let c = s.eat().unwrap();
-                        marker_text.push(c);
-                        // Track quote state to avoid unterminated quote errors
-                        if !escape_next {
-                            if c == '\'' && !in_double_quote {
-                                in_single_quote = !in_single_quote;
-                            } else if c == '"' && !in_single_quote {
-                                in_double_quote = !in_double_quote;
-                            } else if c == '\\' && !in_single_quote {
-                                escape_next = true;
-                            }
-                        } else {
-                            escape_next = false;
-                        }
-                    }
-                    break;
-                }
-            } else if ch == ' ' {
-                let rest = s.after();
-                if rest[1..].trim_start().starts_with(';') {
-                    // Found " ;" - this is a marker
-                    marker_start = Some(result.len());
-                    // Consume until we find the closing quote or end of line
-                    while let Some(c) = s.peek() {
-                        if matches!(c, '\n' | '\r' | '#') {
-                            break;
-                        }
-                        let c = s.eat().unwrap();
-                        marker_text.push(c);
-                        // Track quote state to avoid unterminated quote errors
-                        if !escape_next {
-                            if c == '\'' && !in_double_quote {
-                                in_single_quote = !in_single_quote;
-                            } else if c == '"' && !in_single_quote {
-                                in_double_quote = !in_double_quote;
-                            } else if c == '\\' && !in_single_quote {
-                                escape_next = true;
-                            }
-                        } else {
-                            escape_next = false;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Consume the character
-        let ch = s.eat().unwrap();
-
-        if escape_next {
-            escape_next = false;
-            if in_double_quote {
-                // Inside double quotes, only specific characters are escaped
-                match ch {
-                    '"' | '\\' | '$' | '`' => result.push(ch),
-                    '\n' => {
-                        // Escaped newline is stripped (continuation)
-                    }
-                    _ => {
-                        // Unknown escape - preserve backslash and character
-                        result.push('\\');
-                        result.push(ch);
-                    }
-                }
-            } else {
-                // Outside quotes
-                if ch != '\n' {
-                    // Escaped newline is stripped, everything else is literal
-                    result.push(ch);
-                }
-            }
-            continue;
-        }
-
-        match ch {
-            '\\' if !in_single_quote => {
-                // Start escape sequence (not in single quotes)
-                escape_next = true;
-            }
-            '\'' if !in_double_quote => {
-                // Toggle single quote mode
-                in_single_quote = !in_single_quote;
-            }
-            '"' if !in_single_quote => {
-                // Toggle double quote mode
-                in_double_quote = !in_double_quote;
-            }
-            _ => {
-                // Regular character
-                result.push(ch);
-            }
-        }
-    }
-
-    // Check for unterminated quotes
-    if in_single_quote {
-        let (line, column) = calculate_row_column(content, start);
-        return Err(RequirementsTxtParserError::Parser {
-            message: "Unterminated single quote".to_string(),
-            line,
-            column,
-        });
-    }
-    if in_double_quote {
-        let (line, column) = calculate_row_column(content, start);
-        return Err(RequirementsTxtParserError::Parser {
-            message: "Unterminated double quote".to_string(),
-            line,
-            column,
-        });
-    }
-
-    // If we found a marker, truncate the result there and warn the user
-    if let Some(trim_at) = marker_start {
-        result.truncate(trim_at);
-
-        // Warn the user that we're ignoring the marker, showing the marker text
-        let (line, _) = calculate_row_column(content, start);
-        let marker_display = marker_text.trim();
-        if requirements_txt == Path::new("-") {
-            uv_warnings::warn_user!(
-                "Ignoring environment marker on `{option}` in stdin at line {line}: `{marker_display}` (environment markers are not supported for requirements file options)"
-            );
-        } else {
-            uv_warnings::warn_user!(
-                "Ignoring environment marker on `{option}` in `{path}` at line {line}: `{marker_display}` (environment markers are not supported for requirements file options)",
-                path = requirements_txt.user_display().cyan()
-            );
-        }
-    }
-
-    // Trim trailing whitespace
-    let result = result.trim_end().to_string();
-
-    if result.is_empty() {
-        let (line, column) = calculate_row_column(content, s.cursor());
-        return Err(RequirementsTxtParserError::Parser {
-            message: format!("`{option}` must be followed by an argument"),
-            line,
-            column,
-        });
-    }
-
-    Ok(result)
 }
 
 /// Fetch the contents of a URL and return them as a string.
