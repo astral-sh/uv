@@ -4662,7 +4662,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
 }
 
 #[test]
-fn cyclonedx_export() -> Result<()> {
+fn cyclonedx_export_basic() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4838,6 +4838,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "git")]
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
@@ -5071,6 +5072,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "git")]
 #[test]
 fn cyclonedx_export_mixed_source_types() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
