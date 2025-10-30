@@ -101,6 +101,7 @@ plugins:
           - guides/scripts.md
           - guides/tools.md
           - guides/projects.md
+          - guides/export.md
           - guides/package.md
         Integrations:
           - guides/integration/docker.md
@@ -176,6 +177,7 @@ nav:
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
+      - Exporting lockfiles: guides/export.md
       - Publishing packages: guides/package.md
       - Migration:
           - guides/migration/index.md
