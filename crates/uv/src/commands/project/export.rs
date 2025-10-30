@@ -361,6 +361,7 @@ pub(crate) async fn export(
                 include_annotations,
                 &install_options,
                 preview,
+                all_packages,
             )?;
 
             let mut output = Vec::<u8>::new();
