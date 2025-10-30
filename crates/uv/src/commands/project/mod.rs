@@ -1997,6 +1997,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        vec![], // No excludes for project export
         source_trees,
         project,
         BTreeSet::default(),
@@ -2366,6 +2367,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        vec![], // No excludes for project run
         source_trees,
         project,
         BTreeSet::default(),

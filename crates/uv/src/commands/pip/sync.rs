@@ -461,6 +461,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
+            vec![], // No excludes for pip sync
             source_trees,
             project,
             BTreeSet::default(),

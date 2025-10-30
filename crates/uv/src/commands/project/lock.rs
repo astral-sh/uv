@@ -485,6 +485,7 @@ async fn do_lock(
     let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
+    let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
     let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
@@ -493,6 +494,7 @@ async fn do_lock(
     // If necessary, lower the overrides and constraints.
     let requirements = target.lower(requirements, index_locations, *sources)?;
     let overrides = target.lower(overrides, index_locations, *sources)?;
+    let excludes = target.lower(excludes, index_locations, *sources)?;
     let constraints = target.lower(constraints, index_locations, *sources)?;
     let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
@@ -883,6 +885,11 @@ async fn do_lock(
                     .chain(external)
                     .collect(),
                 overrides
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
+                excludes
                     .iter()
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
