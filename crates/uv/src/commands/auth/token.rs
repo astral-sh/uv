@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_auth::{AuthBackend, Service};
