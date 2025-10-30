@@ -1724,6 +1724,21 @@ impl PythonVariant {
     }
 }
 impl PythonRequest {
+    /// Return the [`PythonVariant`] of the request, if any.
+    pub fn variant(&self) -> Option<PythonVariant> {
+        match self {
+            Self::Version(version) => version.variant(),
+            Self::ImplementationVersion(_, version) => version.variant(),
+            Self::Default
+            | Self::Any
+            | Self::Directory(_)
+            | Self::File(_)
+            | Self::ExecutableName(_)
+            | Self::Implementation(_)
+            | Self::Key(_) => None,
+        }
+    }
+
     /// Create a request from a string.
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
@@ -3431,7 +3446,8 @@ mod tests {
                 os: None,
                 libc: None,
                 build: None,
-                prereleases: None
+                prereleases: None,
+                all_variants: false
             })
         );
         assert_eq!(
@@ -3451,7 +3467,8 @@ mod tests {
                 os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
                 build: None,
-                prereleases: None
+                prereleases: None,
+                all_variants: false
             })
         );
         assert_eq!(
@@ -3468,7 +3485,8 @@ mod tests {
                 os: None,
                 libc: None,
                 build: None,
-                prereleases: None
+                prereleases: None,
+                all_variants: false
             })
         );
         assert_eq!(
@@ -3488,7 +3506,8 @@ mod tests {
                 os: None,
                 libc: None,
                 build: None,
-                prereleases: None
+                prereleases: None,
+                all_variants: false
             })
         );
 

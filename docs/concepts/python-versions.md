@@ -254,6 +254,12 @@ To view Python versions for other platforms:
 $ uv python list --all-platforms
 ```
 
+To view all Python variants, including debug and freethreaded builds:
+
+```console
+$ uv python list --all-variants
+```
+
 To exclude downloads and only show installed Python versions:
 
 ```console
