@@ -6221,6 +6221,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
+ "owo-colors",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",

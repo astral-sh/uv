@@ -9,7 +9,7 @@ use std::env;
 use std::env::current_dir;
 use std::io::Write;
 use uv_static::EnvVars;
-use wiremock::matchers::{basic_auth, method, path};
+use wiremock::matchers::{basic_auth, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
@@ -603,6 +603,115 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+/// Capture the behavior for a simple index page for check URL that returns a status code error
+/// that is not specifically handled as 401 and 403 are.
+#[tokio::test]
+async fn check_url_400() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(400).set_body_string("Access to this page is forbidden"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL
+      Caused by: Failed to fetch: `http://[LOCALHOST]/simple/ok/`
+      Caused by: HTTP status client error (400 Bad Request) for url (http://[LOCALHOST]/simple/ok/)
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_401() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(401).set_body_string("Access to this page is unauthorized"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL due to a lack of valid authentication credentials (401 Unauthorized): http://[LOCALHOST]/simple.
+
+    hint: Check URL credentials must be configured separately from publish URL credentials
+    "
+    );
+}
+#[tokio::test]
+async fn check_url_403() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/.*"))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_string("Access to this page is forbidden"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--check-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--username")
+        .arg("ferris")
+        .arg("--password")
+        .arg("password")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    error: Failed to query check URL due to a lack of valid authentication credentials (403 Forbidden): http://[LOCALHOST]/simple.
+
+    hint: Check URL credentials must be configured separately from publish URL credentials
     "
     );
 }

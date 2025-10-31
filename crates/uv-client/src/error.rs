@@ -3,6 +3,8 @@ use std::ops::Deref;
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
+use http::StatusCode;
+use rustc_hash::FxHashSet;
 use serde::Deserialize;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
@@ -267,12 +269,19 @@ pub enum ErrorKind {
     #[error("{0} isn't available locally, but making network requests to registries was banned")]
     NoIndex(String),
 
-    /// The package was not found in the registry.
+    /// The package was not found in the registry (HTTP Error 404).
     ///
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
     #[error("Package `{0}` was not found in the registry")]
-    PackageNotFound(String),
+    PackageNotFound(PackageName),
+
+    /// The package was not found in the registry (HTTP Error 401 or 403).
+    ///
+    /// Make sure the package name is spelled correctly and that you've
+    /// configured the right registry to fetch it from.
+    #[error("Package `{0}` was not found in the registry")]
+    StatusCodeError(PackageName, FxHashSet<StatusCode>),
 
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]
