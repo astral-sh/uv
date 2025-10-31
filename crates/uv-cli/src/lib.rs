@@ -5432,7 +5432,7 @@ pub struct PythonListArgs {
 
     /// URL pointing to JSON of custom Python installations.
     ///
-    /// Note that currently, only local paths are supported.
+    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -5530,7 +5530,7 @@ pub struct PythonInstallArgs {
 
     /// URL pointing to JSON of custom Python installations.
     ///
-    /// Note that currently, only local paths are supported.
+    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
@@ -5621,7 +5621,7 @@ pub struct PythonUpgradeArgs {
 
     /// URL pointing to JSON of custom Python installations.
     ///
-    /// Note that currently, only local paths are supported.
+    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }

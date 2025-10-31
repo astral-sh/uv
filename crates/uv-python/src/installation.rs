@@ -5,10 +5,11 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use ref_cast::RefCast;
+use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
@@ -16,7 +17,10 @@ use uv_preview::Preview;
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
-use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
+use crate::downloads::{
+    DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
+    Reporter,
+};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
@@ -126,9 +130,16 @@ impl PythonInstallation {
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
 
-        let download = download_request.clone().fill().map(|request| {
-            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
-        });
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware from performing uncontrolled retries.
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build();
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        let download = download_request
+            .clone()
+            .fill()
+            .map(|request| download_list.find(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
         // available to power error messages. However, if downloads aren't enabled, we don't want to
@@ -203,7 +214,8 @@ impl PythonInstallation {
 
         Self::fetch(
             download,
-            client_builder,
+            &client,
+            &retry_policy,
             cache,
             reporter,
             python_install_mirror,
@@ -215,8 +227,9 @@ impl PythonInstallation {
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        download: &'static ManagedPythonDownload,
-        client_builder: &BaseClientBuilder<'_>,
+        download: &ManagedPythonDownload,
+        client: &BaseClient,
+        retry_policy: &ExponentialBackoff,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
@@ -228,16 +241,11 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        // Python downloads are performing their own retries to catch stream errors, disable the
-        // default retries to avoid the middleware from performing uncontrolled retries.
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
-
         info!("Fetching requested Python...");
         let result = download
             .fetch_with_retry(
-                &client,
-                &retry_policy,
+                client,
+                retry_policy,
                 installations_dir,
                 &scratch_dir,
                 false,
