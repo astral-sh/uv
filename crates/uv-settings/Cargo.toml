@@ -28,6 +28,7 @@ uv-macros = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-preview = { workspace = true, features = ["schemars"] }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars", "clap"] }
 uv-redacted = { workspace = true }
