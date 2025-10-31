@@ -171,7 +171,6 @@ impl<'a> ComponentBuilder<'a> {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn create_component_from_package(
         &mut self,
         package: &Package,
@@ -410,7 +409,7 @@ fn create_dependencies(
         .collect()
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum PackageType<'a> {
     Root,
     Workspace(&'a Path),
