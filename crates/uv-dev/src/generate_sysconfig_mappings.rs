@@ -99,13 +99,13 @@ async fn generate() -> Result<String> {
                 replacements
                     .entry(sysconfig_cc_entry)
                     .or_default()
-                    .insert(from_cc.to_string(), "cc".to_string());
+                    .insert(from_cc.to_owned(), "cc".to_string());
             }
             if let Some(ref from_cc) = targets_config.target_cc {
                 replacements
                     .entry(sysconfig_cc_entry)
                     .or_default()
-                    .insert(from_cc.to_string(), "cc".to_string());
+                    .insert(from_cc.to_owned(), "cc".to_string());
             }
         }
         for sysconfig_cxx_entry in ["CXX", "LDCXXSHARED"] {
@@ -113,13 +113,13 @@ async fn generate() -> Result<String> {
                 replacements
                     .entry(sysconfig_cxx_entry)
                     .or_default()
-                    .insert(from_cxx.to_string(), "c++".to_string());
+                    .insert(from_cxx.to_owned(), "c++".to_string());
             }
             if let Some(ref from_cxx) = targets_config.target_cxx {
                 replacements
                     .entry(sysconfig_cxx_entry)
                     .or_default()
-                    .insert(from_cxx.to_string(), "c++".to_string());
+                    .insert(from_cxx.to_owned(), "c++".to_string());
             }
         }
     }

@@ -985,8 +985,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 requires = ["uv_build>={min_version},<{max_version}"]
                 build-backend = "uv_build"
             "#}
-        }
-        .to_string(),
+        },
         // Pure-python backends
         ProjectBuildBackend::Hatch => indoc::indoc! {r#"
                 [build-system]

@@ -337,7 +337,7 @@ impl PyProjectToml {
                         PortableGlobParser::Pep639
                             .parse(license_glob)
                             .map_err(|err| Error::PortableGlob {
-                                field: license_glob.to_string(),
+                                field: license_glob.to_owned(),
                                 source: err,
                             })?;
                     license_globs_parsed.push(pep639_glob);
