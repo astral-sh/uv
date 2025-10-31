@@ -1,3 +1,13 @@
+# These are versions of Python required for running uv's own test suite. You can add or remove
+# versions here as needed for tests; this doesn't impact uv's own functionality. They can be
+# installed through any means you like, e.g. `uv python install` if you already have a build of uv,
+# `cargo run python install`, or through some other installer.
+#
+# In uv's CI in GitHub Actions, they are bootstrapped by an existing released version of uv,
+# installed by the astral-sh/setup-uv action If you need a newer or different version, you will
+# first need to complete a uv release capable of installing that version, get it picked up by
+# astral-sh/setup-uv, and update its hash in .github/workflows.
+
 3.14.0
 3.13.2
 3.12.9

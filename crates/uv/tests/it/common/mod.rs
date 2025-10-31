@@ -32,23 +32,27 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.52";
+pub const PACKSE_VERSION: &str = "0.3.53";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/vendor/", url.trim_end_matches('/')))
         .ok()
         .unwrap_or(format!(
-            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/vendor/"
         ))
 }
 
 pub fn packse_index_url() -> String {
-    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
-        "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
-    ))
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/simple-html/", url.trim_end_matches('/')))
+        .ok()
+        .unwrap_or(format!(
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
+        ))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
@@ -121,6 +125,22 @@ impl TestContext {
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
         self.extra_env
             .push((EnvVars::UV_EXCLUDE_NEWER.into(), exclude_newer.into()));
+        self
+    }
+
+    /// Set the "http timeout" for all commands in this context.
+    pub fn with_http_timeout(mut self, http_timeout: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_TIMEOUT.into(), http_timeout.into()));
+        self
+    }
+
+    /// Set the "concurrent installs" for all commands in this context.
+    pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_INSTALLS.into(),
+            concurrent_installs.into(),
+        ));
         self
     }
 
@@ -205,6 +225,10 @@ impl TestContext {
         ));
         self.filters.push((
             "managed installations, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "search path or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
@@ -462,6 +486,15 @@ impl TestContext {
         self
     }
 
+    #[must_use]
+    pub fn with_empty_python_install_mirror(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_PYTHON_INSTALL_MIRROR.into(),
+            String::new().into(),
+        ));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
@@ -620,7 +653,7 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern, format!("[PYTHON-{version}]"))),
             );
 
             // And for the symlink we created in the test the Python path
@@ -743,13 +776,16 @@ impl TestContext {
         // Remove the version from the packse url in lockfile snapshots. This avoids having a huge
         // diff any time we upgrade packse
         filters.push((
-            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/"),
-            "https://astral-sh.github.io/packse/PACKSE_VERSION/".to_string(),
+            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}"),
+            "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
         ));
-        filters.push((
-            format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
-            "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
-        ));
+        // Developer convenience
+        if let Ok(packse_test_index) = env::var(EnvVars::UV_TEST_PACKSE_INDEX) {
+            filters.push((
+                packse_test_index.trim_end_matches('/').to_string(),
+                "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
+            ));
+        }
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
         // Avoid breaking the tests when bumping the uv version
@@ -1800,19 +1836,18 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Test package for direct URLs in branches"
         requires-python = ">=3.11,<3.13"
         {body}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
         "#
     };
     fs_err::create_dir_all(dir)?;
     fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
-    fs_err::create_dir(dir.join(name))?;
-    fs_err::write(dir.join(name).join("__init__.py"), "")?;
+    fs_err::create_dir_all(dir.join("src").join(name))?;
+    fs_err::write(dir.join("src").join(name).join("__init__.py"), "")?;
     Ok(())
 }
 

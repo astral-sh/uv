@@ -3415,6 +3415,84 @@ fn sync_exclude_group() -> Result<()> {
 }
 
 #[test]
+fn sync_exclude_group_with_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        baz = ["certifi"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test single group exclusion via environment variable
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .env("UV_NO_GROUP", "bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Test multiple group exclusion via environment variable (space-separated)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .env("UV_NO_GROUP", "bar baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 4 packages in [TIME]
+    ");
+
+    // Test that CLI flag takes precedence over environment variable
+    // When --no-group is used on CLI, it overrides UV_NO_GROUP env var
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .arg("--no-group").arg("bar")
+        .env("UV_NO_GROUP", "baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + certifi==2024.2.2
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -5611,6 +5689,95 @@ fn virtual_no_build() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv sync` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv sync --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // default groups
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    // explicit --group
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // explicit --only-group
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
+     + sortedcontainers==2.4.0
     ");
 
     Ok(())
@@ -10949,7 +11116,7 @@ fn multiple_group_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Groups `bar` and `foo` are incompatible with the declared conflicts: {`project:bar`, `project:foo`}
+    error: Groups `bar` and `foo` are incompatible with the conflicts: {`project:bar`, `project:foo`}
     ");
 
     Ok(())
@@ -10985,6 +11152,24 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
         ]
         "#,
     )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
@@ -11027,7 +11212,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `magic` and `test` are incompatible with the declared conflicts: {`example:magic`, `example:test`}
+    error: Groups `magic` and `test` are incompatible with the conflicts: {`example:magic`, `example:test`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
@@ -11037,7 +11222,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
     ");
 
     Ok(())
@@ -11124,7 +11309,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("intermediate").arg("--group").arg("magic"), @r"
@@ -11134,7 +11319,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Groups `intermediate` and `magic` are incompatible with the transitively inferred conflicts: {`example:intermediate`, `example:magic`}
+    error: Groups `intermediate` and `magic` are incompatible with the conflicts: {`example:intermediate`, `example:magic`}
     ");
 
     Ok(())
@@ -11218,7 +11403,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` (enabled by default) and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    error: Groups `dev` (enabled by default) and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("dev2"), @r"
@@ -11228,7 +11413,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Groups `dev` and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    error: Groups `dev` and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
     ");
 
     Ok(())
@@ -11449,7 +11634,7 @@ fn locked_version_coherence() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
+      Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
@@ -11460,7 +11645,7 @@ fn locked_version_coherence() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
+      Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     Ok(())
@@ -11970,8 +12155,12 @@ fn sync_required_environment_hint() -> Result<()> {
         r"You're on [^ ]+ \(`.*`\)",
         "You're on [PLATFORM] (`[TAG]`)",
     ));
+    filters.push((
+        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+    ));
 
-    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -11980,8 +12169,8 @@ fn sync_required_environment_hint() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
 
-    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
-    ");
+    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'" to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    "#);
 
     Ok(())
 }
@@ -14148,6 +14337,106 @@ fn only_group_and_extra_conflict() -> Result<()> {
 
     For more information, try '--help'.
     "###);
+
+    Ok(())
+}
+
+/// `uv sync --no-sources` should consistently switch from editable to package installation.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15190>
+#[test]
+fn sync_no_sources_editable_to_package_switch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package that will be used as editable dependency.
+    let local_dep = context.temp_dir.child("local_dep");
+    local_dep.create_dir_all()?;
+
+    let local_dep_pyproject = local_dep.child("pyproject.toml");
+    local_dep_pyproject.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "4.3.0"
+        description = "Local test package mimicking anyio"
+        requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["setuptools>=61", "wheel"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Create main project with editable source for the local dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test_no_sources"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { path = "./local_dep", editable = true }
+
+        [build-system]
+        requires = ["setuptools>=67"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        exclude = ["local_dep*"]
+        "#,
+    )?;
+
+    // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
+    ");
+
+    // Step 2: `uv sync` should switch to an editable installation.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    // Step 3: `uv sync --no-sources` again should switch back to PyPI package.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
 
     Ok(())
 }

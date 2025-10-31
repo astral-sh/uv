@@ -22,7 +22,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
@@ -236,18 +236,37 @@ pub(crate) async fn pip_install(
         if break_system_packages {
             debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            return if let Some(error) = externally_managed.into_error() {
-                Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+            let managed_message = match externally_managed.into_error() {
+                Some(error) => format!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
-                ))
-            } else {
-                Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                ),
+                None => format!(
+                    "The interpreter at {} is externally managed and cannot be modified.",
                     environment.root().user_display().cyan()
-                ))
+                ),
             };
+
+            let error_message = if system {
+                // Add a hint about the `--system` flag
+                format!(
+                    "{}\n{}{} Virtual environments were not considered due to the `--system` flag",
+                    managed_message,
+                    "hint".bold().cyan(),
+                    ":".bold()
+                )
+            } else {
+                // Add a hint to create a virtual environment
+                format!(
+                    "{}\n{}{} Consider creating a virtual environment, e.g., with `uv venv`",
+                    managed_message,
+                    "hint".bold().cyan(),
+                    ":".bold()
+                )
+            };
+
+            return Err(anyhow::Error::msg(error_message));
         }
     }
 
@@ -289,6 +308,7 @@ pub(crate) async fn pip_install(
             &requirements,
             &constraints,
             &overrides,
+            InstallationStrategy::Permissive,
             &marker_env,
             &tags,
             config_settings,
@@ -602,6 +622,7 @@ pub(crate) async fn pip_install(
     match operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         &reinstall,
         &build_options,

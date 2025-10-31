@@ -1,7 +1,7 @@
 use std::hint::black_box;
 use std::str::FromStr;
 
-use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
+use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_types::Requirement;

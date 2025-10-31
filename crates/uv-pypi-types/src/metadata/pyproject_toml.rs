@@ -10,7 +10,7 @@ use uv_pep440::Version;
 use crate::MetadataError;
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     pub project: Option<Project>,
@@ -33,7 +33,7 @@ impl PyProjectToml {
 /// relevant for dependency resolution.
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(try_from = "PyprojectTomlWire")]
 pub struct Project {
     /// The name of the project
@@ -51,7 +51,7 @@ pub struct Project {
     pub dynamic: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 struct PyprojectTomlWire {
     name: Option<PackageName>,
@@ -78,13 +78,13 @@ impl TryFrom<PyprojectTomlWire> for Project {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct Tool {
     pub(super) poetry: Option<ToolPoetry>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
 pub(super) struct ToolPoetry {}

@@ -553,22 +553,25 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         }
         (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
         (Os::FreeBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::OpenBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
                 release_arch: SmallString::from(release_arch),
             }]

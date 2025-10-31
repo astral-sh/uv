@@ -615,6 +615,13 @@ impl Version {
         Self::new(self.release().iter().copied())
     }
 
+    /// Return the version with any segments apart from the minor version of the release removed.
+    #[inline]
+    #[must_use]
+    pub fn only_minor_release(&self) -> Self {
+        Self::new(self.release().iter().take(2).copied())
+    }
+
     /// Return the version with any segments apart from the release removed, with trailing zeroes
     /// trimmed.
     #[inline]

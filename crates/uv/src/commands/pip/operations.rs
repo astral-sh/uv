@@ -25,7 +25,7 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
@@ -34,7 +34,7 @@ use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -103,7 +103,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
+    source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
@@ -167,7 +167,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(source_trees.iter().map(PathBuf::as_path))
+            .resolve(source_trees.iter())
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -436,6 +436,7 @@ impl Changelog {
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
+    installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
@@ -462,6 +463,7 @@ pub(crate) async fn install(
     let plan = Planner::new(resolution)
         .build(
             site_packages,
+            installation,
             reinstall,
             build_options,
             hasher,
@@ -686,7 +688,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }

@@ -211,6 +211,61 @@ fn create_venv_project_environment() -> Result<()> {
 }
 
 #[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv venv` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv venv` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`, but `[dependency-groups]` defined)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn create_venv_defaults_to_cwd() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -828,6 +883,38 @@ fn seed_older_python_version() {
 }
 
 #[test]
+fn create_venv_with_invalid_http_timeout() {
+    let context = TestContext::new_with_versions(&["3.12"]).with_http_timeout("not_a_number");
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: invalid digit found in string
+    "###);
+}
+
+#[test]
+fn create_venv_with_invalid_concurrent_installs() {
+    let context = TestContext::new_with_versions(&["3.12"]).with_concurrent_installs("0");
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: number would be zero for non-zero type
+    "###);
+}
+
+#[test]
 fn create_venv_unknown_python_minor() {
     let context = TestContext::new_with_versions(&["3.12"]).with_filtered_python_sources();
 
@@ -978,8 +1065,7 @@ fn non_empty_dir_exists() -> Result<()> {
       Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
-    "
-    );
+    ");
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
@@ -1672,6 +1758,126 @@ fn create_venv_current_working_directory() {
     Creating virtual environment at: .
     error: Failed to create virtual environment
       Caused by: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
+    "
+    );
+}
+
+#[test]
+fn no_clear_with_existing_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a virtual environment first
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Try to create again with --no-clear (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
+    "
+    );
+}
+
+#[test]
+fn no_clear_with_non_existent_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create with --no-clear on non-existent directory (should succeed)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn no_clear_overrides_clear() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a non-empty directory at `.venv`
+    context.venv.create_dir_all().unwrap();
+    context.venv.child("file").touch().unwrap();
+
+    // --no-clear should override --clear and fail without prompting
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    "
+    );
+}
+
+#[test]
+fn no_clear_conflicts_with_allow_existing() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Try to use --no-clear with --allow-existing (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-clear' cannot be used with '--allow-existing'
+
+    Usage: uv venv --cache-dir [CACHE_DIR] --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <PATH>
+
+    For more information, try '--help'.
     "
     );
 }

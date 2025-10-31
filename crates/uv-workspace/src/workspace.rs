@@ -94,12 +94,51 @@ pub enum MemberDiscovery {
     Ignore(BTreeSet<PathBuf>),
 }
 
+/// Whether a "project" must be defined via a `[project]` table.
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub enum ProjectDiscovery {
+    /// The `[project]` table is optional; when missing, the target is treated as virtual.
+    #[default]
+    Optional,
+    /// A `[project]` table must be defined, unless `[tool.uv.workspace]` is present indicating a
+    /// legacy non-project workspace root.
+    ///
+    /// If neither is defined, discovery will fail.
+    Legacy,
+    /// A `[project]` table must be defined.
+    ///
+    /// If not defined, discovery will fail.
+    Required,
+}
+
+impl ProjectDiscovery {
+    /// Whether a `[project]` table is required.
+    pub fn allows_implicit_workspace(&self) -> bool {
+        match self {
+            Self::Optional => true,
+            Self::Legacy => false,
+            Self::Required => false,
+        }
+    }
+
+    /// Whether a legacy workspace root is allowed.
+    pub fn allows_legacy_workspace(&self) -> bool {
+        match self {
+            Self::Optional => true,
+            Self::Legacy => true,
+            Self::Required => false,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DiscoveryOptions {
     /// The path to stop discovery at.
     pub stop_discovery_at: Option<PathBuf>,
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
+    /// The strategy to use when discovering the project.
+    pub project: ProjectDiscovery,
 }
 
 pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
@@ -162,6 +201,10 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let path = uv_fs::normalize_path(&path);
+        // Trim trailing slashes.
+        let path = path.components().collect::<PathBuf>();
 
         let project_path = path
             .ancestors()
@@ -929,17 +972,19 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
+            // Normalize the member glob to remove leading `./` and other relative path components
+            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
                 workspace_root.simplified().to_string_lossy().as_ref(),
             ))
-            .join(member_glob.as_str())
+            .join(normalized_glob.as_ref())
             .to_string_lossy()
             .to_string();
             for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+                .map_err(|err| WorkspaceError::Pattern(absolute_glob.clone(), err))?
             {
                 let member_root = member_root
-                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.to_string(), err))?;
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.clone(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -1324,6 +1369,10 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let project_path = uv_fs::normalize_path(&project_path);
+        // Trim trailing slashes.
+        let project_path = project_path.components().collect::<PathBuf>();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1524,10 +1573,12 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
+        // Normalize the exclude glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(exclude_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(exclude_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let exclude_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1545,10 +1596,12 @@ fn is_included_in_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
+        // Normalize the member glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(member_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1561,13 +1614,13 @@ fn is_included_in_workspace(
 
 /// A project that can be discovered.
 ///
-/// The project could be a package within a workspace, a real workspace root, or a (legacy)
-/// non-project workspace root, which can define its own dev dependencies.
+/// The project could be a package within a workspace, a real workspace root, or a non-project
+/// workspace root, which can define its own dev dependencies.
 #[derive(Debug, Clone)]
 pub enum VirtualProject {
     /// A project (which could be a workspace root or member).
     Project(ProjectWorkspace),
-    /// A (legacy) non-project workspace root.
+    /// A non-project workspace root.
     NonProject(Workspace),
 }
 
@@ -1583,33 +1636,6 @@ impl VirtualProject {
         path: &Path,
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
-    ) -> Result<Self, WorkspaceError> {
-        Self::discover_impl(path, options, cache, false).await
-    }
-
-    /// Equivalent to [`VirtualProject::discover`] but consider it acceptable for
-    /// both `[project]` and `[tool.uv.workspace]` to be missing.
-    ///
-    /// If they are, we act as if an empty `[tool.uv.workspace]` was found.
-    pub async fn discover_defaulted(
-        path: &Path,
-        options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
-    ) -> Result<Self, WorkspaceError> {
-        Self::discover_impl(path, options, cache, true).await
-    }
-
-    /// Find the current project or virtual workspace root, given the current directory.
-    ///
-    /// Similar to calling [`ProjectWorkspace::discover`] with a fallback to [`Workspace::discover`],
-    /// but avoids rereading the `pyproject.toml` (and relying on error-handling as control flow).
-    ///
-    /// This method requires an absolute path and panics otherwise.
-    async fn discover_impl(
-        path: &Path,
-        options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
-        default_missing_workspace: bool,
     ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
@@ -1656,6 +1682,7 @@ impl VirtualProject {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
+            .filter(|_| options.project.allows_legacy_workspace())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.
@@ -1674,7 +1701,7 @@ impl VirtualProject {
             .await?;
 
             Ok(Self::NonProject(workspace))
-        } else if default_missing_workspace {
+        } else if options.project.allows_implicit_workspace() {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
             // that we want to treat like a project/workspace to handle those uniformly
             let project_path = std::path::absolute(project_root)

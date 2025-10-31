@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
@@ -17,6 +16,7 @@ use uv_publish::{
     files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user_once, write_error_chain};
 
 use crate::commands::reporters::PublishReporter;
@@ -28,10 +28,12 @@ pub(crate) async fn publish(
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    environment: &EnvironmentOptions,
     client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
+    index: Option<String>,
     index_locations: IndexLocations,
     dry_run: bool,
     cache: &Cache,
@@ -40,6 +42,50 @@ pub(crate) async fn publish(
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
+
+    let token_store = PyxTokenStore::from_settings()?;
+
+    let (publish_url, check_url) = if let Some(index_name) = index {
+        // If the user provided an index by name, look it up.
+        debug!("Publishing with index {index_name}");
+        let index = index_locations
+            .simple_indexes()
+            .find(|index| {
+                index
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.as_ref() == index_name)
+            })
+            .with_context(|| {
+                let mut index_names: Vec<String> = index_locations
+                    .simple_indexes()
+                    .filter_map(|index| index.name.as_ref())
+                    .map(ToString::to_string)
+                    .collect();
+                index_names.sort();
+                if index_names.is_empty() {
+                    format!("No indexes were found, can't use index: `{index_name}`")
+                } else {
+                    let index_names = index_names.join("`, `");
+                    format!("Index not found: `{index_name}`. Found indexes: `{index_names}`")
+                }
+            })?;
+        let publish_url = index
+            .publish_url
+            .clone()
+            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
+
+        // pyx has the same behavior as PyPI where uploads of identical
+        // files + contents are idempotent, so we don't need to pre-check.
+        if token_store.is_known_url(&publish_url) {
+            (publish_url, None)
+        } else {
+            let check_url = index.url.clone();
+            (publish_url, Some(check_url))
+        }
+    } else {
+        (publish_url, check_url)
+    };
 
     let files = files_for_publishing(paths)?;
     match files.len() {
@@ -76,21 +122,18 @@ pub(crate) async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
-        // Set a very high timeout for uploads, connections are often 10x slower on upload than
-        // download. 15 min is taken from the time a trusted publishing token is valid.
-        .default_timeout(Duration::from_secs(15 * 60))
+        .timeout(environment.upload_http_timeout)
         .build();
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
 
+    let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
-    // Load credentials from the token store.
-    let token_store = PyxTokenStore::from_settings()?;
-
+    // Load credentials.
     let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
@@ -180,6 +223,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
+            retry_policy,
             &credentials,
             check_url_client.as_ref(),
             &download_concurrency,

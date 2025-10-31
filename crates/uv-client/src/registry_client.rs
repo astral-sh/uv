@@ -1245,7 +1245,7 @@ impl SimpleMetadata {
                                 version: version.clone(),
                                 requires_dist: metadata.requires_dist,
                                 requires_python: metadata.requires_python,
-                                provides_extras: metadata.provides_extras,
+                                provides_extra: metadata.provides_extra,
                                 dynamic: false,
                             });
                     SimpleMetadatum {

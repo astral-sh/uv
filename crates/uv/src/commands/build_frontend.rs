@@ -108,7 +108,9 @@ pub(crate) async fn build_frontend(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -133,7 +135,9 @@ pub(crate) async fn build_frontend(
         wheel,
         list,
         build_logs,
+        gitignore,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -176,7 +180,9 @@ async fn build_impl(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -341,7 +347,9 @@ async fn build_impl(
             client_builder.clone(),
             hash_checking,
             build_logs,
+            gitignore,
             force_pep517,
+            clear,
             build_constraints,
             build_isolation,
             extra_build_dependencies,
@@ -391,9 +399,15 @@ async fn build_impl(
                 let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
                     // TODO(konsti): astral-tokio-tar should use a proper error instead of
                     // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
                     if err.to_string().contains("/bin/python")
                         && std::error::Error::source(err).is_some_and(|err| {
-                            err.to_string().ends_with("outside of the target directory")
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
                         })
                     {
                         Some(
@@ -442,7 +456,9 @@ async fn build_package(
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
@@ -474,6 +490,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -611,7 +632,7 @@ async fn build_package(
         preview,
     );
 
-    prepare_output_directory(&output_dir).await?;
+    prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
     let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
@@ -1078,19 +1099,21 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
+async fn prepare_output_directory(output_dir: &Path, gitignore: bool) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
+    if gitignore {
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output_dir.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
     }
     Ok(())
 }

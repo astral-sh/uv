@@ -150,7 +150,7 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
                 chars.remove(position);
                 let line_size = term.size().1 as usize;
                 // Case we want to delete last char of a line so the cursor is at the beginning of the next line
-                if (position + prompt_len) % (line_size - 1) == 0 {
+                if (position + prompt_len).is_multiple_of(line_size - 1) {
                     term.clear_line()?;
                     term.move_cursor_up(1)?;
                     term.move_cursor_right(line_size + 1)?;
@@ -183,7 +183,7 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
                 term.flush()?;
             }
             Key::ArrowLeft if position > 0 => {
-                if (position + prompt_len) % term.size().1 as usize == 0 {
+                if (position + prompt_len).is_multiple_of(term.size().1 as usize) {
                     term.move_cursor_up(1)?;
                     term.move_cursor_right(term.size().1 as usize)?;
                 } else {
@@ -193,7 +193,7 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
                 term.flush()?;
             }
             Key::ArrowRight if position < chars.len() => {
-                if (position + prompt_len) % (term.size().1 as usize - 1) == 0 {
+                if (position + prompt_len).is_multiple_of(term.size().1 as usize - 1) {
                     term.move_cursor_down(1)?;
                     term.move_cursor_left(term.size().1 as usize)?;
                 } else {
