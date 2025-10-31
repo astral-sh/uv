@@ -13392,6 +13392,19 @@ fn check_outdated_lock() -> Result<()> {
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
+
+    // Providing both `--check` and `--locked` is okay
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check").arg("--locked"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
     Ok(())
 }
 
