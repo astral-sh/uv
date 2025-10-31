@@ -227,6 +227,11 @@ impl EnvVars {
     #[attr_added_in("0.8.7")]
     pub const UV_NO_DEV: &'static str = "UV_NO_DEV";
 
+    /// Equivalent to the `--no-group` command-line argument. If set, uv will disable
+    /// the specified dependency groups for the given space-delimited list of packages.
+    #[attr_added_in("0.9.8")]
+    pub const UV_NO_GROUP: &'static str = "UV_NO_GROUP";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.

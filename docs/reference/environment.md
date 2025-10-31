@@ -346,6 +346,12 @@ Ignore `.env` files when executing `uv run` commands.
 
 Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
 
+### `UV_NO_GROUP`
+<small class="added-in">added in `0.9.8`</small>
+
+Equivalent to the `--no-group` command-line argument. If set, uv will disable
+the specified dependency groups for the given space-delimited list of packages.
+
 ### `UV_NO_HF_TOKEN`
 <small class="added-in">added in `0.8.1`</small>
 
