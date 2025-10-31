@@ -1130,7 +1130,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.13.9t
+    Using CPython 3.13.9+freethreaded
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -1200,7 +1200,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No download found for request: cpython-3.12t-[PLATFORM]
+    error: No download found for request: cpython-3.12+freethreaded-[PLATFORM]
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r"
