@@ -4930,8 +4930,8 @@ fn cyclonedx_export_basic() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -4939,21 +4939,21 @@ fn cyclonedx_export_basic() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "4-sniffio@1.3.1",
+          "bom-ref": "sniffio-4@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -4961,24 +4961,24 @@ fn cyclonedx_export_basic() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "4-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-4@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0"
+            "anyio-2@3.7.0"
           ]
         },
         {
-          "ref": "4-sniffio@1.3.1",
+          "ref": "sniffio-4@1.3.1",
           "dependsOn": []
         }
       ]
@@ -5031,8 +5031,8 @@ fn cyclonedx_export_direct_url() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -5040,21 +5040,21 @@ fn cyclonedx_export_direct_url() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-idna@3.6",
+          "bom-ref": "idna-2@3.6",
           "name": "idna",
           "version": "3.6",
-          "purl": "pkg:generic/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
+          "purl": "pkg:pypi/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
         }
       ],
       "dependencies": [
         {
-          "ref": "2-idna@3.6",
+          "ref": "idna-2@3.6",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-idna@3.6"
+            "idna-2@3.6"
           ]
         }
       ]
@@ -5108,8 +5108,8 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -5117,21 +5117,21 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-blinker@1.7.0",
+          "bom-ref": "blinker-2@1.7.0",
           "name": "blinker",
           "version": "1.7.0",
           "purl": "pkg:pypi/blinker@1.7.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-click@8.1.7",
+          "bom-ref": "click-3@8.1.7",
           "name": "click",
           "version": "8.1.7",
           "purl": "pkg:pypi/click@8.1.7"
         },
         {
           "type": "library",
-          "bom-ref": "4-colorama@0.4.6",
+          "bom-ref": "colorama-4@0.4.6",
           "name": "colorama",
           "version": "0.4.6",
           "purl": "pkg:pypi/colorama@0.4.6",
@@ -5144,35 +5144,35 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-flask@2.3.3",
+          "bom-ref": "flask-5@2.3.3",
           "name": "flask",
           "version": "2.3.3",
-          "purl": "pkg:generic/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
+          "purl": "pkg:pypi/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
         },
         {
           "type": "library",
-          "bom-ref": "6-itsdangerous@2.1.2",
+          "bom-ref": "itsdangerous-6@2.1.2",
           "name": "itsdangerous",
           "version": "2.1.2",
           "purl": "pkg:pypi/itsdangerous@2.1.2"
         },
         {
           "type": "library",
-          "bom-ref": "7-jinja2@3.1.3",
+          "bom-ref": "jinja2-7@3.1.3",
           "name": "jinja2",
           "version": "3.1.3",
           "purl": "pkg:pypi/jinja2@3.1.3"
         },
         {
           "type": "library",
-          "bom-ref": "8-markupsafe@2.1.5",
+          "bom-ref": "markupsafe-8@2.1.5",
           "name": "markupsafe",
           "version": "2.1.5",
           "purl": "pkg:pypi/markupsafe@2.1.5"
         },
         {
           "type": "library",
-          "bom-ref": "9-werkzeug@3.0.1",
+          "bom-ref": "werkzeug-9@3.0.1",
           "name": "werkzeug",
           "version": "3.0.1",
           "purl": "pkg:pypi/werkzeug@3.0.1"
@@ -5180,53 +5180,53 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-blinker@1.7.0",
+          "ref": "blinker-2@1.7.0",
           "dependsOn": []
         },
         {
-          "ref": "3-click@8.1.7",
+          "ref": "click-3@8.1.7",
           "dependsOn": [
-            "4-colorama@0.4.6"
+            "colorama-4@0.4.6"
           ]
         },
         {
-          "ref": "4-colorama@0.4.6",
+          "ref": "colorama-4@0.4.6",
           "dependsOn": []
         },
         {
-          "ref": "5-flask@2.3.3",
+          "ref": "flask-5@2.3.3",
           "dependsOn": [
-            "2-blinker@1.7.0",
-            "3-click@8.1.7",
-            "6-itsdangerous@2.1.2",
-            "7-jinja2@3.1.3",
-            "9-werkzeug@3.0.1"
+            "blinker-2@1.7.0",
+            "click-3@8.1.7",
+            "itsdangerous-6@2.1.2",
+            "jinja2-7@3.1.3",
+            "werkzeug-9@3.0.1"
           ]
         },
         {
-          "ref": "6-itsdangerous@2.1.2",
+          "ref": "itsdangerous-6@2.1.2",
           "dependsOn": []
         },
         {
-          "ref": "7-jinja2@3.1.3",
+          "ref": "jinja2-7@3.1.3",
           "dependsOn": [
-            "8-markupsafe@2.1.5"
+            "markupsafe-8@2.1.5"
           ]
         },
         {
-          "ref": "8-markupsafe@2.1.5",
+          "ref": "markupsafe-8@2.1.5",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "5-flask@2.3.3"
+            "flask-5@2.3.3"
           ]
         },
         {
-          "ref": "9-werkzeug@3.0.1",
+          "ref": "werkzeug-9@3.0.1",
           "dependsOn": [
-            "8-markupsafe@2.1.5"
+            "markupsafe-8@2.1.5"
           ]
         }
       ]
@@ -5279,8 +5279,8 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-standalone-project@1.0.0",
+          "type": "library",
+          "bom-ref": "standalone-project-1@1.0.0",
           "name": "standalone-project",
           "version": "1.0.0"
         }
@@ -5288,7 +5288,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
       "components": [],
       "dependencies": [
         {
-          "ref": "1-standalone-project@1.0.0",
+          "ref": "standalone-project-1@1.0.0",
           "dependsOn": []
         }
       ]
@@ -5346,8 +5346,8 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-mixed-project@0.1.0",
+          "type": "library",
+          "bom-ref": "mixed-project-1@0.1.0",
           "name": "mixed-project",
           "version": "0.1.0"
         }
@@ -5355,35 +5355,35 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-blinker@1.7.0",
+          "bom-ref": "blinker-2@1.7.0",
           "name": "blinker",
           "version": "1.7.0",
           "purl": "pkg:pypi/blinker@1.7.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-certifi@2024.2.2",
+          "bom-ref": "certifi-3@2024.2.2",
           "name": "certifi",
           "version": "2024.2.2",
           "purl": "pkg:pypi/certifi@2024.2.2"
         },
         {
           "type": "library",
-          "bom-ref": "4-charset-normalizer@3.3.2",
+          "bom-ref": "charset-normalizer-4@3.3.2",
           "name": "charset-normalizer",
           "version": "3.3.2",
           "purl": "pkg:pypi/charset-normalizer@3.3.2"
         },
         {
           "type": "library",
-          "bom-ref": "5-click@8.1.7",
+          "bom-ref": "click-5@8.1.7",
           "name": "click",
           "version": "8.1.7",
           "purl": "pkg:pypi/click@8.1.7"
         },
         {
           "type": "library",
-          "bom-ref": "6-colorama@0.4.6",
+          "bom-ref": "colorama-6@0.4.6",
           "name": "colorama",
           "version": "0.4.6",
           "purl": "pkg:pypi/colorama@0.4.6",
@@ -5396,63 +5396,63 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "7-flask@2.3.3",
+          "bom-ref": "flask-7@2.3.3",
           "name": "flask",
           "version": "2.3.3",
-          "purl": "pkg:generic/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
+          "purl": "pkg:pypi/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
         },
         {
           "type": "library",
-          "bom-ref": "8-idna@3.6",
+          "bom-ref": "idna-8@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "9-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-9@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
-          "purl": "pkg:generic/iniconfig@2.0.0?download_url=https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"
+          "purl": "pkg:pypi/iniconfig@2.0.0?download_url=https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"
         },
         {
           "type": "library",
-          "bom-ref": "10-itsdangerous@2.1.2",
+          "bom-ref": "itsdangerous-10@2.1.2",
           "name": "itsdangerous",
           "version": "2.1.2",
           "purl": "pkg:pypi/itsdangerous@2.1.2"
         },
         {
           "type": "library",
-          "bom-ref": "11-jinja2@3.1.3",
+          "bom-ref": "jinja2-11@3.1.3",
           "name": "jinja2",
           "version": "3.1.3",
           "purl": "pkg:pypi/jinja2@3.1.3"
         },
         {
           "type": "library",
-          "bom-ref": "12-markupsafe@2.1.5",
+          "bom-ref": "markupsafe-12@2.1.5",
           "name": "markupsafe",
           "version": "2.1.5",
           "purl": "pkg:pypi/markupsafe@2.1.5"
         },
         {
           "type": "library",
-          "bom-ref": "13-requests@2.31.0",
+          "bom-ref": "requests-13@2.31.0",
           "name": "requests",
           "version": "2.31.0",
           "purl": "pkg:pypi/requests@2.31.0"
         },
         {
           "type": "library",
-          "bom-ref": "14-urllib3@2.2.1",
+          "bom-ref": "urllib3-14@2.2.1",
           "name": "urllib3",
           "version": "2.2.1",
           "purl": "pkg:pypi/urllib3@2.2.1"
         },
         {
           "type": "library",
-          "bom-ref": "15-werkzeug@3.0.1",
+          "bom-ref": "werkzeug-15@3.0.1",
           "name": "werkzeug",
           "version": "3.0.1",
           "purl": "pkg:pypi/werkzeug@3.0.1"
@@ -5460,84 +5460,84 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-blinker@1.7.0",
+          "ref": "blinker-2@1.7.0",
           "dependsOn": []
         },
         {
-          "ref": "3-certifi@2024.2.2",
+          "ref": "certifi-3@2024.2.2",
           "dependsOn": []
         },
         {
-          "ref": "4-charset-normalizer@3.3.2",
+          "ref": "charset-normalizer-4@3.3.2",
           "dependsOn": []
         },
         {
-          "ref": "5-click@8.1.7",
+          "ref": "click-5@8.1.7",
           "dependsOn": [
-            "6-colorama@0.4.6"
+            "colorama-6@0.4.6"
           ]
         },
         {
-          "ref": "6-colorama@0.4.6",
+          "ref": "colorama-6@0.4.6",
           "dependsOn": []
         },
         {
-          "ref": "7-flask@2.3.3",
+          "ref": "flask-7@2.3.3",
           "dependsOn": [
-            "10-itsdangerous@2.1.2",
-            "11-jinja2@3.1.3",
-            "15-werkzeug@3.0.1",
-            "2-blinker@1.7.0",
-            "5-click@8.1.7"
+            "blinker-2@1.7.0",
+            "click-5@8.1.7",
+            "itsdangerous-10@2.1.2",
+            "jinja2-11@3.1.3",
+            "werkzeug-15@3.0.1"
           ]
         },
         {
-          "ref": "8-idna@3.6",
+          "ref": "idna-8@3.6",
           "dependsOn": []
         },
         {
-          "ref": "9-iniconfig@2.0.0",
+          "ref": "iniconfig-9@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "10-itsdangerous@2.1.2",
+          "ref": "itsdangerous-10@2.1.2",
           "dependsOn": []
         },
         {
-          "ref": "11-jinja2@3.1.3",
+          "ref": "jinja2-11@3.1.3",
           "dependsOn": [
-            "12-markupsafe@2.1.5"
+            "markupsafe-12@2.1.5"
           ]
         },
         {
-          "ref": "12-markupsafe@2.1.5",
+          "ref": "markupsafe-12@2.1.5",
           "dependsOn": []
         },
         {
-          "ref": "1-mixed-project@0.1.0",
+          "ref": "mixed-project-1@0.1.0",
           "dependsOn": [
-            "13-requests@2.31.0",
-            "7-flask@2.3.3",
-            "9-iniconfig@2.0.0"
+            "flask-7@2.3.3",
+            "iniconfig-9@2.0.0",
+            "requests-13@2.31.0"
           ]
         },
         {
-          "ref": "13-requests@2.31.0",
+          "ref": "requests-13@2.31.0",
           "dependsOn": [
-            "14-urllib3@2.2.1",
-            "3-certifi@2024.2.2",
-            "4-charset-normalizer@3.3.2",
-            "8-idna@3.6"
+            "certifi-3@2024.2.2",
+            "charset-normalizer-4@3.3.2",
+            "idna-8@3.6",
+            "urllib3-14@2.2.1"
           ]
         },
         {
-          "ref": "14-urllib3@2.2.1",
+          "ref": "urllib3-14@2.2.1",
           "dependsOn": []
         },
         {
-          "ref": "15-werkzeug@3.0.1",
+          "ref": "werkzeug-15@3.0.1",
           "dependsOn": [
-            "12-markupsafe@2.1.5"
+            "markupsafe-12@2.1.5"
           ]
         }
       ]
@@ -5594,8 +5594,8 @@ fn cyclonedx_export_project_extra() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -5603,7 +5603,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-2@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -5611,13 +5611,13 @@ fn cyclonedx_export_project_extra() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-typing-extensions@4.10.0"
+            "typing-extensions-2@4.10.0"
           ]
         },
         {
-          "ref": "2-typing-extensions@4.10.0",
+          "ref": "typing-extensions-2@4.10.0",
           "dependsOn": []
         }
       ]
@@ -5674,8 +5674,8 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -5683,35 +5683,35 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "4-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "5-sniffio@1.3.1",
+          "bom-ref": "sniffio-5@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
           "type": "library",
-          "bom-ref": "6-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-6@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -5719,34 +5719,34 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "5-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-5@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "4-iniconfig@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0",
-            "4-iniconfig@2.0.0",
-            "6-typing-extensions@4.10.0"
+            "anyio-2@3.7.0",
+            "iniconfig-4@2.0.0",
+            "typing-extensions-6@4.10.0"
           ]
         },
         {
-          "ref": "5-sniffio@1.3.1",
+          "ref": "sniffio-5@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "6-typing-extensions@4.10.0",
+          "ref": "typing-extensions-6@4.10.0",
           "dependsOn": []
         }
       ]
@@ -5836,8 +5836,8 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -5845,14 +5845,14 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
-          "type": "application",
-          "bom-ref": "3-child1@0.1.0",
+          "type": "library",
+          "bom-ref": "child1-3@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -5863,8 +5863,8 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           ]
         },
         {
-          "type": "application",
-          "bom-ref": "4-child2@0.2.9",
+          "type": "library",
+          "bom-ref": "child2-4@0.2.9",
           "name": "child2",
           "version": "0.2.9",
           "properties": [
@@ -5876,21 +5876,21 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-idna@3.6",
+          "bom-ref": "idna-5@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "6-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-6@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "7-sniffio@1.3.1",
+          "bom-ref": "sniffio-7@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -5898,40 +5898,40 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "5-idna@3.6",
-            "7-sniffio@1.3.1"
+            "idna-5@3.6",
+            "sniffio-7@1.3.1"
           ]
         },
         {
-          "ref": "3-child1@0.1.0",
+          "ref": "child1-3@0.1.0",
           "dependsOn": [
-            "6-iniconfig@2.0.0"
+            "iniconfig-6@2.0.0"
           ]
         },
         {
-          "ref": "4-child2@0.2.9",
+          "ref": "child2-4@0.2.9",
           "dependsOn": []
         },
         {
-          "ref": "5-idna@3.6",
+          "ref": "idna-5@3.6",
           "dependsOn": []
         },
         {
-          "ref": "6-iniconfig@2.0.0",
+          "ref": "iniconfig-6@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0",
-            "3-child1@0.1.0",
-            "4-child2@0.2.9"
+            "anyio-2@3.7.0",
+            "child1-3@0.1.0",
+            "child2-4@0.2.9"
           ]
         },
         {
-          "ref": "7-sniffio@1.3.1",
+          "ref": "sniffio-7@1.3.1",
           "dependsOn": []
         }
       ]
@@ -6005,8 +6005,8 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-1@0.1.0",
           "name": "child",
           "version": "0.1.0"
         }
@@ -6014,7 +6014,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-2@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
@@ -6022,13 +6022,13 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "1-child@0.1.0",
+          "ref": "child-1@0.1.0",
           "dependsOn": [
-            "2-iniconfig@2.0.0"
+            "iniconfig-2@2.0.0"
           ]
         },
         {
-          "ref": "2-iniconfig@2.0.0",
+          "ref": "iniconfig-2@2.0.0",
           "dependsOn": []
         }
       ]
@@ -6106,16 +6106,16 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       },
       "components": [
         {
-          "type": "application",
-          "bom-ref": "2-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -6127,7 +6127,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-3@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -6135,19 +6135,19 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-child@0.1.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": [
-            "3-typing-extensions@4.10.0"
+            "typing-extensions-3@4.10.0"
           ]
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-child@0.1.0"
+            "child-2@0.1.0"
           ]
         },
         {
-          "ref": "3-typing-extensions@4.10.0",
+          "ref": "typing-extensions-3@4.10.0",
           "dependsOn": []
         }
       ]
@@ -6176,16 +6176,16 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       },
       "components": [
         {
-          "type": "application",
-          "bom-ref": "2-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -6197,7 +6197,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-3@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -6205,19 +6205,19 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-child@0.1.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": [
-            "3-typing-extensions@4.10.0"
+            "typing-extensions-3@4.10.0"
           ]
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-child@0.1.0"
+            "child-2@0.1.0"
           ]
         },
         {
-          "ref": "3-typing-extensions@4.10.0",
+          "ref": "typing-extensions-3@4.10.0",
           "dependsOn": []
         }
       ]
@@ -6305,22 +6305,22 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "7-uv-workspace",
-          "name": "uv-workspace"
+          "type": "library",
+          "bom-ref": "project-7",
+          "name": "project"
         }
       },
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
-          "type": "application",
-          "bom-ref": "3-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-3@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -6332,70 +6332,70 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "4-idna@3.6",
+          "bom-ref": "idna-4@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "5-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-5@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "6-sniffio@1.3.1",
+          "bom-ref": "sniffio-6@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "4-idna@3.6",
-            "6-sniffio@1.3.1"
+            "idna-4@3.6",
+            "sniffio-6@1.3.1"
           ]
         },
         {
-          "ref": "3-child@0.1.0",
+          "ref": "child-3@0.1.0",
           "dependsOn": [
-            "5-iniconfig@2.0.0"
+            "iniconfig-5@2.0.0"
           ]
         },
         {
-          "ref": "4-idna@3.6",
+          "ref": "idna-4@3.6",
           "dependsOn": []
         },
         {
-          "ref": "5-iniconfig@2.0.0",
+          "ref": "iniconfig-5@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0",
-            "3-child@0.1.0"
+            "anyio-2@3.7.0",
+            "child-3@0.1.0"
           ]
         },
         {
-          "ref": "6-sniffio@1.3.1",
+          "ref": "sniffio-6@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "7-uv-workspace",
+          "ref": "project-7",
           "dependsOn": [
-            "3-child@0.1.0",
-            "1-project@0.1.0"
+            "child-3@0.1.0",
+            "project-1@0.1.0"
           ]
         }
       ]
@@ -6480,22 +6480,22 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "8-uv-workspace",
-          "name": "uv-workspace"
+          "type": "library",
+          "bom-ref": "project-8",
+          "name": "project"
         }
       },
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
-          "type": "application",
-          "bom-ref": "3-child1@0.1.0",
+          "type": "library",
+          "bom-ref": "child1-3@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -6506,8 +6506,8 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           ]
         },
         {
-          "type": "application",
-          "bom-ref": "4-child2@0.2.0",
+          "type": "library",
+          "bom-ref": "child2-4@0.2.0",
           "name": "child2",
           "version": "0.2.0",
           "properties": [
@@ -6519,76 +6519,76 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-idna@3.6",
+          "bom-ref": "idna-5@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "6-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-6@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "7-sniffio@1.3.1",
+          "bom-ref": "sniffio-7@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "5-idna@3.6",
-            "7-sniffio@1.3.1"
+            "idna-5@3.6",
+            "sniffio-7@1.3.1"
           ]
         },
         {
-          "ref": "3-child1@0.1.0",
+          "ref": "child1-3@0.1.0",
           "dependsOn": [
-            "6-iniconfig@2.0.0"
+            "iniconfig-6@2.0.0"
           ]
         },
         {
-          "ref": "4-child2@0.2.0",
+          "ref": "child2-4@0.2.0",
           "dependsOn": [
-            "7-sniffio@1.3.1"
+            "sniffio-7@1.3.1"
           ]
         },
         {
-          "ref": "5-idna@3.6",
+          "ref": "idna-5@3.6",
           "dependsOn": []
         },
         {
-          "ref": "6-iniconfig@2.0.0",
+          "ref": "iniconfig-6@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0"
+            "anyio-2@3.7.0"
           ]
         },
         {
-          "ref": "7-sniffio@1.3.1",
+          "ref": "sniffio-7@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "8-uv-workspace",
+          "ref": "project-8",
           "dependsOn": [
-            "3-child1@0.1.0",
-            "4-child2@0.2.0",
-            "1-project@0.1.0"
+            "child1-3@0.1.0",
+            "child2-4@0.2.0",
+            "project-1@0.1.0"
           ]
         }
       ]
@@ -6601,8 +6601,9 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
     Ok(())
 }
 
+// Contains a combination of combination of workspace and registry deps, with another workspace dep not depended on by the root
 #[test]
-fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
+fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -6680,8 +6681,8 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -6689,14 +6690,14 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
-          "type": "application",
-          "bom-ref": "3-child1@0.1.0",
+          "type": "library",
+          "bom-ref": "child1-3@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -6707,8 +6708,8 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
           ]
         },
         {
-          "type": "application",
-          "bom-ref": "4-child2@0.2.0",
+          "type": "library",
+          "bom-ref": "child2-4@0.2.0",
           "name": "child2",
           "version": "0.2.0",
           "properties": [
@@ -6720,21 +6721,21 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-idna@3.6",
+          "bom-ref": "idna-5@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "6-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-6@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "7-sniffio@1.3.1",
+          "bom-ref": "sniffio-7@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -6742,42 +6743,42 @@ fn cyclonedx_export_workspace_complex_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "5-idna@3.6",
-            "7-sniffio@1.3.1"
+            "idna-5@3.6",
+            "sniffio-7@1.3.1"
           ]
         },
         {
-          "ref": "3-child1@0.1.0",
+          "ref": "child1-3@0.1.0",
           "dependsOn": [
-            "4-child2@0.2.0",
-            "6-iniconfig@2.0.0"
+            "child2-4@0.2.0",
+            "iniconfig-6@2.0.0"
           ]
         },
         {
-          "ref": "4-child2@0.2.0",
+          "ref": "child2-4@0.2.0",
           "dependsOn": [
-            "7-sniffio@1.3.1"
+            "sniffio-7@1.3.1"
           ]
         },
         {
-          "ref": "5-idna@3.6",
+          "ref": "idna-5@3.6",
           "dependsOn": []
         },
         {
-          "ref": "6-iniconfig@2.0.0",
+          "ref": "iniconfig-6@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@3.7.0",
-            "3-child1@0.1.0"
+            "anyio-2@3.7.0",
+            "child1-3@0.1.0"
           ]
         },
         {
-          "ref": "7-sniffio@1.3.1",
+          "ref": "sniffio-7@1.3.1",
           "dependsOn": []
         }
       ]
@@ -6830,8 +6831,8 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -6839,7 +6840,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@4.3.0",
+          "bom-ref": "anyio-2@4.3.0",
           "name": "anyio",
           "version": "4.3.0",
           "purl": "pkg:pypi/anyio@4.3.0",
@@ -6852,7 +6853,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6",
@@ -6865,14 +6866,14 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "4-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "5-sniffio@1.3.1",
+          "bom-ref": "sniffio-5@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1",
@@ -6886,29 +6887,29 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@4.3.0",
+          "ref": "anyio-2@4.3.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "5-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-5@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "4-iniconfig@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@4.3.0",
-            "4-iniconfig@2.0.0"
+            "anyio-2@4.3.0",
+            "iniconfig-4@2.0.0"
           ]
         },
         {
-          "ref": "5-sniffio@1.3.1",
+          "ref": "sniffio-5@1.3.1",
           "dependsOn": []
         }
       ]
@@ -6964,8 +6965,8 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -6973,7 +6974,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-attrs@23.2.0",
+          "bom-ref": "attrs-2@23.2.0",
           "name": "attrs",
           "version": "23.2.0",
           "purl": "pkg:pypi/attrs@23.2.0",
@@ -6986,7 +6987,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-cffi@1.16.0",
+          "bom-ref": "cffi-3@1.16.0",
           "name": "cffi",
           "version": "1.16.0",
           "purl": "pkg:pypi/cffi@1.16.0",
@@ -6999,7 +7000,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "4-exceptiongroup@1.2.0",
+          "bom-ref": "exceptiongroup-4@1.2.0",
           "name": "exceptiongroup",
           "version": "1.2.0",
           "purl": "pkg:pypi/exceptiongroup@1.2.0",
@@ -7012,7 +7013,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-idna@3.6",
+          "bom-ref": "idna-5@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6",
@@ -7025,7 +7026,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "6-outcome@1.3.0.post0",
+          "bom-ref": "outcome-6@1.3.0.post0",
           "name": "outcome",
           "version": "1.3.0.post0",
           "purl": "pkg:pypi/outcome@1.3.0.post0",
@@ -7038,7 +7039,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "7-pycparser@2.21",
+          "bom-ref": "pycparser-7@2.21",
           "name": "pycparser",
           "version": "2.21",
           "purl": "pkg:pypi/pycparser@2.21",
@@ -7051,7 +7052,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "8-sniffio@1.3.1",
+          "bom-ref": "sniffio-8@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1",
@@ -7064,7 +7065,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "9-sortedcontainers@2.4.0",
+          "bom-ref": "sortedcontainers-9@2.4.0",
           "name": "sortedcontainers",
           "version": "2.4.0",
           "purl": "pkg:pypi/sortedcontainers@2.4.0",
@@ -7077,7 +7078,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "10-trio@0.25.0",
+          "bom-ref": "trio-10@0.25.0",
           "name": "trio",
           "version": "0.25.0",
           "purl": "pkg:pypi/trio@0.25.0",
@@ -7091,57 +7092,57 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-attrs@23.2.0",
+          "ref": "attrs-2@23.2.0",
           "dependsOn": []
         },
         {
-          "ref": "3-cffi@1.16.0",
+          "ref": "cffi-3@1.16.0",
           "dependsOn": [
-            "7-pycparser@2.21"
+            "pycparser-7@2.21"
           ]
         },
         {
-          "ref": "4-exceptiongroup@1.2.0",
+          "ref": "exceptiongroup-4@1.2.0",
           "dependsOn": []
         },
         {
-          "ref": "5-idna@3.6",
+          "ref": "idna-5@3.6",
           "dependsOn": []
         },
         {
-          "ref": "6-outcome@1.3.0.post0",
+          "ref": "outcome-6@1.3.0.post0",
           "dependsOn": [
-            "2-attrs@23.2.0"
+            "attrs-2@23.2.0"
           ]
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "10-trio@0.25.0"
+            "trio-10@0.25.0"
           ]
         },
         {
-          "ref": "7-pycparser@2.21",
+          "ref": "pycparser-7@2.21",
           "dependsOn": []
         },
         {
-          "ref": "8-sniffio@1.3.1",
+          "ref": "sniffio-8@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "9-sortedcontainers@2.4.0",
+          "ref": "sortedcontainers-9@2.4.0",
           "dependsOn": []
         },
         {
-          "ref": "10-trio@0.25.0",
+          "ref": "trio-10@0.25.0",
           "dependsOn": [
-            "2-attrs@23.2.0",
-            "3-cffi@1.16.0",
-            "4-exceptiongroup@1.2.0",
-            "5-idna@3.6",
-            "6-outcome@1.3.0.post0",
-            "8-sniffio@1.3.1",
-            "9-sortedcontainers@2.4.0"
+            "attrs-2@23.2.0",
+            "cffi-3@1.16.0",
+            "exceptiongroup-4@1.2.0",
+            "idna-5@3.6",
+            "outcome-6@1.3.0.post0",
+            "sniffio-8@1.3.1",
+            "sortedcontainers-9@2.4.0"
           ]
         }
       ]
@@ -7194,8 +7195,8 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -7203,21 +7204,21 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-blinker@1.7.0",
+          "bom-ref": "blinker-2@1.7.0",
           "name": "blinker",
           "version": "1.7.0",
           "purl": "pkg:pypi/blinker@1.7.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-click@8.1.7",
+          "bom-ref": "click-3@8.1.7",
           "name": "click",
           "version": "8.1.7",
           "purl": "pkg:pypi/click@8.1.7"
         },
         {
           "type": "library",
-          "bom-ref": "4-colorama@0.4.6",
+          "bom-ref": "colorama-4@0.4.6",
           "name": "colorama",
           "version": "0.4.6",
           "purl": "pkg:pypi/colorama@0.4.6",
@@ -7230,42 +7231,42 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-flask@3.0.2",
+          "bom-ref": "flask-5@3.0.2",
           "name": "flask",
           "version": "3.0.2",
           "purl": "pkg:pypi/flask@3.0.2"
         },
         {
           "type": "library",
-          "bom-ref": "6-itsdangerous@2.1.2",
+          "bom-ref": "itsdangerous-6@2.1.2",
           "name": "itsdangerous",
           "version": "2.1.2",
           "purl": "pkg:pypi/itsdangerous@2.1.2"
         },
         {
           "type": "library",
-          "bom-ref": "7-jinja2@3.1.3",
+          "bom-ref": "jinja2-7@3.1.3",
           "name": "jinja2",
           "version": "3.1.3",
           "purl": "pkg:pypi/jinja2@3.1.3"
         },
         {
           "type": "library",
-          "bom-ref": "8-markupsafe@2.1.5",
+          "bom-ref": "markupsafe-8@2.1.5",
           "name": "markupsafe",
           "version": "2.1.5",
           "purl": "pkg:pypi/markupsafe@2.1.5"
         },
         {
           "type": "library",
-          "bom-ref": "9-python-dotenv@1.0.1",
+          "bom-ref": "python-dotenv-9@1.0.1",
           "name": "python-dotenv",
           "version": "1.0.1",
           "purl": "pkg:pypi/python-dotenv@1.0.1"
         },
         {
           "type": "library",
-          "bom-ref": "10-werkzeug@3.0.1",
+          "bom-ref": "werkzeug-10@3.0.1",
           "name": "werkzeug",
           "version": "3.0.1",
           "purl": "pkg:pypi/werkzeug@3.0.1"
@@ -7273,58 +7274,58 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-blinker@1.7.0",
+          "ref": "blinker-2@1.7.0",
           "dependsOn": []
         },
         {
-          "ref": "3-click@8.1.7",
+          "ref": "click-3@8.1.7",
           "dependsOn": [
-            "4-colorama@0.4.6"
+            "colorama-4@0.4.6"
           ]
         },
         {
-          "ref": "4-colorama@0.4.6",
+          "ref": "colorama-4@0.4.6",
           "dependsOn": []
         },
         {
-          "ref": "5-flask@3.0.2",
+          "ref": "flask-5@3.0.2",
           "dependsOn": [
-            "10-werkzeug@3.0.1",
-            "2-blinker@1.7.0",
-            "3-click@8.1.7",
-            "6-itsdangerous@2.1.2",
-            "7-jinja2@3.1.3",
-            "9-python-dotenv@1.0.1"
+            "blinker-2@1.7.0",
+            "click-3@8.1.7",
+            "itsdangerous-6@2.1.2",
+            "jinja2-7@3.1.3",
+            "python-dotenv-9@1.0.1",
+            "werkzeug-10@3.0.1"
           ]
         },
         {
-          "ref": "6-itsdangerous@2.1.2",
+          "ref": "itsdangerous-6@2.1.2",
           "dependsOn": []
         },
         {
-          "ref": "7-jinja2@3.1.3",
+          "ref": "jinja2-7@3.1.3",
           "dependsOn": [
-            "8-markupsafe@2.1.5"
+            "markupsafe-8@2.1.5"
           ]
         },
         {
-          "ref": "8-markupsafe@2.1.5",
+          "ref": "markupsafe-8@2.1.5",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "5-flask@3.0.2"
+            "flask-5@3.0.2"
           ]
         },
         {
-          "ref": "9-python-dotenv@1.0.1",
+          "ref": "python-dotenv-9@1.0.1",
           "dependsOn": []
         },
         {
-          "ref": "10-werkzeug@3.0.1",
+          "ref": "werkzeug-10@3.0.1",
           "dependsOn": [
-            "8-markupsafe@2.1.5"
+            "markupsafe-8@2.1.5"
           ]
         }
       ]
@@ -7393,8 +7394,8 @@ fn cyclonedx_export_prune() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -7402,7 +7403,7 @@ fn cyclonedx_export_prune() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-cffi@1.16.0",
+          "bom-ref": "cffi-2@1.16.0",
           "name": "cffi",
           "version": "1.16.0",
           "purl": "pkg:pypi/cffi@1.16.0",
@@ -7415,14 +7416,14 @@ fn cyclonedx_export_prune() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-jupyter-client@8.6.1",
+          "bom-ref": "jupyter-client-3@8.6.1",
           "name": "jupyter-client",
           "version": "8.6.1",
           "purl": "pkg:pypi/jupyter-client@8.6.1"
         },
         {
           "type": "library",
-          "bom-ref": "4-pycparser@2.21",
+          "bom-ref": "pycparser-4@2.21",
           "name": "pycparser",
           "version": "2.21",
           "purl": "pkg:pypi/pycparser@2.21",
@@ -7435,35 +7436,35 @@ fn cyclonedx_export_prune() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "5-python-dateutil@2.9.0.post0",
+          "bom-ref": "python-dateutil-5@2.9.0.post0",
           "name": "python-dateutil",
           "version": "2.9.0.post0",
           "purl": "pkg:pypi/python-dateutil@2.9.0.post0"
         },
         {
           "type": "library",
-          "bom-ref": "6-pyzmq@25.1.2",
+          "bom-ref": "pyzmq-6@25.1.2",
           "name": "pyzmq",
           "version": "25.1.2",
           "purl": "pkg:pypi/pyzmq@25.1.2"
         },
         {
           "type": "library",
-          "bom-ref": "7-six@1.16.0",
+          "bom-ref": "six-7@1.16.0",
           "name": "six",
           "version": "1.16.0",
           "purl": "pkg:pypi/six@1.16.0"
         },
         {
           "type": "library",
-          "bom-ref": "8-tornado@6.4",
+          "bom-ref": "tornado-8@6.4",
           "name": "tornado",
           "version": "6.4",
           "purl": "pkg:pypi/tornado@6.4"
         },
         {
           "type": "library",
-          "bom-ref": "9-traitlets@5.14.2",
+          "bom-ref": "traitlets-9@5.14.2",
           "name": "traitlets",
           "version": "5.14.2",
           "purl": "pkg:pypi/traitlets@5.14.2"
@@ -7471,52 +7472,52 @@ fn cyclonedx_export_prune() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-cffi@1.16.0",
+          "ref": "cffi-2@1.16.0",
           "dependsOn": [
-            "4-pycparser@2.21"
+            "pycparser-4@2.21"
           ]
         },
         {
-          "ref": "3-jupyter-client@8.6.1",
+          "ref": "jupyter-client-3@8.6.1",
           "dependsOn": [
-            "5-python-dateutil@2.9.0.post0",
-            "6-pyzmq@25.1.2",
-            "8-tornado@6.4",
-            "9-traitlets@5.14.2"
+            "python-dateutil-5@2.9.0.post0",
+            "pyzmq-6@25.1.2",
+            "tornado-8@6.4",
+            "traitlets-9@5.14.2"
           ]
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "3-jupyter-client@8.6.1"
+            "jupyter-client-3@8.6.1"
           ]
         },
         {
-          "ref": "4-pycparser@2.21",
+          "ref": "pycparser-4@2.21",
           "dependsOn": []
         },
         {
-          "ref": "5-python-dateutil@2.9.0.post0",
+          "ref": "python-dateutil-5@2.9.0.post0",
           "dependsOn": [
-            "7-six@1.16.0"
+            "six-7@1.16.0"
           ]
         },
         {
-          "ref": "6-pyzmq@25.1.2",
+          "ref": "pyzmq-6@25.1.2",
           "dependsOn": [
-            "2-cffi@1.16.0"
+            "cffi-2@1.16.0"
           ]
         },
         {
-          "ref": "7-six@1.16.0",
+          "ref": "six-7@1.16.0",
           "dependsOn": []
         },
         {
-          "ref": "8-tornado@6.4",
+          "ref": "tornado-8@6.4",
           "dependsOn": []
         },
         {
-          "ref": "9-traitlets@5.14.2",
+          "ref": "traitlets-9@5.14.2",
           "dependsOn": []
         }
       ]
@@ -7572,8 +7573,8 @@ fn cyclonedx_export_group() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -7581,14 +7582,14 @@ fn cyclonedx_export_group() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-sniffio@1.3.1",
+          "bom-ref": "sniffio-2@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
           "type": "library",
-          "bom-ref": "3-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-3@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -7596,18 +7597,18 @@ fn cyclonedx_export_group() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-sniffio@1.3.1",
-            "3-typing-extensions@4.10.0"
+            "sniffio-2@1.3.1",
+            "typing-extensions-3@4.10.0"
           ]
         },
         {
-          "ref": "2-sniffio@1.3.1",
+          "ref": "sniffio-2@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "3-typing-extensions@4.10.0",
+          "ref": "typing-extensions-3@4.10.0",
           "dependsOn": []
         }
       ]
@@ -7637,8 +7638,8 @@ fn cyclonedx_export_group() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -7646,7 +7647,7 @@ fn cyclonedx_export_group() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-2@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
@@ -7654,7 +7655,7 @@ fn cyclonedx_export_group() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-iniconfig@2.0.0",
+          "ref": "iniconfig-2@2.0.0",
           "dependsOn": []
         }
       ]
@@ -7684,8 +7685,8 @@ fn cyclonedx_export_group() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -7693,7 +7694,7 @@ fn cyclonedx_export_group() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@4.3.0",
+          "bom-ref": "anyio-2@4.3.0",
           "name": "anyio",
           "version": "4.3.0",
           "purl": "pkg:pypi/anyio@4.3.0",
@@ -7706,7 +7707,7 @@ fn cyclonedx_export_group() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6",
@@ -7719,14 +7720,14 @@ fn cyclonedx_export_group() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "4-sniffio@1.3.1",
+          "bom-ref": "sniffio-4@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
           "type": "library",
-          "bom-ref": "5-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-5@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -7734,30 +7735,30 @@ fn cyclonedx_export_group() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@4.3.0",
+          "ref": "anyio-2@4.3.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "4-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-4@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@4.3.0",
-            "4-sniffio@1.3.1",
-            "5-typing-extensions@4.10.0"
+            "anyio-2@4.3.0",
+            "sniffio-4@1.3.1",
+            "typing-extensions-5@4.10.0"
           ]
         },
         {
-          "ref": "4-sniffio@1.3.1",
+          "ref": "sniffio-4@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "5-typing-extensions@4.10.0",
+          "ref": "typing-extensions-5@4.10.0",
           "dependsOn": []
         }
       ]
@@ -7839,21 +7840,21 @@ fn cyclonedx_export_non_project() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "1-anyio@4.3.0",
+          "bom-ref": "anyio-1@4.3.0",
           "name": "anyio",
           "version": "4.3.0",
           "purl": "pkg:pypi/anyio@4.3.0"
         },
         {
           "type": "library",
-          "bom-ref": "2-idna@3.6",
+          "bom-ref": "idna-2@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "3-sniffio@1.3.1",
+          "bom-ref": "sniffio-3@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -7861,18 +7862,18 @@ fn cyclonedx_export_non_project() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "1-anyio@4.3.0",
+          "ref": "anyio-1@4.3.0",
           "dependsOn": [
-            "2-idna@3.6",
-            "3-sniffio@1.3.1"
+            "idna-2@3.6",
+            "sniffio-3@1.3.1"
           ]
         },
         {
-          "ref": "2-idna@3.6",
+          "ref": "idna-2@3.6",
           "dependsOn": []
         },
         {
-          "ref": "3-sniffio@1.3.1",
+          "ref": "sniffio-3@1.3.1",
           "dependsOn": []
         }
       ]
@@ -7948,16 +7949,16 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       },
       "components": [
         {
-          "type": "application",
-          "bom-ref": "2-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -7969,21 +7970,21 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "4-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "5-sniffio@1.3.1",
+          "bom-ref": "sniffio-5@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -7991,27 +7992,27 @@ fn cyclonedx_export_no_emit() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-child@0.1.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": [
-            "4-iniconfig@2.0.0"
+            "iniconfig-4@2.0.0"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "4-iniconfig@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-child@0.1.0"
+            "child-2@0.1.0"
           ]
         },
         {
-          "ref": "5-sniffio@1.3.1",
+          "ref": "sniffio-5@1.3.1",
           "dependsOn": []
         }
       ]
@@ -8041,8 +8042,8 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8050,14 +8051,14 @@ fn cyclonedx_export_no_emit() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@3.7.0",
+          "bom-ref": "anyio-2@3.7.0",
           "name": "anyio",
           "version": "3.7.0",
           "purl": "pkg:pypi/anyio@3.7.0"
         },
         {
-          "type": "application",
-          "bom-ref": "3-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-3@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -8069,21 +8070,21 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "4-idna@3.6",
+          "bom-ref": "idna-4@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "5-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-5@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "6-sniffio@1.3.1",
+          "bom-ref": "sniffio-6@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -8091,28 +8092,28 @@ fn cyclonedx_export_no_emit() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@3.7.0",
+          "ref": "anyio-2@3.7.0",
           "dependsOn": [
-            "4-idna@3.6",
-            "6-sniffio@1.3.1"
+            "idna-4@3.6",
+            "sniffio-6@1.3.1"
           ]
         },
         {
-          "ref": "3-child@0.1.0",
+          "ref": "child-3@0.1.0",
           "dependsOn": [
-            "5-iniconfig@2.0.0"
+            "iniconfig-5@2.0.0"
           ]
         },
         {
-          "ref": "4-idna@3.6",
+          "ref": "idna-4@3.6",
           "dependsOn": []
         },
         {
-          "ref": "5-iniconfig@2.0.0",
+          "ref": "iniconfig-5@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "6-sniffio@1.3.1",
+          "ref": "sniffio-6@1.3.1",
           "dependsOn": []
         }
       ]
@@ -8183,8 +8184,8 @@ fn cyclonedx_export_relative_path() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8192,13 +8193,13 @@ fn cyclonedx_export_relative_path() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-dependency@0.1.0",
+          "bom-ref": "dependency-2@0.1.0",
           "name": "dependency",
           "version": "0.1.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-iniconfig@2.0.0",
+          "bom-ref": "iniconfig-3@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
@@ -8206,19 +8207,19 @@ fn cyclonedx_export_relative_path() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-dependency@0.1.0",
+          "ref": "dependency-2@0.1.0",
           "dependsOn": [
-            "3-iniconfig@2.0.0"
+            "iniconfig-3@2.0.0"
           ]
         },
         {
-          "ref": "3-iniconfig@2.0.0",
+          "ref": "iniconfig-3@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-dependency@0.1.0"
+            "dependency-2@0.1.0"
           ]
         }
       ]
@@ -8271,8 +8272,8 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8280,70 +8281,70 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-argparse@1.4.0",
+          "bom-ref": "argparse-2@1.4.0",
           "name": "argparse",
           "version": "1.4.0",
           "purl": "pkg:pypi/argparse@1.4.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-extras@1.0.0",
+          "bom-ref": "extras-3@1.0.0",
           "name": "extras",
           "version": "1.0.0",
           "purl": "pkg:pypi/extras@1.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "4-fixtures@3.0.0",
+          "bom-ref": "fixtures-4@3.0.0",
           "name": "fixtures",
           "version": "3.0.0",
           "purl": "pkg:pypi/fixtures@3.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "5-linecache2@1.0.0",
+          "bom-ref": "linecache2-5@1.0.0",
           "name": "linecache2",
           "version": "1.0.0",
           "purl": "pkg:pypi/linecache2@1.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "6-pbr@6.0.0",
+          "bom-ref": "pbr-6@6.0.0",
           "name": "pbr",
           "version": "6.0.0",
           "purl": "pkg:pypi/pbr@6.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "7-python-mimeparse@1.6.0",
+          "bom-ref": "python-mimeparse-7@1.6.0",
           "name": "python-mimeparse",
           "version": "1.6.0",
           "purl": "pkg:pypi/python-mimeparse@1.6.0"
         },
         {
           "type": "library",
-          "bom-ref": "8-six@1.16.0",
+          "bom-ref": "six-8@1.16.0",
           "name": "six",
           "version": "1.16.0",
           "purl": "pkg:pypi/six@1.16.0"
         },
         {
           "type": "library",
-          "bom-ref": "9-testtools@2.3.0",
+          "bom-ref": "testtools-9@2.3.0",
           "name": "testtools",
           "version": "2.3.0",
           "purl": "pkg:pypi/testtools@2.3.0"
         },
         {
           "type": "library",
-          "bom-ref": "10-traceback2@1.4.0",
+          "bom-ref": "traceback2-10@1.4.0",
           "name": "traceback2",
           "version": "1.4.0",
           "purl": "pkg:pypi/traceback2@1.4.0"
         },
         {
           "type": "library",
-          "bom-ref": "11-unittest2@1.1.0",
+          "bom-ref": "unittest2-11@1.1.0",
           "name": "unittest2",
           "version": "1.1.0",
           "purl": "pkg:pypi/unittest2@1.1.0"
@@ -8351,68 +8352,68 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-argparse@1.4.0",
+          "ref": "argparse-2@1.4.0",
           "dependsOn": []
         },
         {
-          "ref": "3-extras@1.0.0",
+          "ref": "extras-3@1.0.0",
           "dependsOn": []
         },
         {
-          "ref": "4-fixtures@3.0.0",
+          "ref": "fixtures-4@3.0.0",
           "dependsOn": [
-            "6-pbr@6.0.0",
-            "8-six@1.16.0",
-            "9-testtools@2.3.0"
+            "pbr-6@6.0.0",
+            "six-8@1.16.0",
+            "testtools-9@2.3.0"
           ]
         },
         {
-          "ref": "5-linecache2@1.0.0",
+          "ref": "linecache2-5@1.0.0",
           "dependsOn": []
         },
         {
-          "ref": "6-pbr@6.0.0",
+          "ref": "pbr-6@6.0.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "4-fixtures@3.0.0",
-            "9-testtools@2.3.0"
+            "fixtures-4@3.0.0",
+            "testtools-9@2.3.0"
           ]
         },
         {
-          "ref": "7-python-mimeparse@1.6.0",
+          "ref": "python-mimeparse-7@1.6.0",
           "dependsOn": []
         },
         {
-          "ref": "8-six@1.16.0",
+          "ref": "six-8@1.16.0",
           "dependsOn": []
         },
         {
-          "ref": "9-testtools@2.3.0",
+          "ref": "testtools-9@2.3.0",
           "dependsOn": [
-            "10-traceback2@1.4.0",
-            "11-unittest2@1.1.0",
-            "3-extras@1.0.0",
-            "4-fixtures@3.0.0",
-            "6-pbr@6.0.0",
-            "7-python-mimeparse@1.6.0",
-            "8-six@1.16.0"
+            "extras-3@1.0.0",
+            "fixtures-4@3.0.0",
+            "pbr-6@6.0.0",
+            "python-mimeparse-7@1.6.0",
+            "six-8@1.16.0",
+            "traceback2-10@1.4.0",
+            "unittest2-11@1.1.0"
           ]
         },
         {
-          "ref": "10-traceback2@1.4.0",
+          "ref": "traceback2-10@1.4.0",
           "dependsOn": [
-            "5-linecache2@1.0.0"
+            "linecache2-5@1.0.0"
           ]
         },
         {
-          "ref": "11-unittest2@1.1.0",
+          "ref": "unittest2-11@1.1.0",
           "dependsOn": [
-            "10-traceback2@1.4.0",
-            "2-argparse@1.4.0",
-            "8-six@1.16.0"
+            "argparse-2@1.4.0",
+            "six-8@1.16.0",
+            "traceback2-10@1.4.0"
           ]
         }
       ]
@@ -8469,8 +8470,8 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8478,28 +8479,28 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@4.3.0",
+          "bom-ref": "anyio-2@4.3.0",
           "name": "anyio",
           "version": "4.3.0",
           "purl": "pkg:pypi/anyio@4.3.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "4-sniffio@1.3.1",
+          "bom-ref": "sniffio-4@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
           "type": "library",
-          "bom-ref": "5-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-5@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -8507,29 +8508,29 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@4.3.0",
+          "ref": "anyio-2@4.3.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "4-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-4@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-anyio@4.3.0",
-            "5-typing-extensions@4.10.0"
+            "anyio-2@4.3.0",
+            "typing-extensions-5@4.10.0"
           ]
         },
         {
-          "ref": "4-sniffio@1.3.1",
+          "ref": "sniffio-4@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "5-typing-extensions@4.10.0",
+          "ref": "typing-extensions-5@4.10.0",
           "dependsOn": []
         }
       ]
@@ -8560,8 +8561,8 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8569,7 +8570,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-typing-extensions@4.10.0",
+          "bom-ref": "typing-extensions-2@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
@@ -8577,13 +8578,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": [
-            "2-typing-extensions@4.10.0"
+            "typing-extensions-2@4.10.0"
           ]
         },
         {
-          "ref": "2-typing-extensions@4.10.0",
+          "ref": "typing-extensions-2@4.10.0",
           "dependsOn": []
         }
       ]
@@ -8614,8 +8615,8 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
@@ -8623,21 +8624,21 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "2-anyio@4.3.0",
+          "bom-ref": "anyio-2@4.3.0",
           "name": "anyio",
           "version": "4.3.0",
           "purl": "pkg:pypi/anyio@4.3.0"
         },
         {
           "type": "library",
-          "bom-ref": "3-idna@3.6",
+          "bom-ref": "idna-3@3.6",
           "name": "idna",
           "version": "3.6",
           "purl": "pkg:pypi/idna@3.6"
         },
         {
           "type": "library",
-          "bom-ref": "4-sniffio@1.3.1",
+          "bom-ref": "sniffio-4@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
@@ -8645,18 +8646,18 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "2-anyio@4.3.0",
+          "ref": "anyio-2@4.3.0",
           "dependsOn": [
-            "3-idna@3.6",
-            "4-sniffio@1.3.1"
+            "idna-3@3.6",
+            "sniffio-4@1.3.1"
           ]
         },
         {
-          "ref": "3-idna@3.6",
+          "ref": "idna-3@3.6",
           "dependsOn": []
         },
         {
-          "ref": "4-sniffio@1.3.1",
+          "ref": "sniffio-4@1.3.1",
           "dependsOn": []
         }
       ]
@@ -8737,15 +8738,15 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
           }
         ],
         "component": {
-          "type": "application",
-          "bom-ref": "3-uv-workspace",
-          "name": "uv-workspace"
+          "type": "library",
+          "bom-ref": "project-3",
+          "name": "project"
         }
       },
       "components": [
         {
-          "type": "application",
-          "bom-ref": "2-child@0.1.0",
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -8756,26 +8757,26 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
           ]
         },
         {
-          "type": "application",
-          "bom-ref": "1-project@0.1.0",
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
           "name": "project",
           "version": "0.1.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "2-child@0.1.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": []
         },
         {
-          "ref": "1-project@0.1.0",
+          "ref": "project-1@0.1.0",
           "dependsOn": []
         },
         {
-          "ref": "3-uv-workspace",
+          "ref": "project-3",
           "dependsOn": [
-            "2-child@0.1.0",
-            "1-project@0.1.0"
+            "child-2@0.1.0",
+            "project-1@0.1.0"
           ]
         }
       ]

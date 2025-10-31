@@ -64,9 +64,9 @@ impl<'a> ComponentBuilder<'a> {
         self.id_counter += 1;
         let id = self.id_counter;
         if let Some(version) = version {
-            format!("{id}-{name}@{version}")
+            format!("{name}-{id}@{version}")
         } else {
-            format!("{id}-{name}")
+            format!("{name}-{id}")
         }
     }
 
@@ -94,8 +94,8 @@ impl<'a> ComponentBuilder<'a> {
 
         let (purl_type, qualifiers) = match &package.id.source {
             Source::Registry(_) => ("pypi", vec![]),
-            Source::Git(url, _) => ("generic", vec![("vcs_url", url.as_ref())]),
-            Source::Direct(url, _) => ("generic", vec![("download_url", url.as_ref())]),
+            Source::Git(url, _) => ("pypi", vec![("vcs_url", url.as_ref())]),
+            Source::Direct(url, _) => ("pypi", vec![("download_url", url.as_ref())]),
             // No purl for local sources
             Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => {
                 return None;
@@ -136,13 +136,13 @@ impl<'a> ComponentBuilder<'a> {
         component
     }
 
-    fn create_synthetic_root_component(&mut self) -> Component {
-        let name = "uv-workspace";
+    fn create_synthetic_root_component(&mut self, root: Option<&Package>) -> Component {
+        let name = root.map(Self::get_package_name).unwrap_or("uv-workspace");
         let bom_ref = self.create_bom_ref(name, None);
 
         // No need to register as we manually add dependencies in `if all_packages` check in `from_lock`
         Component {
-            component_type: Classification::Application,
+            component_type: Classification::Library,
             name: NormalizedString::new(name),
             version: None,
             bom_ref: Some(bom_ref),
@@ -184,17 +184,15 @@ impl<'a> ComponentBuilder<'a> {
         let purl = Self::create_purl(package).and_then(|purl_string| purl_string.parse().ok());
         let mut properties = vec![];
 
-        let classification = match package_type {
-            PackageType::Root => Classification::Application,
+        match package_type {
             PackageType::Workspace(path) => {
                 properties.push(Property::new(
                     "uv:workspace:path",
                     &PortablePath::from(path).to_string(),
                 ));
-                Classification::Application
             }
-            PackageType::Dependency => Classification::Library,
-        };
+            PackageType::Root | PackageType::Dependency => {}
+        }
 
         if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
             properties.push(Property::new(
@@ -204,7 +202,7 @@ impl<'a> ComponentBuilder<'a> {
         }
 
         Component {
-            component_type: classification,
+            component_type: Classification::Library,
             name: NormalizedString::new(name),
             version: version.as_deref().map(NormalizedString::new),
             bom_ref: Some(bom_ref),
@@ -343,7 +341,7 @@ pub fn from_lock<'lock>(
     // With `--all-packages`, use synthetic root which depends on workspace root and all workspace members.
     // This ensures that we don't have any dangling components resulting from workspace packages not depended on by the workspace root.
     if all_packages {
-        let synthetic_root = component_builder.create_synthetic_root_component();
+        let synthetic_root = component_builder.create_synthetic_root_component(root);
         let synthetic_root_bom_ref = synthetic_root
             .bom_ref
             .clone()
@@ -356,15 +354,10 @@ pub fn from_lock<'lock>(
 
         dependencies.push(Dependency {
             dependency_ref: synthetic_root_bom_ref,
-            dependencies: components
+            dependencies: workspace_member_ids
                 .iter()
-                .filter_map(|c| {
-                    if c.component_type == Classification::Application {
-                        c.bom_ref.clone()
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|c| component_builder.get_component(c))
+                .map(|c| c.bom_ref.clone().expect("bom-ref should always exist"))
                 .collect(),
         });
     }
