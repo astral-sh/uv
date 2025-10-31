@@ -481,6 +481,16 @@
         "null"
       ]
     },
+    "preview-features": {
+      "description": "Enable experimental preview features.\nPreview features may change without warning.\nUse comma-separated values or pass multiple times to enable multiple features.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
