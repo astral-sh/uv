@@ -518,7 +518,7 @@ pub struct ToolUv {
             exclude-dependencies = ["werkzeug"]
         "#
     )]
-    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+    pub exclude_dependencies: Option<Vec<PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

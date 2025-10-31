@@ -23,7 +23,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -171,7 +171,7 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    let excludes: Vec<uv_normalize::PackageName> = excludes
+    let excludes: Vec<PackageName> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();
@@ -559,7 +559,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
-            uv_configuration::Excludes::from_package_names(excludes),
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),

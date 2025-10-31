@@ -1246,14 +1246,13 @@ pub struct PipCompileArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Exclude dependencies from resolution using the given requirements files.
+    /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
-    /// from the resolution. When a dependency is excluded, it will be omitted from the
-    /// dependency list entirely, regardless of whether it's requested by any other package.
-    ///
-    /// This can be useful for removing optional dependencies or working around packages with
-    /// broken dependencies.
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
@@ -1908,14 +1907,13 @@ pub struct PipInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Exclude dependencies from resolution using the given requirements files.
+    /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
-    /// from the resolution. When a dependency is excluded, it will be omitted from the
-    /// dependency list entirely, regardless of whether it's requested by any other package.
-    ///
-    /// This can be useful for removing optional dependencies or working around packages with
-    /// broken dependencies.
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
@@ -4870,14 +4868,13 @@ pub struct ToolInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Exclude dependencies from resolution using the given requirements files.
+    /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify dependencies to exclude
-    /// from the resolution. When a dependency is excluded, it will be omitted from the
-    /// dependency list entirely, regardless of whether it's requested by any other package.
-    ///
-    /// This can be useful for removing optional dependencies or working around packages with
-    /// broken dependencies.
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 

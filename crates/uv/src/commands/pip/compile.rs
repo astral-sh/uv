@@ -252,7 +252,7 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    let excludes: Vec<uv_normalize::PackageName> = excludes
+    let excludes: Vec<PackageName> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();
@@ -541,7 +541,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        uv_configuration::Excludes::from_package_names(excludes),
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

@@ -24,7 +24,7 @@ pub struct Manifest {
     pub(crate) overrides: Overrides,
 
     /// The dependency excludes for the project.
-    pub(crate) dependency_excludes: Excludes,
+    pub(crate) excludes: Excludes,
 
     /// The preferences for the project.
     ///
@@ -58,7 +58,7 @@ impl Manifest {
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
-        dependency_excludes: Excludes,
+        excludes: Excludes,
         preferences: Preferences,
         project: Option<PackageName>,
         workspace_members: BTreeSet<PackageName>,
@@ -69,7 +69,7 @@ impl Manifest {
             requirements,
             constraints,
             overrides,
-            dependency_excludes,
+            excludes,
             preferences,
             project,
             workspace_members,
@@ -83,7 +83,7 @@ impl Manifest {
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
-            dependency_excludes: Excludes::default(),
+            excludes: Excludes::default(),
             preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
@@ -128,26 +128,26 @@ impl Manifest {
                     .flat_map(move |lookahead| {
                         self.overrides
                             .apply(lookahead.requirements())
+                            .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
-                                !self.dependency_excludes.contains(&requirement.name)
-                                    && requirement
-                                        .evaluate_markers(env.marker_environment(), lookahead.extras())
+                                requirement
+                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
                             })
                     })
                     .chain(
                         self.overrides
                             .apply(&self.requirements)
+                            .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
-                                !self.dependency_excludes.contains(&requirement.name)
-                                    && requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(env.marker_environment(), &[])
                             }),
                     )
                     .chain(
                         self.constraints
                             .requirements()
+                            .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
-                                !self.dependency_excludes.contains(&requirement.name)
-                                    && requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(env.marker_environment(), &[])
                             })
                             .map(Cow::Borrowed),
                     ),
@@ -157,9 +157,9 @@ impl Manifest {
                 self.overrides
                     .apply(&self.requirements)
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        !self.dependency_excludes.contains(&requirement.name)
-                            && requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
             ),
         }
@@ -176,9 +176,9 @@ impl Manifest {
             DependencyMode::Transitive => Either::Left(
                 self.overrides
                     .requirements()
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        !self.dependency_excludes.contains(&requirement.name)
-                            && requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     })
                     .map(Cow::Borrowed),
             ),
@@ -186,9 +186,9 @@ impl Manifest {
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .requirements()
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        !self.dependency_excludes.contains(&requirement.name)
-                            && requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     })
                     .map(Cow::Borrowed),
             ),

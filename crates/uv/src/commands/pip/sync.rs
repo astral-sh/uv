@@ -102,6 +102,7 @@ pub(crate) async fn pip_sync(
 
     // Initialize a few defaults.
     let overrides = &[];
+    let excludes = &[];
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -113,7 +114,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        excludes: _,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -128,7 +129,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        &[],  // No excludes for pip sync
+        excludes,
         extras,
         Some(groups),
         &client_builder,
@@ -463,7 +464,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
-            uv_configuration::Excludes::default(), // No excludes for pip sync
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),
