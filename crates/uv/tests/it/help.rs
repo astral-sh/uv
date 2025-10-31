@@ -33,6 +33,7 @@ fn help() {
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
+      workspace                  Manage workspaces
       cache                      Manage uv's cache
       self                       Manage the uv executable
       generate-shell-completion  Generate shell completion
@@ -98,26 +99,27 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      auth     Manage authentication
-      run      Run a command or script
-      init     Create a new project
-      add      Add dependencies to the project
-      remove   Remove dependencies from the project
-      version  Read or update the project's version
-      sync     Update the project's environment
-      lock     Update the project's lockfile
-      export   Export the project's lockfile to an alternate format
-      tree     Display the project's dependency tree
-      format   Format Python code in the project
-      tool     Run and install commands provided by Python packages
-      python   Manage Python versions and installations
-      pip      Manage Python packages with a pip-compatible interface
-      venv     Create a virtual environment
-      build    Build Python packages into source distributions and wheels
-      publish  Upload distributions to an index
-      cache    Manage uv's cache
-      self     Manage the uv executable
-      help     Display documentation for a command
+      auth       Manage authentication
+      run        Run a command or script
+      init       Create a new project
+      add        Add dependencies to the project
+      remove     Remove dependencies from the project
+      version    Read or update the project's version
+      sync       Update the project's environment
+      lock       Update the project's lockfile
+      export     Export the project's lockfile to an alternate format
+      tree       Display the project's dependency tree
+      format     Format Python code in the project
+      tool       Run and install commands provided by Python packages
+      python     Manage Python versions and installations
+      pip        Manage Python packages with a pip-compatible interface
+      venv       Create a virtual environment
+      build      Build Python packages into source distributions and wheels
+      publish    Upload distributions to an index
+      workspace  Manage workspaces
+      cache      Manage uv's cache
+      self       Manage the uv executable
+      help       Display documentation for a command
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -178,26 +180,27 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      auth     Manage authentication
-      run      Run a command or script
-      init     Create a new project
-      add      Add dependencies to the project
-      remove   Remove dependencies from the project
-      version  Read or update the project's version
-      sync     Update the project's environment
-      lock     Update the project's lockfile
-      export   Export the project's lockfile to an alternate format
-      tree     Display the project's dependency tree
-      format   Format Python code in the project
-      tool     Run and install commands provided by Python packages
-      python   Manage Python versions and installations
-      pip      Manage Python packages with a pip-compatible interface
-      venv     Create a virtual environment
-      build    Build Python packages into source distributions and wheels
-      publish  Upload distributions to an index
-      cache    Manage uv's cache
-      self     Manage the uv executable
-      help     Display documentation for a command
+      auth       Manage authentication
+      run        Run a command or script
+      init       Create a new project
+      add        Add dependencies to the project
+      remove     Remove dependencies from the project
+      version    Read or update the project's version
+      sync       Update the project's environment
+      lock       Update the project's lockfile
+      export     Export the project's lockfile to an alternate format
+      tree       Display the project's dependency tree
+      format     Format Python code in the project
+      tool       Run and install commands provided by Python packages
+      python     Manage Python versions and installations
+      pip        Manage Python packages with a pip-compatible interface
+      venv       Create a virtual environment
+      build      Build Python packages into source distributions and wheels
+      publish    Upload distributions to an index
+      workspace  Manage workspaces
+      cache      Manage uv's cache
+      self       Manage the uv executable
+      help       Display documentation for a command
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -892,6 +895,7 @@ fn help_unknown_subcommand() {
         venv
         build
         publish
+        workspace
         cache
         self
         generate-shell-completion
@@ -921,6 +925,7 @@ fn help_unknown_subcommand() {
         venv
         build
         publish
+        workspace
         cache
         self
         generate-shell-completion
@@ -979,6 +984,7 @@ fn help_with_global_option() {
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
+      workspace                  Manage workspaces
       cache                      Manage uv's cache
       self                       Manage the uv executable
       generate-shell-completion  Generate shell completion
@@ -1102,6 +1108,7 @@ fn help_with_no_pager() {
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
+      workspace                  Manage workspaces
       cache                      Manage uv's cache
       self                       Manage the uv executable
       generate-shell-completion  Generate shell completion
