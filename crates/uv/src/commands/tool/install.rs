@@ -12,11 +12,11 @@ use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+    UnresolvedRequirementSpecification, VersionSpecifiersOrExact,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
@@ -181,9 +181,7 @@ pub(crate) async fn install(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        version.clone(),
-                    )),
+                    specifier: VersionSpecifiersOrExact::Exact(version.clone()),
                     index: None,
                     conflict: None,
                 },
@@ -205,7 +203,9 @@ pub(crate) async fn install(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
+                    specifier: VersionSpecifiersOrExact::VersionSpecifiers(
+                        VersionSpecifiers::empty(),
+                    ),
                     index: None,
                     conflict: None,
                 },

@@ -4,6 +4,7 @@ use uv_pypi_types::{HashDigest, HashDigests};
 
 use crate::{
     BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
+    VersionSpecifiersOrExact,
 };
 
 /// A set of packages pinned at specific versions.
@@ -216,11 +217,7 @@ impl From<&ResolvedDist> for RequirementSource {
                 Dist::Built(BuiltDist::Registry(wheels)) => {
                     let wheel = wheels.best_wheel();
                     Self::Registry {
-                        specifier: uv_pep440::VersionSpecifiers::from(
-                            uv_pep440::VersionSpecifier::equals_version(
-                                wheel.filename.version.clone(),
-                            ),
-                        ),
+                        specifier: VersionSpecifiersOrExact::Exact(wheel.filename.version.clone()),
                         index: Some(IndexMetadata::from(wheel.index.clone())),
                         conflict: None,
                     }
@@ -241,9 +238,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     ext: DistExtension::Wheel,
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => Self::Registry {
-                    specifier: uv_pep440::VersionSpecifiers::from(
-                        uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
-                    ),
+                    specifier: VersionSpecifiersOrExact::Exact(sdist.version.clone()),
                     index: Some(IndexMetadata::from(sdist.index.clone())),
                     conflict: None,
                 },
@@ -275,9 +270,7 @@ impl From<&ResolvedDist> for RequirementSource {
                 },
             },
             ResolvedDist::Installed { dist } => Self::Registry {
-                specifier: uv_pep440::VersionSpecifiers::from(
-                    uv_pep440::VersionSpecifier::equals_version(dist.version().clone()),
-                ),
+                specifier: VersionSpecifiersOrExact::Exact(dist.version().clone()),
                 index: None,
                 conflict: None,
             },

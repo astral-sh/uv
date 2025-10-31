@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
     DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
-    Resolution, UnresolvedRequirement, VersionId,
+    Resolution, UnresolvedRequirement, VersionId, VersionSpecifiersOrExact,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -301,19 +301,27 @@ impl HashStrategy {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 // Must be a single specifier.
-                let [specifier] = specifier.as_ref() else {
-                    return None;
-                };
+                match specifier {
+                    VersionSpecifiersOrExact::VersionSpecifiers(specifier) => {
+                        let [specifier] = specifier.as_ref() else {
+                            return None;
+                        };
 
-                // Must be pinned to a specific version.
-                if *specifier.operator() != uv_pep440::Operator::Equal {
-                    return None;
+                        // Must be pinned to a specific version.
+                        if *specifier.operator() != uv_pep440::Operator::Equal {
+                            return None;
+                        }
+
+                        Some(VersionId::from_registry(
+                            requirement.name.clone(),
+                            specifier.version().clone(),
+                        ))
+                    }
+                    VersionSpecifiersOrExact::Exact(version) => Some(VersionId::from_registry(
+                        requirement.name.clone(),
+                        version.clone(),
+                    )),
                 }
-
-                Some(VersionId::from_registry(
-                    requirement.name.clone(),
-                    specifier.version().clone(),
-                ))
             }
             RequirementSource::Url { url, .. }
             | RequirementSource::Git { url, .. }
