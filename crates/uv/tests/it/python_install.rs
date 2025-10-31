@@ -1130,7 +1130,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.13.9
+    Using CPython 3.13.9t
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");

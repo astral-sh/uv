@@ -1008,16 +1008,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }

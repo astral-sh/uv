@@ -743,9 +743,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {}",
+                    "Using {} {}{}",
                     implementation.pretty(),
-                    interpreter.python_version()
+                    interpreter.python_version(),
+                    interpreter.variant().suffix(),
                 )
                 .dimmed()
             )?;
@@ -754,9 +755,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {} interpreter at: {}",
+                    "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
+                    interpreter.variant().suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -766,16 +768,18 @@ pub(crate) fn report_interpreter(
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
