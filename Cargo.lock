@@ -5373,6 +5373,7 @@ dependencies = [
  "uv-client",
  "uv-distribution-filename",
  "uv-extract",
+ "uv-fs",
  "uv-pep440",
  "uv-platform",
 ]
@@ -5900,8 +5901,10 @@ dependencies = [
  "schemars",
  "serde",
  "tempfile",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "uv-static",
  "windows 0.59.0",
 ]
 

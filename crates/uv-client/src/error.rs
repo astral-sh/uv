@@ -6,6 +6,7 @@ use async_zip::error::ZipError;
 use serde::Deserialize;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_fs::LockedFileError;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
@@ -336,6 +337,9 @@ pub enum ErrorKind {
 
     #[error("Failed to write to the client cache")]
     CacheWrite(#[source] std::io::Error),
+
+    #[error("Failed to acquire lock on the client cache")]
+    CacheLock(#[source] LockedFileError),
 
     #[error(transparent)]
     Io(std::io::Error),

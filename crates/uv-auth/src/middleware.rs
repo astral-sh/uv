@@ -22,7 +22,7 @@ use crate::{
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
-use crate::{Index, TextCredentialStore, TomlCredentialError};
+use crate::{Index, TextCredentialStore};
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -60,49 +60,55 @@ impl NetrcMode {
 
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
-    Automatic(LazyLock<Option<TextCredentialStore>>),
+    Automatic(tokio::sync::OnceCell<Option<TextCredentialStore>>),
     Enabled(TextCredentialStore),
     Disabled,
 }
 
 impl Default for TextStoreMode {
     fn default() -> Self {
-        // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
-        // implementation for now.
-        Self::Automatic(LazyLock::new(|| {
-            let path = TextCredentialStore::default_file()
-                .inspect_err(|err| {
-                    warn!("Failed to determine credentials file path: {}", err);
-                })
-                .ok()?;
-
-            match TextCredentialStore::read(&path) {
-                Ok((store, _lock)) => {
-                    debug!("Loaded credential file {}", path.display());
-                    Some(store)
-                }
-                Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    debug!("No credentials file found at {}", path.display());
-                    None
-                }
-                Err(err) => {
-                    warn!(
-                        "Failed to load credentials from {}: {}",
-                        path.display(),
-                        err
-                    );
-                    None
-                }
-            }
-        }))
+        Self::Automatic(tokio::sync::OnceCell::new())
     }
 }
 
 impl TextStoreMode {
+    async fn load_default_store() -> Option<TextCredentialStore> {
+        let path = TextCredentialStore::default_file()
+            .inspect_err(|err| {
+                warn!("Failed to determine credentials file path: {}", err);
+            })
+            .ok()?;
+
+        match TextCredentialStore::read(&path).await {
+            Ok((store, _lock)) => {
+                debug!("Loaded credential file {}", path.display());
+                Some(store)
+            }
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                debug!("No credentials file found at {}", path.display());
+                None
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to load credentials from {}: {}",
+                    path.display(),
+                    err
+                );
+                None
+            }
+        }
+    }
+
     /// Get the parsed credential store, if enabled.
-    fn get(&self) -> Option<&TextCredentialStore> {
+    async fn get(&self) -> Option<&TextCredentialStore> {
         match self {
-            Self::Automatic(lock) => lock.as_ref(),
+            // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
+            // implementation for now.
+            Self::Automatic(lock) => lock.get_or_init(Self::load_default_store).await.as_ref(),
             Self::Enabled(store) => Some(store),
             Self::Disabled => None,
         }
@@ -720,7 +726,7 @@ impl AuthMiddleware {
             Some(credentials)
 
         // Text credential store support.
-        } else if let Some(credentials) = self.text_store.get().and_then(|text_store| {
+        } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
             text_store.get_credentials(url, credentials.as_ref().and_then(|credentials| credentials.username())).cloned()
         }) {

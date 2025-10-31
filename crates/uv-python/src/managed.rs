@@ -17,7 +17,9 @@ use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, Simplified, replace_symlink, symlink_or_copy_file,
+};
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
@@ -38,6 +40,8 @@ use crate::{
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error(transparent)]
@@ -124,7 +128,12 @@ impl ManagedPythonInstallations {
     /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
     /// across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Prefer, in order:

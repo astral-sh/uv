@@ -511,7 +511,7 @@ impl RegistryClient {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
-            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
         let result = if matches!(index, IndexUrl::Path(_)) {
@@ -833,7 +833,7 @@ impl RegistryClient {
             #[cfg(windows)]
             let _lock = {
                 let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
-                lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+                lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
             };
 
             let response_callback = async |response: Response| {
@@ -917,7 +917,7 @@ impl RegistryClient {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
         // Attempt to fetch via a range request.

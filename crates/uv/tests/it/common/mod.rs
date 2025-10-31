@@ -1654,7 +1654,9 @@ pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<Vec<PathBuf>> {
-    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
+        .init_no_wait()?
+        .expect("No cache contention when setting up Python in tests");
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {

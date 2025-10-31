@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-use uv_fs::{LockedFile, with_added_extension};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, with_added_extension};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
@@ -29,7 +29,7 @@ pub enum AuthBackend {
 }
 
 impl AuthBackend {
-    pub fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
+    pub async fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
         // If preview is enabled, we'll use the system-native store
         if preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
             return Ok(Self::System(KeyringProvider::native()));
@@ -37,12 +37,16 @@ impl AuthBackend {
 
         // Otherwise, we'll use the plaintext credential store
         let path = TextCredentialStore::default_file()?;
-        match TextCredentialStore::read(&path) {
+        match TextCredentialStore::read(&path).await {
             Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
-            Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+            {
                 Ok(Self::TextStore(
                     TextCredentialStore::default(),
-                    TextCredentialStore::lock(&path)?,
+                    TextCredentialStore::lock(&path).await?,
                 ))
             }
             Err(err) => Err(err),
@@ -70,6 +74,8 @@ pub enum AuthScheme {
 pub enum TomlCredentialError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to parse TOML credential file: {0}")]
     ParseError(#[from] toml::de::Error),
     #[error("Failed to serialize credentials to TOML")]
@@ -82,6 +88,21 @@ pub enum TomlCredentialError {
     CredentialsDirError,
     #[error("Token is not valid unicode")]
     TokenNotUnicode(#[from] std::string::FromUtf8Error),
+}
+
+impl TomlCredentialError {
+    pub fn as_io_error(&self) -> Option<&std::io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::ParseError(_)
+            | Self::SerializeError(_)
+            | Self::BasicAuthError(_)
+            | Self::BearerAuthError(_)
+            | Self::CredentialsDirError
+            | Self::TokenNotUnicode(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -234,12 +255,12 @@ impl TextCredentialStore {
     }
 
     /// Acquire a lock on the credentials file at the given path.
-    pub fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
+    pub async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let lock = with_added_extension(path, ".lock");
-        Ok(LockedFile::acquire_blocking(lock, "credentials store")?)
+        Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
     }
 
     /// Read credentials from a file.
@@ -270,8 +291,8 @@ impl TextCredentialStore {
     /// Returns [`TextCredentialStore`] and a [`LockedFile`] to hold if mutating the store.
     ///
     /// If the store will not be written to following the read, the lock can be dropped.
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
-        let lock = Self::lock(path.as_ref())?;
+    pub async fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
+        let lock = Self::lock(path.as_ref()).await?;
         let store = Self::from_file(path)?;
         Ok((store, lock))
     }
@@ -447,8 +468,8 @@ mod tests {
         assert!(store.get_credentials(&url, None).is_none());
     }
 
-    #[test]
-    fn test_file_operations() {
+    #[tokio::test]
+    async fn test_file_operations() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(
             temp_file,
@@ -484,7 +505,7 @@ password = "pass2"
         store
             .write(
                 temp_output.path(),
-                TextCredentialStore::lock(temp_file.path()).unwrap(),
+                TextCredentialStore::lock(temp_file.path()).await.unwrap(),
             )
             .unwrap();
 
