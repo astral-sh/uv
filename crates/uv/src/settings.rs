@@ -1197,6 +1197,7 @@ pub(crate) struct PythonUninstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
+    pub(crate) outdated: bool,
 }
 
 impl PythonUninstallSettings {
@@ -1210,12 +1211,14 @@ impl PythonUninstallSettings {
             install_dir,
             targets,
             all,
+            outdated,
         } = args;
 
         Self {
             install_dir,
             targets,
             all,
+            outdated,
         }
     }
 }
