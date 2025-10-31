@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -390,12 +391,7 @@ pub(crate) async fn export(
                 all_packages,
             )?;
 
-            let mut output = Vec::<u8>::new();
-
-            export.output_as_json_v1_5(&mut output)?;
-
-            let output_str = String::from_utf8(output)?;
-            write!(writer, "{output_str}")?;
+            export.output_as_json_v1_5(&mut writer)?;
         }
     }
 
