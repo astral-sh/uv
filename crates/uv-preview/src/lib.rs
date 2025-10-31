@@ -20,6 +20,7 @@ bitflags::bitflags! {
         const FORMAT = 1 << 8;
         const NATIVE_AUTH = 1 << 9;
         const S3_ENDPOINT = 1 << 10;
+        const SBOM_EXPORT = 1 << 11;
     }
 }
 
@@ -40,6 +41,7 @@ impl PreviewFeatures {
             Self::FORMAT => "format",
             Self::NATIVE_AUTH => "native-auth",
             Self::S3_ENDPOINT => "s3-endpoint",
+            Self::SBOM_EXPORT => "sbom-export",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -88,6 +90,7 @@ impl FromStr for PreviewFeatures {
                 "format" => Self::FORMAT,
                 "native-auth" => Self::NATIVE_AUTH,
                 "s3-endpoint" => Self::S3_ENDPOINT,
+                "sbom-export" => Self::SBOM_EXPORT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -264,6 +267,7 @@ mod tests {
         );
         assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
         assert_eq!(PreviewFeatures::S3_ENDPOINT.flag_as_str(), "s3-endpoint");
+        assert_eq!(PreviewFeatures::SBOM_EXPORT.flag_as_str(), "sbom-export");
     }
 
     #[test]
