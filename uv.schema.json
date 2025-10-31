@@ -1974,6 +1974,13 @@
                 }
               ]
             },
+            "lfs": {
+              "description": "Whether to use Git LFS when cloning the repository.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },

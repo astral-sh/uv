@@ -199,6 +199,61 @@ impl std::fmt::Display for RepositoryUrl {
     }
 }
 
+/// Like [`RepositoryUrl`], but holds additional information that can be used to
+/// discriminate between sources that hold the exact same commit in their canonical
+/// representation, but may differ in the contents.
+///
+/// For Git, it's primarily used to derive a different cache key for when Git LFS is
+/// being used versus not.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct GitRepositoryUrl(RepositoryUrl, Option<bool>);
+
+impl GitRepositoryUrl {
+    pub fn new(url: &DisplaySafeUrl, lfs: Option<bool>) -> Self {
+        Self(RepositoryUrl::new(url), lfs)
+    }
+
+    pub fn parse(url: &str, lfs: Option<bool>) -> Result<Self, url::ParseError> {
+        Ok(Self::new(&DisplaySafeUrl::parse(url)?, lfs))
+    }
+}
+
+impl CacheKey for GitRepositoryUrl {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.0.as_str().cache_key(state);
+        if let Some(true) = self.1 {
+            "lfs".cache_key(state);
+        }
+    }
+}
+
+impl Hash for GitRepositoryUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.0.as_str().hash(state);
+        if let Some(true) = self.1 {
+            "lfs".hash(state);
+        }
+    }
+}
+
+impl Deref for GitRepositoryUrl {
+    type Target = RepositoryUrl;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for GitRepositoryUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +336,14 @@ mod tests {
             CanonicalUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
             )?,
+        );
+
+        // Two URLs should _not_ be considered equal if they differ in Git LFS enablement.
+        assert_ne!(
+            CanonicalUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#lfs=true"
+            )?,
+            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
         );
 
         // Two URLs should _not_ be considered equal if they request different commit tags.
@@ -376,6 +439,102 @@ mod tests {
             RepositoryUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git@v2.0.0"
             )?,
+        );
+
+        // Two URLs should be considered equal if they map to the same repository, even if they
+        // differ in Git LFS enablement.
+        assert_eq!(
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#lfs=true"
+            )?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn git_repository_url() -> Result<(), url::ParseError> {
+        // Two Git URLs should be considered equal if they map to the same repository, and
+        // align on Git LFS enablement.
+        assert_eq!(
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                Some(true)
+            )?,
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                Some(true)
+            )?,
+        );
+
+        // Two Git URLs should not be considered equal if they differ in Git LFS enablement, even
+        // if they map to the same repository.
+        assert_ne!(
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                Some(true)
+            )?,
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                None
+            )?,
+        );
+
+        // Two Git URLs should not be considered equal if they differ in Git LFS enablement, even
+        // if they map to the same repository.
+        assert_ne!(
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                Some(true)
+            )?,
+            GitRepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git",
+                Some(false)
+            )?,
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
+            .cache_key(&mut hasher);
+        let repo_url_basic = hasher.finish();
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+        )?
+        .cache_key(&mut hasher);
+        let repo_url_with_fragments = hasher.finish();
+
+        assert_eq!(
+            repo_url_basic, repo_url_with_fragments,
+            "repository urls should have the exact cache keys as fragments are removed",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        GitRepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+            None,
+        )?
+        .cache_key(&mut hasher);
+        let git_url_with_fragments = hasher.finish();
+
+        assert_eq!(
+            repo_url_with_fragments, git_url_with_fragments,
+            "both structs should have the exact cache keys as fragments are still removed",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        GitRepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+            Some(true),
+        )?
+        .cache_key(&mut hasher);
+        let git_url_with_fragments_and_lfs = hasher.finish();
+
+        assert_ne!(
+            git_url_with_fragments, git_url_with_fragments_and_lfs,
+            "both structs should have different cache keys as one has Git LFS enabled",
         );
 
         Ok(())

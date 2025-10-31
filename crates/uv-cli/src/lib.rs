@@ -3930,6 +3930,10 @@ pub struct AddArgs {
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
+
     /// Extras to enable for the dependency.
     ///
     /// May be provided more than once.
@@ -4755,6 +4759,10 @@ pub struct ToolRunArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// See `uv help python` for details on Python discovery and supported request formats.
@@ -4901,6 +4909,10 @@ pub struct ToolInstallArgs {
     /// Will replace any existing entry points with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
+
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
 
     /// The Python interpreter to use to build the tool environment.
     ///

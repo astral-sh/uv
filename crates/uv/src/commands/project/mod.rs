@@ -18,17 +18,19 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequirementSource,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
-use uv_pep508::MarkerTreeContents;
+use uv_pep508::{MarkerTreeContents, UnnamedRequirement};
 use uv_preview::{Preview, PreviewFeatures};
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_pypi_types::{
+    ConflictItem, ConflictKind, ConflictSet, Conflicts, ParsedUrl, VerbatimParsedUrl,
+};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
@@ -1678,17 +1680,16 @@ pub(crate) async fn resolve_names(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    lfs: Option<bool>,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-        requirements
-            .into_iter()
-            .partition_map(|spec| match spec.requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        .into_iter()
+        .map(|spec| augment_requirement(spec.requirement, lfs))
+        .partition_map(|requirement| match requirement {
+            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
+        });
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {
@@ -1796,6 +1797,55 @@ pub(crate) async fn resolve_names(
     );
 
     Ok(requirements)
+}
+
+/// Augment a user-provided requirement by attaching any specification data that was provided
+/// separately from the requirement itself (e.g., `--lfs`).
+fn augment_requirement(
+    requirement: UnresolvedRequirement,
+    lfs: Option<bool>,
+) -> UnresolvedRequirement {
+    match requirement {
+        UnresolvedRequirement::Named(requirement) => UnresolvedRequirement::Named(Requirement {
+            source: match requirement.source {
+                RequirementSource::Git {
+                    git,
+                    subdirectory,
+                    url,
+                } => {
+                    let git = if let Some(lfs) = lfs {
+                        git.with_lfs(lfs.into())
+                    } else {
+                        git
+                    };
+                    RequirementSource::Git {
+                        git,
+                        subdirectory,
+                        url,
+                    }
+                }
+                _ => requirement.source,
+            },
+            ..requirement
+        }),
+        UnresolvedRequirement::Unnamed(requirement) => {
+            UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                url: match requirement.url.parsed_url {
+                    ParsedUrl::Git(mut git) => {
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(lfs.into());
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Git(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    _ => requirement.url,
+                },
+                ..requirement
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
