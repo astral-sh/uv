@@ -83,7 +83,7 @@ pub(crate) fn pip_freeze(
             }
         })
         .dedup()
-        .try_for_each(|dist| writeln!(printer.stdout(), "{dist}"))?;
+        .try_for_each(|dist| writeln!(printer.stdout_important(), "{dist}"))?;
 
     // Validate that the environment is consistent.
     if strict {

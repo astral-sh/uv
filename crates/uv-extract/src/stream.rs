@@ -9,9 +9,8 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
-use uv_static::EnvVars;
 
-use crate::Error;
+use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -37,21 +36,6 @@ struct ComputedEntry {
     uncompressed_size: u64,
     /// The computed compressed size of the entry.
     compressed_size: u64,
-}
-
-/// Returns `true` if ZIP validation is disabled.
-fn insecure_no_validate() -> bool {
-    // TODO(charlie) Parse this in `EnvironmentOptions`.
-    let Some(value) = std::env::var_os(EnvVars::UV_INSECURE_NO_ZIP_VALIDATION) else {
-        return false;
-    };
-    let Some(value) = value.to_str() else {
-        return false;
-    };
-    matches!(
-        value.to_lowercase().as_str(),
-        "y" | "yes" | "t" | "true" | "on" | "1"
-    )
 }
 
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
@@ -101,6 +85,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             Err(ZipError::StringNotUtf8) => return Err(Error::LocalHeaderNotUtf8 { offset }),
             Err(err) => return Err(err.into()),
         };
+
+        // Apply sanity checks to the file names in local headers.
+        if let Err(e) = validate_archive_member_name(path) {
+            if !skip_validation {
+                return Err(e);
+            }
+        }
 
         // Sanitize the file name to prevent directory traversal attacks.
         let Some(relpath) = enclosed_name(path) else {
@@ -206,9 +197,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
                     // Verify that the existing file contents match the expected contents.
                     if existing_contents != expected_contents {
-                        return Err(Error::DuplicateLocalFileHeader {
-                            path: relpath.clone(),
-                        });
+                        if !skip_validation {
+                            return Err(Error::DuplicateLocalFileHeader {
+                                path: relpath.clone(),
+                            });
+                        }
                     }
 
                     (bytes_read as u64, entry_reader)
@@ -371,6 +364,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                     Err(err) => return Err(err.into()),
                 };
 
+                // Apply sanity checks to the file names in CD headers.
+                if let Err(e) = validate_archive_member_name(path) {
+                    if !skip_validation {
+                        return Err(e);
+                    }
+                }
+
                 // Sanitize the file name to prevent directory traversal attacks.
                 let Some(relpath) = enclosed_name(path) else {
                     continue;
@@ -455,9 +455,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                         }
                         std::collections::hash_map::Entry::Occupied(entry) => {
                             if mode != *entry.get() {
-                                return Err(Error::DuplicateExecutableFileHeader {
-                                    path: relpath.clone(),
-                                });
+                                if !skip_validation {
+                                    return Err(Error::DuplicateExecutableFileHeader {
+                                        path: relpath.clone(),
+                                    });
+                                }
                             }
                         }
                     }

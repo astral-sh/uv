@@ -66,7 +66,7 @@ fn help() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -147,7 +147,7 @@ fn help_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -227,7 +227,7 @@ fn help_short_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -272,6 +272,8 @@ fn help_subcommand() {
 
     - `<version>` e.g. `3`, `3.12`, `3.12.3`
     - `<version-specifier>` e.g. `>=3.12,<3.13`
+    - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     - `<implementation>` e.g. `cpython` or `cp`
     - `<implementation>@<version>` e.g. `cpython@3.12`
     - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -413,6 +415,8 @@ fn help_subcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIRECTORY=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -527,8 +531,6 @@ fn help_subsubcommand() {
               `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYTHON_INSTALL_MIRROR=]
 
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations.
@@ -537,15 +539,11 @@ fn help_subsubcommand() {
               `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYPY_INSTALL_MIRROR=]
 
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations.
               
               Note that currently, only local paths are supported.
-              
-              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
@@ -680,6 +678,8 @@ fn help_subsubcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIRECTORY=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -771,7 +771,7 @@ fn help_flag_subcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -810,13 +810,11 @@ fn help_flag_subsubcommand() {
           --no-registry
               Do not register the Python installation in the Windows registry
           --mirror <MIRROR>
-              Set the URL to use as the source for downloading Python installations [env:
-              UV_PYTHON_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading Python installations
           --pypy-mirror <PYPY_MIRROR>
-              Set the URL to use as the source for downloading PyPy installations [env:
-              UV_PYPY_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading PyPy installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+              URL pointing to JSON of custom Python installations
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed
       -f, --force
@@ -852,7 +850,7 @@ fn help_flag_subsubcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -1014,7 +1012,7 @@ fn help_with_global_option() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -1137,7 +1135,7 @@ fn help_with_no_pager() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>

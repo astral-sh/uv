@@ -19,7 +19,7 @@ use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Box<[Requirement]>,
-    pub provides_extras: Box<[ExtraName]>,
+    pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
@@ -33,7 +33,7 @@ impl RequiresDist {
             requires_dist: Box::into_iter(metadata.requires_dist)
                 .map(Requirement::from)
                 .collect(),
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
         }
@@ -61,6 +61,7 @@ impl RequiresDist {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
+            ..DiscoveryOptions::default()
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
@@ -198,7 +199,7 @@ impl RequiresDist {
             name: metadata.name,
             requires_dist,
             dependency_groups,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         })
     }
@@ -216,7 +217,7 @@ impl RequiresDist {
             for source in sources.iter() {
                 if let Some(extra) = source.extra() {
                     // If the extra doesn't exist at all, error.
-                    if !metadata.provides_extras.contains(extra) {
+                    if !metadata.provides_extra.contains(extra) {
                         return Err(MetadataError::MissingSourceExtra(
                             name.clone(),
                             extra.clone(),
@@ -268,7 +269,7 @@ impl From<Metadata> for RequiresDist {
         Self {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: metadata.dependency_groups,
             dynamic: metadata.dynamic,
         }
@@ -459,7 +460,8 @@ mod test {
             &WorkspaceCache::default(),
         )
         .await?;
-        let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
+        let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents)?;
+        let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,

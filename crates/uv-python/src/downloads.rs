@@ -411,6 +411,10 @@ impl PythonDownloadRequest {
         self.libc.as_ref()
     }
 
+    pub fn take_version(&mut self) -> Option<VersionRequest> {
+        self.version.take()
+    }
+
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads<'a>(
         &'a self,
@@ -792,7 +796,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
     OnceCell::new();
 
@@ -972,13 +977,14 @@ impl ManagedPythonDownload {
                         if let reqwest_retry::RetryDecision::Retry { execute_after } =
                             retry_decision
                         {
-                            debug!(
-                                "Transient failure while handling response for {}; retrying...",
-                                self.key()
-                            );
                             let duration = execute_after
                                 .duration_since(SystemTime::now())
                                 .unwrap_or_else(|_| Duration::default());
+                            debug!(
+                                "Transient failure while handling response for {}; retrying after {}s...",
+                                self.key(),
+                                duration.as_secs()
+                            );
                             tokio::time::sleep(duration).await;
                             retried_here = true;
                             continue; // Retry.
@@ -1129,7 +1135,7 @@ impl ManagedPythonDownload {
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
-            Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
+            Err(err) => return Err(Error::ExtractError(filename, err)),
         };
 
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
@@ -1260,12 +1266,12 @@ impl ManagedPythonDownload {
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
             uv_extract::stream::archive(&mut reader, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
         } else {
             uv_extract::stream::archive(&mut hasher, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
         }
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
@@ -1728,8 +1734,8 @@ mod tests {
             request.version,
             Some(VersionRequest::from_str("3.13.0rc1").unwrap())
         );
-        assert_eq!(request.os, None,);
-        assert_eq!(request.arch, None,);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
         assert_eq!(request.libc, None);
     }
 

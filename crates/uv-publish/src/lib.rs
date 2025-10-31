@@ -27,7 +27,7 @@ use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
-    RetryParsingError, UvRetryableStrategy, retries_from_env,
+    RetryParsingError, UvRetryableStrategy,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -382,6 +382,7 @@ pub async fn upload(
     filename: &DistFilename,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
+    retry_policy: ExponentialBackoff,
     credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
     download_concurrency: &Semaphore,
@@ -389,8 +390,6 @@ pub async fn upload(
 ) -> Result<bool, PublishError> {
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
-    // N.B. We cannot use the client policy here because it is set to zero retries.
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     loop {
         let (request, idx) = build_upload_request(
             file,
@@ -409,11 +408,15 @@ pub async fn upload(
         if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
             let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
             if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                warn_user!("Transient failure while handling response for {registry}; retrying...");
                 reporter.on_upload_complete(idx);
                 let duration = execute_after
                     .duration_since(SystemTime::now())
                     .unwrap_or_else(|_| Duration::default());
+                warn_user!(
+                    "Transient failure while handling response for {}; retrying after {}s...",
+                    registry,
+                    duration.as_secs()
+                );
                 tokio::time::sleep(duration).await;
                 n_past_retries += 1;
                 continue;
@@ -746,7 +749,7 @@ impl FormMetadata {
             requires_python,
             requires_external,
             project_urls,
-            provides_extras,
+            provides_extra,
             dynamic,
         } = metadata(file, filename).await?;
 
@@ -808,7 +811,7 @@ impl FormMetadata {
         add_vec("platform", platforms);
         add_vec("project_urls", project_urls);
         add_vec("provides_dist", provides_dist);
-        add_vec("provides_extra", provides_extras);
+        add_vec("provides_extra", provides_extra);
         add_vec("requires_dist", requires_dist);
         add_vec("requires_external", requires_external);
 

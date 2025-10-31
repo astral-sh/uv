@@ -22,6 +22,7 @@ name = "uv_install_wheel"
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -37,6 +38,7 @@ csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
+owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
