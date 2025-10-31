@@ -451,21 +451,21 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.11` -> `3.13t`
+    Updated `.python-version` from `3.11` -> `3.13+freethreaded`
 
     ----- stderr -----
-    warning: No interpreter found for Python 3.13t in [PYTHON SOURCES]
+    warning: No interpreter found for Python 3.13+freethreaded in [PYTHON SOURCES]
     ");
 
     // Request a implementation version that is compatible
-    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.13t` -> `cpython@3.11`
+    Updated `.python-version` from `3.13+freethreaded` -> `cpython@3.11`
 
     ----- stderr -----
-    "###);
+    ");
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({

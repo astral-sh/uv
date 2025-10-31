@@ -1011,7 +1011,7 @@ impl ProjectInterpreter {
                 "Using {} {}{}",
                 implementation.pretty(),
                 interpreter.python_version().cyan(),
-                interpreter.variant().suffix().cyan(),
+                interpreter.variant().display_suffix().cyan(),
             )?;
         } else {
             writeln!(
@@ -1019,7 +1019,7 @@ impl ProjectInterpreter {
                 "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
-                interpreter.variant().suffix(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
