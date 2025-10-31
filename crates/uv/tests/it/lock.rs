@@ -11236,7 +11236,7 @@ fn lock_find_links_relative_path_preserved() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(workspace.join("uv.lock"))?;
 
     insta::with_settings!({
         filters => context.filters(),

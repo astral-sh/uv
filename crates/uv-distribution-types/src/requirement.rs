@@ -934,21 +934,22 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 specifier,
                 index,
                 conflict,
-            } => Ok(Self::Registry {
-                specifier,
-                index: index.map(|index_str| {
-                    // Try to parse as URL first, then fallback to path
-                    if let Ok(verbatim_url) = VerbatimUrl::from_url_or_path(&index_str, None) {
-                        IndexMetadata::from(IndexUrl::from(verbatim_url.with_given(&index_str)))
-                    } else {
-                        // provide a fallback
-                        IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(
-                            DisplaySafeUrl::parse(&index_str).unwrap(),
-                        )))
-                    }
-                }),
-                conflict,
-            }),
+            } => {
+                let index = if let Some(index_str) = index {
+                    let verbatim_url = VerbatimUrl::from_url_or_path(&index_str, None)?;
+                    Some(IndexMetadata::from(IndexUrl::from(
+                        verbatim_url.with_given(&index_str),
+                    )))
+                } else {
+                    None
+                };
+
+                Ok(Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                })
+            }
             RequirementSourceWire::Git { git } => {
                 let mut repository = DisplaySafeUrl::parse(&git)?;
 
