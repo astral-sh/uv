@@ -78,8 +78,9 @@ impl Display for Error {
         if self.retries > 0 {
             write!(
                 f,
-                "Request failed after {retries} retries",
-                retries = self.retries
+                "Request failed after {retries} {subject}",
+                retries = self.retries,
+                subject = if self.retries > 1 { "retries" } else { "retry" }
             )
         } else {
             Display::fmt(&self.kind, f)
@@ -294,7 +295,7 @@ pub enum ErrorKind {
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
     /// Add the number of failed retries to the error.
-    #[error("Request failed after {retries} retries")]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RequestWithRetries {
         source: Box<ErrorKind>,
         retries: u32,
