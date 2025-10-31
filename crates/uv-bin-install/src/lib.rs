@@ -137,7 +137,7 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Attempt failed after {retries} retries")]
+    #[error("Attempt failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RetriedError {
         #[source]
         err: Box<Error>,

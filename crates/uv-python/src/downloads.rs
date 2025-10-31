@@ -56,7 +56,7 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
-    #[error("Request failed after {retries} retries")]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     NetworkErrorWithRetries {
         #[source]
         err: Box<Error>,
