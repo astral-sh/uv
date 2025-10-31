@@ -364,7 +364,9 @@ impl<'a> BaseClientBuilder<'a> {
             }
         }
 
-        // Check for the presence of an `SSL_CERT_FILE`.
+        // Checks for the presence of `SSL_CERT_FILE`.
+        // Certificate loading support is delegated to `rustls-native-certs`.
+        // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
         let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
             let path_exists = Path::new(&path).exists();
             if !path_exists {
@@ -376,11 +378,42 @@ impl<'a> BaseClientBuilder<'a> {
             path_exists
         });
 
+        // Checks for the presence of `SSL_CERT_DIR`.
+        // Certificate loading support is delegated to `rustls-native-certs`.
+        // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
+        let ssl_cert_dir_exists = env::var_os(EnvVars::SSL_CERT_DIR).is_some_and(|dirs| {
+            // Read `SSL_CERT_DIR`, split it on the platform delimiter (`:` on Unix, `;` on Windows),
+            // and return the existing/missing entries as `PathBuf`s.
+            let (existing, missing): (Vec<_>, Vec<_>) =
+                env::split_paths(&dirs).partition(|p| p.exists());
+
+            if existing.is_empty() {
+                warn_user_once!("Ignoring invalid `SSL_CERT_DIR`. None of the entries exists.");
+                return false;
+            }
+
+            // Warn on any missing entries
+            if !missing.is_empty() {
+                warn_user_once!(
+                    "Invalid entries in `SSL_CERT_DIR`. The following entries do not exist: {}.",
+                    missing
+                        .iter()
+                        .map(Simplified::simplified_display)
+                        .join(", ")
+                        .cyan()
+                );
+            }
+
+            // Proceed while ignoring missing entries
+            true
+        });
+
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
             &user_agent_string,
             timeout,
             ssl_cert_file_exists,
+            ssl_cert_dir_exists,
             Security::Secure,
             self.redirect_policy,
         );
@@ -390,6 +423,7 @@ impl<'a> BaseClientBuilder<'a> {
             &user_agent_string,
             timeout,
             ssl_cert_file_exists,
+            ssl_cert_dir_exists,
             Security::Insecure,
             self.redirect_policy,
         );
@@ -402,6 +436,7 @@ impl<'a> BaseClientBuilder<'a> {
         user_agent: &str,
         timeout: Duration,
         ssl_cert_file_exists: bool,
+        ssl_cert_dir_exists: bool,
         security: Security,
         redirect_policy: RedirectPolicy,
     ) -> Client {
@@ -420,7 +455,7 @@ impl<'a> BaseClientBuilder<'a> {
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
 
-        let client_builder = if self.native_tls || ssl_cert_file_exists {
+        let client_builder = if self.native_tls || ssl_cert_file_exists || ssl_cert_dir_exists {
             client_builder.tls_built_in_native_certs(true)
         } else {
             client_builder.tls_built_in_webpki_certs(true)

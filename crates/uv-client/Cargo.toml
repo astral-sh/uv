@@ -72,6 +72,9 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 insta = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 wiremock = { workspace = true }
 tempfile = { workspace = true }

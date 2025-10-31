@@ -13,3 +13,7 @@ test-group = 'serial'
 [[profile.default.overrides]]
 filter = 'package(uv-keyring)'
 test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = 'test(ssl_certs::ssl_env_vars)'
+test-group = 'serial'
