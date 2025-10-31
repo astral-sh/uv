@@ -1135,7 +1135,7 @@ impl ManagedPythonDownload {
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
-            Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
+            Err(err) => return Err(Error::ExtractError(filename, err)),
         };
 
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
@@ -1266,12 +1266,12 @@ impl ManagedPythonDownload {
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
             uv_extract::stream::archive(&mut reader, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
         } else {
             uv_extract::stream::archive(&mut hasher, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
         }
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
