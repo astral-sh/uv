@@ -23,7 +23,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -54,9 +54,11 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -118,6 +120,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -132,6 +135,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        excludes,
         extras,
         Some(groups),
         &client_builder,
@@ -165,6 +169,11 @@ pub(crate) async fn pip_install(
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<PackageName> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -550,6 +559,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),

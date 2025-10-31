@@ -202,6 +202,37 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`exclude-dependencies`](#exclude-dependencies) {: #exclude-dependencies }
+
+Dependencies to exclude when resolving the project's dependencies.
+
+Excludes are used to prevent a package from being selected during resolution,
+regardless of whether it's requested by any other package. When a package is excluded,
+it will be omitted from the dependency list entirely.
+
+Including a package as an exclusion will prevent it from being installed, even if
+it's requested by transitive dependencies. This can be useful for removing optional
+dependencies or working around packages with broken dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Exclude Werkzeug from being installed, even if transitive dependencies request it.
+exclude-dependencies = ["werkzeug"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.
