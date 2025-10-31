@@ -1,6 +1,8 @@
 //! Environment variables used or supported by uv.
 //! Used to generate `docs/reference/environment.md`.
-use uv_macros::{attr_added_in, attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata};
+use uv_macros::{
+    attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata,
+};
 
 /// Declares all environment variable used throughout `uv` and its crates.
 pub struct EnvVars;
