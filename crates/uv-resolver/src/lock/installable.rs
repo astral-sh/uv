@@ -65,7 +65,7 @@ pub trait Installable<'lock> {
             for root_name in self.roots() {
                 let dist = self
                     .lock()
-                    .find_by_name(root_name)
+                    .find_by_markers(root_name, marker_env.markers())
                     .map_err(|_| LockErrorKind::MultipleRootPackages {
                         name: root_name.clone(),
                     })?
@@ -97,7 +97,7 @@ pub trait Installable<'lock> {
         for root_name in self.roots() {
             let dist = self
                 .lock()
-                .find_by_name(root_name)
+                .find_by_markers(root_name, marker_env.markers())
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
                     name: root_name.clone(),
                 })?
