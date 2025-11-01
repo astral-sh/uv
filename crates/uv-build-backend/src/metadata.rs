@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -105,6 +105,26 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
     }
 }
 
+/// A package name as provided in a `pyproject.toml`.
+#[derive(Debug, Clone)]
+struct VerbatimPackageName {
+    /// The package name as given in the `pyproject.toml`.
+    given: String,
+    /// The normalized package name.
+    normalized: PackageName,
+}
+
+impl<'de> Deserialize<'de> for VerbatimPackageName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let given = String::deserialize(deserializer)?;
+        let normalized = PackageName::from_str(&given).map_err(serde::de::Error::custom)?;
+        Ok(Self { given, normalized })
+    }
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(
@@ -123,7 +143,7 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     pub(crate) fn name(&self) -> &PackageName {
-        &self.project.name.1
+        &self.project.name.normalized
     }
 
     pub(crate) fn version(&self) -> &Version {
@@ -456,7 +476,7 @@ impl PyProjectToml {
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
-            name: self.project.name.0.clone(),
+            name: self.project.name.given.clone(),
             version: self.project.version.to_string(),
             // Not supported.
             platforms: vec![],
@@ -570,17 +590,6 @@ impl PyProjectToml {
     }
 }
 
-// Deserialize the project name to both a normalized and non-normalized form.
-// For this, we make use of a custom deserializer: https://serde.rs/impl-deserializer.html
-fn deserialize_project_name<'de, D>(deserializer: D) -> Result<(String, PackageName), D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let name = String::deserialize(deserializer)?;
-    let normalized = PackageName::from_str(&name).map_err(serde::de::Error::custom)?;
-    Ok((name, normalized))
-}
-
 /// The `[project]` section of a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 ///
@@ -590,8 +599,7 @@ where
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project.
-    #[serde(deserialize_with = "deserialize_project_name")]
-    name: (String, PackageName),
+    name: VerbatimPackageName,
     /// The version of the project.
     version: Version,
     /// The summary description of the project in one line.
