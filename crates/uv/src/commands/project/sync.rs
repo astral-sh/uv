@@ -63,7 +63,7 @@ pub(crate) async fn sync(
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
-    package: Option<PackageName>,
+    package: Vec<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -109,13 +109,37 @@ pub(crate) async fn sync(
                 &workspace_cache,
             )
             .await?
-        } else if let Some(package) = package.as_ref() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+        } else if !package.is_empty() {
+            // If a single package is specified, use it as the current project
+            if package.len() == 1 {
+                VirtualProject::Project(
+                    Workspace::discover(
+                        project_dir,
+                        &DiscoveryOptions::default(),
+                        &workspace_cache,
+                    )
                     .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
-            )
+                    .with_current_project(package[0].clone())
+                    .with_context(|| format!("Package `{}` not found in workspace", package[0]))?,
+                )
+            } else {
+                // Multiple packages specified - discover the workspace and validate all packages exist
+                let workspace = Workspace::discover(
+                    project_dir,
+                    &DiscoveryOptions::default(),
+                    &workspace_cache,
+                )
+                .await?;
+
+                // Validate that all specified packages exist in the workspace
+                for pkg in &package {
+                    if !workspace.packages().contains_key(pkg) {
+                        anyhow::bail!("Package `{pkg}` not found in workspace");
+                    }
+                }
+
+                VirtualProject::NonProject(workspace)
+            }
         } else {
             VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                 .await?
@@ -379,8 +403,7 @@ pub(crate) async fn sync(
     }
 
     // Identify the installation target.
-    let sync_target =
-        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
+    let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
     let state = state.fork();
 
@@ -459,7 +482,7 @@ fn identify_installation_target<'a>(
     target: &'a SyncTarget,
     lock: &'a Lock,
     all_packages: bool,
-    package: Option<&'a PackageName>,
+    package: &'a [PackageName],
 ) -> InstallTarget<'a> {
     match &target {
         SyncTarget::Project(project) => {
@@ -470,11 +493,19 @@ fn identify_installation_target<'a>(
                             workspace: project.workspace(),
                             lock,
                         }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock,
+                    } else if !package.is_empty() {
+                        if package.len() == 1 {
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: &package[0],
+                                lock,
+                            }
+                        } else {
+                            InstallTarget::Projects {
+                                workspace: project.workspace(),
+                                names: package,
+                                lock,
+                            }
                         }
                     } else {
                         // By default, install the root package.
@@ -488,11 +519,19 @@ fn identify_installation_target<'a>(
                 VirtualProject::NonProject(workspace) => {
                     if all_packages {
                         InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock,
+                    } else if !package.is_empty() {
+                        if package.len() == 1 {
+                            InstallTarget::Project {
+                                workspace,
+                                name: &package[0],
+                                lock,
+                            }
+                        } else {
+                            InstallTarget::Projects {
+                                workspace,
+                                names: package,
+                                lock,
+                            }
                         }
                     } else {
                         // By default, install the entire workspace.
@@ -613,6 +652,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
         | InstallTarget::Project { workspace, .. }
+        | InstallTarget::Projects { workspace, .. }
         | InstallTarget::NonProjectWorkspace { workspace, .. } => {
             LoweredExtraBuildDependencies::from_workspace(
                 extra_build_dependencies.clone(),
