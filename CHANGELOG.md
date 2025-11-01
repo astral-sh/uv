@@ -4,6 +4,13 @@
 
 ### Enhancements
 
+- Add man page support for `uv tool install` ([#7171](https://github.com/astral-sh/uv/pull/7171))
+  - Man pages are automatically discovered and installed during tool installation
+  - Man pages are displayed in `uv tool list` output
+  - Man pages are removed automatically during tool uninstallation
+  - Configurable via `UV_TOOL_MAN_DIR` environment variable
+  - Supports all standard man page sections (man1-man9)
+
 - Add `--no-emit-project` and friends to `uv export` ([#7110](https://github.com/astral-sh/uv/pull/7110))
 - Add `--output-file` to `uv export` ([#7109](https://github.com/astral-sh/uv/pull/7109))
 - Prune unused source distributions from the cache in `uv cache prune` ([#7112](https://github.com/astral-sh/uv/pull/7112))

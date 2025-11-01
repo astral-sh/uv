@@ -76,6 +76,9 @@ In addition, uv respects the following environment variables:
   packages.
 - `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
 - `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
+- `UV_TOOL_MAN_DIR`: Used to specify the directory where uv will install tool man pages. Takes
+  precedence over all other man page directory resolution methods. If set, man pages will be
+  installed to `$UV_TOOL_MAN_DIR/man<N>/<filename>` where `<N>` is the man page section number.
 - `UV_PROJECT_ENVIRONMENT`: Use to specify the path to the directory to use for a project virtual
   environment. See the
   [project documentation](../concepts/projects.md#configuring-the-project-environment-path) for more
