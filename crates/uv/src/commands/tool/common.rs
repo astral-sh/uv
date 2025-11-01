@@ -71,6 +71,28 @@ pub(crate) fn remove_resources(tool: &Tool) {
                 "Failed to remove manpage: `{}`: {err}",
                 manpage.simplified_display()
             );
+        } else {
+            // Try to remove the parent directory (e.g., man6/) if it's now empty
+            if let Some(parent_dir) = manpage.parent() {
+                // Try to remove the directory - this will only succeed if it's empty
+                match fs_err::remove_dir(parent_dir) {
+                    Ok(()) => {
+                        debug!(
+                            "Removed empty directory: `{}`",
+                            parent_dir.simplified_display()
+                        );
+                    }
+                    Err(err) => {
+                        // Most likely the directory is not empty (other tools have man pages)
+                        // but could also be permission issues or other errors
+                        debug!(
+                            "Failed to remove directory `{}`: {}",
+                            parent_dir.simplified_display(),
+                            err
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -307,9 +329,11 @@ fn install_resource_targets(
     for (name, source_path, target_path) in targets {
         debug!("Installing {resource_type}: `{name}`");
         #[cfg(unix)]
-        replace_symlink(source_path, target_path).context("Failed to install {resource_type}")?;
+        replace_symlink(source_path, target_path)
+            .context(format!("Failed to install {resource_type}"))?;
         #[cfg(windows)]
-        fs_err::copy(source_path, target_path).context("Failed to install {resource_type}")?;
+        fs_err::copy(source_path, target_path)
+            .context(format!("Failed to install {resource_type}"))?;
     }
 
     if !targets.is_empty() {
