@@ -498,3 +498,198 @@ fn test_tool_upgrade_with() {
      + pytz==2024.1
     "###);
 }
+
+/// Test that upgrading a tool preserves man pages correctly.
+/// This tests the scenario where a tool with man pages is upgraded to the same version
+/// (verifying man pages are retained).
+#[test]
+fn test_tool_upgrade_preserves_manpages() {
+    use assert_fs::prelude::*;
+
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data_dir = context.temp_dir.child("xdg_data");
+    let man_dir = xdg_data_dir.child("man");
+
+    // Install `pycowsay` (has man6 page)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify man page was installed
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::exists());
+
+    // Upgrade `pycowsay` (should be a no-op since already latest)
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+
+    // Verify man page still exists after upgrade attempt
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::exists());
+}
+
+/// Test upgrading a tool without man pages (baseline for comparison).
+#[test]
+fn test_tool_upgrade_without_manpages() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` (no man pages)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==23.1.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==23.1.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Upgrade `black` to a newer version (note: may be nothing to upgrade if already latest)
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+}
+
+/// Test that upgrading all tools preserves man pages.
+#[test]
+fn test_tool_upgrade_all_with_manpages() {
+    use assert_fs::prelude::*;
+
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data_dir = context.temp_dir.child("xdg_data");
+    let man_dir = xdg_data_dir.child("man");
+
+    // Install `pycowsay` (has man6 page)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Install `black` (no man pages)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==23.1.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==23.1.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Verify man page exists before upgrade
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::exists());
+
+    // Upgrade all tools (note: may be nothing to upgrade if already latest)
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+
+    // Verify man page still exists after upgrading all
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::exists());
+}

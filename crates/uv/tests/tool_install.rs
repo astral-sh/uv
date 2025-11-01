@@ -272,6 +272,198 @@ fn tool_install_manpages() {
         .assert(predicate::path::exists());
 }
 
+// NOTE: Testing multiple man page sections (e.g., man1, man5, man7 in one package) is
+// difficult because no commonly available Python test package has man pages in multiple
+// sections. The code correctly handles multiple sections via iteration, and validation in
+// manpage_from_path() accepts man1-man9. This is validated by code review rather than
+// integration testing. If a suitable test package becomes available, add a test here.
+
+/// Test installing a tool with `uv tool install` with `UV_TOOL_MAN_DIR` environment variable
+#[test]
+fn tool_install_uv_tool_man_dir() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let custom_man_dir = context.temp_dir.child("custom_man");
+
+    // Install `pycowsay` with UV_TOOL_MAN_DIR override
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("UV_TOOL_MAN_DIR", custom_man_dir.as_os_str())
+        .env("UV_COMPILE_BYTECODE", "1")
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+    Bytecode compiled 4 files in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    tool_dir.child("pycowsay").assert(predicate::path::is_dir());
+    tool_dir
+        .child("pycowsay")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("pycowsay{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt with manpage in custom directory
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pycowsay").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "pycowsay" }]
+        entrypoints = [
+            { name = "pycowsay", install-path = "[TEMP_DIR]/bin/pycowsay" },
+        ]
+        manpages = [
+            { name = "man6/pycowsay.6", install-path = "[TEMP_DIR]/custom_man/man6/pycowsay.6" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode = true
+        "###);
+    });
+
+    // Verify manpage is in the custom directory
+    custom_man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicate::path::exists());
+}
+
+/// Test man page installation with `UV_TOOL_BIN_DIR/../share/man` fallback
+/// (when `UV_TOOL_MAN_DIR` is not set but the directory exists).
+#[test]
+fn tool_install_manpage_uv_tool_bin_dir_fallback() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let man_dir = context.temp_dir.child("share").child("man");
+
+    // Pre-create the man directory so UV_TOOL_BIN_DIR fallback can find it
+    fs_err::create_dir_all(man_dir.path()).unwrap();
+
+    // Install `pycowsay` without UV_TOOL_MAN_DIR (should use UV_TOOL_BIN_DIR/../share/man)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("UV_TOOL_BIN_DIR", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify manpage is in bin_dir/../share/man
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicate::path::exists());
+}
+
+/// Test man page installation with `XDG_DATA_HOME/man` fallback
+/// (when `UV_TOOL_MAN_DIR` and `UV_TOOL_BIN_DIR` are not set).
+#[test]
+fn tool_install_manpage_xdg_data_home_fallback() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data = context.temp_dir.child("xdg_data");
+    let man_dir = xdg_data.child("man");
+
+    // Install `pycowsay` with XDG_DATA_HOME set (should use XDG_DATA_HOME/man)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify manpage is in XDG_DATA_HOME/man
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicate::path::exists());
+}
+
+/// Test man page installation with HOME/.local/share/man fallback
+/// (when only HOME is set).
+#[test]
+fn tool_install_manpage_home_fallback() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let home_dir = context.temp_dir.child("home");
+    let man_dir = home_dir.child(".local").child("share").child("man");
+
+    // Install `pycowsay` with only HOME set (should use HOME/.local/share/man)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("HOME", home_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify manpage is in HOME/.local/share/man
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicate::path::exists());
+}
+
 #[test]
 fn tool_install_suggest_other_packages_with_executable() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
@@ -1306,6 +1498,77 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     "###);
+}
+
+/// Test that --force flag properly handles man page conflicts.
+#[test]
+fn tool_install_manpage_force() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data_dir = context.temp_dir.child("xdg_data");
+    let man_dir = xdg_data_dir.child("man");
+
+    // Install `pycowsay` first time
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify man page exists
+    let man_file = man_dir.child("man6").child("pycowsay.6");
+    man_file.assert(predicate::path::exists());
+
+    // Try to reinstall without --force (should be a no-op)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `pycowsay` is already installed
+    "###);
+
+    // Reinstall with --force (should succeed and preserve man page)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .arg("--force")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    // Verify man page still exists after force reinstall
+    man_file.assert(predicate::path::exists());
 }
 
 /// Test `uv tool install` when the bin directory is inferred from `$HOME`

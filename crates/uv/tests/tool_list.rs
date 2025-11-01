@@ -295,3 +295,69 @@ fn tool_list_show_version_specifiers() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_with_manpages() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let man_dir = context.temp_dir.child("share").child("man");
+
+    // Install `pycowsay` which has man pages
+    context
+        .tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("UV_TOOL_MAN_DIR", man_dir.as_os_str())
+        .env("UV_COMPILE_BYTECODE", "1")
+        .assert()
+        .success();
+
+    // List tools and verify man pages are shown
+    uv_snapshot!(context.filters(), context.tool_list()
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pycowsay v0.0.0.2
+    - pycowsay
+    - man6/pycowsay.6
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_list_with_manpages_paths() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let man_dir = context.temp_dir.child("share").child("man");
+
+    // Install `pycowsay` which has man pages
+    context
+        .tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("UV_TOOL_MAN_DIR", man_dir.as_os_str())
+        .env("UV_COMPILE_BYTECODE", "1")
+        .assert()
+        .success();
+
+    // List tools with paths and verify man pages are shown with paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-paths")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pycowsay v0.0.0.2 ([TEMP_DIR]/tools/pycowsay)
+    - pycowsay ([TEMP_DIR]/bin/pycowsay)
+    - man6/pycowsay.6 ([TEMP_DIR]/share/man/man6/pycowsay.6)
+
+    ----- stderr -----
+    "###);
+}
