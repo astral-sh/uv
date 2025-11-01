@@ -75,9 +75,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         match self {
             Self::Project { name, .. } => Box::new(std::iter::once(*name)),
             Self::Projects { names, .. } => Box::new(names.iter()),
-            Self::NonProjectWorkspace { lock, .. } => {
-                Box::new(lock.members().iter())
-            }
+            Self::NonProjectWorkspace { lock, .. } => Box::new(lock.members().iter()),
             Self::Workspace { lock, .. } => {
                 // Identify the workspace members.
                 //
@@ -297,9 +295,9 @@ impl<'lock> InstallTarget<'lock> {
                                 Err(ProjectError::MissingExtraProject(extra.clone()))
                             }
                             Self::Projects { .. } => {
-                                Err(ProjectError::MissingExtraWorkspace(extra.clone()))
+                                Err(ProjectError::MissingExtraProjects(extra.clone()))
                             }
-                            _ => Err(ProjectError::MissingExtraWorkspace(extra.clone())),
+                            _ => Err(ProjectError::MissingExtraProjects(extra.clone())),
                         };
                     }
                 }
@@ -355,7 +353,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 for group in groups.explicit_names() {
                     if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
+                        return Err(ProjectError::MissingGroupProjects(group.clone()));
                     }
                 }
             }
@@ -376,8 +374,12 @@ impl<'lock> InstallTarget<'lock> {
                 for group in groups.explicit_names() {
                     if !known_groups.contains(group) {
                         return match self {
-                            Self::Project { .. } => Err(ProjectError::MissingGroupProject(group.clone())),
-                            Self::Projects { .. } => Err(ProjectError::MissingGroupWorkspace(group.clone())),
+                            Self::Project { .. } => {
+                                Err(ProjectError::MissingGroupProject(group.clone()))
+                            }
+                            Self::Projects { .. } => {
+                                Err(ProjectError::MissingGroupProjects(group.clone()))
+                            }
                             _ => unreachable!(),
                         };
                     }
@@ -402,108 +404,27 @@ impl<'lock> InstallTarget<'lock> {
         groups: &DependencyGroupsWithDefaults,
     ) -> BTreeSet<&PackageName> {
         match self {
-            Self::Project { name, lock, .. } => {
+            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+                let roots = self.roots().collect::<FxHashSet<_>>();
+
                 // Collect the packages by name for efficient lookup.
                 let packages = lock
                     .packages()
                     .iter()
-                    .map(|p| (p.name(), p))
-                    .collect::<BTreeMap<_, _>>();
-
-                // We'll include the project itself
-                let mut required_members = BTreeSet::new();
-                required_members.insert(*name);
-
-                // Find all workspace member dependencies recursively
-                let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
-                let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
-
-                let Some(root_package) = packages.get(name) else {
-                    return required_members;
-                };
-
-                if groups.prod() {
-                    // Add the root package
-                    queue.push_back((name, None));
-                    seen.insert((name, None));
-
-                    // Add explicitly activated extras for the root package
-                    for extra in extras.extra_names(root_package.optional_dependencies().keys()) {
-                        if seen.insert((name, Some(extra))) {
-                            queue.push_back((name, Some(extra)));
-                        }
-                    }
-                }
-
-                // Add activated dependency groups for the root package
-                for (group_name, dependencies) in root_package.resolved_dependency_groups() {
-                    if !groups.contains(group_name) {
-                        continue;
-                    }
-                    for dependency in dependencies {
-                        let name = dependency.package_name();
-                        queue.push_back((name, None));
-                        for extra in dependency.extra() {
-                            queue.push_back((name, Some(extra)));
-                        }
-                    }
-                }
-
-                while let Some((pkg_name, extra)) = queue.pop_front() {
-                    if lock.members().contains(pkg_name) {
-                        required_members.insert(pkg_name);
-                    }
-
-                    let Some(package) = packages.get(pkg_name) else {
-                        continue;
-                    };
-
-                    let Some(dependencies) = extra
-                        .map(|extra_name| {
-                            package
-                                .optional_dependencies()
-                                .get(extra_name)
-                                .map(Vec::as_slice)
-                        })
-                        .unwrap_or(Some(package.dependencies()))
-                    else {
-                        continue;
-                    };
-
-                    for dependency in dependencies {
-                        let name = dependency.package_name();
-                        if seen.insert((name, None)) {
-                            queue.push_back((name, None));
-                        }
-                        for extra in dependency.extra() {
-                            if seen.insert((name, Some(extra))) {
-                                queue.push_back((name, Some(extra)));
-                            }
-                        }
-                    }
-                }
-
-                required_members
-            }
-            Self::Projects { names, lock, .. } => {
-                // Collect the packages by name for efficient lookup.
-                let packages = lock
-                    .packages()
-                    .iter()
-                    .map(|p| (p.name(), p))
+                    .map(|package| (package.name(), package))
                     .collect::<BTreeMap<_, _>>();
 
                 // We'll include all specified projects
                 let mut required_members = BTreeSet::new();
-                for name in names.iter() {
-                    required_members.insert(name);
+                for name in &roots {
+                    required_members.insert(*name);
                 }
 
                 // Find all workspace member dependencies recursively for all specified packages
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
                 let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                for name in names.iter() {
+                for name in roots {
                     let Some(root_package) = packages.get(name) else {
                         continue;
                     };
@@ -515,7 +436,8 @@ impl<'lock> InstallTarget<'lock> {
                         }
 
                         // Add explicitly activated extras for the root package
-                        for extra in extras.extra_names(root_package.optional_dependencies().keys()) {
+                        for extra in extras.extra_names(root_package.optional_dependencies().keys())
+                        {
                             if seen.insert((name, Some(extra))) {
                                 queue.push_back((name, Some(extra)));
                             }
@@ -541,12 +463,12 @@ impl<'lock> InstallTarget<'lock> {
                     }
                 }
 
-                while let Some((pkg_name, extra)) = queue.pop_front() {
-                    if lock.members().contains(pkg_name) {
-                        required_members.insert(pkg_name);
+                while let Some((package_name, extra)) = queue.pop_front() {
+                    if lock.members().contains(package_name) {
+                        required_members.insert(package_name);
                     }
 
-                    let Some(package) = packages.get(pkg_name) else {
+                    let Some(package) = packages.get(package_name) else {
                         continue;
                     };
 

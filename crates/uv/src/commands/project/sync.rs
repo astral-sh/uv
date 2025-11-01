@@ -109,40 +109,28 @@ pub(crate) async fn sync(
                 &workspace_cache,
             )
             .await?
-        } else if !package.is_empty() {
-            // If a single package is specified, use it as the current project
-            if package.len() == 1 {
-                VirtualProject::Project(
-                    Workspace::discover(
-                        project_dir,
-                        &DiscoveryOptions::default(),
-                        &workspace_cache,
-                    )
+        } else if let [name] = package.as_slice() {
+            VirtualProject::Project(
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
-                    .with_current_project(package[0].clone())
-                    .with_context(|| format!("Package `{}` not found in workspace", package[0]))?,
-                )
-            } else {
-                // Multiple packages specified - discover the workspace and validate all packages exist
-                let workspace = Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &workspace_cache,
-                )
-                .await?;
-
-                // Validate that all specified packages exist in the workspace
-                for pkg in &package {
-                    if !workspace.packages().contains_key(pkg) {
-                        anyhow::bail!("Package `{pkg}` not found in workspace");
-                    }
-                }
-
-                VirtualProject::NonProject(workspace)
-            }
+                    .with_current_project(name.clone())
+                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            let project = VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?;
+
+            for name in &package {
+                if !project.workspace().packages().contains_key(name) {
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace",));
+                }
+            }
+
+            project
         };
 
         // TODO(lucab): improve warning content
@@ -493,49 +481,45 @@ fn identify_installation_target<'a>(
                             workspace: project.workspace(),
                             lock,
                         }
-                    } else if !package.is_empty() {
-                        if package.len() == 1 {
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: &package[0],
-                                lock,
-                            }
-                        } else {
-                            InstallTarget::Projects {
-                                workspace: project.workspace(),
-                                names: package,
-                                lock,
-                            }
-                        }
                     } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock,
+                        match package {
+                            // By default, install the root project.
+                            [] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock,
+                            },
+                            [name] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace: project.workspace(),
+                                names,
+                                lock,
+                            },
                         }
                     }
                 }
                 VirtualProject::NonProject(workspace) => {
                     if all_packages {
                         InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else if !package.is_empty() {
-                        if package.len() == 1 {
-                            InstallTarget::Project {
-                                workspace,
-                                name: &package[0],
-                                lock,
-                            }
-                        } else {
-                            InstallTarget::Projects {
-                                workspace,
-                                names: package,
-                                lock,
-                            }
-                        }
                     } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                        match package {
+                            // By default, install the entire workspace.
+                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                            [name] => InstallTarget::Project {
+                                workspace,
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace,
+                                names,
+                                lock,
+                            },
+                        }
                     }
                 }
             }
