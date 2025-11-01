@@ -1311,7 +1311,7 @@ pub(crate) struct SyncSettings {
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) all_packages: bool,
-    pub(crate) package: Option<PackageName>,
+    pub(crate) package: Vec<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
