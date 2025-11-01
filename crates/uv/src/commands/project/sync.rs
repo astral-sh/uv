@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -99,39 +99,15 @@ pub(crate) async fn sync(
         SyncTarget::Script(script)
     } else {
         // Identify the project.
-        let project = if frozen {
-            VirtualProject::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    members: MemberDiscovery::None,
-                    ..DiscoveryOptions::default()
-                },
-                &workspace_cache,
-            )
-            .await?
-        } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
-            )
-        } else {
-            let project = VirtualProject::discover(
-                project_dir,
-                &DiscoveryOptions::default(),
-                &workspace_cache,
-            )
-            .await?;
-
-            for name in &package {
-                if !project.workspace().packages().contains_key(name) {
-                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace",));
-                }
+        let discovery = if frozen {
+            DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..DiscoveryOptions::default()
             }
-
-            project
+        } else {
+            DiscoveryOptions::default()
         };
+        let project = VirtualProject::discover(project_dir, &discovery, &workspace_cache).await?;
 
         // TODO(lucab): improve warning content
         // <https://github.com/astral-sh/uv/issues/7428>
