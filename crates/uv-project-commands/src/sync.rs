@@ -105,17 +105,10 @@ pub async fn sync(
             },
             ..DiscoveryOptions::default()
         };
-        let selected_package = if let [name] = package.as_slice()
-            && frozen.is_none()
-        {
-            Some(name)
-        } else {
-            None
-        };
         match DiscoveredProject::discover(
             project_dir,
             &options,
-            selected_package,
+            None,
             frozen,
             preview,
             cache,
@@ -124,18 +117,10 @@ pub async fn sync(
         .await?
         {
             DiscoveredProject::Manifest(project) => {
-                if frozen.is_none() {
-                    for name in &package {
-                        if !project.workspace().packages().contains_key(name) {
-                            return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
-                        }
-                    }
-                }
                 manifest_target = SyncManifest::Project(project);
                 SyncTarget::Manifest(&manifest_target)
             }
             DiscoveredProject::Lockfile(workspace) => {
-                workspace.validate_packages(&package)?;
                 frozen_workspace = workspace;
                 let project_name = frozen_workspace.current_project(project_dir).cloned();
                 SyncTarget::Lockfile {
