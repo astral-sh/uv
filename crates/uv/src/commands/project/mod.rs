@@ -161,7 +161,7 @@ pub(crate) enum ProjectError {
     MissingGroupProject(GroupName),
 
     #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupWorkspace(GroupName),
+    MissingGroupProjects(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
@@ -175,7 +175,7 @@ pub(crate) enum ProjectError {
     MissingExtraProject(ExtraName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraWorkspace(ExtraName),
+    MissingExtraProjects(ExtraName),
 
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),

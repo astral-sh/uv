@@ -280,126 +280,98 @@ fn multiple_packages() -> Result<()> {
         name = "root"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["child-a", "child-b", "child-c"]
+        dependencies = ["foo", "bar", "baz"]
 
         [tool.uv.sources]
-        child-a = { workspace = true }
-        child-b = { workspace = true }
-        child-c = { workspace = true }
+        foo = { workspace = true }
+        bar = { workspace = true }
+        baz = { workspace = true }
 
         [tool.uv.workspace]
         members = ["packages/*"]
         "#,
     )?;
 
-    let src = context.temp_dir.child("src").child("root");
-    src.create_dir_all()?;
-    src.child("__init__.py").touch()?;
-
-    // Create child-a with requests dependency
-    let child_a = context.temp_dir.child("packages").child("child-a");
-    fs_err::create_dir_all(&child_a)?;
-    child_a.child("pyproject.toml").write_str(
-        r#"
+    context
+        .temp_dir
+        .child("packages")
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
         [project]
-        name = "child-a"
+        name = "foo"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        dependencies = ["anyio"]
         "#,
-    )?;
-    let src = child_a.child("src").child("child_a");
-    src.create_dir_all()?;
-    src.child("__init__.py").touch()?;
+        )?;
 
-    // Create child-b with httpx dependency
-    let child_b = context.temp_dir.child("packages").child("child-b");
-    fs_err::create_dir_all(&child_b)?;
-    child_b.child("pyproject.toml").write_str(
-        r#"
+    context
+        .temp_dir
+        .child("packages")
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
         [project]
-        name = "child-b"
+        name = "bar"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        dependencies = ["typing-extensions"]
         "#,
-    )?;
-    let src = child_b.child("src").child("child_b");
-    src.create_dir_all()?;
-    src.child("__init__.py").touch()?;
+        )?;
 
-    // Create child-c with pytest dependency
-    let child_c = context.temp_dir.child("packages").child("child-c");
-    fs_err::create_dir_all(&child_c)?;
-    child_c.child("pyproject.toml").write_str(
-        r#"
+    context
+        .temp_dir
+        .child("packages")
+        .child("baz")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
         [project]
-        name = "child-c"
+        name = "baz"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["pytest"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        dependencies = ["iniconfig"]
         "#,
-    )?;
-    let src = child_c.child("src").child("child_c");
-    src.create_dir_all()?;
-    src.child("__init__.py").touch()?;
+        )?;
 
-    // Sync only child-a and child-b
+    // Sync `foo` and `bar`.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--package").arg("child-a")
-        .arg("--package").arg("child-b"), @r"
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    Prepared 12 packages in [TIME]
-    Installed 12 packages in [TIME]
+    Resolved 9 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
      + anyio==4.3.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + child-a==0.1.0 (from file://[TEMP_DIR]/packages/child-a)
-     + child-b==0.1.0 (from file://[TEMP_DIR]/packages/child-b)
-     + h11==0.14.0
-     + httpcore==1.0.4
-     + httpx==0.27.0
+     + bar==0.1.0 (from file://[TEMP_DIR]/packages/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/packages/foo)
      + idna==3.6
-     + requests==2.31.0
      + sniffio==1.3.1
-     + urllib3==2.2.1
+     + typing-extensions==4.10.0
     ");
 
-    // Now sync all three packages
+    // Sync `foo`, `bar`, and `baz`.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--package").arg("child-a")
-        .arg("--package").arg("child-b")
-        .arg("--package").arg("child-c"), @r"
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar")
+        .arg("--package").arg("baz"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + child-c==0.1.0 (from file://[TEMP_DIR]/packages/child-c)
+    Resolved 9 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + baz==0.1.0 (from file://[TEMP_DIR]/packages/baz)
      + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
     ");
 
     Ok(())
