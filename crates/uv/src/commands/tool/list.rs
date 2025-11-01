@@ -97,6 +97,20 @@ pub(crate) async fn list(
                 writeln!(printer.stdout(), "- {}", entrypoint.name)?;
             }
         }
+
+        // Output tool manpages
+        for manpage in tool.manpages() {
+            if show_paths {
+                writeln!(
+                    printer.stdout(),
+                    "- {} ({})",
+                    manpage.name,
+                    manpage.install_path.simplified_display().cyan()
+                )?;
+            } else {
+                writeln!(printer.stdout(), "- {}", manpage.name)?;
+            }
+        }
     }
 
     Ok(ExitStatus::Success)
