@@ -8,7 +8,9 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, EditableMode, Reinstall, TargetTriple, Upgrade,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
@@ -32,9 +34,10 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
+use crate::commands::project::apply_editable_mode;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EnvironmentSpecification, EnvironmentUpdate, PlatformState, ProjectError, resolve_environment,
+    resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
@@ -461,12 +464,20 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(environment) = existing_environment {
-        let environment = match update_environment(
-            environment.into_environment(),
+    let environment = if let Some(existing_env) = existing_environment {
+        // Update existing environment with requested editable policy.
+        let editable_mode = if editable {
+            Some(EditableMode::Editable)
+        } else {
+            Some(EditableMode::NonEditable)
+        };
+
+        let EnvironmentUpdate { environment, .. } = match update_environment(
+            existing_env.into_environment(),
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
+            editable_mode,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,
@@ -484,7 +495,7 @@ pub(crate) async fn install(
         )
         .await
         {
-            Ok(update) => update.into_environment(),
+            Ok(update) => update,
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(
                     client_builder.is_native_tls(),
@@ -601,10 +612,17 @@ pub(crate) async fn install(
             remove_entrypoints(&existing_receipt);
         }
 
-        // Sync the environment with the resolved requirements.
+        // Sync the environment with the resolved requirements, after applying editable mode.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(
+                resolution.into(),
+                if editable {
+                    Some(uv_configuration::EditableMode::Editable)
+                } else {
+                    Some(uv_configuration::EditableMode::NonEditable)
+                },
+            ),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
