@@ -26,6 +26,12 @@ use uv_state::{StateBucket, StateStore};
 mod receipt;
 mod tool;
 
+/// Environment variable to override the directory where tool executables are installed.
+pub const UV_TOOL_BIN_DIR: &str = "UV_TOOL_BIN_DIR";
+
+/// Environment variable to override the directory where tool man pages are installed.
+pub const UV_TOOL_MAN_DIR: &str = "UV_TOOL_MAN_DIR";
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -42,6 +48,8 @@ pub enum Error {
     DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory for executables")]
     NoExecutableDirectory,
+    #[error("Failed to find a directory for man pages")]
+    NoManpageDirectory,
     #[error(transparent)]
     ToolName(#[from] InvalidNameError),
     #[error(transparent)]
@@ -355,7 +363,7 @@ impl fmt::Display for InstalledTool {
 ///
 /// Errors if a directory cannot be found.
 pub fn find_executable_directory() -> Result<PathBuf, Error> {
-    std::env::var_os("UV_TOOL_BIN_DIR")
+    std::env::var_os(UV_TOOL_BIN_DIR)
         .and_then(dirs_sys::is_absolute_path)
         .or_else(|| std::env::var_os("XDG_BIN_HOME").and_then(dirs_sys::is_absolute_path))
         .or_else(|| {
@@ -378,6 +386,7 @@ pub fn find_executable_directory() -> Result<PathBuf, Error> {
 ///
 /// This follows, in order:
 ///
+/// - `$UV_TOOL_MAN_DIR` (if set and is absolute path)
 /// - `$UV_TOOL_BIN_DIR/../share/man` (only choose this if `$UV_TOOL_BIN_DIR/../share` exists)
 /// - `$XDG_BIN_HOME/../share/man` (only choose this if `$XDG_BIN_HOME/../share` exists)
 /// - `$XDG_DATA_HOME/man`
@@ -387,11 +396,15 @@ pub fn find_executable_directory() -> Result<PathBuf, Error> {
 ///
 /// Errors if a directory cannot be found.
 pub fn find_manpage_directory() -> Result<PathBuf, Error> {
-    std::env::var_os("UV_TOOL_BIN_DIR")
+    std::env::var_os(UV_TOOL_MAN_DIR)
         .and_then(dirs_sys::is_absolute_path)
-        .map(|path| path.join("..").join("share").join("man"))
-        .and_then(|path| normalize_absolute_path(&path).ok())
-        .filter(|path| path.is_dir())
+        .or_else(|| {
+            std::env::var_os(UV_TOOL_BIN_DIR)
+                .and_then(dirs_sys::is_absolute_path)
+                .map(|path| path.join("..").join("share").join("man"))
+                .and_then(|path| normalize_absolute_path(&path).ok())
+                .filter(|path| path.is_dir())
+        })
         .or_else(|| {
             std::env::var_os("XDG_BIN_HOME")
                 .and_then(dirs_sys::is_absolute_path)
@@ -412,7 +425,7 @@ pub fn find_manpage_directory() -> Result<PathBuf, Error> {
             let home_dir = dirs_sys::home_dir();
             home_dir.map(|path| path.join(".local").join("share").join("man"))
         })
-        .ok_or(Error::NoExecutableDirectory)
+        .ok_or(Error::NoManpageDirectory)
 }
 
 /// Find the `.dist-info` directory for a package in an environment.
@@ -541,24 +554,34 @@ fn executable_from_path<'a, P: AsRef<Path>>(
         .ok()
 }
 
-// A manpage that should have a suffix path of `/share/man/man[0-9]/filename`
+// A manpage that should have a suffix path of `/share/man/man[1-9]/filename`
 fn manpage_from_path<'a, P: AsRef<Path>>(
     relative_path: &'a P,
     data_relative: &P,
 ) -> Option<&'a Path> {
+    use std::path::Component;
+
     let path_in_data = relative_path
         .as_ref()
         .strip_prefix(data_relative.as_ref())
         .ok()?;
 
+    // Security: Reject paths with parent directory components to prevent traversal
+    if path_in_data
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return None;
+    }
+
     let mut it = path_in_data.components();
     it.next().filter(|s| s.as_os_str() == "share")?;
     it.next().filter(|s| s.as_os_str() == "man")?;
-    // section
+    // section: must be man1-man9 (man0 is invalid)
     it.next().filter(|s| {
         let s = s.as_os_str().to_string_lossy();
         let suffix = s.trim_start_matches("man");
-        suffix.len() == 1 && suffix.as_bytes()[0].is_ascii_digit()
+        suffix.len() == 1 && matches!(suffix.as_bytes()[0], b'1'..=b'9')
     })?;
     // filename
     it.next()?;
