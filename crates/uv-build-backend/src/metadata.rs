@@ -123,9 +123,9 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     pub(crate) fn name(&self) -> &PackageName {
-        &self.project.name
+        &self.project.name.1
     }
-
+    
     pub(crate) fn version(&self) -> &Version {
         &self.project.version
     }
@@ -456,7 +456,7 @@ impl PyProjectToml {
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
-            name: self.project.name.to_string(),
+            name: self.project.name.0.clone(),
             version: self.project.version.to_string(),
             // Not supported.
             platforms: vec![],
@@ -570,6 +570,17 @@ impl PyProjectToml {
     }
 }
 
+// Deserialize the project name to both a normalized and non-normalized form.
+// For this, we make use of a custom deserializer: https://serde.rs/impl-deserializer.html
+fn deserialize_project_name<'de, D>(deserializer: D) -> Result<(String, PackageName), D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let name = String::deserialize(deserializer)?;
+    let normalized = PackageName::from_str(&name).map_err(serde::de::Error::custom)?;
+    Ok((name, normalized))
+}
+
 /// The `[project]` section of a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 ///
@@ -579,7 +590,8 @@ impl PyProjectToml {
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project.
-    name: PackageName,
+    #[serde(deserialize_with = "deserialize_project_name")]
+    name: (String, PackageName),
     /// The version of the project.
     version: Version,
     /// The summary description of the project in one line.
@@ -854,6 +866,28 @@ mod tests {
             let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
+    }
+
+    #[test]
+    fn uppercase_package_name() {
+        let contents = r#"
+            [project]
+            name = "Hello-World"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
+            build-backend = "uv_build"
+        "#;
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+        assert_snapshot!(metadata.core_metadata_format(), @r"
+        Metadata-Version: 2.3
+        Name: Hello-World
+        Version: 0.1.0
+        ");
     }
 
     #[test]
