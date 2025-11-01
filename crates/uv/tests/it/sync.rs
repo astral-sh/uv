@@ -268,6 +268,143 @@ fn package() -> Result<()> {
     Ok(())
 }
 
+/// Sync multiple packages within a workspace.
+#[test]
+fn multiple_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child-a", "child-b", "child-c"]
+
+        [tool.uv.sources]
+        child-a = { workspace = true }
+        child-b = { workspace = true }
+        child-c = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("root");
+    src.create_dir_all()?;
+    src.child("__init__.py").touch()?;
+
+    // Create child-a with requests dependency
+    let child_a = context.temp_dir.child("packages").child("child-a");
+    fs_err::create_dir_all(&child_a)?;
+    child_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    let src = child_a.child("src").child("child_a");
+    src.create_dir_all()?;
+    src.child("__init__.py").touch()?;
+
+    // Create child-b with httpx dependency
+    let child_b = context.temp_dir.child("packages").child("child-b");
+    fs_err::create_dir_all(&child_b)?;
+    child_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    let src = child_b.child("src").child("child_b");
+    src.create_dir_all()?;
+    src.child("__init__.py").touch()?;
+
+    // Create child-c with pytest dependency
+    let child_c = context.temp_dir.child("packages").child("child-c");
+    fs_err::create_dir_all(&child_c)?;
+    child_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child-c"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pytest"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    let src = child_c.child("src").child("child_c");
+    src.create_dir_all()?;
+    src.child("__init__.py").touch()?;
+
+    // Sync only child-a and child-b
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("child-a")
+        .arg("--package").arg("child-b"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Prepared 12 packages in [TIME]
+    Installed 12 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + child-a==0.1.0 (from file://[TEMP_DIR]/packages/child-a)
+     + child-b==0.1.0 (from file://[TEMP_DIR]/packages/child-b)
+     + h11==0.14.0
+     + httpcore==1.0.4
+     + httpx==0.27.0
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    ");
+
+    // Now sync all three packages
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("child-a")
+        .arg("--package").arg("child-b")
+        .arg("--package").arg("child-c"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + child-c==0.1.0 (from file://[TEMP_DIR]/packages/child-c)
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+
+    Ok(())
+}
+
 /// Test json output
 #[test]
 fn sync_json() -> Result<()> {
