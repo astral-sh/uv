@@ -125,7 +125,7 @@ impl PyProjectToml {
     pub(crate) fn name(&self) -> &PackageName {
         &self.project.name.1
     }
-    
+
     pub(crate) fn version(&self) -> &Version {
         &self.project.version
     }
