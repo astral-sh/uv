@@ -10528,10 +10528,12 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
-/// Regression test that we don't discover workspaces with `--no-sources`.
+/// Regression test that we don't discover workspaces with `--no-sources` or the `UV_NO_SOURCES`
+/// environment variable.
 ///
 /// We have a workspace dependency shadowing a PyPI package and using this package's version to
-/// check that by default we respect workspace package, but with `--no-sources`, we ignore them.
+/// check that by default we respect workspace package, but with `--no-sources` or `UV_NO_SOURCES=true`,
+/// we ignore them.
 #[test]
 fn no_sources_workspace_discovery() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -10631,6 +10633,67 @@ fn no_sources_workspace_discovery() -> Result<()> {
      + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "###
+    );
+
+    // Test with UV_NO_SOURCES=true environment variable (should behave same as flag)
+    uv_snapshot!(context.filters(), context.pip_install()
+    .arg("--upgrade")
+    .arg(".")
+    .env("UV_NO_SOURCES", "true"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test UV_NO_SOURCES=false doesn't activate no-sources
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg(".")
+        .env("UV_NO_SOURCES", "false"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test that CLI flag overrides env var
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg("--no-sources")
+        .arg(".")
+        .env("UV_NO_SOURCES", "False"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "
     );
 
     Ok(())
