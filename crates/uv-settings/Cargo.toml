@@ -17,9 +17,11 @@ workspace = true
 
 [dependencies]
 uv-cache-info = { workspace = true, features = ["schemars"] }
+uv-client = { workspace = true }
 uv-configuration = { workspace = true, features = ["schemars", "clap"] }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true, features = ["schemars"] }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["schemars", "clap"] }
 uv-macros = { workspace = true }
@@ -28,10 +30,12 @@ uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars", "clap"] }
+uv-redacted = { workspace = true }
 uv-resolver = { workspace = true, features = ["schemars", "clap"] }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["schemars", "clap"] }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true, features = ["schemars", "clap"] }
 
 clap = { workspace = true }
 fs-err = { workspace = true }
@@ -47,3 +51,6 @@ url = { workspace = true }
 ignored = ["uv-options-metadata", "clap"]
 
 [dev-dependencies]
+
+[features]
+tracing-durations-export = []

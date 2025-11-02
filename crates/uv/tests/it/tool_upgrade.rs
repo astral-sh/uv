@@ -3,7 +3,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_upgrade_empty() {
@@ -212,6 +212,109 @@ fn tool_upgrade_multiple_names() {
      - python-dotenv==0.10.2.post2
      + python-dotenv==1.0.1
     Installed 1 executable: dotenv
+    "###);
+}
+
+#[test]
+fn tool_upgrade_pinned_hint() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install a specific version of `babel` so the receipt records an exact pin.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel==2.6.0")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    // Attempt to upgrade `babel`; it should remain pinned and emit a hint explaining why.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Modified babel environment
+     - pytz==2018.5
+     + pytz==2024.1
+
+    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    "###);
+}
+
+#[test]
+fn tool_upgrade_pinned_hint_with_mixed_constraint() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install a specific version of `babel` with an additional constraint to ensure the requirement
+    // contains multiple specifiers while still including an exact pin.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel>=2.0,==2.6.0")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    // Attempt to upgrade `babel`; it should remain pinned and emit a hint explaining why.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Modified babel environment
+     - pytz==2018.5
+     + pytz==2024.1
+
+    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     "###);
 }
 
@@ -683,6 +786,8 @@ fn tool_upgrade_with() {
     Modified babel environment
      - pytz==2018.5
      + pytz==2024.1
+
+    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     "###);
 }
 
@@ -741,9 +846,7 @@ fn tool_upgrade_python() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
 }
 
@@ -826,9 +929,7 @@ fn tool_upgrade_python_with_all() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
 
     insta::with_settings!({
@@ -836,8 +937,74 @@ fn tool_upgrade_python_with_all() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
+}
+
+/// Upgrade a tool together with any additional entrypoints from other
+/// packages.
+#[test]
+fn test_tool_upgrade_additional_entrypoints() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` entrypoint, and all additional ones from `black` too.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python")
+        .arg("3.11")
+        .arg("--with-executables-from")
+        .arg("black")
+        .arg("babel==2.14.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables from `black`: black, blackd
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade python, and make sure that all the entrypoints above get
+    // re-installed.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--python")
+        .arg("3.12")
+        .arg("babel")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables from `black`: black, blackd
+    Installed 1 executable: pybabel
+    Upgraded tool environment for `babel` to Python 3.12
+    ");
 }

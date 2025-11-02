@@ -1,8 +1,8 @@
 //! PEP 514 interactions with the Windows registry.
 
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::Arch;
-use crate::{PythonInstallationKey, PythonVersion, COMPANY_DISPLAY_NAME, COMPANY_KEY};
+use crate::{COMPANY_DISPLAY_NAME, COMPANY_KEY, PythonInstallationKey, PythonVersion};
+use anyhow::anyhow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -10,14 +10,12 @@ use std::str::FromStr;
 use target_lexicon::PointerWidth;
 use thiserror::Error;
 use tracing::debug;
+use uv_platform::Arch;
 use uv_warnings::{warn_user, warn_user_once};
-use windows_registry::{Key, Value, CURRENT_USER, HSTRING, LOCAL_MACHINE};
-use windows_result::HRESULT;
-use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
-use windows_sys::Win32::System::Registry::{KEY_WOW64_32KEY, KEY_WOW64_64KEY};
-
-/// Code returned when the registry key doesn't exist.
-const ERROR_NOT_FOUND: HRESULT = HRESULT::from_win32(ERROR_FILE_NOT_FOUND);
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_KEY_DELETED};
+use windows::Win32::System::Registry::{KEY_WOW64_32KEY, KEY_WOW64_64KEY};
+use windows::core::HRESULT;
+use windows_registry::{CURRENT_USER, HSTRING, Key, LOCAL_MACHINE, Value};
 
 /// A Python interpreter found in the Windows registry through PEP 514 or from a known Microsoft
 /// Store path.
@@ -31,7 +29,7 @@ pub(crate) struct WindowsPython {
 }
 
 /// Find all Pythons registered in the Windows registry following PEP 514.
-pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::Error> {
+pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows::core::Error> {
     let mut registry_pythons = Vec::new();
     // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`.
     // By default, a 64-bit program does not see a 32-bit global (HKLM) installation of Python in
@@ -46,7 +44,7 @@ pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::E
         let mut open_options = root_key.options();
         open_options.read();
         if let Some(access_modifier) = access_modifier {
-            open_options.access(access_modifier);
+            open_options.access(access_modifier.0);
         }
         let Ok(key_python) = open_options.open(r"Software\Python") else {
             continue;
@@ -129,12 +127,13 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Window
 pub enum ManagedPep514Error {
     #[error("Windows has an unknown pointer width for arch: `{_0}`")]
     InvalidPointerSize(Arch),
+    #[error("Failed to write registry entry: {0}")]
+    WriteError(#[from] windows::core::Error),
 }
 
 /// Register a managed Python installation in the Windows registry following PEP 514.
 pub fn create_registry_entry(
     installation: &ManagedPythonInstallation,
-    errors: &mut Vec<(PythonInstallationKey, anyhow::Error)>,
 ) -> Result<(), ManagedPep514Error> {
     let pointer_width = match installation.key().arch().family().pointer_width() {
         Ok(PointerWidth::U32) => 32,
@@ -146,9 +145,7 @@ pub fn create_registry_entry(
         }
     };
 
-    if let Err(err) = write_registry_entry(installation, pointer_width) {
-        errors.push((installation.key().clone(), err.into()));
-    }
+    write_registry_entry(installation, pointer_width)?;
 
     Ok(())
 }
@@ -216,7 +213,9 @@ pub fn remove_registry_entry<'a>(
     if all {
         debug!("Removing registry key HKCU:\\{}", astral_key);
         if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
-            if err.code() == ERROR_NOT_FOUND {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
                 debug!("No registry entries to remove, no registry key {astral_key}");
             } else {
                 warn_user!("Failed to clear registry entries under {astral_key}: {err}");
@@ -230,7 +229,9 @@ pub fn remove_registry_entry<'a>(
         let python_entry = format!("{astral_key}\\{python_tag}");
         debug!("Removing registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == ERROR_NOT_FOUND {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
                 debug!(
                     "No registry entries to remove for {}, no registry key {}",
                     installation.key(),
@@ -239,8 +240,7 @@ pub fn remove_registry_entry<'a>(
             } else {
                 errors.push((
                     installation.key().clone(),
-                    anyhow::Error::new(err)
-                        .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
+                    anyhow!("Failed to clear registry entries under HKCU:\\{python_entry}: {err}"),
                 ));
             }
         }
@@ -257,7 +257,10 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     let key = match CURRENT_USER.open(&astral_key) {
         Ok(subkeys) => subkeys,
-        Err(err) if err.code() == ERROR_NOT_FOUND => {
+        Err(err)
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+        {
             return;
         }
         Err(err) => {
@@ -269,6 +272,12 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
+        Err(err)
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+        {
+            return;
+        }
         Err(err) => {
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to list subkeys of HKCU:\\{astral_key}: {err}");
@@ -282,6 +291,11 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
+            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
+                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            {
+                continue;
+            }
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to remove orphan registry key HKCU:\\{python_entry}: {err}");
         }

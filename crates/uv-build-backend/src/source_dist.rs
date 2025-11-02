@@ -1,20 +1,21 @@
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
+use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
-use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
-use flate2::write::GzEncoder;
+use crate::{
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
+};
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
-use uv_pypi_types::Identifier;
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -52,13 +53,12 @@ pub fn list_source_dist(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_source_dist(source_tree, writer, uv_version)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
 /// Build includes and excludes for source tree walking for source dists.
 fn source_dist_matcher(
+    source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
@@ -68,29 +68,33 @@ fn source_dist_matcher(
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
 
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
-    // The wheel must not include any files included by the source distribution (at least until we
-    // have files generated in the source dist -> wheel build step).
-    let import_path = &settings
-        .module_root
-        .join(module_name.as_ref())
+    // Check that the source tree contains a module.
+    let (src_root, modules_relative) = find_roots(
+        source_tree,
+        pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+        settings.namespace,
+    )?;
+    for module_relative in modules_relative {
+        // The wheel must not include any files included by the source distribution (at least until we
+        // have files generated in the source dist -> wheel build step).
+        let import_path = uv_fs::normalize_path(
+            &uv_fs::relative_to(src_root.join(module_relative), source_tree)
+                .expect("module root is inside source tree"),
+        )
         .portable_display()
         .to_string();
-    includes.push(format!("{}/**", globset::escape(import_path)));
+        includes.push(format!("{}/**", globset::escape(&import_path)));
+    }
     for include in includes {
-        let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.source-include".to_string(),
-            source: err,
-        })?;
-        include_globs.push(glob.clone());
+        let glob = PortableGlobParser::Uv
+            .parse(&include)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.source-include".to_string(),
+                source: err,
+            })?;
+        include_globs.push(glob);
     }
 
     // Include the Readme
@@ -99,36 +103,56 @@ fn source_dist_matcher(
         .as_ref()
         .and_then(|readme| readme.path())
     {
-        trace!("Including readme at: `{}`", readme.user_display());
-        include_globs.push(
-            Glob::new(&globset::escape(&readme.portable_display().to_string()))
-                .expect("escaped globset is parseable"),
-        );
+        let readme = uv_fs::normalize_path(readme);
+        trace!("Including readme at: {}", readme.user_display());
+        let readme = readme.portable_display().to_string();
+        let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
+        include_globs.push(glob);
     }
 
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: `{license_files}`");
-        let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
-            field: "project.license-files".to_string(),
-            source: err,
-        })?;
+        trace!("Including license files at: {license_files}`");
+        let glob = PortableGlobParser::Pep639
+            .parse(license_files)
+            .map_err(|err| Error::PortableGlob {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
         include_globs.push(glob);
     }
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let glob =
-            parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
-                Error::PortableGlob {
-                    field: format!("tool.uv.build-backend.data.{name}"),
-                    source: err,
-                }
+        let directory = uv_fs::normalize_path(directory);
+        trace!("Including data ({}) at: {}", name, directory.user_display());
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
+        let directory = directory.portable_display().to_string();
+        let glob = PortableGlobParser::Uv
+            .parse(&format!("{}/**", globset::escape(&directory)))
+            .map_err(|err| Error::PortableGlob {
+                field: format!("tool.uv.build-backend.data.{name}"),
+                source: err,
             })?;
-        trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
     }
 
+    debug!(
+        "Source distribution includes: {:?}",
+        include_globs
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    );
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.build-backend.source-include".to_string(),
@@ -184,15 +208,7 @@ fn write_source_dist(
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
 
-    debug!("Adding content files to wheel");
-    // Check that the source tree contains a module.
-    find_roots(
-        source_tree,
-        &pyproject_toml,
-        &settings.module_root,
-        settings.module_name.as_ref(),
-    )?;
-
+    debug!("Adding content files to source distribution");
     writer.write_bytes(
         &Path::new(&top_level)
             .join("PKG-INFO")
@@ -201,24 +217,29 @@ fn write_source_dist(
         metadata_email.as_bytes(),
     )?;
 
-    let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
+    let (include_matcher, exclude_matcher) =
+        source_dist_matcher(source_tree, &pyproject_toml, settings)?;
 
     let mut files_visited = 0;
-    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(source_tree)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids descending into directories such as
-        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-        // directories that often exist on the top level of a project. This is especially noticeable
-        // on network file systems with high latencies per operation (while contiguous reading may
-        // still be fast).
-        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included. This is the most
+            // important performance optimization, it avoids descending into directories such as
+            // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+            // directories that often exist on the top level of a project. This is especially noticeable
+            // on network file systems with high latencies per operation (while contiguous reading may
+            // still be fast).
+            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
@@ -238,32 +259,18 @@ fn write_source_dist(
             .expect("walkdir starts with root");
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding: `{}`", relative.user_display());
+            trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
 
-        debug!("Including {}", relative.user_display());
-        if entry.file_type().is_dir() {
-            writer.write_directory(
-                &Path::new(&top_level)
-                    .join(relative)
-                    .portable_display()
-                    .to_string(),
-            )?;
-        } else if entry.file_type().is_file() {
-            writer.write_file(
-                &Path::new(&top_level)
-                    .join(relative)
-                    .portable_display()
-                    .to_string(),
-                entry.path(),
-            )?;
-        } else {
-            return Err(Error::UnsupportedFileType(
-                relative.to_path_buf(),
-                entry.file_type(),
-            ));
-        }
+        error_on_venv(entry.file_name(), entry.path())?;
+
+        let entry_path = Path::new(&top_level)
+            .join(relative)
+            .portable_display()
+            .to_string();
+        debug!("Adding to sdist: {}", relative.user_display());
+        writer.write_dir_entry(&entry, &entry_path)?;
     }
     debug!("Visited {files_visited} files for source dist build");
 
@@ -303,15 +310,22 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        {
-            // Preserve for example an executable bit.
-            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-        }
+        let executable_bit = {
+            use std::os::unix::fs::PermissionsExt;
+            file.metadata()?.permissions().mode() & 0o111 != 0
+        };
+        // Windows has no executable bit
         #[cfg(not(unix))]
-        {
-            // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
-            // unpacking.
+        let executable_bit = false;
+
+        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
+        // filesystem permissions to the archive for reproducibility. Where applicable, the
+        // operating system filters the stored permission by the user's umask when unpacking.
+        if executable_bit {
+            header.set_mode(0o755);
+        } else {
             header.set_mode(0o644);
         }
         header.set_size(metadata.len());

@@ -16,7 +16,9 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-build-backend = { workspace = true, features = ["schemars"] }
 uv-cache-key = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git-types = { workspace = true }
@@ -26,9 +28,11 @@ uv-options-metadata = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
+clap = { workspace = true, optional = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
@@ -41,17 +45,16 @@ tokio = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.2" }
-insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
+assert_fs = { workspace = true }
+insta = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-schemars = ["dep:schemars", "uv-pypi-types/schemars"]
+schemars = ["dep:schemars", "uv-pypi-types/schemars", "uv-redacted/schemars"]
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata"]

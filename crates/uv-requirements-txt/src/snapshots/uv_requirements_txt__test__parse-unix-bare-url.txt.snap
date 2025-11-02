@@ -10,7 +10,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -22,12 +22,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -60,7 +60,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -72,12 +72,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -114,7 +114,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -126,12 +126,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "/scripts/packages/black_editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -164,7 +164,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -176,12 +176,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -214,7 +214,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -226,12 +226,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -264,7 +264,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -276,12 +276,12 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
-                                editable: false,
-                                virtual: false,
+                                editable: None,
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",

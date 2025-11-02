@@ -1,9 +1,8 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
-use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
@@ -12,8 +11,9 @@ use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
     RemoteSource, Resolution,
 };
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 /// Prepare distributions for installation.
@@ -70,7 +70,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(|dist| async move {
+            .map(async |dist| {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
@@ -204,7 +204,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     }
                     Ok(cached.clone())
                 }
-                Err(err) => Err(Error::Thread(err.to_string())),
+                Err(err) => Err(Error::Thread(err.to_owned())),
             }
         }
     }
@@ -268,10 +268,10 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
 }
 
 impl dyn Reporter {
@@ -299,11 +299,11 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
     }
 

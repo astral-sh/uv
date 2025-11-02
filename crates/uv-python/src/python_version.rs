@@ -1,12 +1,33 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::collections::BTreeMap;
+use std::env;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 
+use thiserror::Error;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
+use uv_static::EnvVars;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::implementation::ImplementationName;
+
+#[derive(Error, Debug)]
+pub enum BuildVersionError {
+    #[error("`{0}` is not valid unicode: {1:?}")]
+    NotUnicode(&'static str, OsString),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonVersion(StringVersion);
+
+impl From<StringVersion> for PythonVersion {
+    fn from(version: StringVersion) -> Self {
+        Self(version)
+    }
+}
 
 impl Deref for PythonVersion {
     type Target = StringVersion;
@@ -31,6 +52,27 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
+        if let Some(major) = version.release().first() {
+            if u8::try_from(*major).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid major version ({major})"
+                ));
+            }
+        }
+        if let Some(minor) = version.release().get(1) {
+            if u8::try_from(*minor).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid minor version ({minor})"
+                ));
+            }
+        }
+        if let Some(patch) = version.release().get(2) {
+            if u8::try_from(*patch).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid patch version ({patch})"
+                ));
+            }
+        }
 
         Ok(Self(version))
     }
@@ -38,26 +80,16 @@ impl FromStr for PythonVersion {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PythonVersion {
-    fn schema_name() -> String {
-        String::from("PythonVersion")
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PythonVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                pattern: Some(r"^3\.\d+(\.\d+)?$".to_string()),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A Python version specifier, e.g. `3.11` or `3.12.4`.".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^3\.\d+(\.\d+)?$",
+            "description": "A Python version specifier, e.g. `3.11` or `3.12.4`."
+        })
     }
 }
 
@@ -155,6 +187,11 @@ impl PythonVersion {
         &self.0.version
     }
 
+    /// Return the full parsed Python version.
+    pub fn into_version(self) -> Version {
+        self.0.version
+    }
+
     /// Return the major version of this Python version.
     pub fn major(&self) -> u8 {
         u8::try_from(self.0.release().first().copied().unwrap_or(0)).expect("invalid major version")
@@ -180,6 +217,51 @@ impl PythonVersion {
         Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
             .expect("dropping a patch should always be valid")
     }
+}
+
+/// Get the environment variable name for the build constraint for a given implementation.
+pub(crate) fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+    match implementation {
+        ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
+        ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
+        ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
+        ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
+    }
+}
+
+/// Get the build version number from the environment variable for a given implementation.
+pub(crate) fn python_build_version_from_env(
+    implementation: ImplementationName,
+) -> Result<Option<String>, BuildVersionError> {
+    let variable = python_build_version_variable(implementation);
+
+    let Some(build_os) = env::var_os(variable) else {
+        return Ok(None);
+    };
+
+    let build = build_os
+        .into_string()
+        .map_err(|raw| BuildVersionError::NotUnicode(variable, raw))?;
+
+    let trimmed = build.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(trimmed.to_string()))
+}
+
+/// Get the build version numbers for all Python implementations.
+pub(crate) fn python_build_versions_from_env()
+-> Result<BTreeMap<ImplementationName, String>, BuildVersionError> {
+    let mut versions = BTreeMap::new();
+    for implementation in ImplementationName::iter_all() {
+        let Some(build) = python_build_version_from_env(implementation)? else {
+            continue;
+        };
+        versions.insert(implementation, build);
+    }
+    Ok(versions)
 }
 
 #[cfg(test)]

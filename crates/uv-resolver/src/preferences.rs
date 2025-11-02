@@ -4,13 +4,14 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
+use crate::lock::PylockTomlPackage;
 use crate::universal_marker::UniversalMarker;
 use crate::{LockError, ResolverEnvironment};
 
@@ -33,6 +34,8 @@ pub struct Preference {
     /// is part of, otherwise `None`.
     fork_markers: Vec<UniversalMarker>,
     hashes: HashDigests,
+    /// The source of the preference.
+    source: PreferenceSource,
 }
 
 impl Preference {
@@ -72,6 +75,7 @@ impl Preference {
                 .map(String::as_str)
                 .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
+            source: PreferenceSource::RequirementsTxt,
         }))
     }
 
@@ -90,7 +94,46 @@ impl Preference {
             index: PreferenceIndex::from(package.index(install_path)?),
             fork_markers: package.fork_markers().to_vec(),
             hashes: HashDigests::empty(),
+            source: PreferenceSource::Lock,
         }))
+    }
+
+    /// Create a [`Preference`] from a locked distribution.
+    pub fn from_pylock_toml(package: &PylockTomlPackage) -> Result<Option<Self>, LockError> {
+        let Some(version) = package.version.as_ref() else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            name: package.name.clone(),
+            version: version.clone(),
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::from(
+                package
+                    .index
+                    .as_ref()
+                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
+            ),
+            // `pylock.toml` doesn't have fork annotations.
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+            source: PreferenceSource::Lock,
+        }))
+    }
+
+    /// Create a [`Preference`] from an installed distribution.
+    pub fn from_installed(dist: &InstalledDist) -> Option<Self> {
+        let InstalledDistKind::Registry(dist) = &dist.kind else {
+            return None;
+        };
+        Some(Self {
+            name: dist.name.clone(),
+            version: dist.version.clone(),
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::Any,
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+            source: PreferenceSource::Environment,
+        })
     }
 
     /// Return the [`PackageName`] of the package for this [`Preference`].
@@ -134,11 +177,24 @@ impl From<Option<IndexUrl>> for PreferenceIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PreferenceSource {
+    /// The preference is from an installed package in the environment.
+    Environment,
+    /// The preference is from a `uv.ock` file.
+    Lock,
+    /// The preference is from a `requirements.txt` file.
+    RequirementsTxt,
+    /// The preference is from the current solve.
+    Resolver,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
     marker: UniversalMarker,
     index: PreferenceIndex,
     pin: Pin,
+    source: PreferenceSource,
 }
 
 impl Entry {
@@ -155,6 +211,11 @@ impl Entry {
     /// Return the pinned data associated with the entry.
     pub(crate) fn pin(&self) -> &Pin {
         &self.pin
+    }
+
+    /// Return the source of the entry.
+    pub(crate) fn source(&self) -> PreferenceSource {
+        self.source
     }
 }
 
@@ -208,6 +269,7 @@ impl Preferences {
                         version: preference.version,
                         hashes: preference.hashes,
                     },
+                    source: preference.source,
                 });
             } else {
                 for fork_marker in preference.fork_markers {
@@ -218,6 +280,7 @@ impl Preferences {
                             version: preference.version.clone(),
                             hashes: preference.hashes.clone(),
                         },
+                        source: preference.source,
                     });
                 }
             }
@@ -233,11 +296,13 @@ impl Preferences {
         index: Option<IndexUrl>,
         markers: UniversalMarker,
         pin: impl Into<Pin>,
+        source: PreferenceSource,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
             marker: markers,
             index: PreferenceIndex::from(index),
             pin: pin.into(),
+            source,
         });
     }
 

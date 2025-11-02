@@ -3,22 +3,25 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
+use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::managed::{
+    ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
+};
+use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
@@ -27,7 +30,7 @@ pub(crate) async fn uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
@@ -63,7 +66,7 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -87,7 +90,6 @@ async fn do_uninstall(
         // Always include pre-releases in uninstalls
         .map(|result| result.map(|request| request.with_prereleases(true)))
         .collect::<Result<Vec<_>>>()?;
-
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
@@ -110,13 +112,11 @@ async fn do_uninstall(
         }
         if !found {
             // Clear any remnants in the registry
-            if preview.is_enabled() {
-                #[cfg(windows)]
-                {
-                    uv_python::windows_registry::remove_orphan_registry_entries(
-                        &installed_installations,
-                    );
-                }
+            #[cfg(windows)]
+            {
+                uv_python::windows_registry::remove_orphan_registry_entries(
+                    &installed_installations,
+                );
             }
 
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
@@ -138,6 +138,19 @@ async fn do_uninstall(
             "No Python installations found matching the requests"
         )?;
         return Ok(ExitStatus::Failure);
+    }
+
+    // Remove registry entries first, so we don't have dangling entries between the file removal
+    // and the registry removal.
+    let mut errors = vec![];
+    #[cfg(windows)]
+    {
+        uv_python::windows_registry::remove_registry_entry(
+            &matching_installations,
+            all,
+            &mut errors,
+        );
+        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
     // Find and remove all relevant Python executables
@@ -198,49 +211,95 @@ async fn do_uninstall(
         });
     }
 
-    let mut uninstalled = vec![];
-    let mut errors = vec![];
+    let mut uninstalled = IndexSet::<PythonInstallationKey>::default();
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
             errors.push((key.clone(), anyhow::Error::new(err)));
         } else {
-            uninstalled.push(key.clone());
+            uninstalled.insert(key.clone());
         }
     }
 
-    #[cfg(windows)]
-    if preview.is_enabled() {
-        uv_python::windows_registry::remove_registry_entry(
-            &matching_installations,
-            all,
-            &mut errors,
+    // Read all existing managed installations and find the highest installed patch
+    // for each installed minor version. Ensure the minor version link directory
+    // is still valid.
+    let uninstalled_minor_versions: IndexSet<_> = uninstalled
+        .iter()
+        .map(PythonInstallationMinorVersionKey::ref_cast)
+        .collect();
+    let remaining_installations: Vec<_> = installed_installations
+        .into_iter()
+        .filter(|installation| !uninstalled.contains(installation.key()))
+        .collect();
+
+    let remaining_minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            remaining_installations.iter(),
         );
-        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
+
+    for (_, installation) in remaining_minor_versions
+        .iter()
+        .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
+    {
+        installation.update_minor_version_link(preview)?;
+    }
+    // For each uninstalled installation, check if there are no remaining installations
+    // for its minor version. If there are none remaining, remove the symlink directory
+    // (or junction on Windows) if it exists.
+    for installation in &matching_installations {
+        if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation, preview)
+            {
+                if minor_version_link.exists() {
+                    let result = if cfg!(windows) {
+                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
+                    } else {
+                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
+                    };
+                    if result.is_err() {
+                        return Err(anyhow::anyhow!(
+                            "Failed to remove symlink directory {}",
+                            minor_version_link.symlink_directory.display()
+                        ));
+                    }
+                    let symlink_term = if cfg!(windows) {
+                        "junction"
+                    } else {
+                        "symlink directory"
+                    };
+                    debug!(
+                        "Removed {}: {}",
+                        symlink_term,
+                        minor_version_link.symlink_directory.to_string_lossy()
+                    );
+                }
+            }
+        }
     }
 
     // Report on any uninstalled installations.
-    if !uninstalled.is_empty() {
-        if let [uninstalled] = uninstalled.as_slice() {
+    if let Some(first_uninstalled) = uninstalled.first() {
+        if uninstalled.len() == 1 {
             // Ex) "Uninstalled Python 3.9.7 in 1.68s"
             writeln!(
                 printer.stderr(),
                 "{}",
                 format!(
                     "Uninstalled {} {}",
-                    format!("Python {}", uninstalled.version()).bold(),
+                    format!("Python {}", first_uninstalled.version()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()
             )?;
         } else {
             // Ex) "Uninstalled 2 versions in 1.68s"
-            let s = if uninstalled.len() == 1 { "" } else { "s" };
             writeln!(
                 printer.stderr(),
                 "{}",
                 format!(
                     "Uninstalled {} {}",
-                    format!("{} version{s}", uninstalled.len()).bold(),
+                    format!("{} versions", uninstalled.len()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()

@@ -94,7 +94,7 @@ impl BatchPrefetcher {
         let PubGrubPackageInner::Package {
             name,
             extra: None,
-            dev: None,
+            group: None,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -149,7 +149,7 @@ impl BatchPrefetcher {
         let PubGrubPackageInner::Package {
             name,
             extra: None,
-            dev: None,
+            group: None,
             marker: MarkerTree::TRUE,
         } = &**package
         else {
@@ -168,7 +168,7 @@ impl BatchPrefetcher {
         let PubGrubPackageInner::Package {
             name,
             extra: None,
-            dev: None,
+            group: None,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -219,7 +219,7 @@ impl BatchPrefetcherRunner {
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
-        let VersionsResponse::Found(ref version_map) = &**versions_response else {
+        let VersionsResponse::Found(version_map) = &**versions_response else {
             return Ok(());
         };
 

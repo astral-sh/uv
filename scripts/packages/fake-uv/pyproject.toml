@@ -1,0 +1,11 @@
+[project]
+name = "uv"
+version = "0.1.0"
+requires-python = ">=3.8"
+
+[tool.uv.build-backend.data]
+scripts = "scripts"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.10"]
+build-backend = "uv_build"

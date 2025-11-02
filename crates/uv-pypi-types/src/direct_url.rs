@@ -14,7 +14,12 @@ pub enum DirectUrl {
     /// ```json
     /// {"url": "file:///home/user/project", "dir_info": {}}
     /// ```
-    LocalDirectory { url: String, dir_info: DirInfo },
+    LocalDirectory {
+        url: String,
+        dir_info: DirInfo,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subdirectory: Option<Box<Path>>,
+    },
     /// The direct URL is a path to an archive. For example:
     /// ```json
     /// {"archive_info": {"hash": "sha256=75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8", "hashes": {"sha256": "75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8"}}, "url": "https://files.pythonhosted.org/packages/b8/8b/31273bf66016be6ad22bb7345c37ff350276cfd46e389a0c2ac5da9d9073/wheel-0.41.2-py3-none-any.whl"}
@@ -92,7 +97,17 @@ impl TryFrom<&DirectUrl> for Url {
 
     fn try_from(value: &DirectUrl) -> Result<Self, Self::Error> {
         match value {
-            DirectUrl::LocalDirectory { url, .. } => Self::parse(url),
+            DirectUrl::LocalDirectory {
+                url,
+                subdirectory,
+                dir_info: _,
+            } => {
+                let mut url = Self::parse(url)?;
+                if let Some(subdirectory) = subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                Ok(url)
+            }
             DirectUrl::ArchiveUrl {
                 url,
                 subdirectory,

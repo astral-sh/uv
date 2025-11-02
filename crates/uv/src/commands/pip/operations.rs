@@ -1,51 +1,52 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{anyhow, Context};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use anyhow::{Context, anyhow};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
-use uv_tool::InstalledTools;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
     ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
+use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{GroupName, PackageName};
+use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
+use uv_normalize::PackageName;
+use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
-    LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
+    GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTree, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
-use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_tool::InstalledTools;
+use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
+use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -53,25 +54,24 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements.iter().any(|source| {
-            matches!(
-                source,
-                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
-            )
-        }) {
+        let hint = if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::Editable(_)))
+        {
             "Use `<dir>[extra]` syntax or `-r <file>` instead."
         } else {
             "Use `package[extra]` syntax instead."
         };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
+            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
@@ -81,6 +81,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        excludes,
         groups,
         client_builder,
     )
@@ -92,15 +93,11 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(RequirementsSpecification::from_sources(
-        &[],
-        constraints,
-        &[],
-        BTreeMap::default(),
-        client_builder,
+    Ok(
+        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
+            .await?
+            .constraints,
     )
-    .await?
-    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -108,7 +105,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
+    excludes: Vec<PackageName>,
+    source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
@@ -121,6 +119,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    current_environment: &MarkerEnvironment,
     conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -166,13 +165,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
-                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(source_trees.iter().map(PathBuf::as_path))
+            .resolve(source_trees.iter())
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -185,25 +183,23 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             });
 
             // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    )
-                    .into());
-                }
+            let mut unused_extras = extras
+                .explicit_names()
+                .filter(|extra| {
+                    !resolutions
+                        .iter()
+                        .any(|resolution| resolution.extras.contains(extra))
+                })
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
             }
 
             // Extend the requirements with the resolved source trees.
@@ -212,6 +208,46 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     .into_iter()
                     .flat_map(|resolution| resolution.requirements),
             );
+        }
+
+        for (pyproject_path, groups) in groups {
+            let metadata = SourcedDependencyGroups::from_virtual_project(
+                pyproject_path,
+                None,
+                build_dispatch.locations(),
+                build_dispatch.sources(),
+                build_dispatch.workspace_cache(),
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to read dependency groups from: {}",
+                    pyproject_path.display()
+                )
+            })?;
+
+            // Complain if dependency groups are named that don't appear.
+            for name in groups.explicit_names() {
+                if !metadata.dependency_groups.contains_key(name) {
+                    return Err(anyhow!(
+                        "The dependency group '{name}' was not found in the project: {}",
+                        pyproject_path.user_display()
+                    ))?;
+                }
+            }
+            // Apply dependency-groups
+            for (group_name, group) in &metadata.dependency_groups {
+                if groups.contains(group_name) {
+                    requirements.extend(group.iter().cloned().map(|group| Requirement {
+                        origin: Some(RequirementOrigin::Group(
+                            pyproject_path.clone(),
+                            metadata.name.clone(),
+                            group_name.clone(),
+                        )),
+                        ..group
+                    }));
+                }
+            }
         }
 
         requirements
@@ -249,7 +285,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and overrides.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
@@ -257,6 +293,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
+    let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -285,6 +322,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
+        excludes,
         preferences,
         project,
         workspace_members,
@@ -307,6 +345,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             options,
             &python_requirement,
             resolver_env,
+            current_environment,
             conflicts,
             tags,
             flat_index,
@@ -355,6 +394,9 @@ pub(crate) struct Changelog {
 impl Changelog {
     /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
     pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+        // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
+        // the inner `kind`, and omits the types that rely on internal mutability.
+        #[allow(clippy::mutable_key_type)]
         let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
 
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
@@ -399,13 +441,12 @@ impl Changelog {
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
+    installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
-    index_urls: &IndexLocations,
-    config_settings: &ConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -418,6 +459,7 @@ pub(crate) async fn install(
     installer_metadata: bool,
     dry_run: DryRun,
     printer: Printer,
+    preview: Preview,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -426,11 +468,15 @@ pub(crate) async fn install(
     let plan = Planner::new(resolution)
         .build(
             site_packages,
+            installation,
             reinstall,
             build_options,
             hasher,
-            index_urls,
-            config_settings,
+            build_dispatch.locations(),
+            build_dispatch.config_settings(),
+            build_dispatch.config_settings_package(),
+            build_dispatch.extra_build_requires(),
+            build_dispatch.extra_build_variables(),
             cache,
             venv,
             tags,
@@ -466,6 +512,132 @@ pub(crate) async fn install(
         return Ok(Changelog::default());
     }
 
+    // Partition into two sets: those that require build isolation, and those that disable it. This
+    // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
+    // `--no-build-isolation` packages "access" to the rest of the environment.
+    let (isolated_phase, shared_phase) = Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    }
+    .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
+
+    let has_isolated_phase = !isolated_phase.is_empty();
+    let has_shared_phase = !shared_phase.is_empty();
+
+    let mut installs = vec![];
+    let mut uninstalls = vec![];
+
+    // Execute the isolated-build phase.
+    if has_isolated_phase {
+        let (isolated_installs, isolated_uninstalls) = execute_plan(
+            isolated_phase,
+            None,
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(isolated_installs);
+        uninstalls.extend(isolated_uninstalls);
+    }
+
+    if has_shared_phase {
+        let (shared_installs, shared_uninstalls) = execute_plan(
+            shared_phase,
+            if has_isolated_phase {
+                Some(InstallPhase::Shared)
+            } else {
+                None
+            },
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(shared_installs);
+        uninstalls.extend(shared_uninstalls);
+    }
+
+    if compile {
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
+    }
+
+    // Construct a summary of the changes made to the environment.
+    let changelog = Changelog::new(installs, uninstalls);
+
+    // Notify the user of any environment modifications.
+    logger.on_complete(&changelog, printer)?;
+
+    Ok(changelog)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallPhase {
+    /// A dedicated phase for building and installing packages with build-isolation disabled.
+    Shared,
+}
+
+impl InstallPhase {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Shared => "without build isolation",
+        }
+    }
+}
+
+/// Execute a [`Plan`] to install distributions into a Python environment.
+async fn execute_plan(
+    plan: Plan,
+    phase: Option<InstallPhase>,
+    resolution: &Resolution,
+    build_options: &BuildOptions,
+    link_mode: LinkMode,
+    hasher: &HashStrategy,
+    tags: &Tags,
+    client: &RegistryClient,
+    in_flight: &InFlight,
+    concurrency: Concurrency,
+    build_dispatch: &BuildDispatch<'_>,
+    cache: &Cache,
+    venv: &PythonEnvironment,
+    logger: &dyn InstallLogger,
+    installer_metadata: bool,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
+    let Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    } = plan;
+
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]
@@ -487,7 +659,7 @@ pub(crate) async fn install(
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
 
-        logger.on_prepare(wheels.len(), start, printer)?;
+        logger.on_prepare(wheels.len(), phase.map(InstallPhase::label), start, printer)?;
 
         wheels
     };
@@ -521,7 +693,7 @@ pub(crate) async fn install(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -536,7 +708,7 @@ pub(crate) async fn install(
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv)
+        installs = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
@@ -551,20 +723,11 @@ pub(crate) async fn install(
         logger.on_install(installs.len(), start, printer)?;
     }
 
-    if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
-    }
-
-    // Construct a summary of the changes made to the environment.
-    let changelog = Changelog::new(installs, uninstalls);
-
-    // Notify the user of any environment modifications.
-    logger.on_complete(&changelog, printer)?;
-
-    Ok(changelog)
+    Ok((installs, uninstalls))
 }
 
 /// Display a message about the interpreter that was selected for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -580,9 +743,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {}",
+                    "Using {} {}{}",
                     implementation.pretty(),
-                    interpreter.python_version()
+                    interpreter.python_version(),
+                    interpreter.variant().suffix(),
                 )
                 .dimmed()
             )?;
@@ -591,9 +755,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {} interpreter at: {}",
+                    "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
+                    interpreter.variant().suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -603,16 +768,18 @@ pub(crate) fn report_interpreter(
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -622,6 +789,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -664,6 +832,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
+#[allow(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -797,6 +966,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -814,14 +984,16 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
+    tags: &Tags,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers)? {
+    for diagnostic in site_packages.diagnostics(markers, tags)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

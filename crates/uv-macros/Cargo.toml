@@ -1,7 +1,13 @@
 [package]
 name = "uv-macros"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 proc-macro = true

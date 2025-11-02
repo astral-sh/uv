@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_install() {
@@ -82,8 +82,8 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -126,9 +126,11 @@ fn tool_install() {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     #[cfg(not(windows))]
     insta::with_settings!({
@@ -166,7 +168,7 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "flask" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -211,9 +213,11 @@ fn tool_install_with_global_python() -> Result<()> {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
@@ -321,6 +325,116 @@ fn tool_install_with_editable() -> Result<()> {
 }
 
 #[test]
+fn tool_install_with_compatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.9")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.4.2
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.1
+     + requests==1.2.0
+     + tomli==2.0.1
+     + typing-extensions==4.11.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "requests", specifier = "==1.2" },
+        ]
+        build-constraint-dependencies = [{ name = "setuptools", specifier = ">=40" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-05-04T00:00:00Z"
+        "###);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_with_incompatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.9")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==2")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_suggest_other_packages_with_executable() {
     // FastAPI 0.111 is only available from this date onwards.
     let context = TestContext::new("3.12")
@@ -334,13 +448,13 @@ fn tool_install_suggest_other_packages_with_executable() {
     uv_snapshot!(filters, context.tool_install()
         .arg("fastapi==0.111.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
-    No executables are provided by `fastapi`
-    However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
-    Did you mean `uv tool install fastapi-cli`?
+    No executables are provided by package `fastapi`; removing tool
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -380,7 +494,8 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    error: Failed to install entrypoints for `fastapi`
+    ");
 }
 
 /// Test installing a tool at a version
@@ -451,8 +566,8 @@ fn tool_install_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -535,7 +650,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -576,7 +691,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -619,8 +734,8 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -667,8 +782,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -707,11 +822,11 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
-    No executables are provided by `black`
+    No executables are provided by package `black`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -725,7 +840,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    error: Failed to install entrypoints for `black`
+    ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -757,8 +873,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -835,7 +951,7 @@ fn tool_install_editable_from() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -987,8 +1103,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1023,8 +1139,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1314,8 +1430,8 @@ fn tool_install_force() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1352,8 +1468,8 @@ fn tool_install_force() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1535,18 +1651,19 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
-    No executables are provided by `iniconfig`
+    No executables are provided by package `iniconfig`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    error: Failed to install entrypoints for `iniconfig`
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir
@@ -1568,7 +1685,6 @@ fn tool_install_uninstallable() {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),
@@ -1681,8 +1797,8 @@ fn tool_install_unnamed_package() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1796,8 +1912,8 @@ fn tool_install_unnamed_from() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1890,8 +2006,8 @@ fn tool_install_unnamed_with() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1910,7 +2026,132 @@ fn tool_install_unnamed_with() {
     "###);
 }
 
-/// Test installing a tool with extra requirements from a `requirements.txt` file.
+#[test]
+fn tool_install_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    Installed 2 executables: black, blackd
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "anyio" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    // Update the script file.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+    Installed 2 executables: black, blackd
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "anyio" },
+            { name = "iniconfig" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Test installing a tool with additional requirements from a `requirements.txt` file.
 #[test]
 fn tool_install_requirements_txt() {
     let context = TestContext::new("3.12")
@@ -1959,8 +2200,8 @@ fn tool_install_requirements_txt() {
             { name = "iniconfig" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2004,8 +2245,8 @@ fn tool_install_requirements_txt() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2068,8 +2309,8 @@ fn tool_install_requirements_txt_arguments() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2182,8 +2423,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2216,8 +2457,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2256,8 +2497,8 @@ fn tool_install_upgrade() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2296,8 +2537,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2765,7 +3006,7 @@ fn tool_install_malformed_dist_info() {
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
@@ -2845,7 +3086,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2878,7 +3119,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2918,7 +3159,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2967,8 +3208,8 @@ fn tool_install_at_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3033,8 +3274,8 @@ fn tool_install_at_latest() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3079,7 +3320,7 @@ fn tool_install_from_at_latest() {
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
@@ -3124,7 +3365,7 @@ fn tool_install_from_at_version() {
         [tool]
         requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
@@ -3173,8 +3414,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3207,8 +3448,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3244,8 +3485,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3306,8 +3547,8 @@ fn tool_install_constraints() -> Result<()> {
             { name = "anyio", specifier = ">=3" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3413,8 +3654,8 @@ fn tool_install_overrides() -> Result<()> {
             { name = "anyio", specifier = ">=3" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3437,9 +3678,9 @@ fn tool_install_python() {
     // Install `python`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3451,9 +3692,9 @@ fn tool_install_python() {
     // Install `python@<version>`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python@3.12")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3515,4 +3756,504 @@ fn tool_install_mismatched_name() {
     ----- stderr -----
     error: Package name (`black`) provided with `--from` does not match install request (`flask`)
     "###);
+}
+
+/// When installing from an authenticated index, the credentials should be omitted from the receipt.
+#[test]
+fn tool_install_credentials() {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `executable-application`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+         .arg("--index")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
+
+    tool_dir
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/executable-application/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from executable_application import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+}
+
+/// When installing from an authenticated index, the credentials should be omitted from the receipt.
+#[test]
+fn tool_install_default_credentials() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Write a `uv.toml` with a default index that has credentials.
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc::indoc! {r#"
+        [[index]]
+        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+    "#})?;
+
+    // Install `executable-application`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
+
+    tool_dir
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/executable-application/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from executable_application import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "###);
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = true, format = "simple", authenticate = "always" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    // Attempt to upgrade without providing the credentials (from the config file).
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade executable-application
+      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/
+    ");
+
+    // Attempt to upgrade.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+/// Test installing a tool with `--with-executables-from`.
+#[test]
+fn tool_install_with_executables_from() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("ansible-core,black")
+        .arg("ansible==9.3.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ansible==9.3.0
+     + ansible-core==2.16.4
+     + black==24.3.0
+     + cffi==1.16.0
+     + click==8.1.7
+     + cryptography==42.0.5
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + pycparser==2.21
+     + pyyaml==6.0.1
+     + resolvelib==1.0.1
+    Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Installed 2 executables from `black`: black, blackd
+    Installed 1 executable: ansible-community
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            { name = "ansible", specifier = "==9.3.0" },
+            { name = "ansible-core" },
+            { name = "black" },
+        ]
+        entrypoints = [
+            { name = "ansible", install-path = "[TEMP_DIR]/bin/ansible", from = "ansible-core" },
+            { name = "ansible-community", install-path = "[TEMP_DIR]/bin/ansible-community", from = "ansible" },
+            { name = "ansible-config", install-path = "[TEMP_DIR]/bin/ansible-config", from = "ansible-core" },
+            { name = "ansible-connection", install-path = "[TEMP_DIR]/bin/ansible-connection", from = "ansible-core" },
+            { name = "ansible-console", install-path = "[TEMP_DIR]/bin/ansible-console", from = "ansible-core" },
+            { name = "ansible-doc", install-path = "[TEMP_DIR]/bin/ansible-doc", from = "ansible-core" },
+            { name = "ansible-galaxy", install-path = "[TEMP_DIR]/bin/ansible-galaxy", from = "ansible-core" },
+            { name = "ansible-inventory", install-path = "[TEMP_DIR]/bin/ansible-inventory", from = "ansible-core" },
+            { name = "ansible-playbook", install-path = "[TEMP_DIR]/bin/ansible-playbook", from = "ansible-core" },
+            { name = "ansible-pull", install-path = "[TEMP_DIR]/bin/ansible-pull", from = "ansible-core" },
+            { name = "ansible-test", install-path = "[TEMP_DIR]/bin/ansible-test", from = "ansible-core" },
+            { name = "ansible-vault", install-path = "[TEMP_DIR]/bin/ansible-vault", from = "ansible-core" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_uninstall()
+        .arg("ansible")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
+    "###);
+}
+
+/// Test installing a tool with `--with-executables-from`, but the package has no entrypoints.
+#[test]
+fn tool_install_with_executables_from_no_entrypoints() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Try to install flask with executables from requests (which has no executables)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("requests")
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    No executables are provided by package `requests`
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + click==8.1.7
+     + flask==3.0.2
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + requests==2.31.0
+     + urllib3==2.2.1
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+}
+
+#[test]
+fn tool_install_find_links() {
+    let context = TestContext::new("3.13").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    ");
+
+    // Install with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    Installed 1 executable: basic-app
+    ");
+
+    tool_dir
+        .child("basic-app")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("basic-app")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("basic-app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run basic-app in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        #![TEMP_DIR]/tools/basic-app/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from basic_app import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "#);
+    });
+
+    // Run the installed version with `--find-links` on the CLI again.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    ");
+
+    // Run the installed version without `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+}
+
+#[test]
+fn tool_install_python_platform() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` for macos.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("macos")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    // Install `black` for Linux.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("linux")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
+    Installed 2 executables: black, blackd
+    ");
 }

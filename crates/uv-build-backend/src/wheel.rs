@@ -1,10 +1,11 @@
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -12,13 +13,15 @@ use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::metadata::DEFAULT_EXCLUDES;
+use crate::{
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
+};
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -85,8 +88,6 @@ pub fn list_wheel(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
@@ -125,59 +126,66 @@ fn write_wheel(
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to wheel");
-    let (src_root, module_root) = find_roots(
+    let (src_root, module_relative) = find_roots(
         source_tree,
         pyproject_toml,
         &settings.module_root,
         settings.module_name.as_ref(),
+        settings.namespace,
     )?;
 
     let mut files_visited = 0;
-    for entry in WalkDir::new(module_root)
-        .into_iter()
-        .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
-    {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
+    let mut prefix_directories = FxHashSet::default();
+    for module_relative in module_relative {
+        // For convenience, have directories for the whole tree in the wheel
+        for ancestor in module_relative.ancestors().skip(1) {
+            if ancestor == Path::new("") {
+                continue;
+            }
+            // Avoid duplicate directories in the zip.
+            if prefix_directories.insert(ancestor.to_path_buf()) {
+                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
+            }
+        }
 
-        files_visited += 1;
-        if files_visited > 10000 {
-            warn_user_once!(
-                "Visited more than 10,000 files for wheel build. \
+        for entry in WalkDir::new(src_root.join(module_relative))
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+        {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+
+            files_visited += 1;
+            if files_visited > 10000 {
+                warn_user_once!(
+                    "Visited more than 10,000 files for wheel build. \
                 Consider using more constrained includes or more excludes."
-            );
-        }
+                );
+            }
 
-        // We only want to take the module root, but since excludes start at the source tree root,
-        // we strip higher than we iterate.
-        let match_path = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-        let wheel_path = entry
-            .path()
-            .strip_prefix(&src_root)
-            .expect("walkdir starts with root");
-        if exclude_matcher.is_match(match_path) {
-            trace!("Excluding from module: `{}`", match_path.user_display());
-            continue;
-        }
-        let wheel_path = wheel_path.portable_display().to_string();
+            // We only want to take the module root, but since excludes start at the source tree root,
+            // we strip higher than we iterate.
+            let match_path = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+            let entry_path = entry
+                .path()
+                .strip_prefix(&src_root)
+                .expect("walkdir starts with root");
+            if exclude_matcher.is_match(match_path) {
+                trace!("Excluding from module: {}", match_path.user_display());
+                continue;
+            }
 
-        debug!("Adding to wheel: `{wheel_path}`");
+            error_on_venv(entry.file_name(), entry.path())?;
 
-        if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&wheel_path)?;
-        } else if entry.file_type().is_file() {
-            wheel_writer.write_file(&wheel_path, entry.path())?;
-        } else {
-            // TODO(konsti): We may want to support symlinks, there is support for installing them.
-            return Err(Error::UnsupportedFileType(
-                entry.path().to_path_buf(),
-                entry.file_type(),
-            ));
+            let entry_path = entry_path.portable_display().to_string();
+            debug!("Adding to wheel: {entry_path}");
+            wheel_writer.write_dir_entry(&entry, &entry_path)?;
         }
     }
     debug!("Visited {files_visited} files for wheel build");
@@ -202,7 +210,20 @@ fn write_wheel(
 
     // Add the data files
     for (name, directory) in settings.data.iter() {
-        debug!("Adding {name} data files from: `{directory}`");
+        debug!(
+            "Adding {name} data files from: {}",
+            directory.user_display()
+        );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let data_dir = format!(
             "{}-{}.data/{}/",
             pyproject_toml.name().as_dist_info_name(),
@@ -267,29 +288,21 @@ pub fn build_editable(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
-    }
-    let src_root = source_tree.join(settings.module_root);
-
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
     // Check that a module root exists in the directory we're linking from the `.pth` file
-    crate::find_module_root(&src_root, module_name)?;
+    let (src_root, _module_relative) = find_roots(
+        source_tree,
+        &pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+        settings.namespace,
+    )?;
 
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
         src_root.as_os_str().as_encoded_bytes(),
     )?;
 
-    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
+    debug!("Adding metadata files to: {}", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
@@ -350,7 +363,7 @@ struct RecordEntry {
     ///
     /// While the spec would allow backslashes, we always use portable paths with forward slashes.
     path: String,
-    /// The SHA256 of the files.
+    /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
     size: usize,
@@ -385,7 +398,7 @@ fn write_hashed(
     }
     Ok(RecordEntry {
         path: path.to_string(),
-        hash: format!("{:x}", hasher.finalize()),
+        hash: base64.encode(hasher.finalize()),
         size,
     })
 }
@@ -430,10 +443,12 @@ pub(crate) fn build_exclude_matcher(
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.*-exclude".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser::Uv
+            .parse(&exclude)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.*-exclude".to_string(),
+                source: err,
+            })?;
         exclude_builder.add(glob);
     }
     let exclude_matcher = exclude_builder
@@ -465,7 +480,7 @@ fn wheel_subdir_from_globs(
                 src.user_display(),
                 license_files
             );
-            parse_portable_glob(license_files)
+            PortableGlobParser::Pep639.parse(license_files)
         })
         .collect::<Result<_, _>>()
         .map_err(|err| Error::PortableGlob {
@@ -480,16 +495,20 @@ fn wheel_subdir_from_globs(
 
     wheel_writer.write_directory(target)?;
 
-    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(src)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(src)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included.
-        matcher.match_directory(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included.
+            matcher.match_directory(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
             err,
@@ -509,27 +528,18 @@ fn wheel_subdir_from_globs(
             .expect("walkdir starts with root");
 
         if !matcher.match_path(relative) {
-            trace!("Excluding {}: `{}`", globs_field, relative.user_display());
+            trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }
 
-        let relative_licenses = Path::new(target)
+        error_on_venv(entry.file_name(), entry.path())?;
+
+        let license_path = Path::new(target)
             .join(relative)
             .portable_display()
             .to_string();
-
-        if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&relative_licenses)?;
-        } else if entry.file_type().is_file() {
-            debug!("Adding {} file: `{}`", globs_field, relative.user_display());
-            wheel_writer.write_file(&relative_licenses, entry.path())?;
-        } else {
-            // TODO(konsti): We may want to support symlinks, there is support for installing them.
-            return Err(Error::UnsupportedFileType(
-                entry.path().to_path_buf(),
-                entry.file_type(),
-            ));
-        }
+        debug!("Adding for {}: {}", globs_field, relative.user_display());
+        wheel_writer.write_dir_entry(&entry, &license_path)?;
     }
     Ok(())
 }
@@ -630,8 +640,8 @@ impl ZipDirectoryWriter {
         path: &str,
         executable_bit: bool,
     ) -> Result<Box<dyn Write + 'slf>, Error> {
-        // 644 is the default of the zip crate.
-        let permissions = if executable_bit { 775 } else { 664 };
+        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
+        let permissions = if executable_bit { 0o755 } else { 0o644 };
         let options = zip::write::SimpleFileOptions::default()
             .unix_permissions(permissions)
             .compression_method(self.compression);
@@ -643,11 +653,14 @@ impl ZipDirectoryWriter {
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
+        // Set appropriate permissions for metadata files (644 = rw-r--r--)
+        let options = zip::write::SimpleFileOptions::default()
+            .unix_permissions(0o644)
+            .compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -725,7 +738,7 @@ impl FilesystemWriter {
 impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
@@ -801,14 +814,14 @@ mod test {
     fn test_record() {
         let record = vec![RecordEntry {
             path: "built_by_uv/__init__.py".to_string(),
-            hash: "89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865".to_string(),
+            hash: "ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU".to_string(),
             size: 37,
         }];
 
         let mut writer = Vec::new();
         write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
         assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            built_by_uv/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
+            built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
             built_by_uv-0.1.0/RECORD,,
         ");
     }
@@ -821,6 +834,7 @@ mod test {
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .sort_by_file_name()
             .into_iter()
             .map(|entry| {
                 entry
@@ -866,9 +880,9 @@ mod test {
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=f883bac9aabac7a1d297ecd61fdeab666818bdfc87947d342f9590a02a73f982,50
-        built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
         "###);
 

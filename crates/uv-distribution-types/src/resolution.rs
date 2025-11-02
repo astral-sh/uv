@@ -1,6 +1,5 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
 use uv_pypi_types::{HashDigest, HashDigests};
 
 use crate::{
@@ -19,7 +18,7 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    /// Create a new resolution from the given pinned packages.
+    /// Create a [`Resolution`] from the given pinned packages.
     pub fn new(graph: petgraph::graph::DiGraph<Node, Edge>) -> Self {
         Self {
             graph,
@@ -119,11 +118,11 @@ pub enum ResolutionDiagnostic {
         /// The extra that was requested. For example, `colorama` in `black[colorama]`.
         extra: ExtraName,
     },
-    MissingDev {
+    MissingGroup {
         /// The distribution that was requested with a non-existent development dependency group.
         dist: ResolvedDist,
         /// The development dependency group that was requested.
-        dev: GroupName,
+        group: GroupName,
     },
     YankedVersion {
         /// The package that was requested with a yanked version. For example, `black==23.10.0`.
@@ -145,8 +144,10 @@ impl Diagnostic for ResolutionDiagnostic {
             Self::MissingExtra { dist, extra } => {
                 format!("The package `{dist}` does not have an extra named `{extra}`")
             }
-            Self::MissingDev { dist, dev } => {
-                format!("The package `{dist}` does not have a development dependency group named `{dev}`")
+            Self::MissingGroup { dist, group } => {
+                format!(
+                    "The package `{dist}` does not have a development dependency group named `{group}`"
+                )
             }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
@@ -169,7 +170,7 @@ impl Diagnostic for ResolutionDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MissingExtra { dist, .. } => name == dist.name(),
-            Self::MissingDev { dist, .. } => name == dist.name(),
+            Self::MissingGroup { dist, .. } => name == dist.name(),
             Self::YankedVersion { dist, .. } => name == dist.name(),
             Self::MissingLowerBound { package_name } => name == package_name,
         }
@@ -200,23 +201,12 @@ impl Node {
     }
 }
 
-/// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
+/// An edge in the resolution graph.
 #[derive(Debug, Clone)]
 pub enum Edge {
-    Prod(MarkerTree),
-    Optional(ExtraName, MarkerTree),
-    Dev(GroupName, MarkerTree),
-}
-
-impl Edge {
-    /// Return the [`MarkerTree`] for this edge.
-    pub fn marker(&self) -> &MarkerTree {
-        match self {
-            Self::Prod(marker) => marker,
-            Self::Optional(_, marker) => marker,
-            Self::Dev(_, marker) => marker,
-        }
-    }
+    Prod,
+    Optional(ExtraName),
+    Dev(GroupName),
 }
 
 impl From<&ResolvedDist> for RequirementSource {
@@ -225,7 +215,7 @@ impl From<&ResolvedDist> for RequirementSource {
             ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheels)) => {
                     let wheel = wheels.best_wheel();
-                    RequirementSource::Registry {
+                    Self::Registry {
                         specifier: uv_pep440::VersionSpecifiers::from(
                             uv_pep440::VersionSpecifier::equals_version(
                                 wheel.filename.version.clone(),
@@ -238,19 +228,19 @@ impl From<&ResolvedDist> for RequirementSource {
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
                     location.set_fragment(None);
-                    RequirementSource::Url {
+                    Self::Url {
                         url: wheel.url.clone(),
                         location,
                         subdirectory: None,
                         ext: DistExtension::Wheel,
                     }
                 }
-                Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
+                Dist::Built(BuiltDist::Path(wheel)) => Self::Path {
                     install_path: wheel.install_path.clone(),
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },
-                Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
+                Dist::Source(SourceDist::Registry(sdist)) => Self::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
@@ -260,31 +250,31 @@ impl From<&ResolvedDist> for RequirementSource {
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     let mut location = sdist.url.to_url();
                     location.set_fragment(None);
-                    RequirementSource::Url {
+                    Self::Url {
                         url: sdist.url.clone(),
                         location,
                         subdirectory: sdist.subdirectory.clone(),
                         ext: DistExtension::Source(sdist.ext),
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                Dist::Source(SourceDist::Git(sdist)) => Self::Git {
                     git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
                     subdirectory: sdist.subdirectory.clone(),
                 },
-                Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
+                Dist::Source(SourceDist::Path(sdist)) => Self::Path {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     ext: DistExtension::Source(sdist.ext),
                 },
-                Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Directory {
+                Dist::Source(SourceDist::Directory(sdist)) => Self::Directory {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
                     r#virtual: sdist.r#virtual,
                 },
             },
-            ResolvedDist::Installed { dist } => RequirementSource::Registry {
+            ResolvedDist::Installed { dist } => Self::Registry {
                 specifier: uv_pep440::VersionSpecifiers::from(
                     uv_pep440::VersionSpecifier::equals_version(dist.version().clone()),
                 ),

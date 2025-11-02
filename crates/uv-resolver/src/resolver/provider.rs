@@ -5,16 +5,17 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
+use crate::ExcludeNewer;
 use crate::flat_index::FlatIndex;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
-use crate::{ExcludeNewer, RequiresPython};
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
@@ -66,11 +67,11 @@ impl MetadataUnavailable {
     /// formatting system is more custom.
     pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            MetadataUnavailable::Offline => None,
-            MetadataUnavailable::InvalidMetadata(err) => Some(err),
-            MetadataUnavailable::InconsistentMetadata(err) => Some(err),
-            MetadataUnavailable::InvalidStructure(err) => Some(err),
-            MetadataUnavailable::RequiresPython(_, _) => None,
+            Self::Offline => None,
+            Self::InvalidMetadata(err) => Some(err),
+            Self::InconsistentMetadata(err) => Some(err),
+            Self::InvalidStructure(err) => Some(err),
+            Self::RequiresPython(_, _) => None,
         }
     }
 }
@@ -115,7 +116,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
 }
@@ -129,7 +130,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: ExcludeNewer,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
     ) -> Self {
@@ -183,7 +184,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,
-                            self.exclude_newer.as_ref(),
+                            Some(&self.exclude_newer),
                             flat_index
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),
@@ -198,7 +199,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     })
                     .collect(),
             )),
-            Err(err) => match err.into_kind() {
+            Err(err) => match err.kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = flat_index
                         .and_then(|flat_index| flat_index.get(package_name))
@@ -231,7 +232,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         Ok(VersionsResponse::Offline)
                     }
                 }
-                kind => Err(kind.into()),
+                _ => Err(err),
             },
         }
     }
@@ -245,20 +246,25 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
-                uv_distribution::Error::Client(client) => match client.into_kind() {
-                    uv_client::ErrorKind::Offline(_) => {
-                        Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                uv_distribution::Error::Client(client) => {
+                    let retries = client.retries();
+                    match client.into_kind() {
+                        uv_client::ErrorKind::Offline(_) => {
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                        }
+                        uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
+                            ))
+                        }
+                        uv_client::ErrorKind::Metadata(_, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidStructure(Arc::new(err)),
+                            ))
+                        }
+                        kind => Err(uv_client::Error::new(kind, retries).into()),
                     }
-                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                        Ok(MetadataResponse::Unavailable(
-                            MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
-                        ))
-                    }
-                    uv_client::ErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
-                        MetadataUnavailable::InvalidStructure(Arc::new(err)),
-                    )),
-                    kind => Err(uv_client::Error::from(kind).into()),
-                },
+                }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
                     Ok(MetadataResponse::Unavailable(
                         MetadataUnavailable::InconsistentMetadata(Arc::new(err)),
@@ -303,7 +309,6 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Set the [`Reporter`] to use for this installer.
-    #[must_use]
     fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             fetcher: self.fetcher.with_reporter(reporter),

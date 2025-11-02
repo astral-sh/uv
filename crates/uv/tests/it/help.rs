@@ -1,6 +1,6 @@
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn help() {
@@ -16,14 +16,17 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -32,7 +35,6 @@ fn help() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -63,7 +65,7 @@ fn help() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -95,14 +97,17 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
       remove   Remove dependencies from the project
+      version  Read or update the project's version
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -111,7 +116,6 @@ fn help_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
       help     Display documentation for a command
 
     Cache options:
@@ -141,7 +145,7 @@ fn help_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -172,14 +176,17 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
       remove   Remove dependencies from the project
+      version  Read or update the project's version
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      format   Format Python code in the project
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -188,7 +195,6 @@ fn help_short_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
       help     Display documentation for a command
 
     Cache options:
@@ -218,7 +224,7 @@ fn help_short_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -263,6 +269,8 @@ fn help_subcommand() {
 
     - `<version>` e.g. `3`, `3.12`, `3.12.3`
     - `<version-specifier>` e.g. `>=3.12,<3.13`
+    - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     - `<implementation>` e.g. `cpython` or `cp`
     - `<implementation>@<version>` e.g. `cpython@3.12`
     - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -287,12 +295,14 @@ fn help_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache
@@ -402,6 +412,8 @@ fn help_subcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIRECTORY=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -438,9 +450,6 @@ fn help_subcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
     Use `uv help python <command>` for more information on a specific command.
 
 
@@ -466,9 +475,9 @@ fn help_subsubcommand() {
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
 
-    A `python` executable is not made globally available, managed Python versions are only used in uv
-    commands or in active virtual environments. There is experimental support for adding Python
-    executables to the `PATH` — use the `--preview` flag to enable this behavior.
+    By default, Python executables are added to a directory on the path with a minor version suffix,
+    e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use `uv python dir
+    --bin` to see the target directory.
 
     Multiple Python versions may be requested.
 
@@ -501,6 +510,16 @@ fn help_subsubcommand() {
               
               [env: UV_PYTHON_INSTALL_DIR=]
 
+          --no-bin
+              Do not install a Python executable into the `bin` directory.
+              
+              This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
+
+          --no-registry
+              Do not register the Python installation in the Windows registry.
+              
+              This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
+
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
               
@@ -509,8 +528,6 @@ fn help_subsubcommand() {
               `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYTHON_INSTALL_MIRROR=]
 
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations.
@@ -519,8 +536,11 @@ fn help_subsubcommand() {
               `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
+
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations.
               
-              [env: UV_PYPY_INSTALL_MIRROR=]
+              Note that currently, only local paths are supported.
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
@@ -655,6 +675,8 @@ fn help_subsubcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIRECTORY=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -691,9 +713,6 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
 
     ----- stderr -----
     "#);
@@ -712,12 +731,14 @@ fn help_flag_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -746,7 +767,7 @@ fn help_flag_subcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -755,8 +776,6 @@ fn help_flag_subcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help python` for more details.
 
@@ -780,15 +799,24 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
-      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
-                                       UV_PYTHON_INSTALL_DIR=]
-          --mirror <MIRROR>            Set the URL to use as the source for downloading Python
-                                       installations [env: UV_PYTHON_INSTALL_MIRROR=]
-          --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
-                                       installations [env: UV_PYPY_INSTALL_MIRROR=]
-      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
-      -f, --force                      Replace existing Python executables during installation
-          --default                    Use as the default Python version
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --no-bin
+              Do not install a Python executable into the `bin` directory
+          --no-registry
+              Do not register the Python installation in the Windows registry
+          --mirror <MIRROR>
+              Set the URL to use as the source for downloading Python installations
+          --pypy-mirror <PYPY_MIRROR>
+              Set the URL to use as the source for downloading PyPy installations
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations
+      -r, --reinstall
+              Reinstall the requested Python version, if it's already installed
+      -f, --force
+              Replace existing Python executables during installation
+          --default
+              Use as the default Python version
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -817,7 +845,7 @@ fn help_flag_subsubcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -826,8 +854,6 @@ fn help_flag_subsubcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     ----- stderr -----
     "#);
@@ -837,21 +863,24 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
         remove
+        version
         sync
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -860,25 +889,27 @@ fn help_unknown_subcommand() {
         publish
         cache
         self
-        version
         generate-shell-completion
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
         remove
+        version
         sync
         lock
         export
         tree
+        format
         tool
         python
         pip
@@ -887,16 +918,15 @@ fn help_unknown_subcommand() {
         publish
         cache
         self
-        version
         generate-shell-completion
-    "###);
+    ");
 }
 
 #[test]
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -905,11 +935,13 @@ fn help_unknown_subsubcommand() {
     error: There is no command `foobar` for `uv python`. Did you mean one of:
         list
         install
+        upgrade
         find
         pin
         dir
         uninstall
-    "###);
+        update-shell
+    ");
 }
 
 #[test]
@@ -925,14 +957,17 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -941,7 +976,6 @@ fn help_with_global_option() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -972,7 +1006,7 @@ fn help_with_global_option() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -1014,14 +1048,20 @@ fn help_with_help() {
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    "###);
+    error: unexpected argument '--version' found
+
+      tip: a similar argument exists: '--verbose'
+
+    Usage: uv help --verbose... [COMMAND]...
+
+    For more information, try '--help'.
+    ");
 }
 
 #[test]
@@ -1039,14 +1079,17 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      format                     Format Python code in the project
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1055,7 +1098,6 @@ fn help_with_no_pager() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -1086,7 +1128,7 @@ fn help_with_no_pager() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>

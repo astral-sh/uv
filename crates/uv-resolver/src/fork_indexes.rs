@@ -2,8 +2,8 @@ use rustc_hash::FxHashMap;
 use uv_distribution_types::IndexMetadata;
 use uv_normalize::PackageName;
 
-use crate::resolver::ResolverEnvironment;
 use crate::ResolveError;
+use crate::resolver::ResolverEnvironment;
 
 /// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
@@ -24,7 +24,7 @@ impl ForkIndexes {
     ) -> Result<(), ResolveError> {
         if let Some(previous) = self.0.insert(package_name.clone(), index.clone()) {
             if &previous != index {
-                let mut conflicts = vec![previous.url.to_string(), index.url.to_string()];
+                let mut conflicts = vec![previous.url, index.url.clone()];
                 conflicts.sort();
                 return Err(ResolveError::ConflictingIndexesForEnvironment {
                     package_name: package_name.clone(),

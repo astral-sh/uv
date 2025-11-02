@@ -217,10 +217,45 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Using a shebang to create an executable file
+
+A shebang can be added to make a script executable without using `uv run` — this makes it easy to
+run scripts that are on your `PATH` or in the current folder.
+
+For example, create a file called `greet` with the following contents
+
+```python title="greet"
+#!/usr/bin/env -S uv run --script
+
+print("Hello, world!")
+```
+
+Ensure that your script is executable, e.g., with `chmod +x greet`, then run the script:
+
+```console
+$ ./greet
+Hello, world!
+```
+
+Declaration of dependencies is also supported in this context, for example:
+
+```python title="example"
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["httpx"]
+# ///
+
+import httpx
+
+print(httpx.get("https://example.com"))
+```
+
 ## Using alternative package indexes
 
-If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
-dependencies, you can provide the index with the `--index` option:
+If you wish to use an alternative [package index](../concepts/indexes.md) to resolve dependencies,
+you can provide the index with the `--index` option:
 
 ```console
 $ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
@@ -234,7 +269,7 @@ This will include the package data in the inline metadata:
 ```
 
 If you require authentication to access the package index, then please refer to the
-[package index](../configuration/indexes.md) documentation.
+[package index](../concepts/indexes.md) documentation.
 
 ## Locking dependencies
 

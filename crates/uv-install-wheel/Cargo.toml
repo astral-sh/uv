@@ -21,11 +21,12 @@ doctest = false
 name = "uv_install_wheel"
 
 [dependencies]
-uv-cache-info = { workspace = true }
 uv-distribution-filename = { workspace = true }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
@@ -37,6 +38,7 @@ csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
+owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
@@ -55,6 +57,6 @@ same-file = { workspace = true }
 self-replace = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.89" }
-assert_fs = { version = "1.1.2" }
+anyhow = { workspace = true }
+assert_fs = { workspace = true }
 indoc = { workspace = true }

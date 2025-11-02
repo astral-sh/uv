@@ -1,3 +1,6 @@
+use serde::{Serialize, Serializer};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
@@ -83,7 +86,31 @@ impl<'de> serde::de::Deserialize<'de> for Identifier {
         D: serde::de::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Identifier::from_str(&s).map_err(serde::de::Error::custom)
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for Identifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Serialize::serialize(&self.0, serializer)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Identifier {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Identifier")
+    }
+
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*$",
+            "description": "An identifier in Python"
+        })
     }
 }
 

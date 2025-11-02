@@ -5,7 +5,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use pretty_assertions::StrComparison;
 use schemars::JsonSchema;
@@ -16,8 +16,8 @@ use uv_options_metadata::{OptionField, OptionSet, OptionsMetadata, Visit};
 use uv_settings::Options as SettingsOptions;
 use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(Deserialize, JsonSchema, OptionsMetadata)]
 #[serde(deny_unknown_fields)]
@@ -56,7 +56,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-options-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-options-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -68,25 +70,25 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 );
             }
         },
-        Mode::Write => {
-            match fs_err::read_to_string(&reference_path) {
-                Ok(current) => {
-                    if current == reference_string {
-                        println!("Up-to-date: {filename}");
-                    } else {
-                        println!("Updating: {filename}");
-                        fs_err::write(reference_path, reference_string.as_bytes())?;
-                    }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        Mode::Write => match fs_err::read_to_string(&reference_path) {
+            Ok(current) => {
+                if current == reference_string {
+                    println!("Up-to-date: {filename}");
+                } else {
                     println!("Updating: {filename}");
                     fs_err::write(reference_path, reference_string.as_bytes())?;
                 }
-                Err(err) => {
-                    bail!("{filename} changed, please run `cargo dev generate-options-reference`:\n{err}");
-                }
             }
-        }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                println!("Updating: {filename}");
+                fs_err::write(reference_path, reference_string.as_bytes())?;
+            }
+            Err(err) => {
+                bail!(
+                    "{filename} changed, please run `cargo dev generate-options-reference`:\n{err}"
+                );
+            }
+        },
     }
 
     Ok(())
@@ -167,7 +169,7 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
         generate_set(
             output,
             Set::Named {
-                name: set_name.to_string(),
+                name: set_name.to_owned(),
                 set: *sub_set,
             },
             parents,
@@ -191,15 +193,15 @@ enum Set {
 impl Set {
     fn name(&self) -> Option<&str> {
         match self {
-            Set::Global { .. } => None,
-            Set::Named { name, .. } => Some(name),
+            Self::Global { .. } => None,
+            Self::Named { name, .. } => Some(name),
         }
     }
 
     fn metadata(&self) -> &OptionSet {
         match self {
-            Set::Global { set, .. } => set,
-            Set::Named { set, .. } => set,
+            Self::Global { set, .. } => set,
+            Self::Named { set, .. } => set,
         }
     }
 }
@@ -396,10 +398,15 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_options_reference() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {

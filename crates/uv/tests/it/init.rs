@@ -9,7 +9,7 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn init() {
@@ -314,7 +314,7 @@ fn init_application_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -327,9 +327,9 @@ fn init_application_package() -> Result<()> {
         foo = "foo:main"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -390,7 +390,7 @@ fn init_library() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -400,9 +400,9 @@ fn init_library() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -446,6 +446,51 @@ fn init_library() -> Result<()> {
     Ok(())
 }
 
+/// Test the uv build backend with using `uv init --package --preview`. To be merged with the regular
+/// init lib test once the uv build backend becomes the stable default.
+#[test]
+fn init_package_preview() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 #[test]
 fn init_bare_lib() {
     let context = TestContext::new("3.12");
@@ -483,7 +528,7 @@ fn init_bare_lib() {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -491,9 +536,9 @@ fn init_bare_lib() {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 }
@@ -535,7 +580,7 @@ fn init_bare_package() {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -543,9 +588,9 @@ fn init_bare_package() {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 }
@@ -797,6 +842,108 @@ fn init_script_file_conflicts() -> Result<()> {
     Ok(())
 }
 
+// Init script should not trash an existing shebang.
+#[test]
+fn init_script_shebang() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script_path = context.temp_dir.child("script.py");
+
+    let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: If you execute script.py directly, it might ignore its inline metadata.
+    Consider replacing its shebang with: #!/usr/bin/env -S uv run --script
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #! /usr/bin/env python3
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
+    let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #!/usr/bin/env -S uv run --script
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    Ok(())
+}
+
+// Make sure that `uv init --script` picks the latest non-pre-release version of Python
+// for the `requires-python` constraint.
+#[cfg(feature = "python-patch")]
+#[test]
+fn init_script_picks_latest_stable_version() -> Result<()> {
+    let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
+    // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
+    // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
+    let context =
+        TestContext::new_with_versions(managed_versions).with_versions_as_managed(managed_versions);
+
+    let script_path = context.temp_dir.join("main.py");
+
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("main.py"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `main.py`
+    "#);
+
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(
+        resulting_script, @r#"
+        # /// script
+        # requires-python = ">=3.13"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from main.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "#
+    );
+
+    Ok(())
+}
+
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {
@@ -963,7 +1110,7 @@ fn init_library_current_dir() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -973,9 +1120,9 @@ fn init_library_current_dir() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -1092,7 +1239,7 @@ fn init_dot_args() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1102,9 +1249,9 @@ fn init_dot_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -1170,7 +1317,7 @@ fn init_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1180,9 +1327,9 @@ fn init_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -1355,7 +1502,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1365,9 +1512,9 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -1452,7 +1599,7 @@ fn init_workspace_outside() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1462,9 +1609,9 @@ fn init_workspace_outside() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -1534,7 +1681,7 @@ fn init_normalized_names() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo-bar"
         version = "0.1.0"
@@ -1544,9 +1691,9 @@ fn init_normalized_names() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
         );
     });
 
@@ -2233,7 +2380,7 @@ fn init_requires_python_version() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.9"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2248,15 +2395,15 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -2265,7 +2412,7 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2276,7 +2423,7 @@ fn init_requires_python_version() -> Result<()> {
 /// specifiers verbatim.
 #[test]
 fn init_requires_python_specifiers() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2292,7 +2439,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.8.*"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2300,7 +2447,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
     insta::with_settings!({
@@ -2313,7 +2460,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = []
         "###
         );
@@ -2324,7 +2471,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2334,9 +2481,9 @@ fn init_requires_python_specifiers() -> Result<()> {
 /// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
 #[test]
 fn init_requires_python_version_file() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
-    context.temp_dir.child(".python-version").write_str("3.8")?;
+    context.temp_dir.child(".python-version").write_str("3.9")?;
 
     let child = context.temp_dir.join("foo");
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
@@ -2353,15 +2500,15 @@ fn init_requires_python_version_file() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -2371,7 +2518,7 @@ fn init_requires_python_version_file() -> Result<()> {
 /// Run `uv init`, inferring the Python version from an existing `.venv`
 #[test]
 fn init_existing_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2420,7 +2567,7 @@ fn init_existing_environment() -> Result<()> {
 /// Run `uv init`, it should ignore a the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a new virtual environment in the parent directory
     uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @r###"
@@ -2456,7 +2603,7 @@ fn init_existing_environment_parent() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
         "###
         );
@@ -2817,8 +2964,8 @@ fn init_with_author() {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2847,8 +2994,8 @@ fn init_with_author() {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -3048,6 +3195,87 @@ fn init_backend_implies_package() {
     });
 }
 
+/// Run `uv init --build-backend poetry` to create a project with poetry-core build backend
+#[test]
+fn init_library_poetry() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-04-28T00:00:00Z");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("poetry"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["poetry-core>=2,<3"]
+        build-backend = "poetry.core.masonry.api"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def hello() -> str:
+            return "Hello from foo!"
+        "###
+        );
+    });
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}
+
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
 #[cfg(feature = "crates-io")]
@@ -3094,6 +3322,9 @@ fn init_app_build_backend_maturin() -> Result<()> {
         python-packages = ["foo"]
         python-source = "src"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
         build-backend = "maturin"
@@ -3135,18 +3366,17 @@ fn init_app_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3161,7 +3391,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3171,7 +3401,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3222,6 +3452,9 @@ fn init_app_build_backend_scikit() -> Result<()> {
         [tool.scikit-build]
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]
@@ -3345,6 +3578,9 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         python-packages = ["foo"]
         python-source = "src"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
         build-backend = "maturin"
@@ -3386,18 +3622,17 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3412,7 +3647,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3422,7 +3657,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3470,6 +3705,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         [tool.scikit-build]
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]
@@ -3550,9 +3788,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init --app --package --build-backend uv` to create a packaged application project
+/// Run `uv init --app --package --build-backend hatchling` to create a packaged application project
 #[test]
-fn init_application_package_uv() -> Result<()> {
+fn init_application_package_hatchling() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let child = context.temp_dir.child("foo");
@@ -3561,41 +3799,34 @@ fn init_application_package_uv() -> Result<()> {
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("uv"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("hatchling"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The uv build backend is experimental and may change without warning
     Initialized project `foo`
     "###);
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
-    let mut filters = context.filters();
-    filters.push((r#"\["uv_build>=.*,<.*"\]"#, r#"["uv_build[SPECIFIERS]"]"#));
-    insta::with_settings!({
-        filters => filters,
-    }, {
-        assert_snapshot!(
-            pyproject, @r###"
-        [project]
-        name = "foo"
-        version = "0.1.0"
-        description = "Add your description here"
-        readme = "README.md"
-        requires-python = ">=3.12"
-        dependencies = []
+    assert_snapshot!(
+        pyproject, @r#"
+    [project]
+    name = "foo"
+    version = "0.1.0"
+    description = "Add your description here"
+    readme = "README.md"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [project.scripts]
-        foo = "foo:main"
+    [project.scripts]
+    foo = "foo:main"
 
-        [build-system]
-        requires = ["uv_build[SPECIFIERS]"]
-        build-backend = "uv_build"
-        "###
-        );
-    });
+    [build-system]
+    requires = ["hatchling"]
+    build-backend = "hatchling.build"
+    "#
+    );
 
     let init = fs_err::read_to_string(init_py)?;
     insta::with_settings!({
@@ -3609,8 +3840,7 @@ fn init_application_package_uv() -> Result<()> {
         );
     });
 
-    // Use preview to go through the fast path.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3663,8 +3893,8 @@ fn init_with_description() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -3705,11 +3935,91 @@ fn init_without_description() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
 
     Ok(())
+}
+
+/// Run `uv init --python 3.13t` to create a pin to a freethreaded Python.
+#[test]
+fn init_python_variant() -> Result<()> {
+    let context = TestContext::new("3.13");
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--python").arg("3.13t"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let python_version = fs_err::read_to_string(context.temp_dir.join("foo/.python-version"))?;
+    assert_eq!(python_version, "3.13t\n");
+
+    Ok(())
+}
+
+/// Check how `uv init` reacts to working and broken git with different `--vcs` options.
+#[test]
+fn git_states() {
+    let context = TestContext::new("3.12");
+
+    // First, with working git.
+
+    context.init().arg("working").assert().success();
+    assert!(context.temp_dir.child("working/.git").is_dir());
+
+    context
+        .init()
+        .arg("working-no-git")
+        .arg("--vcs")
+        .arg("none")
+        .assert()
+        .success();
+    assert!(!context.temp_dir.child("working-no-git/.git").is_dir());
+
+    context
+        .init()
+        .arg("working-git")
+        .arg("--vcs")
+        .arg("git")
+        .assert()
+        .success();
+    assert!(context.temp_dir.child("working-git/.git").is_dir());
+
+    // The same tests again, but with broken git.
+    TestContext::disallow_git_cli(&context.bin_dir)
+        .expect("Failed to setup disallowed `git` command");
+
+    context.init().arg("broken").assert().success();
+    assert!(!context.temp_dir.child("broken/.git").is_dir());
+
+    context
+        .init()
+        .arg("broken-no-git")
+        .arg("--vcs")
+        .arg("none")
+        .assert()
+        .success();
+    assert!(!context.temp_dir.child("broken-no-git/.git").is_dir());
+
+    uv_snapshot!(context.filters(), context
+        .init()
+        .arg("broken-git")
+        .arg("--vcs")
+        .arg("git"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to initialize Git repository at `[TEMP_DIR]/broken-git`
+    stdout:
+    stderr: error: `git` operations are not allowed — are you missing a cfg for the `git` feature?
+    ");
+    assert!(!context.temp_dir.child("broken-git/.git").is_dir());
 }

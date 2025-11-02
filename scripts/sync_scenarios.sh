@@ -15,6 +15,10 @@
 #   For development purposes, the `./scripts/scenarios/generate.py` script can be used directly to generate
 #   test cases from a local set of scenarios.
 #
+#   To update the packse version, run the following command first:
+#
+#       $ uv pip compile --group scripts/scenarios/pyproject.toml:packse -o scripts/scenarios/pylock.toml --upgrade-package packse --universal -p 3.12
+#
 # See `scripts/scenarios/` for supporting files.
 set -eu
 
@@ -23,11 +27,11 @@ script_root="$(realpath "$(dirname "$0")")"
 
 cd "$script_root/scenarios"
 echo "Setting up a temporary environment..."
-uv venv -p 3.12
+uv venv -p 3.12 -c
 
 # shellcheck disable=SC1091
 source ".venv/bin/activate"
-uv pip install -r requirements.txt --refresh-package packse
+uv pip install -r "$script_root/scenarios/pylock.toml" --refresh-package packse
 
 echo "Fetching packse scenarios..."
 packse fetch --dest "$script_root/scenarios/.downloads" --force

@@ -5,6 +5,7 @@ use tracing::instrument;
 
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{Os, Platform};
+use uv_static::EnvVars;
 use uv_version::version;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -64,9 +65,14 @@ impl LineHaul {
     #[instrument(name = "linehaul", skip_all)]
     pub fn new(markers: &MarkerEnvironment, platform: Option<&Platform>) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
-        let looks_like_ci = ["BUILD_BUILDID", "BUILD_ID", "CI", "PIP_IS_CI"]
-            .iter()
-            .find_map(|&var_name| env::var(var_name).ok().map(|_| true));
+        let looks_like_ci = [
+            EnvVars::BUILD_BUILDID,
+            EnvVars::BUILD_ID,
+            EnvVars::CI,
+            EnvVars::PIP_IS_CI,
+        ]
+        .iter()
+        .find_map(|&var_name| env::var(var_name).ok().map(|_| true));
 
         let libc = match platform.map(Platform::os) {
             Some(Os::Manylinux { major, minor }) => Some(Libc {

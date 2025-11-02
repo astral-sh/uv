@@ -33,6 +33,8 @@ The following Python version request formats are supported:
 
 - `<version>` (e.g., `3`, `3.12`, `3.12.3`)
 - `<version-specifier>` (e.g., `>=3.12,<3.13`)
+- `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
 - `<implementation>` (e.g., `cpython` or `cp`)
 - `<implementation>@<version>` (e.g., `cpython@3.12`)
 - `<implementation><version>` (e.g., `cpython3.12` or `cp312`)
@@ -64,8 +66,8 @@ A global `.python-version` file can be created in the user configuration directo
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 
-uv will not search for `.python-version` files beyond project or workspace boundaries (with the
-exception of the user configuration directory).
+uv will not search for `.python-version` files beyond project or workspace boundaries (except the
+user configuration directory).
 
 ## Installing a Python version
 
@@ -106,13 +108,13 @@ To install a specific implementation:
 $ uv python install pypy
 ```
 
-All of the [Python version request](#requesting-a-version) formats are supported except those that
-are used for requesting local interpreters such as a file path.
+All the [Python version request](#requesting-a-version) formats are supported except those that are
+used for requesting local interpreters such as a file path.
 
 By default `uv python install` will verify that a managed Python version is installed or install the
 latest version. If a `.python-version` file is present, uv will install the Python version listed in
 the file. A project that requires multiple Python versions may define a `.python-versions` file. If
-present, uv will install all of the Python versions listed in the file.
+present, uv will install all the Python versions listed in the file.
 
 !!! important
 
@@ -121,28 +123,17 @@ present, uv will install all of the Python versions listed in the file.
 
 ### Installing Python executables
 
-!!! important
-
-    Support for installing Python executables is in _preview_, this means the behavior is experimental
-    and subject to change.
-
-To install Python executables into your `PATH`, provide the `--preview` option:
-
-```console
-$ uv python install 3.12 --preview
-```
-
-This will install a Python executable for the requested version into `~/.local/bin`, e.g., as
-`python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
+install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
 
 !!! tip
 
     If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
 
-To install `python` and `python3` executables, include the `--default` option:
+To install `python` and `python3` executables, include the experimental `--default` option:
 
 ```console
-$ uv python install 3.12 --default --preview
+$ uv python install 3.12 --default
 ```
 
 When installing Python executables, uv will only overwrite an existing executable if it is managed
@@ -153,10 +144,74 @@ uv will update executables that it manages. However, it will prefer the latest p
 Python minor version by default. For example:
 
 ```console
-$ uv python install 3.12.7 --preview  # Adds `python3.12` to `~/.local/bin`
-$ uv python install 3.12.6 --preview  # Does not update `python3.12`
-$ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
+$ uv python install 3.12.7  # Adds `python3.12` to `~/.local/bin`
+$ uv python install 3.12.6  # Does not update `python3.12`
+$ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 ```
+
+## Upgrading Python versions
+
+!!! important
+
+    Support for upgrading Python versions is in _preview_. This means the behavior is experimental
+    and subject to change.
+
+    Upgrades are only supported for uv-managed Python versions.
+
+    Upgrades are not currently supported for PyPy and GraalPy.
+
+uv allows transparently upgrading Python versions to the latest patch release, e.g., 3.13.4 to
+3.13.5. uv does not allow transparently upgrading across minor Python versions, e.g., 3.12 to 3.13,
+because changing minor versions can affect dependency resolution.
+
+uv-managed Python versions can be upgraded to the latest supported patch release with the
+`python upgrade` command:
+
+To upgrade a Python version to the latest supported patch release:
+
+```console
+$ uv python upgrade 3.12
+```
+
+To upgrade all installed Python versions:
+
+```console
+$ uv python upgrade
+```
+
+After an upgrade, uv will prefer the new version, but will retain the existing version as it may
+still be used by virtual environments.
+
+If the Python version was installed with the `python-upgrade` [preview feature](./preview.md)
+enabled, e.g., `uv python install 3.12 --preview-features python-upgrade`, virtual environments
+using the Python version will be automatically upgraded to the new patch version.
+
+!!! note
+
+    If the virtual environment was created _before_ opting in to the preview mode, it will not be
+    included in the automatic upgrades.
+
+If a virtual environment was created with an explicitly requested patch version, e.g.,
+`uv venv -p 3.10.8`, it will not be transparently upgraded to a new version.
+
+### Minor version directories
+
+Automatic upgrades for virtual environments are implemented using a directory with the Python minor
+version, e.g.:
+
+```
+~/.local/share/uv/python/cpython-3.12-macos-aarch64-none
+```
+
+which is a symbolic link (on Unix) or junction (on Windows) pointing to a specific patch version:
+
+```console
+$ readlink ~/.local/share/uv/python/cpython-3.12-macos-aarch64-none
+~/.local/share/uv/python/cpython-3.12.11-macos-aarch64-none
+```
+
+If this link is resolved by another tool, e.g., by canonicalizing the Python interpreter path, and
+used to create a virtual environment, it will not be automatically upgraded.
 
 ## Project Python versions
 
@@ -262,7 +317,7 @@ a system Python version, uv will use the first compatible version — not the ne
 If a Python version cannot be found on the system, uv will check for a compatible managed Python
 version download.
 
-### Python pre-releases
+## Python pre-releases
 
 Python pre-releases will not be selected by default. Python pre-releases will be used if there is no
 other available installation matching the request. For example, if only a pre-release version is
@@ -272,6 +327,38 @@ and the pre-release version will be used.
 
 If a pre-release Python version is available and matches the request, uv will not download a stable
 Python version instead.
+
+## Free-threaded Python
+
+uv supports discovering and installing
+[free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in
+CPython 3.13+.
+
+Free-threaded Python versions will not be selected by default. Free-threaded Python versions will
+only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
+
+## Debug Python variants
+
+uv supports discovering and installing
+[debug builds](https://docs.python.org/3.14/using/configure.html#debug-build) of Python, i.e., with
+debug assertions enabled.
+
+!!! important
+
+    Debug builds of Python are slower and are not appropriate for general use.
+
+Debug builds will be used if there is no other available installation matching the request. For
+example, if only a debug version is available it will be used but otherwise a stable release version
+will be used. Similarly, if the path to a debug Python executable is provided then no other Python
+version matches the request and the debug version will be used.
+
+Debug builds of Python can be explicitly requested with, e.g., `3.13d` or `3.13+debug`.
+
+!!! note
+
+    CPython versions installed by uv usually have debug symbols stripped to reduce the distribution
+    size. These debug builds do not have debug symbols stripped, which can be useful when debugging
+    Python processes with a C-level debugger.
 
 ## Disabling automatic Python downloads
 
@@ -284,7 +371,7 @@ during `uv python install`.
 !!! tip
 
     The `python-downloads` setting can be set in a
-    [persistent configuration file](../configuration/files.md) to change the default behavior, or
+    [persistent configuration file](./configuration-files.md) to change the default behavior, or
     the `--no-python-downloads` flag can be passed to any uv command.
 
 ## Requiring or disabling managed Python versions
@@ -332,23 +419,24 @@ The following alternative options are available:
 
 ## Python implementation support
 
-uv supports the CPython, PyPy, and GraalPy Python implementations. If a Python implementation is not
-supported, uv will fail to discover its interpreter.
+uv supports the CPython, PyPy, Pyodide, and GraalPy Python implementations. If a Python
+implementation is not supported, uv will fail to discover its interpreter.
 
 The implementations may be requested with either the long or short name:
 
 - CPython: `cpython`, `cp`
 - PyPy: `pypy`, `pp`
 - GraalPy: `graalpy`, `gp`
+- Pyodide: `pyodide`
 
-Implementation name requests are not case sensitive.
+Implementation name requests are not case-sensitive.
 
 See the [Python version request](#requesting-a-version) documentation for more details on the
 supported formats.
 
 ## Managed Python distributions
 
-uv supports downloading and installing CPython and PyPy distributions.
+uv supports downloading and installing CPython, PyPy, and Pyodide distributions.
 
 ### CPython distributions
 
@@ -356,7 +444,7 @@ As Python does not publish official distributable CPython binaries, uv instead u
 distributions from the Astral
 [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
 `python-build-standalone` is also is used in many other Python projects, like
-[Rye](https://github.com/astral-sh/rye), [Mise](https://mise.jdx.dev/lang/python.html), and
+[Mise](https://mise.jdx.dev/lang/python.html) and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
@@ -365,9 +453,38 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 
 These distributions have some behavior quirks, generally as a consequence of portability; see the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details. Additionally, some platforms may not be supported (e.g., distributions
-are not yet available for musl Linux on ARM).
+documentation for details.
 
 ### PyPy distributions
 
-PyPy distributions are provided by the PyPy project.
+PyPy distributions are provided by the [PyPy project](https://pypy.org).
+
+### Pyodide distributions
+
+Pyodide distributions are provided by the [Pyodide project](https://github.com/pyodide/pyodide).
+
+Pyodide is a port of CPython for the WebAssembly / Emscripten platform.
+
+## Transparent x86_64 emulation on aarch64
+
+Both macOS and Windows support running x86_64 binaries on aarch64 through transparent emulation.
+This is called [Rosetta 2](https://support.apple.com/en-gb/102527) or
+[Windows on ARM (WoA) emulation](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation).
+It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Python interpreter on
+aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
+for its architecture, either all x86_64 or all aarch64.
+
+## Registration in the Windows registry
+
+On Windows, installation of managed Python versions will register them with the Windows registry as
+defined by [PEP 514](https://peps.python.org/pep-0514/).
+
+After installation, the Python versions can be selected with the `py` launcher, e.g.:
+
+```console
+$ uv python install 3.13.1
+$ py -V:Astral/CPython3.13.1
+```
+
+On uninstall, uv will remove the registry entry for the target version as well as any broken
+registry entries.

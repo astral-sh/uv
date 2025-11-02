@@ -1,6 +1,4 @@
 use std::env::consts::EXE_SUFFIX;
-use std::path::Path;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -11,23 +9,9 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use crate::common::{
-    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
-};
-use uv_fs::{copy_dir_all, Simplified};
+use crate::common::{TestContext, download_to_disk, site_packages_path, uv_snapshot};
+use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
-
-fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
-    Command::new(venv_to_interpreter(venv))
-        // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
-        // https://github.com/python/cpython/issues/75953
-        .arg("-B")
-        .arg("-c")
-        .arg(command)
-        .current_dir(temp_dir)
-        .assert()
-        .success();
-}
 
 #[test]
 fn missing_requirements_txt() {
@@ -59,27 +43,27 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
-    "###);
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
-    "###);
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
@@ -129,12 +113,14 @@ fn install() -> Result<()> {
     );
 
     // Counterpart for the `compile()` test.
-    assert!(!context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context
         .assert_command("from markupsafe import Markup")
@@ -230,6 +216,7 @@ fn install_hardlink() -> Result<()> {
 
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
+#[cfg(unix)] // Windows does not allow symlinks by default
 fn install_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -460,7 +447,13 @@ fn link() -> Result<()> {
     "###
     );
 
-    check_command(&context2.venv, "import iniconfig", &context2.temp_dir);
+    context2
+        .python_command()
+        .arg("-c")
+        .arg("import iniconfig")
+        .current_dir(&context2.temp_dir)
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -776,7 +769,7 @@ fn install_sdist_url() -> Result<()> {
 /// Install a package with source archive format `.tar.bz2`.
 #[test]
 fn install_sdist_archive_type_bz2() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -919,6 +912,7 @@ fn install_version_then_install_url() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
+#[cfg(feature = "python-eol")]
 #[test]
 fn install_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -1086,7 +1080,10 @@ fn install_local_wheel() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1223,7 +1220,10 @@ fn mismatched_version() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1233,7 +1233,7 @@ fn mismatched_version() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1242,8 +1242,23 @@ fn mismatched_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
-      Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-    "###
+      Caused by: Wheel version does not match filename (2.0.1 != 3.7.2), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK, "1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl)
+    "
     );
 
     Ok(())
@@ -1269,7 +1284,7 @@ fn mismatched_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1278,9 +1293,9 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    "
     );
 
     Ok(())
@@ -2613,7 +2628,7 @@ fn incompatible_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2622,9 +2637,10 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            Failed to read from zip file
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: Failed to read from zip file
+            Caused by: unable to locate the end of central directory record
+    "
     );
 
     Ok(())
@@ -3286,12 +3302,14 @@ fn compile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -3335,12 +3353,14 @@ fn recompile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -3439,14 +3459,14 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
-    "###
+    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `foo`
+    "
     );
 
     Ok(())
@@ -5187,18 +5207,18 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
@@ -5207,8 +5227,8 @@ fn target_built_distribution() -> Result<()> {
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5223,20 +5243,20 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
      + iniconfig==1.1.1
-    "###);
+    ");
 
     // Remove it, and replace with `flask`, which includes a binary.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5245,27 +5265,29 @@ fn target_built_distribution() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.2
      - iniconfig==1.1.1
-    "###);
+    ");
     // Ensure that the binary is present in the target directory.
-    assert!(context
-        .temp_dir
-        .child("target")
-        .child("bin")
-        .child(format!("flask{EXE_SUFFIX}"))
-        .is_file());
+    assert!(
+        context
+            .temp_dir
+            .child("target")
+            .child("bin")
+            .child(format!("flask{EXE_SUFFIX}"))
+            .is_file()
+    );
 
     Ok(())
 }
@@ -5287,18 +5309,18 @@ fn target_source_distribution() -> Result<()> {
         .arg("--no-binary")
         .arg("iniconfig")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the build requirements are not present in the target directory.
     assert!(!context.temp_dir.child("target").child("hatchling").is_dir());
@@ -5310,8 +5332,8 @@ fn target_source_distribution() -> Result<()> {
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5336,7 +5358,7 @@ fn target_no_build_isolation() -> Result<()> {
     requirements_in.write_str("flit_core")?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5346,7 +5368,7 @@ fn target_no_build_isolation() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flit-core==3.9.0
-    "###);
+    ");
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5358,18 +5380,18 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("--no-binary")
         .arg("wheel")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel==0.43.0
-    "###);
+    ");
 
     // Ensure that the build requirements are not present in the target directory.
     assert!(!context.temp_dir.child("target").child("flit_core").is_dir());
@@ -5381,8 +5403,8 @@ fn target_no_build_isolation() -> Result<()> {
     context.assert_command("import wheel").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import wheel")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5405,7 +5427,7 @@ fn target_system() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5416,7 +5438,7 @@ fn target_system() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
@@ -5441,25 +5463,25 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that we can't import the package.
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(
@@ -5477,20 +5499,20 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
      + iniconfig==1.1.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -5523,7 +5545,7 @@ fn preserve_markers() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5553,7 +5575,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5581,7 +5603,7 @@ fn compatible_build_constraint() -> Result<()> {
 
 #[test]
 fn sync_seed() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
@@ -5603,7 +5625,7 @@ fn sync_seed() -> Result<()> {
 
     // Syncing should remove the seed packages.
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5615,29 +5637,29 @@ fn sync_seed() -> Result<()> {
     Installed 1 package in [TIME]
      - pip==24.0
      + requests==1.2.0
-    "###
+    "
     );
 
     // Re-create the environment with seed packages.
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--seed"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear")
+        .arg("--seed"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment with seed packages at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Syncing should retain the seed packages.
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5646,7 +5668,7 @@ fn sync_seed() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())
@@ -5728,6 +5750,413 @@ fn semicolon_no_space() -> Result<()> {
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 3 packages in [TIME]
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     + iniconfig==2.0.0
+     - sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Avoid erroring for packages that only include wheels, and _don't_ include a wheel for the
+/// current platform, but are omitted by markers anyway.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13127>
+#[test]
+fn pep_751_wheel_only() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = ["torch"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // If there's no compatible wheel for a package we _don't_ need to install (e.g., anything
+    // CUDA-related), succeed.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would download 9 packages
+    Would install 9 packages
+     + filelock==3.13.1
+     + fsspec==2024.3.1
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mpmath==1.3.0
+     + networkx==3.2.1
+     + sympy==1.12
+     + torch==2.2.1
+     + typing-extensions==4.10.0
+    "
+    );
+
+    // However, if there's no compatible wheel for a package that we _do_ need to install, we should
+    // error
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("--python-version")
+        .arg("3.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `torch` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're using CPython 3.8 (`cp38`), but `torch` (v2.2.1) only has wheels with the following Python implementation tag: `cp312`
+    "
+    );
+
+    Ok(())
+}
+
+/// Respect `--no-binary` et al when installing from a `pylock.toml`.
+#[test]
+fn pep_751_build_options() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.8.0
+     + idna==3.10
+     + sniffio==1.3.1
+     + typing-extensions==4.12.2
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["odrive"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("odrive"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `odrive` can't be installed because it is marked as `--no-binary` but has no source distribution
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-distribution"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("source-distribution"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `source-distribution` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.8.0
+     - idna==3.10
+     - sniffio==1.3.1
+     + source-distribution==0.0.3
+     - typing-extensions==4.12.2
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_direct_url_tags() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["MarkupSafe @ https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+
+    hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_python_version_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_platform_direct_url() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
+    "
     );
 
     Ok(())

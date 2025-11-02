@@ -2,11 +2,92 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{validate_and_normalize_ref, InvalidNameError};
+use crate::{InvalidNameError, validate_and_normalize_ref};
+
+/// Either the literal "all" or a list of extras
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum DefaultExtras {
+    /// All extras are defaulted
+    All,
+    /// A list of extras
+    List(Vec<ExtraName>),
+}
+
+/// Serialize a [`DefaultExtras`] struct into a list of marker strings.
+impl serde::Serialize for DefaultExtras {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::All => serializer.serialize_str("all"),
+            Self::List(extras) => {
+                let mut seq = serializer.serialize_seq(Some(extras.len()))?;
+                for extra in extras {
+                    seq.serialize_element(&extra)?;
+                }
+                seq.end()
+            }
+        }
+    }
+}
+
+/// Deserialize a "all" or list of [`ExtraName`] into a [`DefaultExtras`] enum.
+impl<'de> serde::Deserialize<'de> for DefaultExtras {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StringOrVecVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StringOrVecVisitor {
+            type Value = DefaultExtras;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(r#"the string "all" or a list of strings"#)
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if value != "all" {
+                    return Err(serde::de::Error::custom(
+                        r#"default-extras must be "all" or a ["list", "of", "extras"]"#,
+                    ));
+                }
+                Ok(DefaultExtras::All)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut extras = Vec::new();
+
+                while let Some(elem) = seq.next_element::<ExtraName>()? {
+                    extras.push(elem);
+                }
+
+                Ok(DefaultExtras::List(extras))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrVecVisitor)
+    }
+}
+
+impl Default for DefaultExtras {
+    fn default() -> Self {
+        Self::List(Vec::new())
+    }
+}
 
 /// The normalized name of an extra dependency.
 ///
@@ -16,8 +97,21 @@ use crate::{validate_and_normalize_ref, InvalidNameError};
 /// See:
 /// - <https://peps.python.org/pep-0685/#specification/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[rkyv(derive(Debug))]
 pub struct ExtraName(SmallString);
 
 impl ExtraName {

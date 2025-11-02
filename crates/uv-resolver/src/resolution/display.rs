@@ -14,7 +14,6 @@ use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolverOutput,
@@ -62,7 +61,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-    ) -> DisplayResolutionGraph<'a> {
+    ) -> Self {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
@@ -290,7 +289,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.dist.index() {
-                    let url = index.redacted();
+                    let url = index.without_credentials();
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }

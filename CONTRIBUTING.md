@@ -1,10 +1,34 @@
 # Contributing
 
-We have issues labeled as
-[Good First Issue](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
-and
-[Help Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
-which are good opportunities for new contributors.
+## Finding ways to help
+
+We label issues that would be good for a first time contributor as
+[`good first issue`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
+These usually do not require significant experience with Rust or the uv code base.
+
+We label issues that we think are a good opportunity for subsequent contributions as
+[`help wanted`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22).
+These require varying levels of experience with Rust and uv. Often, we want to accomplish these
+tasks but do not have the resources to do so ourselves.
+
+You don't need our permission to start on an issue we have labeled as appropriate for community
+contribution as described above. However, it's a good idea to indicate that you are going to work on
+an issue to avoid concurrent attempts to solve the same problem.
+
+Please check in with us before starting work on an issue that has not been labeled as appropriate
+for community contribution. We're happy to receive contributions for other issues, but it's
+important to make sure we have consensus on the solution to the problem first.
+
+Outside of issues with the labels above, issues labeled as
+[`bug`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22bug%22) are the
+best candidates for contribution. In contrast, issues labeled with `needs-decision` or
+`needs-design` are _not_ good candidates for contribution. Please do not open pull requests for
+issues with these labels.
+
+Please do not open pull requests for new features without prior discussion. While we appreciate
+exploration of new features, we will almost always close these pull requests immediately. Adding a
+new feature to uv creates a long-term maintenance burden and requires strong consensus from the uv
+team before it is appropriate to begin work on an implementation.
 
 ## Setup
 
@@ -14,6 +38,12 @@ On Ubuntu and other Debian-based distributions, you can install a C compiler wit
 
 ```shell
 sudo apt install build-essential
+```
+
+On Fedora-based distributions, you can install a C compiler with:
+
+```shell
+sudo dnf install gcc
 ```
 
 ## Testing
@@ -74,7 +104,7 @@ system
 just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```console
-$ docker buildx build -t uv-builder -f builder.dockerfile --load .
+$ docker build -t uv-builder -f crates/uv-dev/builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
 cargo build --target x86_64-unknown-linux-musl --profile profiling
 docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
@@ -163,6 +193,13 @@ After making changes to the documentation, format the markdown files with:
 
 ```shell
 npx prettier --prose-wrap always --write "**/*.md"
+```
+
+Note that the command above requires Node.js and npm to be installed on your system. As an
+alternative, you can run this command using Docker:
+
+```console
+$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --prose-wrap always --write "**/*.md"
 ```
 
 ## Releases

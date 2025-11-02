@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use uv_normalize::{DefaultGroups, GroupName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName};
 
 /// Manager of all dependency-group decisions and settings history.
 ///
@@ -186,6 +186,18 @@ impl DependencyGroupsInner {
         self.include.names().chain(&self.exclude)
     }
 
+    /// Returns an iterator over all groups that are included in the specification,
+    /// assuming `all_names` is an iterator over all groups.
+    pub fn group_names<'a, Names>(
+        &'a self,
+        all_names: Names,
+    ) -> impl Iterator<Item = &'a GroupName> + 'a
+    where
+        Names: Iterator<Item = &'a GroupName> + 'a,
+    {
+        all_names.filter(move |name| self.contains(name))
+    }
+
     /// Iterate over all groups the user explicitly asked for on the CLI
     pub fn explicit_names(&self) -> impl Iterator<Item = &GroupName> {
         let DependencyGroupsHistory {
@@ -240,8 +252,8 @@ impl DependencyGroupsHistory {
     /// Conceptually this being an empty list should be equivalent to
     /// [`DependencyGroups::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
-    pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
-        let DependencyGroupsHistory {
+    pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
+        let Self {
             dev_mode,
             group,
             only_group,
@@ -295,6 +307,15 @@ pub struct DependencyGroupsWithDefaults {
 }
 
 impl DependencyGroupsWithDefaults {
+    /// Do not enable any groups
+    ///
+    /// Many places in the code need to know what dependency-groups are active,
+    /// but various commands or subsystems never enable any dependency-groups,
+    /// in which case they want this.
+    pub fn none() -> Self {
+        DependencyGroups::default().with_defaults(DefaultGroups::default())
+    }
+
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, group: &GroupName) -> bool {
         self.cur.contains(group) && !self.prev.contains(group)
@@ -341,26 +362,26 @@ impl IncludeGroups {
     /// Returns `true` if the specification includes the given group.
     pub fn contains(&self, group: &GroupName) -> bool {
         match self {
-            IncludeGroups::Some(groups) => groups.contains(group),
-            IncludeGroups::All => true,
+            Self::Some(groups) => groups.contains(group),
+            Self::All => true,
         }
     }
 
     /// Returns `true` if the specification will have no effect.
     pub fn is_empty(&self) -> bool {
         match self {
-            IncludeGroups::Some(groups) => groups.is_empty(),
+            Self::Some(groups) => groups.is_empty(),
             // Although technically this is a noop if they have no groups,
             // conceptually they're *trying* to have an effect, so treat it as one.
-            IncludeGroups::All => false,
+            Self::All => false,
         }
     }
 
     /// Iterate over all groups referenced in the [`IncludeGroups`].
-    pub fn names(&self) -> std::slice::Iter<GroupName> {
+    pub fn names(&self) -> std::slice::Iter<'_, GroupName> {
         match self {
-            IncludeGroups::Some(groups) => groups.iter(),
-            IncludeGroups::All => [].iter(),
+            Self::Some(groups) => groups.iter(),
+            Self::All => [].iter(),
         }
     }
 }

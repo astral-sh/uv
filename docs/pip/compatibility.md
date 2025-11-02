@@ -36,7 +36,7 @@ drawbacks:
 
 Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also supports persistent
 configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`. For more
-information, see [Configuration files](../configuration/files.md).
+information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
@@ -120,8 +120,8 @@ While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users t
 "dependency confusion" attacks.
 
 uv also supports pinning packages to dedicated indexes (see:
-[_Indexes_](../configuration/indexes.md#pinning-a-package-to-an-index)), such that a given package
-is _always_ installed from a specific index.
+[_Indexes_](../concepts/indexes.md#pinning-a-package-to-an-index)), such that a given package is
+_always_ installed from a specific index.
 
 ## PEP 517 build isolation
 
@@ -400,7 +400,7 @@ the `subprocess` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 
-Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
+Unlike `pip`, uv does not wait until a request returns an HTTP 401 before searching for
 authentication. uv attaches authentication to all requests for hosts with credentials available.
 
 ## `egg` support
@@ -447,13 +447,15 @@ By default, uv does not write any index URLs to the output file, while `pip-comp
 in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`, uv
 will include all index URLs when `--emit-index-url` is passed, including the default index URL.
 
-## `requires-python` enforcement
+## `requires-python` upper bounds
 
 When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
 ignores upper bounds entirely. For example, `>=3.8, <4` is treated as `>=3.8`. Respecting upper
 bounds on `requires-python` often leads to formally correct but practically incorrect resolutions,
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
+
+## `requires-python` specifiers
 
 When evaluating Python versions against `requires-python` specifiers, uv truncates the candidate
 version to the major, minor, and patch components, ignoring (e.g.) pre-release and post-release
@@ -479,3 +481,11 @@ is.
 For example, `uv pip install foo bar` prioritizes newer versions of `foo` over `bar` and could
 result in a different resolution than `uv pip install bar foo`. Similarly, this behavior applies to
 the ordering of requirements in input files for `uv pip compile`.
+
+## Wheel filename and metadata validation
+
+By default, uv will reject wheels whose filenames are inconsistent with the wheel metadata inside
+the file. For example, a wheel named `foo-1.0.0-py3-none-any.whl` that contains metadata indicating
+the version is `1.0.1` will be rejected by uv, but accepted by pip.
+
+To force uv to accept such wheels, set `UV_SKIP_WHEEL_FILENAME_CHECK=1` in the environment.

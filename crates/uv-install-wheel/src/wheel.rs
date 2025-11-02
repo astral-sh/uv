@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io;
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -12,15 +12,15 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_cache_info::CacheInfo;
-use uv_fs::{persist_with_retry_sync, relative_to, Simplified};
+use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
+use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::{scripts_from_ini, Script};
+use crate::script::{Script, scripts_from_ini};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
@@ -143,7 +143,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
 fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
-    // Only check for pythonw.exe on Windows
+    // Only check for `pythonw.exe` on Windows.
     if cfg!(windows) && is_gui {
         python_executable
             .file_name()
@@ -186,17 +186,33 @@ pub(crate) fn write_script_entrypoints(
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
+        let warn_names = ["activate", "activate_this.py"];
+        if warn_names.contains(&entrypoint.name.as_str())
+            || entrypoint.name.starts_with("activate.")
+        {
+            warn_user_once!(
+                "The script name `{}` is reserved for virtual environment activation scripts.",
+                entrypoint.name
+            );
+        }
+        let reserved_names = ["python", "pythonw", "python3"];
+        if reserved_names.contains(&entrypoint.name.as_str())
+            || entrypoint
+                .name
+                .strip_prefix("python3.")
+                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        {
+            return Err(Error::ReservedScriptName(entrypoint.name.clone()));
+        }
+
         let entrypoint_absolute = entrypoint_path(entrypoint, layout);
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
             .ok_or_else(|| {
-                Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Could not find relative path for: {}",
-                        entrypoint_absolute.simplified_display()
-                    ),
-                ))
+                Error::Io(io::Error::other(format!(
+                    "Could not find relative path for: {}",
+                    entrypoint_absolute.simplified_display()
+                )))
             })?;
 
         // Generate the launcher script.
@@ -241,6 +257,76 @@ pub(crate) fn write_script_entrypoints(
     Ok(())
 }
 
+/// A parsed `WHEEL` file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WheelFile(FxHashMap<String, Vec<String>>);
+
+impl WheelFile {
+    /// Parse `WHEEL` file.
+    ///
+    /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
+    /// > email message format:
+    pub fn parse(wheel_text: &str) -> Result<Self, Error> {
+        // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same email message format:
+        let data = parse_email_message_file(&mut wheel_text.as_bytes(), "WHEEL")?;
+
+        // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
+        // like pip
+        let wheel_version = data
+            .get("Wheel-Version")
+            .and_then(|wheel_versions| wheel_versions.first());
+        let wheel_version = wheel_version
+            .and_then(|wheel_version| wheel_version.split_once('.'))
+            .ok_or_else(|| {
+                Error::InvalidWheel(format!(
+                    "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+                ))
+            })?;
+        // pip has some test wheels that use that ancient version,
+        // and technically we only need to check that the version is not higher
+        if wheel_version == ("0", "1") {
+            warn!("Ancient wheel version 0.1 (expected is 1.0)");
+            return Ok(Self(data));
+        }
+        // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
+        // Wheel-Version: 1.0
+        if wheel_version.0 != "1" {
+            return Err(Error::InvalidWheel(format!(
+                "Unsupported wheel major version (expected {}, got {})",
+                1, wheel_version.0
+            )));
+        }
+        if wheel_version.1 > "0" {
+            warn!(
+                "Warning: Unsupported wheel minor version (expected {}, got {})",
+                0, wheel_version.1
+            );
+        }
+        Ok(Self(data))
+    }
+
+    /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
+    pub fn lib_kind(&self) -> LibKind {
+        // Determine whether Root-Is-Purelib == ‘true’.
+        // If it is, the wheel is pure, and should be installed into purelib.
+        let root_is_purelib = self
+            .0
+            .get("Root-Is-Purelib")
+            .and_then(|root_is_purelib| root_is_purelib.first())
+            .is_some_and(|root_is_purelib| root_is_purelib == "true");
+        if root_is_purelib {
+            LibKind::Pure
+        } else {
+            LibKind::Plat
+        }
+    }
+
+    /// Return the list of wheel tags.
+    pub fn tags(&self) -> Option<&[String]> {
+        self.0.get("Tag").map(Vec::as_slice)
+    }
+}
+
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LibKind {
@@ -248,61 +334,6 @@ pub enum LibKind {
     Pure,
     /// Install into the `platlib` directory.
     Plat,
-}
-
-/// Parse WHEEL file.
-///
-/// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
-/// > email message format:
-pub fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
-    // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same email message format:
-    let data = parse_email_message_file(&mut wheel_text.as_bytes(), "WHEEL")?;
-
-    // Determine whether Root-Is-Purelib == ‘true’.
-    // If it is, the wheel is pure, and should be installed into purelib.
-    let root_is_purelib = data
-        .get("Root-Is-Purelib")
-        .and_then(|root_is_purelib| root_is_purelib.first())
-        .is_some_and(|root_is_purelib| root_is_purelib == "true");
-    let lib_kind = if root_is_purelib {
-        LibKind::Pure
-    } else {
-        LibKind::Plat
-    };
-
-    // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
-    // like pip
-    let wheel_version = data
-        .get("Wheel-Version")
-        .and_then(|wheel_versions| wheel_versions.first());
-    let wheel_version = wheel_version
-        .and_then(|wheel_version| wheel_version.split_once('.'))
-        .ok_or_else(|| {
-            Error::InvalidWheel(format!(
-                "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
-            ))
-        })?;
-    // pip has some test wheels that use that ancient version,
-    // and technically we only need to check that the version is not higher
-    if wheel_version == ("0", "1") {
-        warn!("Ancient wheel version 0.1 (expected is 1.0)");
-        return Ok(lib_kind);
-    }
-    // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
-    // Wheel-Version: 1.0
-    if wheel_version.0 != "1" {
-        return Err(Error::InvalidWheel(format!(
-            "Unsupported wheel major version (expected {}, got {})",
-            1, wheel_version.0
-        )));
-    }
-    if wheel_version.1 > "0" {
-        warn!(
-            "Warning: Unsupported wheel minor version (expected {}, got {})",
-            0, wheel_version.1
-        );
-    }
-    Ok(lib_kind)
 }
 
 /// Moves the files and folders in src to dest, updating the RECORD in the process
@@ -387,13 +418,10 @@ fn install_script(
     let script_absolute = layout.scheme.scripts.join(file.file_name());
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    script_absolute.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                script_absolute.simplified_display()
+            )))
         })?;
 
     let path = file.path();
@@ -410,23 +438,47 @@ fn install_script(
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = vec![0; placeholder_python.len()];
-    script.read_exact(&mut start)?;
+    match script.read_exact(&mut start) {
+        Ok(()) => {}
+        // Ignore scripts shorter than the buffer.
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(Error::Io(err)),
+    }
     let size_and_encoded_hash = if start == placeholder_python {
-        let is_gui = {
-            let mut buf = vec![0; 1];
-            script.read_exact(&mut buf)?;
-            if buf == b"w" {
-                true
-            } else {
-                script.seek_relative(-1)?;
-                false
+        // Read the rest of the first line, one byte at a time, until we hit a newline.
+        let mut is_gui = false;
+        let mut first = true;
+        let mut byte = [0u8; 1];
+        loop {
+            match script.read_exact(&mut byte) {
+                Ok(()) => {
+                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                        break;
+                    }
+
+                    // Check if this is a GUI script (starts with 'w').
+                    if first {
+                        is_gui = byte[0] == b'w';
+                        first = false;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(err) => return Err(Error::Io(err)),
             }
-        };
+        }
+
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let start = format_shebang(&executable, &layout.os_name, relocatable)
+        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
+
+        // Use appropriate line ending for the platform.
+        if layout.os_name == "nt" {
+            start.extend_from_slice(b"\r\n");
+        } else {
+            start.push(b'\n');
+        }
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
@@ -550,12 +602,20 @@ pub(crate) fn install_data(
 
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
-                trace!(?dist_name, "Installing data/data");
+                trace!(
+                    ?dist_name,
+                    "Installing data/data to {}",
+                    layout.scheme.data.user_display()
+                );
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
-                trace!(?dist_name, "Installing data/scripts");
+                trace!(
+                    ?dist_name,
+                    "Installing data/scripts to {}",
+                    layout.scheme.scripts.user_display()
+                );
                 let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
@@ -594,22 +654,34 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                trace!(?dist_name, "Installing data/headers");
                 let target_path = layout.scheme.include.join(dist_name.as_str());
+                trace!(
+                    ?dist_name,
+                    "Installing data/headers to {}",
+                    target_path.user_display()
+                );
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
-                trace!(?dist_name, "Installing data/purelib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/purelib to {}",
+                    layout.scheme.purelib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
-                trace!(?dist_name, "Installing data/platlib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/platlib to {}",
+                    layout.scheme.platlib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
-                    "Unknown wheel data type: {:?}",
-                    entry.file_name()
+                    "Unknown wheel data type: {}",
+                    entry.file_name().display()
                 )));
             }
         }
@@ -646,12 +718,13 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn write_installer_metadata(
+pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Serialize>(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
-    cache_info: Option<&CacheInfo>,
+    cache_info: Option<&Cache>,
+    build_info: Option<&Build>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -672,6 +745,14 @@ pub(crate) fn write_installer_metadata(
             site_packages,
             &dist_info_dir.join("uv_cache.json"),
             serde_json::to_string(cache_info)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(build_info) = build_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_build.json"),
+            serde_json::to_string(build_info)?.as_bytes(),
             record,
         )?;
     }
@@ -698,13 +779,10 @@ pub(crate) fn get_relocatable_executable(
 ) -> Result<PathBuf, Error> {
     Ok(if relocatable {
         pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    executable.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                executable.simplified_display()
+            )))
         })?
     } else {
         executable
@@ -849,7 +927,7 @@ impl RenameOrCopy {
             Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
                 Ok(()) => {}
                 Err(err) => {
-                    *self = RenameOrCopy::Copy;
+                    *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
                     fs_err::copy(from.as_ref(), to.as_ref())?;
                 }
@@ -871,12 +949,9 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    use crate::wheel::format_shebang;
-    use crate::Error;
-
     use super::{
-        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file,
-        write_installer_metadata, RecordEntry, Script,
+        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
+        parse_email_message_file, read_record_file, write_installer_metadata,
     };
 
     #[test]
@@ -950,8 +1025,8 @@ mod test {
                 version
             }
         }
-        parse_wheel_file(&wheel_with_version("1.0")).unwrap();
-        parse_wheel_file(&wheel_with_version("2.0")).unwrap_err();
+        WheelFile::parse(&wheel_with_version("1.0")).unwrap();
+        WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
     }
 
     #[test]
@@ -1064,9 +1139,14 @@ mod test {
         );
 
         // If the path is too long, we should not use the `exec` trick.
-        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let executable = Path::new(
+            "/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3",
+        );
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+        );
     }
 
     #[test]
@@ -1161,10 +1241,11 @@ mod test {
             .child("foo-0.1.0.dist-info")
             .create_dir_all()
             .unwrap();
-        write_installer_metadata(
+        write_installer_metadata::<(), ()>(
             site_packages,
             "foo-0.1.0",
             true,
+            None,
             None,
             None,
             Some("uv"),

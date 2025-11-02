@@ -1,19 +1,21 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
-pub use exclude_newer::ExcludeNewer;
+pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
+pub use exclude_newer::{
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerPackageEntry, ExcludeNewerTimestamp,
+};
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, RequirementsTxtExport,
-    ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    VERSION,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
 pub use python_requirement::PythonRequirement;
-pub use requires_python::{RequiresPython, RequiresPythonRange};
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
@@ -54,10 +56,9 @@ mod options;
 mod pins;
 mod preferences;
 mod prerelease;
-mod pubgrub;
+pub mod pubgrub;
 mod python_requirement;
 mod redirect;
-mod requires_python;
 mod resolution;
 mod resolution_mode;
 mod resolver;

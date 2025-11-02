@@ -3,22 +3,22 @@ use tracing::debug;
 
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl, RequiresPython};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
 /// A client to fetch the latest version of a package from an index.
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) tags: Option<&'env Tags>,
     pub(crate) requires_python: &'env RequiresPython,
 }
@@ -45,12 +45,12 @@ impl LatestClient<'_> {
         {
             Ok(archives) => archives,
             Err(err) => {
-                return match err.into_kind() {
+                return match err.kind() {
                     uv_client::ErrorKind::PackageNotFound(_) => Ok(None),
                     uv_client::ErrorKind::NoIndex(_) => Ok(None),
                     uv_client::ErrorKind::Offline(_) => Ok(None),
-                    kind => Err(kind.into()),
-                }
+                    _ => Err(err),
+                };
             }
         };
 
@@ -70,7 +70,7 @@ impl LatestClient<'_> {
 
                 for (filename, file) in files.all() {
                     // Skip distributions uploaded after the cutoff.
-                    if let Some(exclude_newer) = self.exclude_newer {
+                    if let Some(exclude_newer) = self.exclude_newer.exclude_newer_package(package) {
                         match file.upload_time_utc_ms.as_ref() {
                             Some(&upload_time)
                                 if upload_time >= exclude_newer.timestamp_millis() =>
@@ -79,8 +79,9 @@ impl LatestClient<'_> {
                             }
                             None => {
                                 warn_user_once!(
-                                    "{} is missing an upload date, but user provided: {exclude_newer}",
+                                    "{} is missing an upload date, but user provided: {}",
                                     file.filename,
+                                    self.exclude_newer
                                 );
                             }
                             _ => {}

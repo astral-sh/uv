@@ -4,6 +4,7 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
+import site
 import sys
 
 import json
@@ -39,10 +40,11 @@ if hasattr(sys, "implementation"):
         # GraalPy reports the CPython version as sys.implementation.version,
         # so we need to discover the GraalPy version from the cache_tag
         import re
+
         implementation_version = re.sub(
-            r"graalpy(\d)(\d+)-\d+",
+            r"graalpy(\d)(\d+)(?:dev[\da-f]+)?-\d+",
             r"\1.\2",
-            sys.implementation.cache_tag
+            sys.implementation.cache_tag,
         )
     else:
         implementation_version = format_full_version(sys.implementation.version)
@@ -510,6 +512,24 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "emscripten":
+        pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
+        if not pyodide_abi_version:
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "emscripten_not_pyodide",
+                    }
+                )
+            )
+            sys.exit(0)
+        version = pyodide_abi_version.split("_")
+        operating_system = {
+            "name": "pyodide",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+        }
     elif operating_system in [
         "freebsd",
         "netbsd",
@@ -565,7 +585,6 @@ def main() -> None:
     elif os_and_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
 
-
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
     #     sysconfig._PIP_USE_SYSCONFIG = True / False
@@ -590,7 +609,7 @@ def main() -> None:
             except (ImportError, AttributeError):
                 pass
 
-            import distutils.dist
+            import distutils.dist  # noqa: F401
         except ImportError:
             # We require distutils, but it's not installed; this is fairly
             # common in, e.g., deadsnakes where distutils is packaged
@@ -619,11 +638,15 @@ def main() -> None:
         # temporary path to `sys.path` so we can import it, which we have to strip later
         # to avoid having this now-deleted path around.
         "sys_path": sys.path[1:],
+        "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
-        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
+        "standalone": (
+            sysconfig.get_config_var("prefix") == "/install"
+            or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE"))
+        ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
@@ -631,6 +654,8 @@ def main() -> None:
         # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
+        # https://docs.python.org/3/using/configure.html#debug-build
+        "debug_enabled": bool(sysconfig.get_config_var("Py_DEBUG")),
         # Determine if the interpreter is 32-bit or 64-bit.
         # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
         "pointer_size": "64" if sys.maxsize > 2**32 else "32",

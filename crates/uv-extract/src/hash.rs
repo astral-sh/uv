@@ -1,7 +1,7 @@
+use blake2::digest::consts::U32;
+use sha2::Digest;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-use sha2::Digest;
 use tokio::io::{AsyncReadExt, ReadBuf};
 
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -12,15 +12,17 @@ pub enum Hasher {
     Sha256(sha2::Sha256),
     Sha384(sha2::Sha384),
     Sha512(sha2::Sha512),
+    Blake2b(blake2::Blake2b<U32>),
 }
 
 impl Hasher {
     pub fn update(&mut self, data: &[u8]) {
         match self {
-            Hasher::Md5(hasher) => hasher.update(data),
-            Hasher::Sha256(hasher) => hasher.update(data),
-            Hasher::Sha384(hasher) => hasher.update(data),
-            Hasher::Sha512(hasher) => hasher.update(data),
+            Self::Md5(hasher) => hasher.update(data),
+            Self::Sha256(hasher) => hasher.update(data),
+            Self::Sha384(hasher) => hasher.update(data),
+            Self::Sha512(hasher) => hasher.update(data),
+            Self::Blake2b(hasher) => hasher.update(data),
         }
     }
 }
@@ -28,10 +30,11 @@ impl Hasher {
 impl From<HashAlgorithm> for Hasher {
     fn from(algorithm: HashAlgorithm) -> Self {
         match algorithm {
-            HashAlgorithm::Md5 => Hasher::Md5(md5::Md5::new()),
-            HashAlgorithm::Sha256 => Hasher::Sha256(sha2::Sha256::new()),
-            HashAlgorithm::Sha384 => Hasher::Sha384(sha2::Sha384::new()),
-            HashAlgorithm::Sha512 => Hasher::Sha512(sha2::Sha512::new()),
+            HashAlgorithm::Md5 => Self::Md5(md5::Md5::new()),
+            HashAlgorithm::Sha256 => Self::Sha256(sha2::Sha256::new()),
+            HashAlgorithm::Sha384 => Self::Sha384(sha2::Sha384::new()),
+            HashAlgorithm::Sha512 => Self::Sha512(sha2::Sha512::new()),
+            HashAlgorithm::Blake2b => Self::Blake2b(blake2::Blake2b::new()),
         }
     }
 }
@@ -39,20 +42,24 @@ impl From<HashAlgorithm> for Hasher {
 impl From<Hasher> for HashDigest {
     fn from(hasher: Hasher) -> Self {
         match hasher {
-            Hasher::Md5(hasher) => HashDigest {
+            Hasher::Md5(hasher) => Self {
                 algorithm: HashAlgorithm::Md5,
                 digest: format!("{:x}", hasher.finalize()).into(),
             },
-            Hasher::Sha256(hasher) => HashDigest {
+            Hasher::Sha256(hasher) => Self {
                 algorithm: HashAlgorithm::Sha256,
                 digest: format!("{:x}", hasher.finalize()).into(),
             },
-            Hasher::Sha384(hasher) => HashDigest {
+            Hasher::Sha384(hasher) => Self {
                 algorithm: HashAlgorithm::Sha384,
                 digest: format!("{:x}", hasher.finalize()).into(),
             },
-            Hasher::Sha512(hasher) => HashDigest {
+            Hasher::Sha512(hasher) => Self {
                 algorithm: HashAlgorithm::Sha512,
+                digest: format!("{:x}", hasher.finalize()).into(),
+            },
+            Hasher::Blake2b(hasher) => Self {
+                algorithm: HashAlgorithm::Blake2b,
                 digest: format!("{:x}", hasher.finalize()).into(),
             },
         }

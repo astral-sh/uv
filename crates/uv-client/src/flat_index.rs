@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
-use tracing::{debug, info_span, warn, Instrument};
+use tracing::{Instrument, debug, info_span, warn};
 use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
@@ -10,6 +10,7 @@ use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -19,13 +20,13 @@ use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(DisplaySafeUrl),
 
     #[error("Failed to read `--find-links` directory: {0}")]
     FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
 
     #[error("Failed to read `--find-links` URL: {0}")]
-    FindLinksUrl(Url, #[source] Error),
+    FindLinksUrl(DisplaySafeUrl, #[source] Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,7 +113,7 @@ impl<'a> FlatIndexClient<'a> {
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
-            .map(|index| async move {
+            .map(async |index| {
                 let entries = self.fetch_index(index).await?;
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);
@@ -158,7 +159,7 @@ impl<'a> FlatIndexClient<'a> {
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(
         &self,
-        url: &Url,
+        url: &DisplaySafeUrl,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
@@ -179,7 +180,7 @@ impl<'a> FlatIndexClient<'a> {
             .client
             .uncached()
             .for_host(url)
-            .get(url.clone())
+            .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
             .build()
@@ -188,7 +189,7 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = DisplaySafeUrl::from(response.url().clone());
 
                 let text = response
                     .text()
@@ -203,11 +204,11 @@ impl<'a> FlatIndexClient<'a> {
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, &base) {
+                        match File::try_from_pypi(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {url}: {err}");
+                                warn!("Skipping file in {}: {err}", &url);
                                 None
                             }
                         }
@@ -245,7 +246,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(CachedClientError::Client(err)) if err.is_offline() => {
+            Err(CachedClientError::Client { err, .. }) if err.is_offline() => {
                 Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),
@@ -293,7 +294,7 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             // SAFETY: The index path is itself constructed from a URL.
-            let url = Url::from_file_path(entry.path()).unwrap();
+            let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: false,
@@ -302,8 +303,9 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(&url)),
+                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
+                zstd: None,
             };
 
             let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
@@ -319,6 +321,63 @@ impl<'a> FlatIndexClient<'a> {
                 index: flat_index.clone(),
             });
         }
+
+        dists.sort_by(|a, b| {
+            a.filename
+                .cmp(&b.filename)
+                .then_with(|| a.index.cmp(&b.index))
+        });
+
         Ok(FlatIndexEntries::from_entries(dists))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fs_err::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn read_from_directory_sorts_distributions() {
+        let dir = tempdir().unwrap();
+
+        let filenames = [
+            "beta-2.0.0-py3-none-any.whl",
+            "alpha-1.0.0.tar.gz",
+            "alpha-1.0.0-py3-none-any.whl",
+        ];
+
+        for name in &filenames {
+            let mut file = File::create(dir.path().join(name)).unwrap();
+            file.write_all(b"").unwrap();
+        }
+
+        let entries = FlatIndexClient::read_from_directory(
+            dir.path(),
+            &IndexUrl::parse(&dir.path().to_string_lossy(), None).unwrap(),
+        )
+        .unwrap();
+
+        let actual = entries
+            .entries
+            .iter()
+            .map(|entry| entry.filename.to_string())
+            .collect::<Vec<_>>();
+
+        let mut expected = filenames
+            .iter()
+            .map(|name| DistFilename::try_from_normalized_filename(name).unwrap())
+            .collect::<Vec<_>>();
+
+        expected.sort();
+
+        let expected = expected
+            .into_iter()
+            .map(|filename| filename.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
     }
 }

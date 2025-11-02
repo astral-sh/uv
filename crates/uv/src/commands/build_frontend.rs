@@ -3,47 +3,53 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
-use uv_auth::UrlAuthPolicies;
 
-use crate::commands::pip::operations;
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
-use uv_fs::{relative_to, Simplified};
+use uv_distribution_types::{
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, RequiresPython, SourceDist,
+};
+use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
+
+use crate::commands::ExitStatus;
+use crate::commands::pip::operations;
+use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::printer::Printer;
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 enum Error {
@@ -102,20 +108,22 @@ pub(crate) async fn build_frontend(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
@@ -127,13 +135,15 @@ pub(crate) async fn build_frontend(
         wheel,
         list,
         build_logs,
+        gitignore,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
         install_mirrors,
         settings,
-        network_settings,
+        client_builder,
         no_config,
         python_preference,
         python_downloads,
@@ -170,30 +180,23 @@ async fn build_impl(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<BuildResult> {
-    if list && preview.is_disabled() {
-        // We need the direct build for list and that is preview only.
-        writeln!(
-            printer.stderr(),
-            "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
-        )?;
-        return Ok(BuildResult::Failure);
-    }
-
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -204,19 +207,16 @@ async fn build_impl(
         fork_strategy: _,
         dependency_metadata,
         config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
+        config_settings_package,
+        build_isolation,
+        extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
         build_options,
         sources,
     } = settings;
-
-    let client_builder = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -260,8 +260,7 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--package` was provided, but no workspace was found"));
+                return Err(err).context("`--package` was provided, but no workspace was found");
             }
         };
 
@@ -270,10 +269,16 @@ async fn build_impl(
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
 
-        if !package.pyproject_toml().is_package() {
+        if !package.pyproject_toml().is_package(true) {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "build-system".green(),
+                "setuptools".cyan(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
@@ -289,8 +294,8 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--all-packages` was provided, but no workspace was found"));
+                return Err(err)
+                    .context("`--all-packages` was provided, but no workspace was found");
             }
         };
 
@@ -301,7 +306,7 @@ async fn build_impl(
         let packages: Vec<_> = workspace
             .packages()
             .values()
-            .filter(|package| package.pyproject_toml().is_package())
+            .filter(|package| package.pyproject_toml().is_package(true))
             .map(|package| AnnotatedSource {
                 source: Source::Directory(Cow::Borrowed(package.root())),
                 package: Some(package.project().name.clone()),
@@ -312,7 +317,13 @@ async fn build_impl(
             let member = workspace.packages().values().next().unwrap();
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "setuptools".cyan(),
+                "build-system".green(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         packages
@@ -333,17 +344,19 @@ async fn build_impl(
             cache,
             printer,
             index_locations,
-            &client_builder,
+            client_builder.clone(),
             hash_checking,
             build_logs,
+            gitignore,
             force_pep517,
+            clear,
             build_constraints,
-            *no_build_isolation,
-            no_build_isolation_package,
-            network_settings,
+            build_isolation,
+            extra_build_dependencies,
+            extra_build_variables,
             *index_strategy,
             *keyring_provider,
-            *exclude_newer,
+            exclude_newer.clone(),
             *sources,
             concurrency,
             build_options,
@@ -353,6 +366,7 @@ async fn build_impl(
             dependency_metadata,
             *link_mode,
             config_setting,
+            config_settings_package,
             preview,
         );
         async {
@@ -378,11 +392,39 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 
@@ -411,17 +453,19 @@ async fn build_package(
     cache: &Cache,
     printer: Printer,
     index_locations: &IndexLocations,
-    client_builder: &BaseClientBuilder<'_>,
+    client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
-    no_build_isolation: bool,
-    no_build_isolation_package: &[PackageName],
-    network_settings: &NetworkSettings,
+    build_isolation: &BuildIsolation,
+    extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
     concurrency: Concurrency,
     build_options: &BuildOptions,
@@ -431,7 +475,8 @@ async fn build_package(
     dependency_metadata: &DependencyMetadata,
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
-    preview: PreviewMode,
+    config_settings_package: &PackageConfigSettings,
+    preview: Preview,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
@@ -445,6 +490,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -462,7 +512,8 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            let groups = DependencyGroupsWithDefaults::none();
+            interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -480,28 +531,20 @@ async fn build_package(
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
-        client_builder,
+        &client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
-
     // Read build constraints.
-    let build_constraints = operations::read_constraints(build_constraints, client_builder).await?;
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -519,17 +562,13 @@ async fn build_package(
 
     let build_constraints = Constraints::from_requirements(
         build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
+            .into_iter()
+            .map(|constraint| constraint.requirement),
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
@@ -538,14 +577,16 @@ async fn build_package(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Resolve the flat indexes from `--find-links`.
@@ -561,11 +602,15 @@ async fn build_package(
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
 
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
@@ -573,7 +618,10 @@ async fn build_package(
         state.clone(),
         index_strategy,
         config_setting,
-        build_isolation,
+        config_settings_package,
+        types_build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &hasher,
@@ -584,7 +632,7 @@ async fn build_package(
         preview,
     );
 
-    prepare_output_directory(&output_dir).await?;
+    prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
     let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
@@ -602,10 +650,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if preview.is_enabled()
-        && !force_pep517
-        && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517
@@ -1054,19 +1099,21 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
+async fn prepare_output_directory(output_dir: &Path, gitignore: bool) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
+    if gitignore {
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output_dir.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
     }
     Ok(())
 }
@@ -1170,11 +1217,11 @@ impl BuildMessage {
     /// The normalized filename of the wheel or source distribution.
     fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 normalized_filename: name,
                 ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 normalized_filename: name,
                 ..
             } => name,
@@ -1184,10 +1231,10 @@ impl BuildMessage {
     /// The filename of the wheel or source distribution before normalization.
     fn raw_filename(&self) -> &str {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename: name, ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 raw_filename: name, ..
             } => name,
         }
@@ -1195,7 +1242,7 @@ impl BuildMessage {
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename,
                 output_dir,
                 ..
@@ -1206,7 +1253,7 @@ impl BuildMessage {
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
-            BuildMessage::List {
+            Self::List {
                 raw_filename,
                 file_list,
                 source_tree,

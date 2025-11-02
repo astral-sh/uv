@@ -1,31 +1,65 @@
-use core::fmt;
-use fs_err as fs;
-
-use uv_dirs::user_executable_directory;
-use uv_pep440::Version;
-use uv_pep508::{InvalidNameError, PackageName};
-
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use fs_err as fs;
 use fs_err::File;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_install_wheel::read_record_file;
-
-pub use receipt::ToolReceipt;
-pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
+use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, Simplified};
+use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
+use uv_normalize::{InvalidNameError, PackageName};
+use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::remove_virtualenv;
+
+pub use receipt::ToolReceipt;
+pub use tool::{Tool, ToolEntrypoint};
 
 mod receipt;
 mod tool;
+
+/// A wrapper around [`PythonEnvironment`] for tools that provides additional functionality.
+#[derive(Debug, Clone)]
+pub struct ToolEnvironment {
+    environment: PythonEnvironment,
+    name: PackageName,
+}
+
+impl ToolEnvironment {
+    pub fn new(environment: PythonEnvironment, name: PackageName) -> Self {
+        Self { environment, name }
+    }
+
+    /// Return the [`Version`] of the tool package in this environment.
+    pub fn version(&self) -> Result<Version, Error> {
+        let site_packages = SitePackages::from_environment(&self.environment).map_err(|err| {
+            Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string())
+        })?;
+        let packages = site_packages.get_packages(&self.name);
+        let package = packages
+            .first()
+            .ok_or_else(|| Error::MissingToolPackage(self.name.clone()))?;
+        Ok(package.version().clone())
+    }
+
+    /// Get the underlying [`PythonEnvironment`].
+    pub fn into_environment(self) -> PythonEnvironment {
+        self.environment
+    }
+
+    /// Get a reference to the underlying [`PythonEnvironment`].
+    pub fn environment(&self) -> &PythonEnvironment {
+        &self.environment
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -51,6 +85,8 @@ pub enum Error {
     EnvironmentRead(PathBuf, String),
     #[error("Failed find package `{0}` in tool environment")]
     MissingToolPackage(PackageName),
+    #[error("Tool `{0}` environment not found at `{1}`")]
+    ToolEnvironmentNotFound(PackageName, PathBuf),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -74,7 +110,7 @@ impl InstalledTools {
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/tools`
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR) {
+        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR).filter(|s| !s.is_empty()) {
             Ok(Self::from_path(std::path::absolute(tool_dir)?))
         } else {
             Ok(Self::from_path(
@@ -187,17 +223,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        // On Windows, if the current executable is in the directory, guard against self-deletion.
-        #[cfg(windows)]
-        if let Ok(itself) = std::env::current_exe() {
-            let target = std::path::absolute(&environment_path)?;
-            if itself.starts_with(&target) {
-                debug!("Detected self-delete of executable: {}", itself.display());
-                self_replace::self_delete_outside_path(&environment_path)?;
-            }
-        }
-
-        fs_err::remove_dir_all(environment_path)?;
+        remove_virtualenv(environment_path.as_path())?;
 
         Ok(())
     }
@@ -212,7 +238,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         cache: &Cache,
-    ) -> Result<Option<PythonEnvironment>, Error> {
+    ) -> Result<Option<ToolEnvironment>, Error> {
         let environment_path = self.tool_dir(name);
 
         match PythonEnvironment::from_root(&environment_path, cache) {
@@ -221,25 +247,28 @@ impl InstalledTools {
                     "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
-                Ok(Some(venv))
+                Ok(Some(ToolEnvironment::new(venv, name.clone())))
             }
             Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
                 interpreter_path,
             ))) => {
-                if interpreter_path.is_symlink() {
-                    let target_path = fs_err::read_link(&interpreter_path)?;
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        interpreter_path.user_display(),
-                        target_path.user_display()
-                    );
-                } else {
-                    warn!(
-                        "Ignoring existing virtual environment with missing Python interpreter: {}",
-                        interpreter_path.user_display()
-                    );
-                }
+                warn!(
+                    "Ignoring existing virtual environment with missing Python interpreter: {}",
+                    interpreter_path.user_display()
+                );
+
+                Ok(None)
+            }
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
+                broken_symlink,
+            ))) => {
+                let target_path = fs_err::read_link(&broken_symlink.path)?;
+                warn!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    broken_symlink.path.user_display(),
+                    target_path.user_display()
+                );
 
                 Ok(None)
             }
@@ -254,6 +283,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -280,9 +310,11 @@ impl InstalledTools {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
             false,
             false,
+            preview,
         )?;
 
         Ok(venv)
@@ -293,19 +325,6 @@ impl InstalledTools {
         Ok(Self::from_path(
             StateStore::temp()?.bucket(StateBucket::Tools),
         ))
-    }
-
-    /// Return the [`Version`] of an installed tool.
-    pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let environment_path = self.tool_dir(name);
-        let environment = PythonEnvironment::from_root(&environment_path, cache)?;
-        let site_packages = SitePackages::from_environment(&environment)
-            .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;
-        let packages = site_packages.get_packages(name);
-        let package = packages
-            .first()
-            .ok_or_else(|| Error::MissingToolPackage(name.clone()))?;
-        Ok(package.version().clone())
     }
 
     /// Initialize the tools directory.
@@ -354,8 +373,8 @@ impl InstalledTool {
     }
 }
 
-impl fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for InstalledTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
@@ -411,13 +430,10 @@ pub fn entrypoint_paths(
     let layout = site_packages.interpreter().layout();
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    layout.scheme.scripts.simplified_display()
-                ),
-            )
+            io::Error::other(format!(
+                "Could not find relative path for: {}",
+                layout.scheme.scripts.simplified_display()
+            ))
         })?;
 
     // Identify any installed binaries (both entrypoints and scripts from the `.data` directory).

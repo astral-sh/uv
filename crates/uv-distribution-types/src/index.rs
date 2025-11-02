@@ -1,18 +1,54 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexUrl, IndexUrlError};
+use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+/// Cache control configuration for an index.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct IndexCacheControl {
+    /// Cache control header for Simple API requests.
+    pub api: Option<SmallString>,
+    /// Cache control header for file downloads.
+    pub files: Option<SmallString>,
+}
+
+impl IndexCacheControl {
+    /// Return the default Simple API cache control headers for the given index URL, if applicable.
+    pub fn simple_api_cache_control(_url: &Url) -> Option<&'static str> {
+        None
+    }
+
+    /// Return the default files cache control headers for the given index URL, if applicable.
+    pub fn artifact_cache_control(url: &Url) -> Option<&'static str> {
+        if url
+            .host_str()
+            .is_some_and(|host| host.ends_with("pytorch.org"))
+        {
+            // Some wheels in the PyTorch registry were accidentally uploaded with `no-cache,no-store,must-revalidate`.
+            // The PyTorch team plans to correct this in the future, but in the meantime we override
+            // the cache control headers to allow caching of static files.
+            //
+            // See: https://github.com/pytorch/pytorch/pull/149218
+            Some("max-age=365000000, immutable, public")
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -83,7 +119,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<Url>,
+    pub publish_url: Option<DisplaySafeUrl>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -94,6 +130,116 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
+    /// Status codes that uv should ignore when deciding whether
+    /// to continue searching in the next index after a failure.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// ignore-error-codes = [401, 403]
+    /// ```
+    #[serde(default)]
+    pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+    /// Cache control configuration for this index.
+    ///
+    /// When set, these headers will override the server's cache control headers
+    /// for both package metadata requests and artifact downloads.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// cache-control = { api = "max-age=600", files = "max-age=3600" }
+    /// ```
+    #[serde(default)]
+    pub cache_control: Option<IndexCacheControl>,
+}
+
+impl PartialEq for Index {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        *url == other.url
+            && *name == other.name
+            && *explicit == other.explicit
+            && *default == other.default
+            && *format == other.format
+            && *publish_url == other.publish_url
+            && *authenticate == other.authenticate
+            && *ignore_error_codes == other.ignore_error_codes
+            && *cache_control == other.cache_control
+    }
+}
+
+impl Eq for Index {}
+
+impl PartialOrd for Index {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Index {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.cmp(&other.url)
+            .then_with(|| name.cmp(&other.name))
+            .then_with(|| explicit.cmp(&other.explicit))
+            .then_with(|| default.cmp(&other.default))
+            .then_with(|| format.cmp(&other.format))
+            .then_with(|| publish_url.cmp(&other.publish_url))
+            .then_with(|| authenticate.cmp(&other.authenticate))
+            .then_with(|| ignore_error_codes.cmp(&other.ignore_error_codes))
+            .then_with(|| cache_control.cmp(&other.cache_control))
+    }
+}
+
+impl std::hash::Hash for Index {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.hash(state);
+        name.hash(state);
+        explicit.hash(state);
+        default.hash(state);
+        format.hash(state);
+        publish_url.hash(state);
+        authenticate.hash(state);
+        ignore_error_codes.hash(state);
+        cache_control.hash(state);
+    }
 }
 
 #[derive(
@@ -131,6 +277,8 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -145,6 +293,8 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -159,6 +309,8 @@ impl Index {
             format: IndexFormat::Flat,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -180,7 +332,7 @@ impl Index {
     }
 
     /// Return the raw [`Url`] of the index.
-    pub fn raw_url(&self) -> &Url {
+    pub fn raw_url(&self) -> &DisplaySafeUrl {
         self.url.url()
     }
 
@@ -188,7 +340,7 @@ impl Index {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root_url(&self) -> Option<Url> {
+    pub fn root_url(&self) -> Option<DisplaySafeUrl> {
         self.url.root()
     }
 
@@ -214,6 +366,41 @@ impl Index {
         }
         Ok(self)
     }
+
+    /// Return the [`IndexStatusCodeStrategy`] for this index.
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+        if let Some(ignore_error_codes) = &self.ignore_error_codes {
+            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
+        } else {
+            IndexStatusCodeStrategy::from_index_url(self.url.url())
+        }
+    }
+
+    /// Return the cache control header for file requests to this index, if any.
+    pub fn artifact_cache_control(&self) -> Option<&str> {
+        if let Some(artifact_cache_control) = self
+            .cache_control
+            .as_ref()
+            .and_then(|cache_control| cache_control.files.as_deref())
+        {
+            Some(artifact_cache_control)
+        } else {
+            IndexCacheControl::artifact_cache_control(self.url.url())
+        }
+    }
+
+    /// Return the cache control header for API requests to this index, if any.
+    pub fn simple_api_cache_control(&self) -> Option<&str> {
+        if let Some(api_cache_control) = self
+            .cache_control
+            .as_ref()
+            .and_then(|cache_control| cache_control.api.as_deref())
+        {
+            Some(api_cache_control)
+        } else {
+            IndexCacheControl::simple_api_cache_control(self.url.url())
+        }
+    }
 }
 
 impl From<IndexUrl> for Index {
@@ -227,6 +414,8 @@ impl From<IndexUrl> for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
         }
     }
 }
@@ -249,6 +438,8 @@ impl FromStr for Index {
                     format: IndexFormat::Simple,
                     publish_url: None,
                     authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
+                    cache_control: None,
                 });
             }
         }
@@ -264,6 +455,8 @@ impl FromStr for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
         })
     }
 }
@@ -358,4 +551,56 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_cache_control_headers() {
+        // Test that cache control headers are properly parsed from TOML
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+            cache-control = { api = "max-age=600", files = "max-age=3600" }
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert!(index.cache_control.is_some());
+        let cache_control = index.cache_control.as_ref().unwrap();
+        assert_eq!(cache_control.api.as_deref(), Some("max-age=600"));
+        assert_eq!(cache_control.files.as_deref(), Some("max-age=3600"));
+    }
+
+    #[test]
+    fn test_index_without_cache_control() {
+        // Test that indexes work without cache control headers
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert_eq!(index.cache_control, None);
+    }
+
+    #[test]
+    fn test_index_partial_cache_control() {
+        // Test that cache control can have just one field
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+            cache-control = { api = "max-age=300" }
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert!(index.cache_control.is_some());
+        let cache_control = index.cache_control.as_ref().unwrap();
+        assert_eq!(cache_control.api.as_deref(), Some("max-age=300"));
+        assert_eq!(cache_control.files, None);
+    }
 }

@@ -37,6 +37,7 @@ Ok(
             prerelease_mode: IfNecessaryOrExplicit,
             fork_strategy: RequiresPython,
             exclude_newer: None,
+            exclude_newer_package: None,
         },
         packages: [
             Package {
@@ -65,6 +66,7 @@ Ok(
                         },
                         hash: None,
                         size: None,
+                        upload_time: None,
                         filename: WheelFilename {
                             name: PackageName(
                                 "anyio",
@@ -81,6 +83,7 @@ Ok(
                                 },
                             },
                         },
+                        zstd: None,
                     },
                 ],
                 fork_markers: [],
@@ -89,7 +92,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    provides_extras: [],
+                    provides_extra: [],
                     dependency_groups: {},
                 },
             },
@@ -117,6 +120,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            excludes: {},
             build_constraints: {},
             dependency_metadata: {},
         },

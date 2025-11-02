@@ -4,7 +4,6 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Verbatim;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -64,9 +63,9 @@ impl Urls {
                         verbatim: _,
                     } = package_url
                     {
-                        if !*editable {
+                        if editable.is_none() {
                             debug!("Allowing an editable variant of {}", &package_url.verbatim);
-                            *editable = true;
+                            *editable = Some(true);
                         }
                     }
                 }
@@ -156,10 +155,10 @@ impl Urls {
         parsed_url: &'a ParsedUrl,
     ) -> Result<&'a VerbatimParsedUrl, ResolveError> {
         let Some(expected) = self.get_regular(package_name) else {
-            return Err(ResolveError::DisallowedUrl(
-                package_name.clone(),
-                verbatim_url.to_string(),
-            ));
+            return Err(ResolveError::DisallowedUrl {
+                name: package_name.clone(),
+                url: verbatim_url.to_string(),
+            });
         };
 
         let matching_urls: Vec<_> = expected
@@ -170,8 +169,8 @@ impl Urls {
         let [allowed_url] = matching_urls.as_slice() else {
             let mut conflicting_urls: Vec<_> = matching_urls
                 .into_iter()
-                .map(|parsed_url| parsed_url.verbatim.verbatim().to_string())
-                .chain(std::iter::once(verbatim_url.verbatim().to_string()))
+                .map(|parsed_url| parsed_url.parsed_url.clone())
+                .chain(std::iter::once(parsed_url.clone()))
                 .collect();
             conflicting_urls.sort();
             return Err(ResolveError::ConflictingUrls {
@@ -202,8 +201,9 @@ fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
                 || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
         }
         (ParsedUrl::Directory(a), ParsedUrl::Directory(b)) => {
-            a.install_path == b.install_path
-                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
+            (a.install_path == b.install_path
+                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
+                && a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b))
         }
         _ => false,
     }

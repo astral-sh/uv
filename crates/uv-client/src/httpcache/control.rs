@@ -21,7 +21,6 @@ use crate::rkyvutil::OwnedArchive;
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct CacheControl {
     // directives for requests and responses
     /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age>
@@ -180,7 +179,7 @@ struct CacheControlParser<'b, I> {
 impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlParser<'b, I> {
     /// Create a new parser of zero or more `Cache-Control` header values. The
     /// given iterator should yield elements that satisfy `AsRef<[u8]>`.
-    fn new<II: IntoIterator<IntoIter = I>>(headers: II) -> CacheControlParser<'b, I> {
+    fn new<II: IntoIterator<IntoIter = I>>(headers: II) -> Self {
         let mut directives = headers.into_iter();
         let cur = directives.next().map(AsRef::as_ref).unwrap_or(b"");
         CacheControlParser {

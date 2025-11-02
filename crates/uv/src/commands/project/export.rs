@@ -1,20 +1,23 @@
 use std::env;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::path::{Path, PathBuf};
-use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    PreviewMode,
 };
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::RequirementsTxtExport;
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_requirements::is_pylock_toml;
+use uv_resolver::{PylockToml, RequirementsTxtExport};
+use uv_scripts::Pep723Script;
+use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -22,14 +25,15 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    detect_conflicts,
 };
-use crate::commands::{diagnostics, ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum ExportTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script),
@@ -51,7 +55,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
-    format: ExportFormat,
+    format: Option<ExportFormat>,
     all_packages: bool,
     package: Option<PackageName>,
     prune: Vec<PackageName>,
@@ -59,9 +63,9 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
-    editable: EditableMode,
-    locked: bool,
+    groups: DependencyGroups,
+    editable: Option<EditableMode>,
+    lock_check: LockCheck,
     frozen: bool,
     include_annotations: bool,
     include_header: bool,
@@ -69,7 +73,7 @@ pub(crate) async fn export(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -77,7 +81,7 @@ pub(crate) async fn export(
     quiet: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -109,11 +113,19 @@ pub(crate) async fn export(
     };
 
     // Determine the default groups to include.
-    let defaults = match &target {
+    let default_groups = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
-    let dev = dev.with_defaults(defaults);
+
+    // Determine the default extras to include.
+    let default_extras = match &target {
+        ExportTarget::Project(_project) => DefaultExtras::default(),
+        ExportTarget::Script(_) => DefaultExtras::default(),
+    };
+
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen {
@@ -121,31 +133,36 @@ pub(crate) async fn export(
     } else {
         Some(match &target {
             ExportTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
                 no_config,
+                false,
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -155,8 +172,8 @@ pub(crate) async fn export(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(interpreter.as_ref().unwrap())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))
         && !LockTarget::from(&target).lock_path().is_file()
     {
@@ -173,11 +190,12 @@ pub(crate) async fn export(
     let lock = match LockOperation::new(
         mode,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -186,15 +204,12 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
-
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &dev)?;
 
     // Identify the installation target.
     let target = match &target {
@@ -245,12 +260,50 @@ pub(crate) async fn export(
         },
     };
 
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&target, &extras, &groups)?;
+
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
-    target.validate_groups(&dev)?;
+    target.validate_groups(&groups)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
+
+    // Determine the output format.
+    let format = format.unwrap_or_else(|| {
+        if output_file
+            .as_deref()
+            .and_then(Path::extension)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+        {
+            ExportFormat::RequirementsTxt
+        } else if output_file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    });
+
+    // If the user is exporting to PEP 751, ensure the filename matches the specification.
+    if matches!(format, ExportFormat::PylockToml) {
+        if let Some(file_name) = output_file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+        {
+            if !is_pylock_toml(file_name) {
+                return Err(anyhow!(
+                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+                ));
+            }
+        }
+    }
 
     // Generate the export.
     match format {
@@ -259,7 +312,7 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
                 editable,
                 hashes,
@@ -275,6 +328,27 @@ pub(crate) async fn export(
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
             write!(writer, "{export}")?;
+        }
+        ExportFormat::PylockToml => {
+            let export = PylockToml::from_lock(
+                &target,
+                &prune,
+                &extras,
+                &groups,
+                include_annotations,
+                editable,
+                &install_options,
+            )?;
+
+            if include_header {
+                writeln!(
+                    writer,
+                    "{}",
+                    "# This file was autogenerated by uv via the following command:".green()
+                )?;
+                writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+            }
+            write!(writer, "{}", export.to_toml()?)?;
         }
     }
 

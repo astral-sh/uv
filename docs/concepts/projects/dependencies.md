@@ -37,11 +37,12 @@ dependencies = ["httpx>=0.27.2"]
 ```
 
 The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
-[`--optional`](#optional-dependencies) flags can be used to add a dependencies to an alternative
+[`--optional`](#optional-dependencies) flags can be used to add dependencies to an alternative
 field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
-of the package. An alternative constraint can be provided:
+of the package. The kind of bound can be adjusted with
+[`--bounds`](../../reference/settings.md#add-bounds), or the constraint can be provided directly:
 
 ```console
 $ uv add "httpx>=0.20"
@@ -77,13 +78,16 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
-### Importing dependencies
+### Importing dependencies from requirements files
 
 Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
 
 ```
 uv add -r requirements.txt
 ```
+
+See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
+for more details.
 
 ## Removing dependencies
 
@@ -261,7 +265,7 @@ When defining an index, an `explicit` flag can be included to indicate that the 
 be used for packages that explicitly specify it in `tool.uv.sources`. If `explicit` is not set,
 other packages may be resolved from the index, if not found elsewhere.
 
-```toml title="pyproject.toml" hl_lines="3"
+```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
@@ -270,13 +274,16 @@ explicit = true
 
 ### Git
 
-To add a Git dependency source, prefix a Git-compatible URL (i.e., that you would use with
-`git clone`) with `git+`.
+To add a Git dependency source, prefix a Git-compatible URL with `git+`.
 
 For example:
 
 ```console
+$ # Install over HTTP(S).
 $ uv add git+https://github.com/encode/httpx
+
+$ # Install over SSH.
+$ uv add git+ssh://git@github.com/encode/httpx
 ```
 
 ```toml title="pyproject.toml" hl_lines="5"
@@ -406,33 +413,28 @@ $ uv add ~/projects/bar/
 
 !!! important
 
-    An [editable installation](#editable-dependencies) is not used for path dependencies by
-    default. An editable installation may be requested for project directories:
+    When using a directory as a path dependency, uv will attempt to build and install the target as
+    a package by default. See the [virtual dependency](#virtual-dependencies) documentation for
+    details.
 
-    ```console
-    $ uv add --editable ../projects/bar/
-    ```
+An [editable installation](#editable-dependencies) is not used for path dependencies by default. An
+editable installation may be requested for project directories:
 
-    Which will result in a `pyproject.toml` with:
+```console
+$ uv add --editable ../projects/bar/
+```
 
-    ```toml title="pyproject.toml"
-    [project]
-    dependencies = ["bar"]
+Which will result in a `pyproject.toml` with:
 
-    [tool.uv.sources]
-    bar = { path = "../projects/bar", editable = true }
-    ```
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
 
-    Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd
-    like to install it in the environment as a package, set `package = true` on the source:
+[tool.uv.sources]
+bar = { path = "../projects/bar", editable = true }
+```
 
-    ```toml title="pyproject.toml"
-    [project]
-    dependencies = ["bar"]
-
-    [tool.uv.sources]
-    bar = { path = "../projects/bar", package = true }
-    ```
+!!! tip
 
     For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
     fit.
@@ -511,10 +513,12 @@ torch = [
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 ```
 
 ### Disabling sources
@@ -539,8 +543,8 @@ installation of Excel parsers and `matplotlib` unless someone explicitly require
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
-from extra name to its dependencies, following
-[dependency specifiers](#dependency-specifiers-pep-508) syntax.
+from extra name to its dependencies, following [dependency specifiers](#dependency-specifiers)
+syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
@@ -673,6 +677,26 @@ to resolve the requirements of the project with an error.
     If you have dependency groups that conflict with one another, resolution will fail
     unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
 
+### Nesting groups
+
+A dependency group can include other dependency groups, e.g.:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+dev = [
+  {include-group = "lint"},
+  {include-group = "test"}
+]
+lint = [
+  "ruff"
+]
+test = [
+  "pytest"
+]
+```
+
+An included group's dependencies cannot conflict with the other dependencies declared in a group.
+
 ### Default groups
 
 By default, uv includes the `dev` dependency group in the environment (e.g., during `uv run` or
@@ -694,6 +718,26 @@ default-groups = "all"
 
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
     To exclude a specific default group, use `--no-group <name>`.
+
+### Group `requires-python`
+
+By default, dependency groups must be compatible with your project's `requires-python` range.
+
+If a dependency group requires a different range of Python versions than your project, you can
+specify a `requires-python` for the group in `[tool.uv.dependency-groups]`, e.g.:
+
+```toml title="pyproject.toml" hl_lines="9-10"
+[project]
+name = "example"
+version = "0.0.0"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.12"}
+```
 
 ### Legacy `dev-dependencies`
 
@@ -782,12 +826,91 @@ Or, to opt-out of using an editable dependency in a workspace:
 $ uv add --no-editable ./path/foo
 ```
 
-## Dependency specifiers (PEP 508)
+## Virtual dependencies
 
-uv uses
+uv allows dependencies to be "virtual", in which the dependency itself is not installed as a
+[package](./config.md#project-packaging), but its dependencies are.
+
+By default, dependencies are never virtual.
+
+A dependency with a [`path` source](#path) can be virtual if it explicitly sets
+[`tool.uv.package = false`](../../reference/settings.md#package). Unlike working _in_ the dependent
+project with uv, the package will be built even if a [build system](./config.md#build-systems) is
+not declared.
+
+To treat a dependency as virtual, set `package = false` on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = false }
+```
+
+If a dependency sets `tool.uv.package = false`, it can be overridden by declaring `package = true`
+on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = true }
+```
+
+Similarly, a dependency with a [`workspace` source](#workspace-member) can be virtual if it
+explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). The workspace
+member will be built even if a [build system](./config.md#build-systems) is not declared.
+
+Workspace members that are _not_ dependencies can be virtual by default, e.g., if the parent
+`pyproject.toml` is:
+
+```toml title="pyproject.toml"
+[project]
+name = "parent"
+version = "1.0.0"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["child"]
+```
+
+And the child `pyproject.toml` excluded a build system:
+
+```toml title="pyproject.toml"
+[project]
+name = "child"
+version = "1.0.0"
+dependencies = ["anyio"]
+```
+
+Then the `child` workspace member would not be installed, but the transitive dependency `anyio`
+would be.
+
+In contrast, if the parent declared a dependency on `child`:
+
+```toml title="pyproject.toml"
+[project]
+name = "parent"
+version = "1.0.0"
+dependencies = ["child"]
+
+[tool.uv.sources]
+child = { workspace = true }
+
+[tool.uv.workspace]
+members = ["child"]
+```
+
+Then `child` would be built and installed.
+
+## Dependency specifiers
+
+uv uses standard
 [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
-previously known as [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is composed
-of, in order:
+originally defined in [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is
+composed of, in order:
 
 - The dependency name
 - The extras you want (optional)

@@ -33,23 +33,23 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
-use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use uv_pypi_types::VerbatimParsedUrl;
+use uv_fs::{CWD, Simplified};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::PyProjectToml;
 
-use crate::RequirementsSource;
+use crate::{RequirementsSource, SourceTree};
 
 #[derive(Debug, Default, Clone)]
 pub struct RequirementsSpecification {
@@ -61,8 +61,12 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The excludes for the project.
+    pub excludes: Vec<PackageName>,
+    /// The `pylock.toml` file from which to extract the resolution.
+    pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
-    pub source_trees: Vec<PathBuf>,
+    pub source_trees: Vec<SourceTree>,
     /// The groups to use for `source_trees`
     pub groups: BTreeMap<PathBuf, DependencyGroups>,
     /// The extras used to collect requirements.
@@ -172,51 +176,168 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let _ = toml::from_str::<PyProjectToml>(&contents)
+                let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
-                    source_trees: vec![path.clone()],
+                    source_trees: vec![SourceTree::PyProjectToml(path.clone(), pyproject_toml)],
                     ..Self::default()
                 }
             }
-            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
+            RequirementsSource::Pep723Script(path) => {
+                let script = match Pep723Script::read(&path).await {
+                    Ok(Some(script)) => Pep723Item::Script(script),
+                    Ok(None) => {
+                        return Err(anyhow::anyhow!(
+                            "`{}` does not contain inline script metadata",
+                            path.user_display(),
+                        ));
+                    }
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to read `{}` (not found)",
+                            path.user_display(),
+                        ));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                let metadata = script.metadata();
+
+                let requirements = metadata
+                    .dependencies
+                    .as_ref()
+                    .map(|dependencies| {
+                        dependencies
+                            .iter()
+                            .map(|dependency| {
+                                UnresolvedRequirementSpecification::from(Requirement::from(
+                                    dependency.to_owned(),
+                                ))
+                            })
+                            .collect::<Vec<UnresolvedRequirementSpecification>>()
+                    })
+                    .unwrap_or_default();
+
+                if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
+                    let constraints = tool_uv
+                        .constraint_dependencies
+                        .as_ref()
+                        .map(|dependencies| {
+                            dependencies
+                                .iter()
+                                .map(|dependency| {
+                                    NameRequirementSpecification::from(Requirement::from(
+                                        dependency.to_owned(),
+                                    ))
+                                })
+                                .collect::<Vec<NameRequirementSpecification>>()
+                        })
+                        .unwrap_or_default();
+
+                    let overrides = tool_uv
+                        .override_dependencies
+                        .as_ref()
+                        .map(|dependencies| {
+                            dependencies
+                                .iter()
+                                .map(|dependency| {
+                                    UnresolvedRequirementSpecification::from(Requirement::from(
+                                        dependency.to_owned(),
+                                    ))
+                                })
+                                .collect::<Vec<UnresolvedRequirementSpecification>>()
+                        })
+                        .unwrap_or_default();
+
+                    Self {
+                        requirements,
+                        constraints,
+                        overrides,
+                        index_url: tool_uv
+                            .top_level
+                            .index_url
+                            .as_ref()
+                            .map(|index| Index::from(index.clone()).url),
+                        extra_index_urls: tool_uv
+                            .top_level
+                            .extra_index_url
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(|urls| {
+                                urls.iter().map(|index| Index::from(index.clone()).url)
+                            })
+                            .collect(),
+                        no_index: tool_uv.top_level.no_index.unwrap_or_default(),
+                        find_links: tool_uv
+                            .top_level
+                            .find_links
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(|urls| {
+                                urls.iter().map(|index| Index::from(index.clone()).url)
+                            })
+                            .collect(),
+                        no_binary: NoBinary::from_args(
+                            tool_uv.top_level.no_binary,
+                            tool_uv
+                                .top_level
+                                .no_binary_package
+                                .clone()
+                                .unwrap_or_default(),
+                        ),
+                        no_build: NoBuild::from_args(
+                            tool_uv.top_level.no_build,
+                            tool_uv
+                                .top_level
+                                .no_build_package
+                                .clone()
+                                .unwrap_or_default(),
+                        ),
+                        ..Self::default()
+                    }
+                } else {
+                    Self {
+                        requirements,
+                        ..Self::default()
+                    }
+                }
+            }
+            RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    source_trees: vec![path.clone()],
+                    source_trees: vec![SourceTree::SetupPy(path.clone())],
                     ..Self::default()
                 }
             }
-            RequirementsSource::SourceTree(path) => {
-                if !path.is_dir() {
-                    return Err(anyhow::anyhow!(
-                        "Directory not found: `{}`",
-                        path.user_display()
-                    ));
+            RequirementsSource::SetupCfg(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    project: None,
-                    requirements: vec![UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                            extras: Box::new([]),
-                            marker: MarkerTree::TRUE,
-                            origin: None,
-                        }),
-                        hashes: vec![],
-                    }],
+                    source_trees: vec![SourceTree::SetupCfg(path.clone())],
+                    ..Self::default()
+                }
+            }
+            RequirementsSource::PylockToml(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
+                Self {
+                    pylock: Some(path.clone()),
                     ..Self::default()
                 }
             }
             RequirementsSource::EnvironmentYml(path) => {
                 return Err(anyhow::anyhow!(
-                    "Conda environment files (i.e. `{}`) are not supported",
+                    "Conda environment files (i.e., `{}`) are not supported",
                     path.user_display()
-                ))
+                ));
             }
         })
     }
@@ -226,69 +347,150 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        groups: BTreeMap<PathBuf, Vec<GroupName>>,
+        excludes: &[RequirementsSource],
+        groups: Option<&GroupsSpecification>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
-        // Resolve sources into specifications so we know their `source_tree`s∂
-        let mut requirement_sources = Vec::new();
-        for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
-            requirement_sources.push(source);
+        // Disallow `pylock.toml` files as constraints.
+        if let Some(pylock_toml) = constraints.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as a constraint file",
+                pylock_toml.user_display()
+            ));
         }
 
-        // pip `--group` flags specify their own sources, which we need to process here
-        if !groups.is_empty() {
+        // Disallow `pylock.toml` files as overrides.
+        if let Some(pylock_toml) = overrides.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an override file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // Disallow `pylock.toml` files as excludes.
+        if let Some(pylock_toml) = excludes.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an exclude file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
+        // overrides.
+        if let Some(pylock_toml) = requirements.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            if requirements
+                .iter()
+                .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
+            {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify additional requirements alongside a `pylock.toml` file",
+                ));
+            }
+            if !constraints.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify constraints with a `pylock.toml` file"
+                ));
+            }
+            if !overrides.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify overrides with a `pylock.toml` file"
+                ));
+            }
+
+            // If we have a `pylock.toml`, disallow specifying paths for groups; instead, require
+            // that all groups refer to the `pylock.toml` file.
+            if let Some(groups) = groups {
+                let mut names = Vec::new();
+                for group in &groups.groups {
+                    if group.path.is_some() {
+                        return Err(anyhow::anyhow!(
+                            "Cannot specify paths for groups with a `pylock.toml` file; all groups must refer to the `pylock.toml` file"
+                        ));
+                    }
+                    names.push(group.name.clone());
+                }
+
+                if !names.is_empty() {
+                    spec.groups.insert(
+                        pylock_toml.clone(),
+                        DependencyGroups::from_args(
+                            false,
+                            false,
+                            false,
+                            Vec::new(),
+                            Vec::new(),
+                            false,
+                            names,
+                            false,
+                        ),
+                    );
+                }
+            }
+        } else if let Some(groups) = groups {
+            // pip `--group` flags specify their own sources, which we need to process here.
+            // First, we collect all groups by their path.
+            let mut groups_by_path = BTreeMap::new();
+            for group in &groups.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| groups.root.join("pyproject.toml"));
+                groups_by_path
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
             let mut group_specs = BTreeMap::new();
-            for (path, groups) in groups {
-                // Conceptually pip `--group` flags just add the group referred to by the file.
-                // In uv semantics this would be like `--only-group`, however if you do this:
-                //
-                //    uv pip install -r pyproject.toml --group pyproject.toml:foo
-                //
-                // We don't want to discard the package listed by `-r` in the way `--only-group`
-                // would. So we check to see if any other source wants to add this path, and use
-                // that to determine if we're doing `--group` or `--only-group` semantics.
-                //
-                // Note that it's fine if a file gets referred to multiple times by
-                // different-looking paths (like `./pyproject.toml` vs `pyproject.toml`). We're
-                // specifically trying to disambiguate in situations where the `--group` *happens*
-                // to match with an unrelated argument, and `--only-group` would be overzealous!
-                let source_exists_without_group = requirement_sources
-                    .iter()
-                    .any(|source| source.source_trees.contains(&path));
-                let (group, only_group) = if source_exists_without_group {
-                    (groups, Vec::new())
-                } else {
-                    (Vec::new(), groups)
-                };
+            for (path, groups) in groups_by_path {
                 let group_spec = DependencyGroups::from_args(
                     false,
                     false,
                     false,
-                    group,
+                    Vec::new(),
                     Vec::new(),
                     false,
-                    only_group,
+                    groups,
                     false,
                 );
-
-                // If we're doing `--only-group` semantics it's because only `--group` flags referred
-                // to this file, and so we need to make sure to add it to the list of sources!
-                if !source_exists_without_group {
-                    let source = Self::from_source(
-                        &RequirementsSource::PyprojectToml(path.clone()),
-                        client_builder,
-                    )
-                    .await?;
-                    requirement_sources.push(source);
-                }
-
                 group_specs.insert(path, group_spec);
             }
-
             spec.groups = group_specs;
+        }
+
+        // Resolve sources into specifications so we know their `source_tree`.
+        let mut requirement_sources = Vec::new();
+        for source in requirements {
+            let source = Self::from_source(source, client_builder).await?;
+            requirement_sources.push(source);
         }
 
         // Read all requirements, and keep track of all requirements _and_ constraints.
@@ -300,6 +502,18 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
+
+            // Allow at most one `pylock.toml`.
+            if let Some(pylock) = source.pylock {
+                if let Some(existing) = spec.pylock {
+                    return Err(anyhow::anyhow!(
+                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
+                        existing.user_display(),
+                        pylock.user_display()
+                    ));
+                }
+                spec.pylock = Some(pylock);
+            }
 
             // Use the first project name discovered.
             if spec.project.is_none() {
@@ -385,6 +599,24 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
+        // Collect excludes.
+        for source in excludes {
+            let source = Self::from_source(source, client_builder).await?;
+            for req_spec in source.requirements {
+                match req_spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        spec.excludes.push(requirement.name);
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        return Err(anyhow::anyhow!(
+                            "Unnamed requirements are not allowed as exclusions (found: `{requirement}`)"
+                        ));
+                    }
+                }
+            }
+            spec.excludes.extend(source.excludes.into_iter());
+        }
+
         Ok(spec)
     }
 
@@ -400,7 +632,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
+        Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
@@ -458,4 +690,13 @@ impl RequirementsSpecification {
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct GroupsSpecification {
+    /// The path to the project root, relative to which the default `pyproject.toml` file is
+    /// located.
+    pub root: PathBuf,
+    /// The enabled groups.
+    pub groups: Vec<PipGroupName>,
 }

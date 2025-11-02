@@ -5,7 +5,7 @@ use std::ops::Bound;
 use uv_pep440::{LowerBound, UpperBound, Version};
 use uv_pep508::{CanonicalMarkerValueVersion, MarkerTree, MarkerTreeKind};
 
-use crate::requires_python::RequiresPythonRange;
+use uv_distribution_types::RequiresPythonRange;
 
 /// Returns the bounding Python versions that can satisfy the [`MarkerTree`], if it's constrained.
 pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
@@ -50,6 +50,11 @@ pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
                 }
             }
             MarkerTreeKind::Extra(marker) => {
+                for (_, tree) in marker.children() {
+                    collect_python_markers(tree, markers, range);
+                }
+            }
+            MarkerTreeKind::List(marker) => {
                 for (_, tree) in marker.children() {
                     collect_python_markers(tree, markers, range);
                 }

@@ -30,6 +30,23 @@ $ uv help init
 When using the long help menu, uv will attempt to use `less` or `more` to "page" the output so it is
 not all displayed at once. To exit the pager, press `q`.
 
+## Displaying verbose output
+
+The `-v` flag can be used to display verbose output for a command, e.g., for `uv sync`:
+
+```console
+$ uv sync -v
+```
+
+The `-v` flag can be repeated to increase verbosity, e.g.:
+
+```console
+$ uv sync -vv
+```
+
+Often, the verbose output will include additional information about why uv is behaving in a certain
+way.
+
 ## Viewing the version
 
 When seeking help, it's important to determine the version of uv that you're using — sometimes the
@@ -38,16 +55,19 @@ problem is already solved in a newer version.
 To check the installed version:
 
 ```console
-$ uv version
+$ uv self version
 ```
 
 The following are also valid:
 
 ```console
-$ uv --version      # Same output as `uv version`
+$ uv --version      # Same output as `uv self version`
 $ uv -V             # Will not include the build commit and date
-$ uv pip --version  # Can be used with a subcommand
 ```
+
+!!! note
+
+    Before uv 0.7.0, `uv version` was used instead of `uv self version`.
 
 ## Troubleshooting issues
 

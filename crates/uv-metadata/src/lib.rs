@@ -186,7 +186,7 @@ pub fn find_flat_dist_info(
         .starts_with(filename.name.as_str())
     {
         return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
+            dist_info_prefix,
             filename.name.to_string(),
         ));
     }
@@ -282,7 +282,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
 
         // Close current file to get access to the next one. See docs:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
-        zip = entry.skip().await?;
+        (.., zip) = entry.skip().await?;
     }
 
     Err(Error::MissingDistInfo)
