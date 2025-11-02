@@ -387,9 +387,10 @@ Equivalent to the `--no-progress` command-line argument. Disables all progress o
 example, spinners and progress bars.
 
 ### `UV_NO_SOURCES`
+<small class="added-in">added in `0.9.8`</small>
 
-Equivalent to the `--no-sources` command-line argument. If set, uv will
-not use the sources for any operations.
+Equivalent to the `--no-sources` command-line argument. If set, uv will ignore
+`[tool.uv.sources]` annotations when resolving dependencies.
 
 ### `UV_NO_SYNC`
 <small class="added-in">added in `0.4.18`</small>
