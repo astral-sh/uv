@@ -116,15 +116,29 @@ pub(crate) async fn init(
             let name = match name {
                 Some(name) => name,
                 None => {
-                    let name = path
+                    let directory_name = path
                         .file_name()
                         .and_then(|path| path.to_str())
                         .context("Missing directory name")?;
 
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
-                    let name = name.trim().replace(' ', "-");
-                    PackageName::from_owned(name)?
+                    let candidate = directory_name.trim().replace(' ', "-");
+                    match PackageName::from_owned(candidate) {
+                        Ok(name) => name,
+                        Err(_) => {
+                            let directory_description = if explicit_path.is_some() {
+                                "target directory"
+                            } else {
+                                "current directory"
+                            };
+                            anyhow::bail!(
+                                "The {} (`{}`) is not a valid package name. Please provide a package name with `--name`.",
+                                directory_description,
+                                directory_name
+                            );
+                        }
+                    }
                 }
             };
 

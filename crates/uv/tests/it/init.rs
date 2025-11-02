@@ -2659,8 +2659,30 @@ fn init_hidden() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    error: The target directory (`.foo`) is not a valid package name. Please provide a package name with `--name`.
     "###);
+}
+
+#[test]
+fn init_non_ascii_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let directory = context.temp_dir.child("püthon");
+    directory.create_dir_all()?;
+
+    let mut command = context.init();
+    command.current_dir(directory.path());
+
+    uv_snapshot!(context.filters(), command, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The current directory (`püthon`) is not a valid package name. Please provide a package name with `--name`.
+    "###);
+
+    Ok(())
 }
 
 /// Run `uv init` with an invalid `pyproject.toml` in a parent directory.
