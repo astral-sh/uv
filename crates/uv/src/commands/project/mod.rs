@@ -88,6 +88,11 @@ pub(crate) enum ProjectError {
     MissingLockfile,
 
     #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
+
+    #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
     UnsupportedLockVersion(u32, u32),
@@ -1003,16 +1008,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1873,6 +1880,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
@@ -1992,6 +2000,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2229,6 +2238,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2361,6 +2371,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

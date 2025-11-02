@@ -228,6 +228,10 @@ impl TestContext {
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
+            "search path or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
             "registry or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
@@ -649,7 +653,7 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern, format!("[PYTHON-{version}]"))),
             );
 
             // And for the symlink we created in the test the Python path

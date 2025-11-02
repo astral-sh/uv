@@ -354,6 +354,7 @@ pub(crate) async fn add(
         &requirements,
         &constraints,
         &[],
+        &[],
         None,
         &client_builder,
     )
@@ -644,6 +645,22 @@ pub(crate) async fn add(
         index,
         &mut toml,
     )?;
+
+    // If no requirements were added but a dependency group or optional dependency was specified,
+    // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
+    // --group <name>` or `uv add -r requirements.txt --optional <extra>` is called with an empty
+    // requirements file.
+    if edits.is_empty() {
+        match &dependency_type {
+            DependencyType::Group(group) => {
+                toml.ensure_dependency_group(group)?;
+            }
+            DependencyType::Optional(extra) => {
+                toml.ensure_optional_dependency(extra)?;
+            }
+            _ => {}
+        }
+    }
 
     // Validate any indexes that were provided on the command-line to ensure
     // they point to existing non-empty directories when using path URLs.

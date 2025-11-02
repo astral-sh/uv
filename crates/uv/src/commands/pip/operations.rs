@@ -13,8 +13,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification,
-    Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -54,6 +54,7 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
     groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
@@ -80,6 +81,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        excludes,
         groups,
         client_builder,
     )
@@ -92,7 +94,7 @@ pub(crate) async fn read_constraints(
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
     Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], None, client_builder)
+        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
             .await?
             .constraints,
     )
@@ -103,6 +105,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
+    excludes: Vec<PackageName>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -282,7 +285,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and overrides.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
@@ -290,6 +293,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
+    let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -318,6 +322,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
+        excludes,
         preferences,
         project,
         workspace_members,
@@ -738,9 +743,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {}",
+                    "Using {} {}{}",
                     implementation.pretty(),
-                    interpreter.python_version()
+                    interpreter.python_version(),
+                    interpreter.variant().suffix(),
                 )
                 .dimmed()
             )?;
@@ -749,9 +755,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {} interpreter at: {}",
+                    "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
+                    interpreter.variant().suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -761,16 +768,18 @@ pub(crate) fn report_interpreter(
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }

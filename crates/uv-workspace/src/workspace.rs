@@ -661,6 +661,20 @@ impl Workspace {
         overrides.clone()
     }
 
+    /// Returns the set of dependency exclusions for the workspace.
+    pub fn exclude_dependencies(&self) -> Vec<uv_normalize::PackageName> {
+        let Some(excludes) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.exclude_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        excludes.clone()
+    }
+
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(constraints) = self
@@ -981,10 +995,10 @@ impl Workspace {
             .to_string_lossy()
             .to_string();
             for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+                .map_err(|err| WorkspaceError::Pattern(absolute_glob.clone(), err))?
             {
                 let member_root = member_root
-                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.to_string(), err))?;
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.clone(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -2059,6 +2073,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2159,6 +2174,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2372,6 +2388,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2481,6 +2498,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2603,6 +2621,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2699,6 +2718,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,

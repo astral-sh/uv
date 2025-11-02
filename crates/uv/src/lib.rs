@@ -568,6 +568,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -582,9 +587,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
@@ -751,6 +758,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -814,9 +826,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
                 &groups,
@@ -1072,7 +1086,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.wheel,
                 args.list,
                 args.build_logs,
+                args.gitignore,
                 args.force_pep517,
+                args.clear,
                 build_constraints,
                 args.hash_checking,
                 args.python,
@@ -1374,6 +1390,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -1387,6 +1408,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 &entrypoints,
                 args.python,

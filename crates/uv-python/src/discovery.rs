@@ -37,7 +37,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -2457,9 +2457,26 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
-    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
-    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
-        Self::MajorMinor(key.major, key.minor, key.variant)
+    /// Drop any patch or prerelease information from the version request.
+    #[must_use]
+    pub fn only_minor(self) -> Self {
+        match self {
+            Self::Any => self,
+            Self::Default => self,
+            Self::Range(specifiers, variant) => Self::Range(
+                specifiers
+                    .into_iter()
+                    .map(|s| s.only_minor_release())
+                    .collect(),
+                variant,
+            ),
+            Self::Major(..) => self,
+            Self::MajorMinor(..) => self,
+            Self::MajorMinorPatch(major, minor, _, variant)
+            | Self::MajorMinorPrerelease(major, minor, _, variant) => {
+                Self::MajorMinor(major, minor, variant)
+            }
+        }
     }
 
     /// Return possible executable names for the given version request.
@@ -3150,7 +3167,7 @@ impl PythonPreference {
     fn sources(self) -> &'static [PythonSource] {
         match self {
             Self::OnlyManaged => &[PythonSource::Managed],
-            Self::Managed | Self::System => {
+            Self::Managed => {
                 if cfg!(windows) {
                     &[
                         PythonSource::Managed,
@@ -3161,9 +3178,20 @@ impl PythonPreference {
                     &[PythonSource::Managed, PythonSource::SearchPath]
                 }
             }
+            Self::System => {
+                if cfg!(windows) {
+                    &[
+                        PythonSource::SearchPath,
+                        PythonSource::Registry,
+                        PythonSource::Managed,
+                    ]
+                } else {
+                    &[PythonSource::SearchPath, PythonSource::Managed]
+                }
+            }
             Self::OnlySystem => {
                 if cfg!(windows) {
-                    &[PythonSource::Registry, PythonSource::SearchPath]
+                    &[PythonSource::SearchPath, PythonSource::Registry]
                 } else {
                     &[PythonSource::SearchPath]
                 }
@@ -3328,7 +3356,9 @@ mod tests {
     };
     use uv_platform::{Arch, Libc, Os};
 
-    use super::{Error, PythonVariant};
+    use super::{
+        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonVariant,
+    };
 
     #[test]
     fn interpreter_request_from_str() {
@@ -3572,6 +3602,36 @@ mod tests {
             PythonRequest::parse("3.13t"),
             PythonRequest::Version(VersionRequest::from_str("3.13t").unwrap())
         );
+    }
+
+    #[test]
+    fn discovery_sources_prefer_system_orders_search_path_first() {
+        let preferences = DiscoveryPreferences {
+            python_preference: PythonPreference::System,
+            environment_preference: EnvironmentPreference::OnlySystem,
+        };
+        let sources = preferences.sources(&PythonRequest::Default);
+
+        if cfg!(windows) {
+            assert_eq!(sources, "search path, registry, or managed installations");
+        } else {
+            assert_eq!(sources, "search path or managed installations");
+        }
+    }
+
+    #[test]
+    fn discovery_sources_only_system_matches_platform_order() {
+        let preferences = DiscoveryPreferences {
+            python_preference: PythonPreference::OnlySystem,
+            environment_preference: EnvironmentPreference::OnlySystem,
+        };
+        let sources = preferences.sources(&PythonRequest::Default);
+
+        if cfg!(windows) {
+            assert_eq!(sources, "search path or registry");
+        } else {
+            assert_eq!(sources, "search path");
+        }
     }
 
     #[test]

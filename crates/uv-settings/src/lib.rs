@@ -212,6 +212,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         pip: _,
         cache_keys: _,
         override_dependencies: _,
+        exclude_dependencies: _,
         constraint_dependencies: _,
         build_constraint_dependencies: _,
         environments,
@@ -353,6 +354,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         pip,
         cache_keys,
         override_dependencies,
+        exclude_dependencies,
         constraint_dependencies,
         build_constraint_dependencies,
         environments: _,
@@ -528,6 +530,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if override_dependencies.is_some() {
         masked_fields.push("override-dependencies");
+    }
+    if exclude_dependencies.is_some() {
+        masked_fields.push("exclude-dependencies");
     }
     if constraint_dependencies.is_some() {
         masked_fields.push("constraint-dependencies");

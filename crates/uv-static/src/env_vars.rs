@@ -120,20 +120,25 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
-    /// Equivalent to the `--constraint` command-line argument. If set, uv will use this
+    /// Equivalent to the `--constraints` command-line argument. If set, uv will use this
     /// file as the constraints file. Uses space-separated list of files.
     #[attr_added_in("0.1.36")]
     pub const UV_CONSTRAINT: &'static str = "UV_CONSTRAINT";
 
-    /// Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
+    /// Equivalent to the `--build-constraints` command-line argument. If set, uv will use this file
     /// as constraints for any source distribution builds. Uses space-separated list of files.
     #[attr_added_in("0.2.34")]
     pub const UV_BUILD_CONSTRAINT: &'static str = "UV_BUILD_CONSTRAINT";
 
-    /// Equivalent to the `--override` command-line argument. If set, uv will use this file
+    /// Equivalent to the `--overrides` command-line argument. If set, uv will use this file
     /// as the overrides file. Uses space-separated list of files.
     #[attr_added_in("0.2.22")]
     pub const UV_OVERRIDE: &'static str = "UV_OVERRIDE";
+
+    /// Equivalent to the `--excludes` command-line argument. If set, uv will use this
+    /// as the excludes file. Uses space-separated list of files.
+    #[attr_added_in("0.9.8")]
+    pub const UV_EXCLUDE: &'static str = "UV_EXCLUDE";
 
     /// Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
     /// a link mode.
@@ -226,6 +231,11 @@ impl EnvVars {
     /// development dependencies.
     #[attr_added_in("0.8.7")]
     pub const UV_NO_DEV: &'static str = "UV_NO_DEV";
+
+    /// Equivalent to the `--no-group` command-line argument. If set, uv will disable
+    /// the specified dependency groups for the given space-delimited list of packages.
+    #[attr_added_in("0.9.8")]
+    pub const UV_NO_GROUP: &'static str = "UV_NO_GROUP";
 
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to

@@ -1130,7 +1130,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.13.9
+    Using CPython 3.13.9t
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -1230,7 +1230,7 @@ fn python_upgrade_not_allowed() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.13.0
     ");
 
     // Request a pre-release upgrade
@@ -1240,7 +1240,7 @@ fn python_upgrade_not_allowed() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv python upgrade` only accepts minor versions
+    error: `uv python upgrade` only accepts minor versions, got: 3.14rc3
     ");
 }
 
@@ -2760,6 +2760,77 @@ fn python_install_emulated_macos() {
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13.9-macos-aarch64-none/bin/python3.13
+
+    ----- stderr -----
+    ");
+}
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+#[test]
+fn python_install_emulated_windows_x86_on_x64() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Before installation, `uv python list` should not show the x86_32 download
+    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.9-windows-x86_64-none    <download available>
+
+    ----- stderr -----
+    ");
+
+    // Install an x86_32 version (assuming an x64 host)
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-windows-x86-none (python3.13)
+    ");
+
+    // It should be discoverable with `uv python find`
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86-none/python
+
+    ----- stderr -----
+    ");
+
+    // And included in `uv python list`
+    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.9-windows-x86_64-none    <download available>
+    cpython-3.13.9-windows-x86-none       managed/cpython-3.13.9-windows-x86-none/python
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86_64"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-windows-x86_64-none
+    ");
+
+    // Once we've installed the native version, it should be preferred over x86_32
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.9-windows-x86_64-none/python
 
     ----- stderr -----
     ");

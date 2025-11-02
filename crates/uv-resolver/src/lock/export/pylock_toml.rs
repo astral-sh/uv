@@ -631,7 +631,7 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
@@ -903,7 +903,7 @@ impl<'lock> PylockToml {
         let mut doc = toml_edit::DocumentMut::new();
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
-        doc.insert("created-by", value(self.created_by.to_string()));
+        doc.insert("created-by", value(self.created_by.as_str()));
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }

@@ -56,7 +56,7 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
-    #[error("Request failed after {retries} retries")]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     NetworkErrorWithRetries {
         #[source]
         err: Box<Error>,
@@ -409,6 +409,10 @@ impl PythonDownloadRequest {
 
     pub fn libc(&self) -> Option<&Libc> {
         self.libc.as_ref()
+    }
+
+    pub fn take_version(&mut self) -> Option<VersionRequest> {
+        self.version.take()
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
@@ -1131,7 +1135,7 @@ impl ManagedPythonDownload {
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
-            Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
+            Err(err) => return Err(Error::ExtractError(filename, err)),
         };
 
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
@@ -1262,12 +1266,12 @@ impl ManagedPythonDownload {
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
             uv_extract::stream::archive(&mut reader, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
         } else {
             uv_extract::stream::archive(&mut hasher, ext, target)
                 .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+                .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
         }
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 

@@ -1735,9 +1735,24 @@ impl RunCommand {
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
                 let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
 
+                let client = client_builder.build();
+                let mut response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
+
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if url.host_str() == Some("gist.github.com") {
-                    url = resolve_gist_url(&url, &client_builder).await?;
+                if response.url().host_str() == Some("gist.github.com") {
+                    url =
+                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
+                            .await?;
+
+                    response = client
+                        .for_host(&url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await?;
                 }
 
                 let file_stem = url
@@ -1749,13 +1764,6 @@ impl RunCommand {
                     .prefix(file_stem)
                     .suffix(".py")
                     .tempfile()?;
-
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();

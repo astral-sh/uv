@@ -46,7 +46,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {
