@@ -3,130 +3,230 @@
 <!-- prettier-ignore-start -->
 
 
-## 0.7.0
+## 0.9.7
 
-This release contains various changes that improve correctness and user experience, but could break some workflows; many changes have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
-
-### Breaking changes
-
-- **Update `uv version` to display and update project versions ([#12349](https://github.com/astral-sh/uv/pull/12349))**
-
-  Previously, `uv version` displayed uv's version. Now, `uv version` will display or update the project's version. This interface was [heavily requested](https://github.com/astral-sh/uv/issues/6298) and, after much consideration, we decided that transitioning the top-level command was the best option.
-
-  Here's a brief example:
-
-  ```console
-  $ uv init example
-  Initialized project `example` at `./example`
-  $ cd example
-  $ uv version
-  example 0.1.0
-  $ uv version --bump major
-  example 0.1.0 => 1.0.0
-  $ uv version --short
-  1.0.0
-  ```
-
-  If used outside of a project, uv will fallback to showing its own version still:
-
-  ```console
-  $ uv version
-  warning: failed to read project: No `pyproject.toml` found in current directory or any parent directory
-    running `uv self version` for compatibility with old `uv version` command.
-    this fallback will be removed soon, pass `--preview` to make this an error.
-
-  uv 0.7.0 (4433f41c9 2025-04-29)
-  ```
-
-  As described in the warning, `--preview` can be used to error instead:
-
-  ```console
-  $ uv version --preview
-  error: No `pyproject.toml` found in current directory or any parent directory
-  ```
-
-  The previous functionality of `uv version` was moved to `uv self version`.
-
-- **Avoid fallback to subsequent indexes on authentication failure ([#12805](https://github.com/astral-sh/uv/pull/12805))**
-
-  When using the `first-index` strategy (the default), uv will stop searching indexes for a package once it is found on a single index. Previously, uv considered a package as "missing" from an index during authentication failures, such as an HTTP 401 or HTTP 403 (normally, missing packages are represented by an HTTP 404). This behavior was motivated by unusual responses from some package indexes, but reduces the safety of uv's index strategy when authentication fails. Now, uv will consider an authentication failure as a stop-point when searching for a package across indexes. The `index.ignore-error-codes` option can be used to recover the existing behavior, e.g.:
-
-  ```toml
-  [[tool.uv.index]]
-  name = "pytorch"
-  url = "https://download.pytorch.org/whl/cpu"
-  ignore-error-codes = [401, 403]
-  ```
-
-  Since PyTorch's indexes always return a HTTP 403 for missing packages, uv special-cases indexes on the `pytorch.org` domain to ignore that error code by default.
-
-- **Require the command in `uvx <name>` to be available in the Python environment ([#11603](https://github.com/astral-sh/uv/pull/11603))**
-
-  Previously, `uvx` would attempt to execute a command even if it was not provided by a Python package. For example, if we presume `foo` is an empty Python package which provides no command, `uvx foo` would invoke the `foo` command on the `PATH` (if present). Now, uv will error early if the `foo` executable is not provided by the requested Python package. This check is not enforced when `--from` is used, so patterns like `uvx --from foo bash -c "..."` are still valid. uv also still allows `uvx foo` where the `foo` executable is provided by a dependency of `foo` instead of `foo` itself, as this is fairly common for packages which depend on a dedicated package for their command-line interface.
-
-- **Use index URL instead of package URL for keyring credential lookups ([#12651](https://github.com/astral-sh/uv/pull/12651))**
-
-  When determining credentials for querying a package URL, uv previously sent the full URL to the `keyring` command. However, some keyring plugins expect to receive the _index URL_ (which is usually a parent of the package URL). Now, uv requests credentials for the index URL instead. This behavior matches `pip`.
-
-- **Remove `--version` from subcommands ([#13108](https://github.com/astral-sh/uv/pull/13108))**
-
-  Previously, uv allowed the `--version` flag on arbitrary subcommands, e.g., `uv run --version`. However, the `--version` flag is useful for other operations since uv is a package manager. Consequently, we've removed the `--version` flag from subcommands — it is only available as `uv --version`.
-
-- **Omit Python 3.7 downloads from managed versions ([#13022](https://github.com/astral-sh/uv/pull/13022))**
-
-  Python 3.7 is EOL and not formally supported by uv; however, Python 3.7 was previously available for download on a subset of platforms.
-
-- **Reject non-PEP 751 TOML files in install, compile, and export commands ([#13120](https://github.com/astral-sh/uv/pull/13120), [#13119](https://github.com/astral-sh/uv/pull/13119))**
-
-  Previously, uv treated arbitrary `.toml` files passed to commands (e.g., `uv pip install -r foo.toml` or `uv pip compile -o foo.toml`) as `requirements.txt`-formatted files. Now, uv will error instead. If using PEP 751 lockfiles, use the standardized format for custom names instead, e.g., `pylock.foo.toml`.
-
-- **Ignore arbitrary Python requests in version files ([#12909](https://github.com/astral-sh/uv/pull/12909))**
-
-  uv allows arbitrary strings to be used for Python version requests, in which they are treated as an executable name to search for in the `PATH`. However, using this form of request in `.python-version` files is non-standard and conflicts with `pyenv-virtualenv` which writes environment names to `.python-version` files. In this release, uv will now ignore requests that are arbitrary strings when found in `.python-version` files.
-
-- **Error on unknown dependency object specifiers ([12811](https://github.com/astral-sh/uv/pull/12811))**
-
-  The `[dependency-groups]` entries can include "object specifiers", e.g. `set-phasers-to = ...` in:
-
-  ```toml
-  [dependency-groups]
-  foo = ["pyparsing"]
-  bar = [{set-phasers-to = "stun"}]
-  ```
-
-  However, the only current spec-compliant object specifier is `include-group`. Previously, uv would ignore unknown object specifiers. Now, uv will error.
-
-- **Make `--frozen` and `--no-sources` conflicting options ([#12671](https://github.com/astral-sh/uv/pull/12671))**
-
-  Using `--no-sources` always requires a new resolution and `--frozen` will always fail when used with it. Now, this conflict is encoded in the CLI options for clarity.
-
-- **Treat empty `UV_PYTHON_INSTALL_DIR` and `UV_TOOL_DIR` as unset ([#12907](https://github.com/astral-sh/uv/pull/12907), [#12905](https://github.com/astral-sh/uv/pull/12905))**
-
-  Previously, these variables were treated as set to the current working directory when set to an empty string. Now, uv will ignore these variables when empty. This matches uv's behavior for other environment variables which configure directories.
+Released on 2025-10-30.
 
 ### Enhancements
 
-- Disallow mixing requirements across PyTorch indexes ([#13179](https://github.com/astral-sh/uv/pull/13179))
-- Add optional managed Python archive download cache ([#12175](https://github.com/astral-sh/uv/pull/12175))
-- Add `poetry-core` as a `uv init` build backend option ([#12781](https://github.com/astral-sh/uv/pull/12781))
-- Show tag hints when failing to find a compatible wheel in `pylock.toml` ([#13136](https://github.com/astral-sh/uv/pull/13136))
-- Report Python versions in `pyvenv.cfg` version mismatch ([#13027](https://github.com/astral-sh/uv/pull/13027))
+- Add Windows x86-32 emulation support to interpreter architecture checks ([#13475](https://github.com/astral-sh/uv/pull/13475))
+- Improve readability of progress bars ([#16509](https://github.com/astral-sh/uv/pull/16509))
+- Add GitHub attestations for uv release artifacts ([#11357](https://github.com/astral-sh/uv/pull/11357))
 
 ### Bug fixes
 
-- Avoid erroring on omitted wheel-only packages in `pylock.toml` ([#13132](https://github.com/astral-sh/uv/pull/13132))
-- Fix display name for `uvx --version` ([#13109](https://github.com/astral-sh/uv/pull/13109))
-- Restore handling of authentication when encountering redirects ([#13050](https://github.com/astral-sh/uv/pull/13050))
-- Respect build options (`--no-binary` et al) in `pylock.toml` ([#13134](https://github.com/astral-sh/uv/pull/13134))
-- Use `upload-time` rather than `upload_time` in `uv.lock` ([#13176](https://github.com/astral-sh/uv/pull/13176))
+- Drop terminal coloring from `uv auth token` output ([#16504](https://github.com/astral-sh/uv/pull/16504))
+- Don't use UV_LOCKED to enable `--check` flag ([#16521](https://github.com/astral-sh/uv/pull/16521))
+
+## 0.9.6
+
+Released on 2025-10-29.
+
+This release contains an upgrade to Astral's fork of `async_zip`, which addresses potential sources of ZIP parsing differentials between uv and other Python packaging tooling. See [GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64) for additional details.
+
+### Security
+
+* Address ZIP parsing differentials ([GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64))
+
+### Python
+
+- Upgrade GraalPy to 25.0.1 ([#16401](https://github.com/astral-sh/uv/pull/16401))
+
+### Enhancements
+
+- Add `--clear` to `uv build` to remove old build artifacts ([#16371](https://github.com/astral-sh/uv/pull/16371))
+- Add `--no-create-gitignore` to `uv build` ([#16369](https://github.com/astral-sh/uv/pull/16369))
+- Do not error when a virtual environment directory cannot be removed due to a busy error ([#16394](https://github.com/astral-sh/uv/pull/16394))
+- Improve hint on `pip install --system` when externally managed ([#16392](https://github.com/astral-sh/uv/pull/16392))
+- Running `uv lock --check` with outdated lockfile will print that `--check` was passed, instead of `--locked`  ([#16322](https://github.com/astral-sh/uv/pull/16322))
+- Update `uv init` template for Maturin ([#16449](https://github.com/astral-sh/uv/pull/16449))
+- Improve ordering of Python sources in logs ([#16463](https://github.com/astral-sh/uv/pull/16463))
+- Restore DockerHub release images and annotations ([#16441](https://github.com/astral-sh/uv/pull/16441))
+
+### Bug fixes
+
+- Check for matching Python implementation during `uv python upgrade` ([#16420](https://github.com/astral-sh/uv/pull/16420))
+- Deterministically order `--find-links` distributions ([#16446](https://github.com/astral-sh/uv/pull/16446))
+- Don't panic in `uv export --frozen` when the lockfile is outdated ([#16407](https://github.com/astral-sh/uv/pull/16407))
+- Fix root of `uv tree` when `--package` is used with circular dependencies ([#15908](https://github.com/astral-sh/uv/pull/15908))
+- Show package list with `pip freeze --quiet` ([#16491](https://github.com/astral-sh/uv/pull/16491))
+- Limit `uv auth login pyx.dev` retries to 60s ([#16498](https://github.com/astral-sh/uv/pull/16498))
+- Add an empty group with `uv add --group ... -r ...` ([#16490](https://github.com/astral-sh/uv/pull/16490))
 
 ### Documentation
 
-- Changed `fish` completions append `>>` to overwrite `>` ([#13130](https://github.com/astral-sh/uv/pull/13130))
-- Add `pylock.toml` mentions where relevant ([#13115](https://github.com/astral-sh/uv/pull/13115))
-- Add ROCm example to the PyTorch guide ([#13200](https://github.com/astral-sh/uv/pull13200))
-- Upgrade PyTorch guide to CUDA 12.8 and PyTorch 2.7 ([#13199](https://github.com/astral-sh/uv/pull13199))
+- Update docs for maturin build backend init template ([#16469](https://github.com/astral-sh/uv/pull/16469))
+- Update docs to reflect previous changes to signal forwarding semantics ([#16430](https://github.com/astral-sh/uv/pull/16430))
+- Add instructions for installing via MacPorts ([#16039](https://github.com/astral-sh/uv/pull/16039))
 
+## 0.9.5
+
+Released on 2025-10-21.
+
+This release contains an upgrade to `astral-tokio-tar`, which addresses a vulnerability in tar extraction on malformed archives with mismatching size information between the ustar header and PAX extensions. While the `astral-tokio-tar` advisory has been graded as "high" due its potential broader impact, the *specific* impact to uv is **low** due to a lack of novel attacker capability. Specifically, uv only processes tar archives from source distributions, which already possess the capability for full arbitrary code execution by design, meaning that an attacker gains no additional capabilities through `astral-tokio-tar`.
+
+Regardless, we take the hypothetical risk of parser differentials very seriously. Out of an abundance of caution, we have assigned this upgrade an advisory: https://github.com/astral-sh/uv/security/advisories/GHSA-w476-p2h3-79g9
+
+### Security
+
+* Upgrade `astral-tokio-tar` to 0.5.6 to address a parsing differential ([#16387](https://github.com/astral-sh/uv/pull/16387))
+
+### Enhancements
+
+- Add required environment marker example to hint ([#16244](https://github.com/astral-sh/uv/pull/16244))
+- Fix typo in MissingTopLevel warning ([#16351](https://github.com/astral-sh/uv/pull/16351))
+- Improve 403 Forbidden error message to indicate package may not exist ([#16353](https://github.com/astral-sh/uv/pull/16353))
+- Add a hint on `uv pip install` failure if the `--system` flag is used to select an externally managed interpreter ([#16318](https://github.com/astral-sh/uv/pull/16318))
+
+### Bug fixes
+
+- Fix backtick escaping for PowerShell ([#16307](https://github.com/astral-sh/uv/pull/16307))
+
+### Documentation
+
+- Document metadata consistency expectation ([#15683](https://github.com/astral-sh/uv/pull/15683))
+- Remove outdated aarch64 musl note ([#16385](https://github.com/astral-sh/uv/pull/16385))
+
+## 0.9.4
+
+Released on 2025-10-17.
+
+### Enhancements
+
+- Add CUDA 13.0 support ([#16321](https://github.com/astral-sh/uv/pull/16321))
+- Add auto-detection for Intel GPU on Windows ([#16280](https://github.com/astral-sh/uv/pull/16280))
+- Implement display of RFC 9457 HTTP error contexts ([#16199](https://github.com/astral-sh/uv/pull/16199))
+
+### Bug fixes
+
+- Avoid obfuscating pyx tokens in `uv auth token` output ([#16345](https://github.com/astral-sh/uv/pull/16345))
+
+## 0.9.3
+
+Released on 2025-10-14.
+
+### Python
+
+- Add CPython 3.15.0a1
+- Add CPython 3.13.9
+
+### Enhancements
+
+- Obfuscate secret token values in logs ([#16164](https://github.com/astral-sh/uv/pull/16164))
+
+### Bug fixes
+
+- Fix workspace with relative pathing ([#16296](https://github.com/astral-sh/uv/pull/16296))
+
+## 0.9.2
+
+Released on 2025-10-10.
+
+### Python
+
+- Add CPython 3.9.24.
+- Add CPython 3.10.19.
+- Add CPython 3.11.14.
+- Add CPython 3.12.12.
+
+### Enhancements
+
+- Avoid inferring check URLs for pyx in `uv publish` ([#16234](https://github.com/astral-sh/uv/pull/16234))
+- Add `uv tool list --show-python` ([#15814](https://github.com/astral-sh/uv/pull/15814))
+
+### Documentation
+
+- Add missing "added in" to new environment variables in reference ([#16217](https://github.com/astral-sh/uv/pull/16217))
+
+## 0.9.1
+
+Released on 2025-10-09.
+
+### Enhancements
+
+- Log Python choice in `uv init` ([#16182](https://github.com/astral-sh/uv/pull/16182))
+- Fix `pylock.toml` config conflict error messages ([#16211](https://github.com/astral-sh/uv/pull/16211))
+
+### Configuration
+
+- Add `UV_UPLOAD_HTTP_TIMEOUT` and respect `UV_HTTP_TIMEOUT` in uploads ([#16040](https://github.com/astral-sh/uv/pull/16040))
+- Support `UV_WORKING_DIRECTORY` for setting `--directory` ([#16125](https://github.com/astral-sh/uv/pull/16125))
+
+### Bug fixes
+
+- Allow missing `Scripts` directory ([#16206](https://github.com/astral-sh/uv/pull/16206))
+- Fix handling of Python requests with pre-releases in ranges ([#16208](https://github.com/astral-sh/uv/pull/16208))
+- Preserve comments on version bump ([#16141](https://github.com/astral-sh/uv/pull/16141))
+- Retry all HTTP/2 errors ([#16038](https://github.com/astral-sh/uv/pull/16038))
+- Treat deleted Windows registry keys as equivalent to missing ones ([#16194](https://github.com/astral-sh/uv/pull/16194))
+- Ignore pre-release Python versions when a patch version is requested ([#16210](https://github.com/astral-sh/uv/pull/16210))
+
+### Documentation
+
+- Document why uv discards upper bounds on `requires-python` ([#15927](https://github.com/astral-sh/uv/pull/15927))
+- Document uv version environment variables were added in ([#15196](https://github.com/astral-sh/uv/pull/15196))
+
+## 0.9.0
+
+Released on 2025-10-07.
+
+This breaking release is primarily motivated by the release of Python 3.14, which contains some breaking changes (we recommend reading the ["What's new in Python 3.14"](https://docs.python.org/3/whatsnew/3.14.html) page). uv may use Python 3.14 in cases where it previously used 3.13, e.g., if you have not pinned your Python version and do not have any Python versions installed on your machine. While we think this is uncommon, we prefer to be cautious. We've included some additional small changes that could break workflows.
+
+See our [Python 3.14](https://astral.sh/blog/python-3.14) blog post for some discussion of features we're excited about!
+
+There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts/build-backend/). If you have an upper bound in your `[build-system]` table, you should update it.
+
+### Breaking changes
+
+- **Python 3.14 is now the default stable version**
+  
+  The default Python version has changed from 3.13 to 3.14. This applies to Python version installation when no Python version is requested, e.g., `uv python install`. By default, uv will use the system Python version if present, so this may not cause changes to general use of uv. For example, if Python 3.13 is installed already, then `uv venv` will use that version. If no Python versions are installed on a machine and automatic downloads are enabled, uv will now use 3.14 instead of 3.13, e.g., for `uv venv` or `uvx python`. This change will not affect users who are using a `.python-version` file to pin to a specific Python version.
+- **Allow use of free-threaded variants in Python 3.14+ without explicit opt-in** ([#16142](https://github.com/astral-sh/uv/pull/16142))
+  
+  Previously, free-threaded variants of Python were considered experimental and required explicit opt-in (i.e., with `3.14t`) for usage. Now uv will allow use of free-threaded Python 3.14+ interpreters without explicit selection. The GIL-enabled build of Python will still be preferred, e.g., when performing an installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes before a GIL-enabled build on the `PATH`, it will be used. This change does not apply to free-threaded Python 3.13 interpreters, which will continue to require opt-in.
+- **Use Python 3.14 stable Docker images** ([#16150](https://github.com/astral-sh/uv/pull/16150))
+  
+  Previously, the Python 3.14 images had an `-rc` suffix, e.g., `python:3.14-rc-alpine` or
+`python:3.14-rc-trixie`. Now, the `-rc` suffix has been removed to match the stable
+[upstream images](https://hub.docker.com/_/python). The `-rc` images tags will no longer be
+updated. This change should not break existing workflows.
+- **Upgrade Alpine Docker image to Alpine 3.22**
+  
+  Previously, the `uv:alpine` Docker image was based on Alpine 3.21. Now, this image is based on Alpine 3.22. The previous image can be recovered with `uv:alpine3.21` and will continue to be updated until a future release.
+- **Upgrade Debian Docker images to Debian 13 "Trixie"**
+  
+  Previously, the `uv:debian` and `uv:debian-slim` Docker images were based on Debian 12 "Bookworm". Now, these images are based on Debian 13 "Trixie". The previous images can be recovered with `uv:bookworm` and `uv:bookworm-slim` and will continue to be updated until a future release.
+- **Fix incorrect output path when a trailing `/` is used in `uv build`** ([#15133](https://github.com/astral-sh/uv/pull/15133))
+  
+  When using `uv build` in a workspace, the artifacts are intended to be written to a `dist` directory in the workspace root. A bug caused workspace root determination to fail when the input path included a trailing `/` causing the `dist` directory to be placed in the child directory. This bug has been fixed in this release. For example, `uv build child/` is used, the output path will now be in `<workspace root>/dist/` rather than `<workspace root>/child/dist/`.
+
+### Python
+
+- Add CPython 3.14.0
+- Add CPython 3.13.8
+
+### Enhancements
+
+- Don't warn when a dependency is constrained by another dependency ([#16149](https://github.com/astral-sh/uv/pull/16149))
+
+### Bug fixes
+
+- Fix `uv python upgrade / install` output when there is a no-op for one request ([#16158](https://github.com/astral-sh/uv/pull/16158))
+- Surface pinned-version hint when `uv tool upgrade` can’t move the tool ([#16081](https://github.com/astral-sh/uv/pull/16081))
+- Ban pre-release versions in `uv python upgrade` requests ([#16160](https://github.com/astral-sh/uv/pull/16160))
+- Fix `uv python upgrade` replacement of installed binaries on pre-release to stable ([#16159](https://github.com/astral-sh/uv/pull/16159))
+
+### Documentation
+
+- Update `uv pip compile` args in `layout.md` ([#16155](https://github.com/astral-sh/uv/pull/16155))
+
+## 0.8.x
+
+See [changelogs/0.8.x](./changelogs/0.8.x.md)
+
+## 0.7.x
+
+See [changelogs/0.7.x](./changelogs/0.7.x.md)
 
 ## 0.6.x
 

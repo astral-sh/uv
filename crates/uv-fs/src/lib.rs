@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,24 @@ pub use crate::path::*;
 pub mod cachedir;
 mod path;
 pub mod which;
+
+/// Append an extension to a [`PathBuf`].
+///
+/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
+///
+/// If there is no file name, the path is returned unchanged.
+///
+/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
+pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
+    let Some(name) = path.file_name() else {
+        // If there is no file name, we cannot add an extension.
+        return Cow::Borrowed(path);
+    };
+    let mut name = name.to_os_string();
+    name.push(".");
+    name.push(extension.trim_start_matches('.'));
+    Cow::Owned(path.with_file_name(name))
+}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -84,6 +103,8 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
 /// junction at the same path.
 ///
 /// Note that because junctions are used, the source must be a directory.
+///
+/// Changes to this function should be reflected in [`create_symlink`].
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // If the source is a file, we can't create a junction
@@ -121,13 +142,13 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
-    match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
+    match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
             // Create a symlink, using a temporary file to ensure atomicity.
             let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
             let temp_file = temp_dir.path().join("link");
-            std::os::unix::fs::symlink(src, &temp_file)?;
+            fs_err::os::unix::fs::symlink(src, &temp_file)?;
 
             // Move the symlink into the target location.
             fs_err::rename(&temp_file, dst.as_ref())?;
@@ -136,6 +157,38 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         }
         Err(err) => Err(err),
     }
+}
+
+/// Create a symlink at `dst` pointing to `src`.
+///
+/// On Windows, this uses the `junction` crate to create a junction point.
+///
+/// Note that because junctions are used, the source must be a directory.
+///
+/// Changes to this function should be reflected in [`replace_symlink`].
+#[cfg(windows)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // If the source is a file, we can't create a junction
+    if src.as_ref().is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Cannot create a junction for {}: is not a directory",
+                src.as_ref().display()
+            ),
+        ));
+    }
+
+    junction::create(
+        dunce::simplified(src.as_ref()),
+        dunce::simplified(dst.as_ref()),
+    )
+}
+
+/// Create a symlink at `dst` pointing to `src`.
+#[cfg(unix)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
 #[cfg(unix)]
@@ -255,7 +308,7 @@ pub async fn rename_with_retry(
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let rename = || async { fs_err::rename(from, to) };
+        let rename = async || fs_err::rename(from, to);
 
         rename
             .retry(backoff_file_move())
@@ -312,16 +365,13 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed {} {} to {}: {}",
-                        operation_name,
-                        from.display(),
-                        to.display(),
-                        err
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "Failed {} {} to {}: {}",
+                    operation_name,
+                    from.display(),
+                    to.display(),
+                    err
+                ))
             })
     }
     #[cfg(not(windows))]
@@ -417,21 +467,15 @@ pub async fn persist_with_retry(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -491,21 +535,15 @@ pub fn persist_with_retry_sync(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -590,8 +628,47 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
         .is_some_and(|name| name.starts_with(".tmp"))
 }
 
+/// Checks if the grandparent directory of the given executable is the base
+/// of a virtual environment.
+///
+/// The procedure described in PEP 405 includes checking both the parent and
+/// grandparent directory of an executable, but in practice we've found this to
+/// be unnecessary.
+pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
+    executable
+        .as_ref()
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(is_virtualenv_base)
+}
+
+/// Returns `true` if a path is the base path of a virtual environment,
+/// indicated by the presence of a `pyvenv.cfg` file.
+///
+/// The procedure described in PEP 405 includes scanning `pyvenv.cfg`
+/// for a `home` key, but in practice we've found this to be
+/// unnecessary.
+pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
+    path.as_ref().join("pyvenv.cfg").is_file()
+}
+
+/// Whether the error is due to a lock being held.
+fn is_known_already_locked_error(err: &std::io::Error) -> bool {
+    if matches!(err.kind(), std::io::ErrorKind::WouldBlock) {
+        return true;
+    }
+
+    // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
+    if cfg!(windows) && err.raw_os_error() == Some(33) {
+        return true;
+    }
+
+    false
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
+#[must_use]
 pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
@@ -608,7 +685,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -617,14 +694,11 @@ impl LockedFile {
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Could not acquire lock for `{resource}` at `{}`: {}",
-                            file.path().user_display(),
-                            err
-                        ),
-                    )
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
                 })?;
 
                 debug!("Acquired lock for `{resource}`");
@@ -633,9 +707,72 @@ impl LockedFile {
         }
     }
 
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
-    /// context, as this can block the runtime while waiting for another process to release the
-    /// lock.
+    /// Inner implementation for [`LockedFile::acquire_no_wait`].
+    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        match file.file().try_lock_exclusive() {
+            Ok(()) => {
+                debug!("Acquired lock for `{resource}`");
+                Some(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
+                    debug!("Try lock error: {err:?}");
+                }
+                debug!("Lock is busy for `{resource}`");
+                None
+            }
+        }
+    }
+
+    /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
+    /// [`LockedFile::acquire_blocking`].
+    fn lock_file_shared_blocking(
+        file: fs_err::File,
+        resource: &str,
+    ) -> Result<Self, std::io::Error> {
+        trace!(
+            "Checking shared lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        // TODO(konsti): Update fs_err to support this.
+        match FileExt::try_lock_shared(file.file()) {
+            Ok(()) => {
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
+                    debug!("Try lock error: {err:?}");
+                }
+                info!(
+                    "Waiting to acquire shared lock for `{resource}` at `{}`",
+                    file.path().user_display(),
+                );
+                FileExt::lock_shared(file.file()).map_err(|err| {
+                    // Not an fs_err method, we need to build our own path context
+                    std::io::Error::other(format!(
+                        "Could not acquire shared lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
+                })?;
+
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+        }
+    }
+
+    /// The same as [`LockedFile::acquire`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
     pub fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
@@ -643,6 +780,19 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
+    }
+
+    /// The same as [`LockedFile::acquire_blocking`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
+    pub fn acquire_shared_blocking(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        Self::lock_file_shared_blocking(file, &resource)
     }
 
     /// Acquire a cross-process lock for a resource using a file at the provided path.
@@ -654,6 +804,29 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+    }
+
+    /// Acquire a cross-process read lock for a shared resource using a file at the provided path.
+    #[cfg(feature = "tokio")]
+    pub async fn acquire_shared(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
+            .await?
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path
+    ///
+    /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
+    ///
+    /// If the lock is not immediately available, [`None`] is returned.
+    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
+        let file = Self::create(path).ok()?;
+        let resource = resource.to_string();
+        Self::lock_file_no_wait(file, &resource)
     }
 
     #[cfg(unix)]
@@ -770,4 +943,46 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_with_added_extension() {
+        // Test with simple package name (no dots)
+        let path = PathBuf::from("python");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("python.exe"));
+
+        // Test with package name containing single dot
+        let path = PathBuf::from("awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
+
+        // Test with package name containing multiple dots
+        let path = PathBuf::from("org.example.tool");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
+
+        // Test with different extensions
+        let path = PathBuf::from("script");
+        let result = with_added_extension(&path, "ps1");
+        assert_eq!(result, PathBuf::from("script.ps1"));
+
+        // Test with path that has directory components
+        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(
+            result,
+            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
+        );
+
+        // Test with empty path (edge case)
+        let path = PathBuf::new();
+        let result = with_added_extension(&path, "exe");
+        assert_eq!(result, path); // Should return unchanged
+    }
 }

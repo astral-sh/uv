@@ -1,7 +1,7 @@
 //! Configure rayon and determine thread stack sizes.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 
 /// The default minimum stack size for uv threads.
@@ -62,7 +62,7 @@ pub static RAYON_PARALLELISM: AtomicUsize = AtomicUsize::new(0);
 /// `LazyLock::force(&RAYON_INITIALIZE)`.
 pub static RAYON_INITIALIZE: LazyLock<()> = LazyLock::new(|| {
     rayon::ThreadPoolBuilder::new()
-        .num_threads(RAYON_PARALLELISM.load(Ordering::SeqCst))
+        .num_threads(RAYON_PARALLELISM.load(Ordering::Relaxed))
         .stack_size(min_stack_size())
         .build_global()
         .expect("failed to initialize global rayon pool");

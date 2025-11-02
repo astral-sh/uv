@@ -12,7 +12,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -24,12 +24,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -69,7 +71,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -81,12 +83,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -126,7 +130,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -138,12 +142,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -183,7 +189,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -195,12 +201,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -240,7 +248,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -252,12 +260,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -290,7 +300,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -302,12 +312,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable[d",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -340,7 +352,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -352,12 +364,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -390,7 +404,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -402,12 +416,14 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                editable: true,
-                                virtual: false,
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",

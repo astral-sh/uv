@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{DEFAULT_PYTHON_VERSION, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -7,7 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
-use std::process::Command;
+use uv_static::EnvVars;
 use zip::ZipArchive;
 
 #[test]
@@ -16,7 +16,7 @@ fn build_basic() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -134,7 +134,7 @@ fn build_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -190,7 +190,7 @@ fn build_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -246,7 +246,7 @@ fn build_sdist_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -304,7 +304,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -413,7 +413,7 @@ fn build_fail() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -489,7 +489,6 @@ fn build_workspace() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -695,7 +694,6 @@ fn build_all_with_failure() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member-\w+\]", "[PKG]"),
@@ -841,7 +839,7 @@ fn build_constraints() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -898,11 +896,11 @@ fn build_constraints() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1188,7 +1186,7 @@ fn build_tool_uv_sources() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let build = context.temp_dir.child("backend");
@@ -1338,7 +1336,6 @@ fn build_non_package() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -1443,10 +1440,9 @@ fn build_fast_path() -> Result<()> {
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
-        .arg(context.temp_dir.join("output1")), @r###"
+        .arg(context.temp_dir.join("output1")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1456,7 +1452,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel from source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1469,7 +1465,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1489,11 +1484,10 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1501,7 +1495,7 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
     Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output3")
@@ -1509,12 +1503,11 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1524,7 +1517,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel (uv build backend)...
     Successfully built output4/built_by_uv-0.1.0.tar.gz
     Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output4")
@@ -1549,18 +1542,17 @@ fn build_list_files() -> Result<()> {
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @r###"
+        .arg("--list"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1574,25 +1566,25 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
     Building source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1605,20 +1597,19 @@ fn build_list_files() -> Result<()> {
         .assert(predicate::path::missing());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1632,23 +1623,23 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
-    "###);
+    ");
     context
         .temp_dir
         .child("output2")
@@ -1674,7 +1665,6 @@ fn build_list_files_errors() -> Result<()> {
     // In CI, we run with link mode settings.
     filters.push(("--link-mode <LINK_MODE> ", ""));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1698,7 +1688,6 @@ fn build_list_files_errors() -> Result<()> {
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1765,14 +1754,15 @@ fn build_with_symlink() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
     "#})?;
-    std::os::unix::fs::symlink(
-        context.temp_dir.child("pyproject.toml.real"),
+    fs_err::os::unix::fs::symlink(
+        "pyproject.toml.real",
         context.temp_dir.child("pyproject.toml"),
     )?;
     context
         .temp_dir
         .child("src/softlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1811,6 +1801,7 @@ fn build_with_hardlink() -> Result<()> {
         .temp_dir
         .child("src/hardlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1857,7 +1848,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
      + greet==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    uv_snapshot!(context.filters(), Command::new(context.interpreter()).arg("-c").arg("import greet"), @r###"
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1931,7 +1922,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1979,6 +1970,296 @@ fn build_with_nonnormalized_name() -> Result<()> {
         .child("dist")
         .child("my.PROJECT-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Check that `--force-pep517` is respected.
+///
+/// The error messages for a broken project are different for direct builds vs. PEP 517.
+#[test]
+fn force_pep517() -> Result<()> {
+    // We need to use a real `uv_build` package.
+    let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
+
+    context.init().assert().success();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+
+        [tool.uv.build-backend]
+        module-name = "does_not_exist"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Error: Missing source directory at: `src`
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    Ok(())
+}
+
+/// Check that we show a hint when there's a venv in the source distribution.
+///
+/// <https://github.com/astral-sh/uv/issues/15096>
+// Windows uses trampolines instead of symlinks. You don't want those in your source distribution
+// either, but that's for the build backend to catch, we're only checking for the unix error hint
+// in uv here.
+#[cfg(unix)]
+#[test]
+fn venv_included_in_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--name")
+        .arg("project")
+        .arg("--build-backend")
+        .arg("hatchling")
+        .assert()
+        .success();
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+
+        [tool.hatch.build.targets.sdist.force-include]
+        ".venv" = ".venv"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#};
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    context.venv().assert().success();
+
+    // context.filters()
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid tar file
+      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      ╰─▶ symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
+    ");
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery works with and without trailing slash.
+///
+/// <https://github.com/astral-sh/uv/issues/13914>
+#[test]
+fn test_workspace_trailing_slash() {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace with a root and a member.
+    context.init().arg("--lib").assert().success();
+    context.init().arg("--lib").arg("child").assert().success();
+
+    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check that workspace discovery still works.
+    uv_snapshot!(context.filters(), context.build().arg("child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check general normalization too.
+    uv_snapshot!(context.filters(), context.build().arg("./child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+}
+
+/// Test `uv build --clear`.
+#[test]
+fn build_clear() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Regular build
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    // Add a marker file to verify `--clear` removes it
+    fs_err::write(project.child("dist").child("marker.txt"), "marker")?;
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    // Build with `--clear` to remove the marker file
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test `uv build --no-create-gitignore`.
+#[test]
+fn build_no_gitignore() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Default build with `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::is_file());
+
+    fs_err::remove_dir_all(project.child("dist"))?;
+
+    // Build with `--no-create-gitignore` that does not create `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::missing());
 
     Ok(())
 }

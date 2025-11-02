@@ -5,9 +5,9 @@ use std::ops::Bound;
 use std::str::FromStr;
 
 use crate::{
-    version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
+    Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
 };
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 #[cfg(feature = "tracing")]
 use tracing::warn;
 
@@ -48,6 +48,11 @@ impl VersionSpecifiers {
         Self(Box::new([]))
     }
 
+    /// The number of specifiers.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Whether all specifiers match the given version.
     pub fn contains(&self, version: &Version) -> bool {
         self.iter().all(|specifier| specifier.contains(version))
@@ -80,22 +85,38 @@ impl VersionSpecifiers {
 
         // Add specifiers for the holes between the bounds.
         for (lower, upper) in bounds {
-            match (next, lower) {
+            let specifier = match (next, lower) {
                 // Ex) [3.7, 3.8.5), (3.8.5, 3.9] -> >=3.7,!=3.8.5,<=3.9
                 (Bound::Excluded(prev), Bound::Excluded(lower)) if prev == lower => {
-                    specifiers.push(VersionSpecifier::not_equals_version(prev.clone()));
+                    Some(VersionSpecifier::not_equals_version(prev.clone()))
                 }
                 // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
-                (Bound::Excluded(prev), Bound::Included(lower))
-                    if prev.release().len() == 2
-                        && *lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
-                {
-                    specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
+                (Bound::Excluded(prev), Bound::Included(lower)) => {
+                    match *prev.only_release_trimmed().release() {
+                        [major] if *lower.only_release_trimmed().release() == [major, 1] => {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, 0,
+                            ])))
+                        }
+                        [major, minor]
+                            if *lower.only_release_trimmed().release() == [major, minor + 1] =>
+                        {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, minor,
+                            ])))
+                        }
+                        _ => None,
+                    }
                 }
-                _ => {
-                    #[cfg(feature = "tracing")]
-                    warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
-                }
+                _ => None,
+            };
+            if let Some(specifier) = specifier {
+                specifiers.push(specifier);
+            } else {
+                #[cfg(feature = "tracing")]
+                warn!(
+                    "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
+                );
             }
             next = upper;
         }
@@ -346,6 +367,42 @@ impl VersionSpecifier {
         Ok(Self { operator, version })
     }
 
+    /// Remove all non-release parts of the version.
+    ///
+    /// The marker decision diagram relies on the assumption that the negation of a marker tree is
+    /// the complement of the marker space. However, pre-release versions violate this assumption.
+    ///
+    /// For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    /// does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
+    /// its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
+    /// match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
+    /// rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
+    ///
+    /// Note that `python_version` cannot take on pre-release values as it is truncated to just the
+    /// major and minor version segments. Thus using release-only specifiers is definitely necessary
+    /// for `python_version` to fully simplify any ranges, such as
+    /// `python_version > '3.9' or python_version <= '3.9'`, which is always `true` for
+    /// `python_version`. For `python_full_version` however, this decision is a semantic change.
+    ///
+    /// For Python versions, the major.minor is considered the API version, so unlike the rules
+    /// for package versions in PEP 440, we Python `3.9.0a0` is acceptable for `>= "3.9"`.
+    #[must_use]
+    pub fn only_release(self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_release(),
+        }
+    }
+
+    /// Remove all parts of the version beyond the minor segment of the release.
+    #[must_use]
+    pub fn only_minor_release(&self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_minor_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {
@@ -414,7 +471,7 @@ impl VersionSpecifier {
         &self.operator
     }
 
-    /// Get the version, e.g. `<=` in `<= 2.0.0`
+    /// Get the version, e.g. `2.0.0` in `<= 2.0.0`
     pub fn version(&self) -> &Version {
         &self.version
     }
@@ -434,52 +491,57 @@ impl VersionSpecifier {
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
-    ) -> impl Iterator<Item = VersionSpecifier> {
+    ) -> impl Iterator<Item = Self> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
-                (Some(VersionSpecifier::equals_version(v1.clone())), None)
+                (Some(Self::equals_version(v1.clone())), None)
             }
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
-            (Bound::Included(v1), Bound::Excluded(v2))
-                if v1.release().len() == 2
-                    && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-            {
-                (
-                    Some(VersionSpecifier::equals_star_version(v1.clone())),
-                    None,
-                )
+            (Bound::Included(v1), Bound::Excluded(v2)) => {
+                match *v1.only_release_trimmed().release() {
+                    [major] if *v2.only_release_trimmed().release() == [major, 1] => {
+                        let version = Version::new([major, 0]);
+                        (Some(Self::equals_star_version(version)), None)
+                    }
+                    [major, minor]
+                        if *v2.only_release_trimmed().release() == [major, minor + 1] =>
+                    {
+                        let version = Version::new([major, minor]);
+                        (Some(Self::equals_star_version(version)), None)
+                    }
+                    _ => (
+                        Self::from_lower_bound(&Bound::Included(v1.clone())),
+                        Self::from_upper_bound(&Bound::Excluded(v2.clone())),
+                    ),
+                }
             }
-            (lower, upper) => (
-                VersionSpecifier::from_lower_bound(lower),
-                VersionSpecifier::from_upper_bound(upper),
-            ),
+            (lower, upper) => (Self::from_lower_bound(lower), Self::from_upper_bound(upper)),
         };
 
         b1.into_iter().chain(b2)
     }
 
     /// Returns a version specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_lower_bound(bound: &Bound<Version>) -> Option<Self> {
         match bound {
-            Bound::Included(version) => Some(
-                VersionSpecifier::from_version(Operator::GreaterThanEqual, version.clone())
-                    .unwrap(),
-            ),
-            Bound::Excluded(version) => Some(
-                VersionSpecifier::from_version(Operator::GreaterThan, version.clone()).unwrap(),
-            ),
+            Bound::Included(version) => {
+                Some(Self::from_version(Operator::GreaterThanEqual, version.clone()).unwrap())
+            }
+            Bound::Excluded(version) => {
+                Some(Self::from_version(Operator::GreaterThan, version.clone()).unwrap())
+            }
             Bound::Unbounded => None,
         }
     }
 
     /// Returns a version specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_upper_bound(bound: &Bound<Version>) -> Option<Self> {
         match bound {
-            Bound::Included(version) => Some(
-                VersionSpecifier::from_version(Operator::LessThanEqual, version.clone()).unwrap(),
-            ),
+            Bound::Included(version) => {
+                Some(Self::from_version(Operator::LessThanEqual, version.clone()).unwrap())
+            }
             Bound::Excluded(version) => {
-                Some(VersionSpecifier::from_version(Operator::LessThan, version.clone()).unwrap())
+                Some(Self::from_version(Operator::LessThan, version.clone()).unwrap())
             }
             Bound::Unbounded => None,
         }
@@ -625,7 +687,15 @@ impl FromStr for VersionSpecifier {
         // operator but we don't know yet if it has a star
         let operator = s.eat_while(['=', '!', '~', '<', '>']);
         if operator.is_empty() {
-            return Err(ParseErrorKind::MissingOperator.into());
+            // Attempt to parse the version from the rest of the scanner to provide a more useful error message in MissingOperator.
+            // If it is not able to be parsed (i.e. not a valid version), it will just be None and no additional info will be added to the error message.
+            s.eat_while(|c: char| c.is_whitespace());
+            let version = s.eat_while(|c: char| !c.is_whitespace());
+            s.eat_while(|c: char| c.is_whitespace());
+            return Err(ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: VersionPattern::from_str(version).ok(),
+            })
+            .into());
         }
         let operator = Operator::from_str(operator).map_err(ParseErrorKind::InvalidOperator)?;
         s.eat_while(|c: char| c.is_whitespace());
@@ -693,6 +763,25 @@ impl std::fmt::Display for VersionSpecifierBuildError {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct VersionOperatorBuildError {
+    version_pattern: Option<VersionPattern>,
+}
+
+impl std::error::Error for VersionOperatorBuildError {}
+
+impl std::fmt::Display for VersionOperatorBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Unexpected end of version specifier, expected operator")?;
+        if let Some(version_pattern) = &self.version_pattern {
+            let version_specifier =
+                VersionSpecifier::from_pattern(Operator::Equal, version_pattern.clone()).unwrap();
+            write!(f, ". Did you mean `{version_specifier}`?")?;
+        }
+        Ok(())
+    }
+}
+
 /// The specific kind of error that can occur when building a version specifier
 /// from an operator and version pair.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -746,9 +835,7 @@ impl std::fmt::Display for VersionSpecifierParseError {
             ParseErrorKind::InvalidOperator(ref err) => err.fmt(f),
             ParseErrorKind::InvalidVersion(ref err) => err.fmt(f),
             ParseErrorKind::InvalidSpecifier(ref err) => err.fmt(f),
-            ParseErrorKind::MissingOperator => {
-                write!(f, "Unexpected end of version specifier, expected operator")
-            }
+            ParseErrorKind::MissingOperator(ref err) => err.fmt(f),
             ParseErrorKind::MissingVersion => {
                 write!(f, "Unexpected end of version specifier, expected version")
             }
@@ -766,7 +853,7 @@ enum ParseErrorKind {
     InvalidOperator(OperatorParseError),
     InvalidVersion(VersionPatternParseError),
     InvalidSpecifier(VersionSpecifierBuildError),
-    MissingOperator,
+    MissingOperator(VersionOperatorBuildError),
     MissingVersion,
     InvalidTrailing(String),
 }
@@ -811,6 +898,88 @@ pub(crate) fn parse_version_specifiers(
     Ok(version_ranges)
 }
 
+/// A simple `~=` version specifier with a major, minor and (optional) patch version, e.g., `~=3.13`
+/// or `~=3.13.0`.
+#[derive(Clone, Debug)]
+pub struct TildeVersionSpecifier<'a> {
+    inner: Cow<'a, VersionSpecifier>,
+}
+
+impl<'a> TildeVersionSpecifier<'a> {
+    /// Create a new [`TildeVersionSpecifier`] from a [`VersionSpecifier`] value.
+    ///
+    /// If a [`Operator::TildeEqual`] is not used, or the version includes more than minor and patch
+    /// segments, this will return [`None`].
+    pub fn from_specifier(specifier: VersionSpecifier) -> Option<Self> {
+        TildeVersionSpecifier::new(Cow::Owned(specifier))
+    }
+
+    /// Create a new [`TildeVersionSpecifier`] from a [`VersionSpecifier`] reference.
+    ///
+    /// See [`TildeVersionSpecifier::from_specifier`].
+    pub fn from_specifier_ref(specifier: &'a VersionSpecifier) -> Option<Self> {
+        TildeVersionSpecifier::new(Cow::Borrowed(specifier))
+    }
+
+    fn new(specifier: Cow<'a, VersionSpecifier>) -> Option<Self> {
+        if specifier.operator != Operator::TildeEqual {
+            return None;
+        }
+        if specifier.version().release().len() < 2 || specifier.version().release().len() > 3 {
+            return None;
+        }
+        if specifier.version().any_prerelease()
+            || specifier.version().is_local()
+            || specifier.version().is_post()
+        {
+            return None;
+        }
+        Some(Self { inner: specifier })
+    }
+
+    /// Whether a patch version is present in this tilde version specifier.
+    pub fn has_patch(&self) -> bool {
+        self.inner.version.release().len() == 3
+    }
+
+    /// Construct the lower and upper bounding version specifiers for this tilde version specifier,
+    /// e.g., for `~=3.13` this would return `>=3.13` and `<4` and for `~=3.13.0` it would
+    /// return `>=3.13.0` and `<3.14`.
+    pub fn bounding_specifiers(&self) -> (VersionSpecifier, VersionSpecifier) {
+        let release = self.inner.version().release();
+        let lower = self.inner.version.clone();
+        let upper = if self.has_patch() {
+            Version::new([release[0], release[1] + 1])
+        } else {
+            Version::new([release[0] + 1])
+        };
+        (
+            VersionSpecifier::greater_than_equal_version(lower),
+            VersionSpecifier::less_than_version(upper),
+        )
+    }
+
+    /// Construct a new tilde `VersionSpecifier` with the given patch version appended.
+    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier<'_> {
+        let mut release = self.inner.version.release().to_vec();
+        if self.has_patch() {
+            release.pop();
+        }
+        release.push(patch);
+        TildeVersionSpecifier::from_specifier(
+            VersionSpecifier::from_version(Operator::TildeEqual, Version::new(release))
+                .expect("We should always derive a valid new version specifier"),
+        )
+        .expect("We should always derive a new tilde version specifier")
+    }
+}
+
+impl std::fmt::Display for TildeVersionSpecifier<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{cmp::Ordering, str::FromStr};
@@ -826,15 +995,21 @@ mod tests {
     fn test_equal() {
         let version = Version::from_str("1.1.post1").unwrap();
 
-        assert!(!VersionSpecifier::from_str("== 1.1")
-            .unwrap()
-            .contains(&version));
-        assert!(VersionSpecifier::from_str("== 1.1.post1")
-            .unwrap()
-            .contains(&version));
-        assert!(VersionSpecifier::from_str("== 1.1.*")
-            .unwrap()
-            .contains(&version));
+        assert!(
+            !VersionSpecifier::from_str("== 1.1")
+                .unwrap()
+                .contains(&version)
+        );
+        assert!(
+            VersionSpecifier::from_str("== 1.1.post1")
+                .unwrap()
+                .contains(&version)
+        );
+        assert!(
+            VersionSpecifier::from_str("== 1.1.*")
+                .unwrap()
+                .contains(&version)
+        );
     }
 
     const VERSIONS_ALL: &[&str] = &[
@@ -1085,12 +1260,16 @@ mod tests {
 
     #[test]
     fn test_arbitrary_equality() {
-        assert!(VersionSpecifier::from_str("=== 1.2a1")
-            .unwrap()
-            .contains(&Version::from_str("1.2a1").unwrap()));
-        assert!(!VersionSpecifier::from_str("=== 1.2a1")
-            .unwrap()
-            .contains(&Version::from_str("1.2a1+local").unwrap()));
+        assert!(
+            VersionSpecifier::from_str("=== 1.2a1")
+                .unwrap()
+                .contains(&Version::from_str("1.2a1").unwrap())
+        );
+        assert!(
+            !VersionSpecifier::from_str("=== 1.2a1")
+                .unwrap()
+                .contains(&Version::from_str("1.2a1+local").unwrap())
+        );
     }
 
     #[test]
@@ -1345,6 +1524,32 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_specifier_missing_operator_error() {
+        let result = VersionSpecifiers::from_str("3.12");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            indoc! {"
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+            3.12
+            ^^^^
+            "}
+        );
+    }
+
+    #[test]
+    fn test_parse_specifier_missing_operator_invalid_version_error() {
+        let result = VersionSpecifiers::from_str("blergh");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            indoc! {r"
+            Failed to parse version: Unexpected end of version specifier, expected operator:
+            blergh
+            ^^^^^^
+            "}
+        );
+    }
+
+    #[test]
     fn test_non_star_after_star() {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
@@ -1374,7 +1579,10 @@ mod tests {
         let result = VersionSpecifiers::from_str("blergh");
         assert_eq!(
             result.unwrap_err().inner.err,
-            ParseErrorKind::MissingOperator.into(),
+            ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: None
+            })
+            .into(),
         );
     }
 
@@ -1383,7 +1591,13 @@ mod tests {
     fn test_invalid_specifier() {
         let specifiers = [
             // Operator-less specifier
-            ("2.0", ParseErrorKind::MissingOperator.into()),
+            (
+                "2.0",
+                ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                    version_pattern: VersionPattern::from_str("2.0").ok(),
+                })
+                .into(),
+            ),
             // Invalid operator
             (
                 "=>2.0",
@@ -1723,7 +1937,9 @@ mod tests {
     fn error_message_version_specifiers_parse_error() {
         let specs = ">=1.2.3, 5.4.3, >=3.4.5";
         let err = VersionSpecifierParseError {
-            kind: Box::new(ParseErrorKind::MissingOperator),
+            kind: Box::new(ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: VersionPattern::from_str("5.4.3").ok(),
+            })),
         };
         let inner = Box::new(VersionSpecifiersParseErrorInner {
             err,
@@ -1736,7 +1952,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "\
-Failed to parse version: Unexpected end of version specifier, expected operator:
+Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==5.4.3`?:
 >=1.2.3, 5.4.3, >=3.4.5
         ^^^^^^
 "

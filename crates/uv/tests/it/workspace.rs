@@ -10,7 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
+use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
@@ -24,6 +24,7 @@ fn workspaces_dir() -> PathBuf {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -67,6 +68,7 @@ fn test_albatross_in_examples_bird_feeder() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -107,6 +109,7 @@ fn test_albatross_in_examples() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -147,6 +150,7 @@ fn test_albatross_just_project() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -222,6 +226,7 @@ fn test_albatross_project_in_excluded() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -265,6 +270,7 @@ fn test_albatross_root_workspace() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -310,6 +316,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -355,6 +362,7 @@ fn test_albatross_root_workspace_albatross() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -402,6 +410,7 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -471,6 +480,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 /// Check that `uv run` works from a virtual workspace root, which should sync all packages in the
 /// workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -511,6 +521,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -573,6 +584,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -694,6 +706,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
 /// Check that the resolution is the same no matter where in the workspace we are.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_root_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-root-workspace",
@@ -705,6 +718,7 @@ fn workspace_lock_idempotence_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are, and that locking
 /// works even if there is no root project.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-virtual-workspace",
@@ -1212,7 +1226,7 @@ fn workspace_inherit_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -1337,7 +1351,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1345,9 +1359,9 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=1.0.0b0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+      ╰─▶ Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1628,17 +1642,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
           And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1913,6 +1928,166 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
         toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
 
     assert_eq!(lock1, lock2, "sources changed");
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_leading_dot_slash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace with leading `./` in member paths
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["./packages/foo", "./packages/bar"]
+    "#})?;
+
+    // Create package foo that depends on bar
+    let deps = indoc! {r#"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("foo"), "foo", deps)?;
+
+    // Create package bar
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("packages").join("bar"), "bar", deps)?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "bar": {
+        "editable": "packages/bar"
+      },
+      "foo": {
+        "editable": "packages/foo"
+      }
+    }
+    "###);
+
+    // Test syncing from within foo works correctly
+    uv_snapshot!(context.filters(), context.sync().current_dir(workspace.join("packages").join("foo")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/workspace/packages/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/workspace/packages/foo)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_parent_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build a workspace with a member outside its directory using `../`
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+    "#})?;
+
+    // Create an external package
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(
+        &context.temp_dir.join("external-package"),
+        "external-package",
+        deps,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "external-package": {
+        "editable": "../external-package"
+      }
+    }
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_complex_relative_paths() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build a workspace with complex relative path normalization
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["./subdir/../../sibling-package"]
+    "#})?;
+
+    // Create a sibling package
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(
+        &context.temp_dir.join("sibling-package"),
+        "sibling-package",
+        deps,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "sibling-package": {
+        "editable": "../sibling-package"
+      }
+    }
+    "###);
 
     Ok(())
 }

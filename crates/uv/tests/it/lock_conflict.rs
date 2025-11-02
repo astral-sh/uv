@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
 //
@@ -91,7 +91,7 @@ fn extra_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -285,7 +285,7 @@ fn extra_basic_three_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -546,16 +546,16 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         project4 = ["sortedcontainers==2.4.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
           And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // One could try to declare all pairs of conflicting extras as
     // conflicting, but this doesn't quite work either. For example,
@@ -703,16 +703,16 @@ fn extra_multiple_independent() -> Result<()> {
         project4 = ["anyio==4.2.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -760,7 +760,7 @@ fn extra_multiple_independent() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -910,7 +910,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -1049,23 +1049,24 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
+
     // This should error since we're enabling two conflicting extras.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `proxy1[extra1]` and `proxy1[extra2]` enabled simultaneously
-    "###);
+    ");
 
     root_pyproject_toml.write_str(
         r#"
@@ -1084,28 +1085,29 @@ fn extra_unconditional() -> Result<()> {
         proxy1 = { workspace = true }
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     // And same thing for the other extra.
     root_pyproject_toml.write_str(
@@ -1125,17 +1127,17 @@ fn extra_unconditional() -> Result<()> {
         proxy1 = { workspace = true }
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1146,7 +1148,7 @@ fn extra_unconditional() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==4.1.0
      + anyio==4.2.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1201,32 +1203,33 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // This *should* install `anyio==4.1.0`, but when this
     // test was initially written, it didn't. This was because
     // `uv sync` wasn't correctly propagating extras in a way
     // that would satisfy the conflict markers that got added
     // to the `proxy1[extra1]` dependency.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -1301,16 +1304,17 @@ fn extra_unconditional_in_optional() -> Result<()> {
     "###);
 
     // This should install `sortedcontainers==2.3.0`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sortedcontainers==2.3.0
-    "###);
+    ");
 
     // This should install `sortedcontainers==2.4.0`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x2"), @r###"
@@ -1422,26 +1426,26 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
     // that can never be installed! Namely, because two different
     // conflicting extras are enabled unconditionally in all
     // configurations.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // This should fail. If it doesn't and we generated a lock
     // file above, then this will likely result in the installation
     // of two different versions of the same package.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `c[x1]` and `c[x2]` enabled simultaneously
-    "###);
+    ");
 
     Ok(())
 }
@@ -1547,20 +1551,20 @@ fn extra_nested_across_workspace() -> Result<()> {
     // `dummy[extra1]` conflicts with `dummysub[extra2]` and that
     // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2]):
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
           Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
           And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Now let's write out the full set of conflicts, taking
     // advantage of the optional `package` key.
@@ -1649,6 +1653,249 @@ fn extra_nested_across_workspace() -> Result<()> {
     Ok(())
 }
 
+/// The project declares conflicting extras, but one of the extras directly depends on the other.
+#[test]
+fn extra_depends_on_conflicting_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["sortedcontainers==2.3.0", "example[bar]"]
+        bar = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // This should fail to resolve, because the extras are always required together and
+    // `example[foo]` is unusable.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar]):
+      ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
+          And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// Like [`extra_depends_on_conflicting_extra`], but the conflict between the extras is mediated by
+/// another package.
+#[test]
+fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["sortedcontainers==2.3.0", "indirection"]
+        bar = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        indirection = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["indirection"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // Create the indirection subproject
+    let subproject_dir = context.temp_dir.child("indirection");
+    subproject_dir.create_dir_all()?;
+
+    let sub_pyproject_toml = subproject_dir.child("pyproject.toml");
+    sub_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "indirection"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example[bar]"]
+
+        [tool.uv.sources]
+        example = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // This succeeds, but probably shouldn't. There's an unconditional conflict in `example[foo]
+    // -> indirection[bar] -> example[bar]`, which means `example[foo]` can never be used.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "example", extra = "bar" },
+            { package = "example", extra = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "example",
+            "indirection",
+        ]
+
+        [[package]]
+        name = "example"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        bar = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        foo = [
+            { name = "indirection" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "indirection", marker = "extra == 'foo'", editable = "indirection" },
+            { name = "sortedcontainers", marker = "extra == 'bar'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'foo'", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["foo", "bar"]
+
+        [[package]]
+        name = "indirection"
+        version = "0.1.0"
+        source = { editable = "indirection" }
+        dependencies = [
+            { name = "example" },
+            { name = "example", extra = ["bar"], marker = "extra == 'extra-7-example-bar'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "example", extras = ["bar"], editable = "." }]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+        "#
+        );
+    });
+
+    // Install from the lockfile
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Install with `foo`
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extras `example[bar]` and `example[foo]` enabled simultaneously
+    ");
+
+    // Install the child package
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("indirection"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + indirection==0.1.0 (from file://[TEMP_DIR]/indirection)
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
 /// This tests a "basic" case for specifying conflicting groups.
 #[test]
 fn group_basic() -> Result<()> {
@@ -1708,14 +1955,14 @@ fn group_basic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1725,7 +1972,7 @@ fn group_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -1825,7 +2072,7 @@ fn group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     Ok(())
@@ -1863,14 +2110,14 @@ fn group_default() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1880,7 +2127,7 @@ fn group_default() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -1970,7 +2217,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` (enabled by default) and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` (enabled by default) and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
@@ -1981,7 +2228,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
@@ -1992,7 +2239,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
+    error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // Disabling the default group should succeed.
@@ -2092,7 +2339,7 @@ fn mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -2262,7 +2509,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -2395,14 +2642,14 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2412,7 +2659,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "cu118" },
@@ -2561,7 +2808,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -2730,7 +2977,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -2878,7 +3125,7 @@ fn non_optional_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2888,7 +3135,7 @@ fn non_optional_dependency_extra() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2925,7 +3172,7 @@ fn non_optional_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2935,7 +3182,7 @@ fn non_optional_dependency_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2975,7 +3222,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2985,7 +3232,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -3056,7 +3303,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -3175,7 +3422,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
     )?;
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
-    uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--group=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--group=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3187,7 +3434,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
      + anyio==4.3.0
      + idna==3.5
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3196,7 +3443,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -3337,7 +3584,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3482,7 +3729,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -3602,7 +3849,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
     )?;
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
-    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3614,7 +3861,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3623,7 +3870,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -3769,7 +4016,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3892,7 +4139,7 @@ fn shared_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3904,7 +4151,7 @@ fn shared_dependency_extra() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3913,7 +4160,7 @@ fn shared_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -3993,7 +4240,7 @@ fn shared_dependency_extra() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4005,9 +4252,9 @@ fn shared_dependency_extra() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==3.5
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4018,9 +4265,9 @@ fn shared_dependency_extra() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.5
      + idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4028,7 +4275,7 @@ fn shared_dependency_extra() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4067,7 +4314,7 @@ fn shared_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4079,7 +4326,7 @@ fn shared_dependency_group() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4088,7 +4335,7 @@ fn shared_dependency_group() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4243,7 +4490,7 @@ fn shared_dependency_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4255,7 +4502,7 @@ fn shared_dependency_mixed() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4264,7 +4511,7 @@ fn shared_dependency_mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4348,7 +4595,7 @@ fn shared_dependency_mixed() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4360,9 +4607,9 @@ fn shared_dependency_mixed() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==3.5
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4373,9 +4620,9 @@ fn shared_dependency_mixed() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.5
      + idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4383,7 +4630,7 @@ fn shared_dependency_mixed() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4460,19 +4707,20 @@ conflicts = [
     error: Extra `x2` is not defined in the project's `optional-dependencies` table
     "###);
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4481,7 +4729,7 @@ conflicts = [
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "x1" },
@@ -4558,14 +4806,14 @@ conflicts = [
         requires-dist = [
             { name = "anyio", specifier = ">=4" },
             { name = "idna", marker = "extra == 'x1'", specifier = "==3.6" },
-            { name = "proxy1", virtual = "proxy1" },
+            { name = "proxy1", editable = "proxy1" },
         ]
         provides-extras = ["x1"]
 
         [[package]]
         name = "proxy1"
         version = "0.1.0"
-        source = { virtual = "proxy1" }
+        source = { editable = "proxy1" }
 
         [package.optional-dependencies]
         x2 = [
@@ -4667,7 +4915,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -4829,7 +5077,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -4990,7 +5238,7 @@ fn collision_extra() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "bar" },
@@ -5219,7 +5467,7 @@ fn extra_inferences() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "x1" },
@@ -5757,7 +6005,7 @@ fn extra_inferences() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
         wheels = [
@@ -5778,7 +6026,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.8.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/75/32/cdfba08674d72fe7895a8ec7be8f171e8502274999cae9497e4545404873/colorlog-4.8.0.tar.gz", hash = "sha256:59b53160c60902c405cdec28d38356e09d40686659048893e026ecbd589516b1", size = 28770, upload-time = "2021-03-22T11:26:32.319Z" }
         wheels = [
@@ -5852,7 +6100,7 @@ fn extra_inferences() -> Result<()> {
         version = "42.0.5"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+            { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/13/9e/a55763a32d340d7b06d045753c186b690e7d88780cafce5f88cb931536be/cryptography-42.0.5.tar.gz", hash = "sha256:6fe07eec95dfd477eb9530aef5bead34fec819b3aaf6c5bd6d20565da607bfe1", size = 671025, upload-time = "2024-02-24T01:17:48.141Z" }
         wheels = [
@@ -6556,7 +6804,7 @@ fn extra_inferences() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "python-dateutil" },
-            { name = "time-machine", marker = "implementation_name != 'pypy'" },
+            { name = "time-machine", marker = "implementation_name != 'pypy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
             { name = "tzdata" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/fe/27c7438c6ac8b8f8bef3c6e571855602ee784b85d072efddfff0ceb1cd77/pendulum-3.0.0.tar.gz", hash = "sha256:5d034998dea404ec31fae27af6b22cff1708f830a1ed7353be4d1019bb9f584e", size = 84524, upload-time = "2023-12-16T21:27:19.742Z" }
@@ -6941,7 +7189,7 @@ fn extra_inferences() -> Result<()> {
         version = "1.4.52"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
+            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8a/a4/b5991829c34af0505e0f2b1ccf9588d1ba90f2d984ee208c90c985f1265a/SQLAlchemy-1.4.52.tar.gz", hash = "sha256:80e63bbdc5217dad3485059bdf6f65a7d43f33c8bde619df5c220edf03d87296", size = 8514200, upload-time = "2024-03-04T13:29:44.258Z" }
         wheels = [
@@ -7255,7 +7503,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'linux' and extra != 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2'",
@@ -7409,7 +7657,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
@@ -7705,11 +7953,11 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 
         [[package]]
         name = "configargparse"
-        version = "1.7"
+        version = "1.5.3"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/70/8a/73f1008adfad01cb923255b924b1528727b8270e67cb4ef41eabdc7d783e/ConfigArgParse-1.7.tar.gz", hash = "sha256:e7067471884de5478c58a511e529f0f9bd1c66bfef1dea90935438d6c23306d1", size = 43817, upload-time = "2023-07-23T16:20:04.95Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/05/385451bc8d20a3aa1d8934b32bd65847c100849ebba397dbf6c74566b237/ConfigArgParse-1.5.3.tar.gz", hash = "sha256:1b0b3cbf664ab59dada57123c81eff3d9737e0d11d8cf79e3d6eb10823f1739f", size = 39175, upload-time = "2021-10-03T00:17:24.663Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/6f/b3/b4ac838711fd74a2b4e6f746703cf9dd2cf5462d17dac07e349234e21b97/ConfigArgParse-1.7-py3-none-any.whl", hash = "sha256:d249da6591465c6c26df64a9f73d2536e743be2f244eb3ebe61114af2f94f86b", size = 25489, upload-time = "2023-07-23T16:20:03.27Z" },
+            { url = "https://files.pythonhosted.org/packages/af/cb/2a6620656f029b7b49c302853b433fac2c8eda9cbb5a3bc70b186b1b5b90/ConfigArgParse-1.5.3-py3-none-any.whl", hash = "sha256:18f6535a2db9f6e02bd5626cc7455eac3e96b9ab3d969d366f9aafd5c5c00fe7", size = 20505, upload-time = "2021-10-03T00:17:22.974Z" },
         ]
 
         [[package]]
@@ -9917,7 +10165,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         version = "4.67.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
         wheels = [
@@ -10184,7 +10432,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
@@ -10263,7 +10511,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "aiohappyeyeballs" },
             { name = "aiosignal" },
-            { name = "async-timeout", marker = "python_full_version < '3.11'" },
+            { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "attrs" },
             { name = "frozenlist" },
             { name = "multidict" },
@@ -10549,11 +10797,11 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
 
         [[package]]
         name = "configargparse"
-        version = "1.7"
+        version = "1.5.3"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/70/8a/73f1008adfad01cb923255b924b1528727b8270e67cb4ef41eabdc7d783e/ConfigArgParse-1.7.tar.gz", hash = "sha256:e7067471884de5478c58a511e529f0f9bd1c66bfef1dea90935438d6c23306d1", size = 43817, upload-time = "2023-07-23T16:20:04.95Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/05/385451bc8d20a3aa1d8934b32bd65847c100849ebba397dbf6c74566b237/ConfigArgParse-1.5.3.tar.gz", hash = "sha256:1b0b3cbf664ab59dada57123c81eff3d9737e0d11d8cf79e3d6eb10823f1739f", size = 39175, upload-time = "2021-10-03T00:17:24.663Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/6f/b3/b4ac838711fd74a2b4e6f746703cf9dd2cf5462d17dac07e349234e21b97/ConfigArgParse-1.7-py3-none-any.whl", hash = "sha256:d249da6591465c6c26df64a9f73d2536e743be2f244eb3ebe61114af2f94f86b", size = 25489, upload-time = "2023-07-23T16:20:03.27Z" },
+            { url = "https://files.pythonhosted.org/packages/af/cb/2a6620656f029b7b49c302853b433fac2c8eda9cbb5a3bc70b186b1b5b90/ConfigArgParse-1.5.3-py3-none-any.whl", hash = "sha256:18f6535a2db9f6e02bd5626cc7455eac3e96b9ab3d969d366f9aafd5c5c00fe7", size = 20505, upload-time = "2021-10-03T00:17:22.974Z" },
         ]
 
         [[package]]
@@ -11373,7 +11621,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "6.1.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d6/be/504b89a5e9ca731cd47487e91c469064f8ae5af93b7259758dcfc2b9c848/multidict-6.1.0.tar.gz", hash = "sha256:22ae2ebf9b0c69d206c003e2f6a914ea33f0a932d4aa16f236afc049d9958f4a", size = 64002, upload-time = "2024-09-09T23:49:38.163Z" }
         wheels = [
@@ -13150,7 +13398,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "4.67.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
         wheels = [
@@ -13406,13 +13654,13 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
-            "platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
-            "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118')",
+            "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
@@ -13436,9 +13684,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
@@ -13885,15 +14133,15 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "2.2.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "fsspec", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "jinja2", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "networkx", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "sympy", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "typing-extensions", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "filelock", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "fsspec", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "jinja2", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "networkx", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "sympy", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "typing-extensions", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.2.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3a2c075218081ef9c7bf8c55c706f236daebb753da41de498aca7163257380bd", upload-time = "2025-01-29T22:50:59.083Z" },
@@ -13911,10 +14159,10 @@ fn overlapping_resolution_markers() -> Result<()> {
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
         ]
         dependencies = [
-            { name = "filelock" },
-            { name = "fsspec" },
-            { name = "jinja2" },
-            { name = "networkx" },
+            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
@@ -13926,9 +14174,9 @@ fn overlapping_resolution_markers() -> Result<()> {
             { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "sympy" },
+            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "typing-extensions" },
+            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/33/b3/1fcc3bccfddadfd6845dcbfe26eb4b099f1dfea5aa0e5cfb92b3c98dba5b/torch-2.2.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:bc889d311a855dd2dfd164daf8cc903a6b7273a747189cebafdd89106e4ad585", size = 755526581, upload-time = "2024-03-27T21:06:46.5Z" },
@@ -13943,16 +14191,16 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "2.2.2+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "platform_machine != 'aarch64' and sys_platform == 'linux'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "fsspec", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "jinja2", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "networkx", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "sympy", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "filelock", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "fsspec", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "jinja2", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "networkx", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "sympy", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp310-cp310-linux_x86_64.whl", hash = "sha256:02c4fac3c964e73f5f49003e0060c697f73b67c10cc23f51c592facb29e1bd53", upload-time = "2025-01-29T22:50:59.083Z" },
@@ -14089,7 +14337,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -14504,7 +14752,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -14892,6 +15140,163 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Check that simplification of conflict markers does not apply with not all paths activate the
+/// marker unconditionally.
+///
+/// For example, when `a` and `b` conflict, this marker does not simplify:
+/// ```text
+/// (platform_machine == 'x86_64' and extra == 'extra-5-foo-b') or extra == 'extra-5-foo-a'
+/// ````
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/14805>
+#[test]
+fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-02-06T00:00Z");
+
+    let pyproject = r#"
+        [project]
+        name = "debug"
+        version = "0.0.1"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        a = [
+          "python-dateutil==2.8.0",
+        ]
+        b = [
+          "python-dateutil==2.8.1; platform_machine != 'inapplicable'",
+          "python-dateutil==2.8.0; platform_machine == 'inapplicable'",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "a" },
+            { extra = "b" },
+          ],
+        ]
+    "#;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = "==3.12.*"
+        resolution-markers = [
+            "platform_machine != 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "platform_machine == 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "extra == 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+            "extra != 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+        ]
+        conflicts = [[
+            { package = "debug", extra = "a" },
+            { package = "debug", extra = "b" },
+        ]]
+
+        [options]
+        exclude-newer = "2025-02-06T00:00:00Z"
+
+        [[package]]
+        name = "debug"
+        version = "0.0.1"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        a = [
+            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        b = [
+            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+            { name = "python-dateutil", version = "2.8.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "python-dateutil", marker = "platform_machine == 'inapplicable' and extra == 'b'", specifier = "==2.8.0" },
+            { name = "python-dateutil", marker = "platform_machine != 'inapplicable' and extra == 'b'", specifier = "==2.8.1" },
+            { name = "python-dateutil", marker = "extra == 'a'", specifier = "==2.8.0" },
+        ]
+        provides-extras = ["a", "b"]
+
+        [[package]]
+        name = "python-dateutil"
+        version = "2.8.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine == 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "extra == 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+        ]
+        dependencies = [
+            { name = "six", marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or extra == 'extra-5-debug-a'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ad/99/5b2e99737edeb28c71bcbec5b5dda19d0d9ef3ca3e92e3e925e7c0bb364c/python-dateutil-2.8.0.tar.gz", hash = "sha256:c89805f6f4d64db21ed966fda138f8a5ed7a4fdbc1a8ee329ce1b74e3c74da9e", size = 327134, upload-time = "2019-02-05T14:12:37.493Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/41/17/c62faccbfbd163c7f57f3844689e3a78bae1f403648a6afb1d0866d87fbb/python_dateutil-2.8.0-py2.py3-none-any.whl", hash = "sha256:7e6584c74aeed623791615e26efd690f29817a27c73085b78e4bad02493df2fb", size = 226803, upload-time = "2019-02-05T14:12:35.322Z" },
+        ]
+
+        [[package]]
+        name = "python-dateutil"
+        version = "2.8.1"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine != 'inapplicable'",
+        ]
+        dependencies = [
+            { name = "six", marker = "platform_machine != 'inapplicable'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/be/ed/5bbc91f03fa4c839c4c7360375da77f9659af5f7086b7a7bdda65771c8e0/python-dateutil-2.8.1.tar.gz", hash = "sha256:73ebfe9dbf22e832286dafa60473e4cd239f8592f699aa5adaf10050e6e1823c", size = 331745, upload-time = "2019-11-03T05:42:03.923Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d4/70/d60450c3dd48ef87586924207ae8907090de0b306af2bce5d134d78615cb/python_dateutil-2.8.1-py2.py3-none-any.whl", hash = "sha256:75bb3f31ea686f1197762692a9ee6a7550b59fc6ca3a1f4b5d7e32fb98e2da2a", size = 227183, upload-time = "2019-11-03T05:42:01.643Z" },
+        ]
+
+        [[package]]
+        name = "six"
+        version = "1.17.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+        ]
+        "#
+        );
+    });
+
+    // The incorrect behavior was that only python-dateutil was installed and six was missing.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("a").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    Resolved 4 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 2 packages
+    Would install 2 packages
+     + python-dateutil==2.8.0
+     + six==1.17.0
+    ");
 
     Ok(())
 }

@@ -2,33 +2,44 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_dirs::user_uv_config_dir;
+use uv_client::BaseClientBuilder;
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
+    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{project::find_requires_python, ExitStatus};
+use crate::commands::{
+    ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
+};
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pin(
     project_dir: &Path,
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
     no_project: bool,
     global: bool,
+    rm: bool,
+    install_mirrors: PythonInstallMirrors,
+    client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
@@ -45,16 +56,39 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = if global {
-        if let Some(path) = user_uv_config_dir() {
-            PythonVersionFile::discover_user_config(path, &VersionFileDiscoveryOptions::default())
-                .await
-        } else {
-            Ok(None)
+    // Search for an existing file, we won't necessarily write to this, we'll construct a target
+    // path if there's a request later on.
+    let version_file = PythonVersionFile::discover(
+        project_dir,
+        &VersionFileDiscoveryOptions::default().with_no_local(global),
+    )
+    .await;
+
+    if rm {
+        let Some(file) = version_file? else {
+            if global {
+                bail!("No global Python pin found");
+            }
+            bail!("No Python version file found");
+        };
+
+        if !global && file.is_global() {
+            bail!("No Python version file found; use `--rm --global` to remove the global pin");
         }
-    } else {
-        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await
-    };
+
+        fs_err::tokio::remove_file(file.path()).await?;
+        writeln!(
+            printer.stdout(),
+            "Removed {} at `{}`",
+            if global {
+                "global Python pin"
+            } else {
+                "Python version file"
+            },
+            file.path().user_display()
+        )?;
+        return Ok(ExitStatus::Success);
+    }
 
     let Some(request) = request else {
         // Display the current pinned Python version
@@ -67,12 +101,13 @@ pub(crate) async fn pin(
                         virtual_project,
                         python_preference,
                         cache,
+                        preview,
                     );
                 }
             }
             return Ok(ExitStatus::Success);
         }
-        bail!("No pinned Python version found")
+        bail!("No Python version file found; specify a version to create one")
     };
     let request = PythonRequest::parse(&request);
 
@@ -80,18 +115,36 @@ pub(crate) async fn pin(
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
-    let python = match PythonInstallation::find(
-        &request,
+    let reporter = PythonDownloadReporter::single(printer);
+
+    let python = match PythonInstallation::find_or_download(
+        Some(&request),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_downloads,
+        &client_builder,
         cache,
-    ) {
+        Some(&reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
+    )
+    .await
+    {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
-        Err(uv_python::Error::MissingPython(err)) if !resolved => {
+        Err(uv_python::Error::MissingPython(err, ..)) if !resolved => {
+            // N.B. We omit the hint and just show the inner error message
             warn_user_once!("{err}");
             None
         }
+        // If there was some other error, log it
+        Err(err) if !resolved => {
+            debug!("{err}");
+            None
+        }
+        // If `resolved` was requested, we must find an interpreter — fail otherwise
         Err(err) => return Err(err.into()),
     };
 
@@ -145,12 +198,11 @@ pub(crate) async fn pin(
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
     let new = if global {
-        let Some(config_dir) = user_uv_config_dir() else {
-            return Err(anyhow::anyhow!("No user-level config directory found."));
+        let Some(new) = PythonVersionFile::global() else {
+            // TODO(zanieb): We should find a nice way to surface that as an error
+            bail!("Failed to determine directory for global Python pin");
         };
-        fs_err::tokio::create_dir_all(&config_dir).await?;
-        PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
-            .with_versions(vec![request])
+        new.with_versions(vec![request])
     } else {
         PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
             .with_versions(vec![request])
@@ -186,8 +238,9 @@ pub(crate) async fn pin(
 
 fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
     let version_request = match request {
-        PythonRequest::Version(ref version)
-        | PythonRequest::ImplementationVersion(_, ref version) => version,
+        PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version) => {
+            version
+        }
         PythonRequest::Key(download_request) => download_request.version()?,
         _ => {
             return None;
@@ -212,6 +265,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
     cache: &Cache,
+    preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
@@ -236,6 +290,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();
@@ -275,6 +330,9 @@ struct Pin<'a> {
 
 /// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
 fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProject) -> Result<()> {
+    // Don't factor in requires-python settings on dependency-groups
+    let groups = DependencyGroupsWithDefaults::none();
+
     let (requires_python, project_type) = match virtual_project {
         VirtualProject::Project(project_workspace) => {
             debug!(
@@ -282,7 +340,8 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 project_workspace.project_name(),
                 project_workspace.workspace().install_path().display()
             );
-            let requires_python = find_requires_python(project_workspace.workspace())?;
+
+            let requires_python = find_requires_python(project_workspace.workspace(), &groups)?;
             (requires_python, "project")
         }
         VirtualProject::NonProject(workspace) => {
@@ -290,7 +349,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 "Discovered virtual workspace at: {}",
                 workspace.install_path().display()
             );
-            let requires_python = find_requires_python(workspace)?;
+            let requires_python = find_requires_python(workspace, &groups)?;
             (requires_python, "workspace")
         }
     };

@@ -3,13 +3,13 @@ use std::cmp::max;
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Command, CommandFactory};
 use itertools::Itertools;
 use pretty_assertions::StrComparison;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 use uv_cli::Cli;
 
@@ -24,7 +24,7 @@ const REPLACEMENTS: &[(&str, &str)] = &[
     // TODO(zanieb): In general, we should show all of the environment variables in the reference
     // but this one is non-standard so it's the only one included right now. When we tackle the rest
     // we can fix the formatting.
-    (" [env: &quot;UV<em>PYTHON</em>DOWNLOADS=never&quot;]", ""),
+    (" [env: &quot;UV_PYTHON_DOWNLOADS=never&quot;]", ""),
 ];
 
 const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
@@ -53,7 +53,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -351,10 +353,15 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_cli_reference() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {

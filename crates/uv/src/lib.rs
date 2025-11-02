@@ -1,39 +1,46 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
+#[cfg(feature = "self-update")]
+use std::ops::Bound;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{bail, Context, Result};
+use anyhow::{Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
+    AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, VersionArgs,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
+use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
-use uv_fs::{Simplified, CWD};
+use uv_flags::EnvironmentFlags;
+use uv_fs::{CWD, Simplified};
+#[cfg(feature = "self-update")]
+use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
-use uv_requirements::RequirementsSource;
+use uv_python::PythonRequest;
+use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
-use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
+use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -46,10 +53,13 @@ use crate::settings::{
     PublishSettings,
 };
 
+pub(crate) mod child;
 pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
+#[cfg(windows)]
+mod windows_exception;
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -75,6 +85,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
         match &*cli.command {
@@ -88,19 +101,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
                 false
             }
 
             // Preview APIs. Ignore `--isolated` and warn.
             Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 false
             }
 
             // Non-preview APIs. Continue to support `--isolated`, but warn.
             _ => {
-                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 true
             }
         }
@@ -120,7 +139,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -152,16 +173,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            let settings = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+            let settings = GlobalSettings::resolve(
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
+            let client_builder = BaseClientBuilder::new(
+                settings.network_settings.connectivity,
+                settings.network_settings.native_tls,
+                settings.network_settings.allow_insecure_host,
+                settings.preview,
+                settings.network_settings.timeout,
+                settings.network_settings.retries,
+            );
             Some(
-                RunCommand::from_args(
-                    command,
-                    settings.network_settings,
-                    *module,
-                    *script,
-                    *gui_script,
-                )
-                .await?,
+                RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
+                    .await?,
             )
         } else {
             None
@@ -288,26 +315,64 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .combine(filesystem);
 
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(
+        &cli.top_level.global_args,
+        filesystem.as_ref(),
+        &environment,
+    );
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Set the global flags.
+    uv_flags::init(EnvironmentFlags::from(&environment))
+        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
+            #[cfg(feature = "self-update")]
+            let hint = {
+                // If the required version range includes a lower bound that's higher than
+                // the current version, suggest `uv self update`.
+                let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
+
+                if let Some(singleton) = ranges.as_singleton() {
+                    // E.g., `==1.0.0`
+                    format!(
+                        ". Update `uv` by running `{}`.",
+                        format!("uv self update {singleton}").green()
+                    )
+                } else if ranges
+                    .bounding_range()
+                    .iter()
+                    .any(|(lowest, _highest)| match lowest {
+                        Bound::Included(version) => **version > package_version,
+                        Bound::Excluded(version) => **version > package_version,
+                        Bound::Unbounded => false,
+                    })
+                {
+                    // E.g., `>=1.0.0`
+                    format!(". Update `uv` by running `{}`.", "uv self update".cyan())
+                } else {
+                    String::new()
+                }
+            };
+            #[cfg(not(feature = "self-update"))]
+            let hint = "";
             return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
             ));
         }
     }
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration()?;
+    let (durations_layer, _duration_guard) =
+        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
     #[cfg(not(feature = "tracing-durations-export"))]
-    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
         match globals.verbose {
             0 => logging::Level::Off,
@@ -315,8 +380,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2 => logging::Level::TraceUv,
             3.. => logging::Level::TraceAll,
         },
-        duration_layer,
+        durations_layer,
         globals.color,
+        environment.log_context.unwrap_or_default(),
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
@@ -357,7 +423,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }))?;
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     debug!("uv {}", uv_cli::version::uv_self_version());
 
@@ -379,9 +445,93 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     show_settings!(cache_settings, false);
 
     // Configure the cache.
+    if cache_settings.no_cache {
+        debug!("Disabling the uv cache due to `--no-cache`");
+    }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    let result = match *cli.command {
+    // Configure the global network settings.
+    let client_builder = BaseClientBuilder::new(
+        globals.network_settings.connectivity,
+        globals.network_settings.native_tls,
+        globals.network_settings.allow_insecure_host.clone(),
+        globals.preview,
+        globals.network_settings.timeout,
+        globals.network_settings.retries,
+    );
+
+    match *cli.command {
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Login(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthLoginSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
+            show_settings!(args);
+
+            commands::auth_login(
+                args.service,
+                args.username,
+                args.password,
+                args.token,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Logout(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthLogoutSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
+            show_settings!(args);
+
+            commands::auth_logout(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Token(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AuthTokenSettings::resolve(
+                args,
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
+            show_settings!(args);
+
+            commands::auth_token(
+                args.service,
+                args.username,
+                &args.network_settings,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Dir(args),
+        }) => {
+            commands::auth_dir(args.service.as_ref())?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -393,7 +543,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem);
+            let args = PipCompileSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -418,33 +568,30 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
@@ -473,10 +620,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -502,7 +651,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem);
+            let args = PipSyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -527,11 +676,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_sync(
                 &requirements,
                 &constraints,
                 &build_constraints,
+                &args.settings.extras,
+                &groups,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -541,12 +696,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
                 &args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                &args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -573,7 +730,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem);
+            let mut args = PipInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -601,25 +758,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             // Special-case: any source trees specified on the command-line are automatically
             // reinstalled. This matches user expectations: `uv pip install .` should always
@@ -674,12 +826,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
-                groups,
+                &groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -689,15 +843,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
                 globals.installer_metadata,
                 &args.settings.config_setting,
-                args.settings.no_build_isolation,
-                args.settings.no_build_isolation_package,
+                &args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
                 args.settings.build_options,
                 args.modifications,
                 args.settings.python_version,
@@ -723,7 +879,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Uninstall(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipUninstallSettings::resolve(args, filesystem);
+            let args = PipUninstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -748,9 +904,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 cache,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -758,7 +915,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Freeze(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, filesystem);
+            let args = PipFreezeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -772,6 +929,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -780,7 +938,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem);
+            let args = PipListSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -795,7 +953,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
@@ -803,6 +961,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -810,7 +969,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Show(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipShowSettings::resolve(args, filesystem);
+            let args = PipShowSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -824,13 +983,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Tree(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem);
+            let args = PipTreeSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
             let cache = cache.init()?;
@@ -847,7 +1007,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                globals.network_settings,
+                client_builder,
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
@@ -855,6 +1015,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -862,7 +1023,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Check(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, filesystem);
+            let args = PipCheckSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -871,8 +1032,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_check(
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.python_version.as_ref(),
+                args.settings.python_platform.as_ref(),
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Cache(CacheNamespace {
@@ -880,13 +1044,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, &cache, printer)
+            commands::cache_clean(&args.package, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, &cache, printer)
+            commands::cache_prune(args.ci, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
@@ -896,7 +1060,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem);
+            let args = settings::BuildSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -922,13 +1086,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.wheel,
                 args.list,
                 args.build_logs,
+                args.gitignore,
                 args.force_pep517,
+                args.clear,
                 build_constraints,
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
                 &args.settings,
-                &globals.network_settings,
+                &client_builder,
                 cli.top_level.no_config,
                 globals.python_preference,
                 globals.python_downloads,
@@ -943,15 +1109,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             if args.no_system {
-                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             if args.system {
-                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem);
+            let args = settings::VenvSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -970,10 +1140,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 }
             });
 
+            let python_request: Option<PythonRequest> =
+                args.settings.python.as_deref().map(PythonRequest::parse);
+
+            let on_existing = uv_virtualenv::OnExisting::from_args(
+                args.allow_existing,
+                args.clear,
+                args.no_clear,
+            );
+
             commands::venv(
                 &project_dir,
                 args.path,
-                args.settings.python.as_deref(),
+                python_request,
                 args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
@@ -982,11 +1161,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &globals.network_settings,
+                &client_builder,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
-                args.allow_existing,
+                on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,
@@ -1006,6 +1185,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 script,
                 globals,
                 cli.top_level.no_config,
+                cli.top_level.global_args.project.is_some(),
+                client_builder,
                 filesystem,
                 cache,
                 printer,
@@ -1018,8 +1199,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 SelfCommand::Update(SelfUpdateArgs {
                     target_version,
                     token,
+                    dry_run,
                 }),
-        }) => commands::self_update(target_version, token, printer).await,
+        }) => commands::self_update(target_version, token, dry_run, printer, client_builder).await,
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1037,30 +1219,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 is not available. Please use your package manager to update uv."
             );
         }
-        Commands::Version(VersionArgs {
-            value,
-            bump,
-            dry_run,
-            short,
-            output_format,
-        }) => {
-            // If they specified a project, they probably don't want `uv --version` semantics
-            let strict =
-                cli.top_level.global_args.project.is_some() || globals.preview.is_enabled();
-            commands::project_version(
-                &project_dir,
-                value,
-                bump,
-                dry_run,
-                short,
-                output_format,
-                strict,
-                &workspace_cache,
-                printer,
-            )
-            .await
-        }
-
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
@@ -1100,7 +1258,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolRunSettings::resolve(args, filesystem, invocation_source);
+            let args = settings::ToolRunSettings::resolve(
+                args,
+                filesystem,
+                invocation_source,
+                environment,
+            );
             show_settings!(args);
 
             // Initialize the cache.
@@ -1154,10 +1317,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.options,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 invocation_source,
                 args.isolated,
                 globals.python_preference,
@@ -1176,7 +1340,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolInstallSettings::resolve(args, filesystem);
+            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1186,21 +1350,35 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
-                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+                args.with.len()
+                    + args.with_editable.len()
+                    + args.with_requirements.len()
+                    + args.with_executables_from.len(),
             );
-            for package in args.with {
-                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
+            for pkg in args.with {
+                requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for package in args.with_editable {
-                requirements.push(RequirementsSource::from_editable(&package)?);
+            for pkg in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
-            requirements.extend(
-                args.with_requirements
-                    .into_iter()
-                    .map(RequirementsSource::from_requirements_file)
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
+            for path in args.with_requirements {
+                requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
+            for pkg in &args.with_executables_from {
+                let source = RequirementsSource::from_with_package_argument(pkg)?;
+                let RequirementsSource::Package(RequirementsTxtRequirement::Named(requirement)) =
+                    &source
+                else {
+                    bail!(
+                        "Expected a named package for `--with-executables-from`, but got: {}",
+                        source.to_string().cyan()
+                    )
+                };
+                entrypoints.push(requirement.name.clone());
+                requirements.push(source);
+            }
 
             let constraints = args
                 .constraints
@@ -1211,6 +1389,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
+                .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
                 .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
@@ -1225,13 +1408,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
+                &entrypoints,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.force,
                 args.options,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1255,6 +1441,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::tool_list(
                 args.show_paths,
                 args.show_version_specifiers,
+                args.show_with,
+                args.show_extras,
+                args.show_python,
                 &cache,
                 printer,
             )
@@ -1264,7 +1453,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1273,10 +1462,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Box::pin(commands::tool_upgrade(
                 args.names,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.args,
                 args.filesystem,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1316,7 +1506,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::List(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonListSettings::resolve(args, filesystem);
+            let args = settings::PythonListSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1330,10 +1520,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_arches,
                 args.show_urls,
                 args.output_format,
+                args.python_downloads_json_url,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1341,18 +1533,53 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+            // TODO(john): If we later want to support `--upgrade`, we need to replace this.
+            let upgrade = false;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
                 args.reinstall,
+                upgrade,
+                args.bin,
+                args.registry,
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
-                globals.network_settings,
+                args.python_downloads_json_url,
+                client_builder,
+                args.default,
+                globals.python_downloads,
+                cli.top_level.no_config,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Upgrade(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
+            show_settings!(args);
+            let upgrade = true;
+
+            commands::python_install(
+                &project_dir,
+                args.install_dir,
+                args.targets,
+                args.reinstall,
+                upgrade,
+                args.bin,
+                args.registry,
+                args.force,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
+                args.python_downloads_json_url,
+                client_builder,
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1388,14 +1615,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
-                    Pep723ItemRef::Script(&script),
+                    (&script).into(),
                     args.show_version,
-                    &globals.network_settings,
+                    &client_builder,
                     globals.python_preference,
                     globals.python_downloads,
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             } else {
@@ -1409,6 +1637,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     globals.python_preference,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             }
@@ -1417,7 +1646,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Pin(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonPinSettings::resolve(args, filesystem);
+            let args = settings::PythonPinSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
             let cache = cache.init()?;
@@ -1427,10 +1656,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_downloads,
                 args.no_project,
                 args.global,
+                args.rm,
+                args.install_mirrors,
+                client_builder,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1442,6 +1676,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::python_dir(args.bin)?;
+            Ok(ExitStatus::Success)
+        }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::UpdateShell,
+        }) => {
+            commands::python_update_shell(printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
@@ -1462,6 +1702,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 files,
                 username,
                 password,
+                dry_run,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -1470,51 +1711,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index_locations,
             } = PublishSettings::resolve(args, filesystem);
 
-            let (publish_url, check_url) = if let Some(index_name) = index {
-                debug!("Publishing with index {index_name}");
-                let index = index_locations
-                    .simple_indexes()
-                    .find(|index| {
-                        index
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.as_ref() == index_name)
-                    })
-                    .with_context(|| {
-                        let mut index_names: Vec<String> = index_locations
-                            .simple_indexes()
-                            .filter_map(|index| index.name.as_ref())
-                            .map(ToString::to_string)
-                            .collect();
-                        index_names.sort();
-                        if index_names.is_empty() {
-                            format!("No indexes were found, can't use index: `{index_name}`")
-                        } else {
-                            let index_names = index_names.join("`, `");
-                            format!(
-                                "Index not found: `{index_name}`. Found indexes: `{index_names}`"
-                            )
-                        }
-                    })?;
-                let publish_url = index
-                    .publish_url
-                    .clone()
-                    .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
-                let check_url = index.url.clone();
-                (publish_url, Some(check_url))
-            } else {
-                (publish_url, check_url)
-            };
-
             commands::publish(
                 files,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                &globals.network_settings,
+                &environment,
+                &client_builder,
                 username,
                 password,
                 check_url,
+                index,
+                index_locations,
+                dry_run,
                 &cache,
                 printer,
             )
@@ -1556,8 +1765,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-    };
-    result
+    }
 }
 
 /// Run a [`ProjectCommand`].
@@ -1569,6 +1777,8 @@ async fn run_project(
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
     no_config: bool,
+    explicit_project: bool,
+    client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
     printer: Printer,
@@ -1583,10 +1793,13 @@ async fn run_project(
         };
     }
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     match *project_command {
         ProjectCommand::Init(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::InitSettings::resolve(args, filesystem);
+            let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1609,7 +1822,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
-                &globals.network_settings,
+                &client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 no_config,
@@ -1621,7 +1834,7 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem);
+            let args = settings::RunSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1653,7 +1866,7 @@ async fn run_project(
                 command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -1663,21 +1876,21 @@ async fn run_project(
                 args.no_project,
                 no_config,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.modifications,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                &cache,
+                cache,
                 printer,
                 args.env_file,
-                args.no_env_file,
                 globals.preview,
                 args.max_recursion_depth,
             ))
@@ -1685,7 +1898,7 @@ async fn run_project(
         }
         ProjectCommand::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem);
+            let args = settings::SyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1704,23 +1917,24 @@ async fn run_project(
 
             Box::pin(commands::sync(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.active,
                 args.all_packages,
                 args.package,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.install_options,
                 args.modifications,
                 args.python,
+                args.python_platform,
                 args.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1728,17 +1942,19 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
+                args.output_format,
             ))
             .await
         }
         ProjectCommand::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem);
+            let args = settings::LockSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
                 args.refresh
+                    .clone()
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
@@ -1757,13 +1973,14 @@ async fn run_project(
 
             Box::pin(commands::lock(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
+                args.refresh,
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1777,15 +1994,8 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
+            let mut args = settings::AddSettings::resolve(args, filesystem, environment);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
             // initialize it later on.
@@ -1811,6 +2021,55 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Result<Vec<_>>>()?;
+
+            // Special-case: any local source trees specified on the command-line are automatically
+            // reinstalled.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
             let constraints = args
                 .constraints
                 .into_iter()
@@ -1819,16 +2078,20 @@ async fn run_project(
 
             Box::pin(commands::add(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
+                args.no_install_project,
+                args.no_install_workspace,
+                args.no_install_local,
                 requirements,
                 constraints,
                 args.marker,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                args.raw,
+                args.bounds,
                 args.indexes,
                 args.rev,
                 args.tag,
@@ -1836,9 +2099,10 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.workspace,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1853,7 +2117,7 @@ async fn run_project(
         }
         ProjectCommand::Remove(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem);
+            let args = settings::RemoveSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1872,7 +2136,7 @@ async fn run_project(
 
             Box::pin(commands::remove(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -1882,8 +2146,48 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 script,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+        ProjectCommand::Version(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VersionSettings::resolve(args, filesystem, environment);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            Box::pin(commands::project_version(
+                args.value,
+                args.bump,
+                args.short,
+                args.output_format,
+                project_dir,
+                args.package,
+                explicit_project,
+                args.dry_run,
+                args.lock_check,
+                args.frozen,
+                args.active,
+                args.no_sync,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1897,7 +2201,7 @@ async fn run_project(
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::TreeSettings::resolve(args, filesystem);
+            let args = settings::TreeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1912,8 +2216,8 @@ async fn run_project(
 
             Box::pin(commands::tree(
                 project_dir,
-                args.dev,
-                args.locked,
+                args.groups,
+                args.lock_check,
                 args.frozen,
                 args.universal,
                 args.depth,
@@ -1922,12 +2226,13 @@ async fn run_project(
                 args.no_dedupe,
                 args.invert,
                 args.outdated,
+                args.show_sizes,
                 args.python_version,
                 args.python_platform,
                 args.python,
                 args.install_mirrors,
                 args.resolver,
-                &globals.network_settings,
+                &client_builder,
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1941,7 +2246,7 @@ async fn run_project(
         }
         ProjectCommand::Export(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ExportSettings::resolve(args, filesystem);
+            let args = settings::ExportSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1964,9 +2269,9 @@ async fn run_project(
                 args.install_options,
                 args.output_file,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.include_annotations,
                 args.include_header,
@@ -1974,7 +2279,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                globals.network_settings,
+                client_builder,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
@@ -1985,6 +2290,28 @@ async fn run_project(
                 globals.preview,
             )
             .boxed_local()
+            .await
+        }
+        ProjectCommand::Format(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::FormatSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::format(
+                project_dir,
+                args.check,
+                args.diff,
+                args.extra_args,
+                args.version,
+                client_builder,
+                cache,
+                printer,
+                globals.preview,
+                args.no_project,
+            ))
             .await
         }
     }
@@ -2010,6 +2337,9 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    #[cfg(windows)]
+    windows_exception::setup();
+
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
     if let Ok(current_exe) = std::env::current_exe() {
@@ -2101,6 +2431,7 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
+            trace!("Error trace: {err:?}");
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",

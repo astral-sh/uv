@@ -1,4 +1,6 @@
 use serde::{Deserialize, Deserializer};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::str::FromStr;
 use url::Url;
 
@@ -18,8 +20,8 @@ impl TrustedHost {
     /// Returns `true` if the [`Url`] matches this trusted host.
     pub fn matches(&self, url: &Url) -> bool {
         match self {
-            TrustedHost::Wildcard => true,
-            TrustedHost::Host { scheme, host, port } => {
+            Self::Wildcard => true,
+            Self::Host { scheme, host, port } => {
                 if scheme.as_ref().is_some_and(|scheme| scheme != url.scheme()) {
                     return false;
                 }
@@ -51,9 +53,9 @@ impl<'de> Deserialize<'de> for TrustedHost {
         }
 
         serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| TrustedHost::from_str(string).map_err(serde::de::Error::custom))
+            .string(|string| Self::from_str(string).map_err(serde::de::Error::custom))
             .map(|map| {
-                map.deserialize::<Inner>().map(|inner| TrustedHost::Host {
+                map.deserialize::<Inner>().map(|inner| Self::Host {
                     scheme: inner.scheme,
                     host: inner.host,
                     port: inner.port,
@@ -121,10 +123,10 @@ impl FromStr for TrustedHost {
 impl std::fmt::Display for TrustedHost {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            TrustedHost::Wildcard => {
+            Self::Wildcard => {
                 write!(f, "*")?;
             }
-            TrustedHost::Host { scheme, host, port } => {
+            Self::Host { scheme, host, port } => {
                 if let Some(scheme) = &scheme {
                     write!(f, "{scheme}://{host}")?;
                 } else {
@@ -143,20 +145,15 @@ impl std::fmt::Display for TrustedHost {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for TrustedHost {
-    fn schema_name() -> String {
-        "TrustedHost".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("TrustedHost")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A host or host-port pair.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A host or host-port pair."
+        })
     }
 }
 

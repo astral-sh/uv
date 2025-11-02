@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use console::Term;
 
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
 
 #[derive(Debug, Clone)]
@@ -13,6 +13,8 @@ pub enum RequirementsSource {
     Package(RequirementsTxtRequirement),
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
+    /// Dependencies were provided via a PEP 723 script.
+    Pep723Script(PathBuf),
     /// Dependencies were provided via a `pylock.toml` file.
     PylockToml(PathBuf),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
@@ -23,8 +25,6 @@ pub enum RequirementsSource {
     SetupPy(PathBuf),
     /// Dependencies were provided via a `setup.cfg` file (e.g., `pip-compile setup.cfg`).
     SetupCfg(PathBuf),
-    /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
-    SourceTree(PathBuf),
     /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
 }
@@ -46,6 +46,12 @@ impl RequirementsSource {
             .is_some_and(|file_name| file_name.to_str().is_some_and(is_pylock_toml))
         {
             Ok(Self::PylockToml(path))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+        {
+            // TODO(blueraft): Support scripts without an extension.
+            Ok(Self::Pep723Script(path))
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -170,7 +176,8 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -190,7 +197,8 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -218,7 +226,8 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -238,7 +247,8 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -267,23 +277,17 @@ impl RequirementsSource {
         Ok(Self::Package(requirement))
     }
 
-    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
-    /// tree.
-    pub fn from_source_tree(path: PathBuf) -> Self {
-        Self::SourceTree(path)
-    }
-
     /// Returns `true` if the source allows extras to be specified.
     pub fn allows_extras(&self) -> bool {
         matches!(
             self,
-            Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
+            Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
 
     /// Returns `true` if the source allows groups to be specified.
     pub fn allows_groups(&self) -> bool {
-        matches!(self, Self::PyprojectToml(_))
+        matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
     }
 }
 
@@ -294,11 +298,11 @@ impl std::fmt::Display for RequirementsSource {
             Self::Editable(path) => write!(f, "-e {path:?}"),
             Self::PylockToml(path)
             | Self::RequirementsTxt(path)
+            | Self::Pep723Script(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::EnvironmentYml(path)
-            | Self::SourceTree(path) => {
+            | Self::EnvironmentYml(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }

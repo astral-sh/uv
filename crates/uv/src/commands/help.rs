@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt::Display, fmt::Write};
 
-use anstream::{stream::IsTerminal, ColorChoice};
-use anyhow::{anyhow, Result};
+use anstream::{ColorChoice, stream::IsTerminal};
+use anyhow::{Result, anyhow};
 use clap::CommandFactory;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
@@ -221,21 +221,21 @@ impl Pager {
     ///
     /// Supports the `PAGER` environment variable, otherwise checks for `less` and `more` in the
     /// search path.
-    fn try_from_env() -> Option<Pager> {
+    fn try_from_env() -> Option<Self> {
         if let Some(pager) = std::env::var_os(EnvVars::PAGER) {
             if !pager.is_empty() {
-                return Pager::from_str(&pager.to_string_lossy()).ok();
+                return Self::from_str(&pager.to_string_lossy()).ok();
             }
         }
 
         if let Ok(less) = which("less") {
-            Some(Pager {
+            Some(Self {
                 kind: PagerKind::Less,
                 args: vec![],
                 path: Some(less),
             })
         } else if let Ok(more) = which("more") {
-            Some(Pager {
+            Some(Self {
                 kind: PagerKind::More,
                 args: vec![],
                 path: Some(more),

@@ -5,18 +5,19 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DefaultExtras, DEV_DEPENDENCIES};
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
@@ -30,18 +31,18 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -51,7 +52,7 @@ pub(crate) async fn remove(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -60,7 +61,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -69,9 +70,9 @@ pub(crate) async fn remove(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if locked {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation",
             );
         }
         if frozen {
@@ -202,6 +203,14 @@ pub(crate) async fn remove(
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
 
+    // Determine enabled groups and extras
+    let default_groups = match &target {
+        RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        RemoveTarget::Script(_) => DefaultGroups::default(),
+    };
+    let groups = DependencyGroups::default().with_defaults(default_groups);
+    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = match target {
         RemoveTarget::Project(project) => {
@@ -210,15 +219,18 @@ pub(crate) async fn remove(
                 let interpreter = ProjectInterpreter::discover(
                     project.workspace(),
                     project_dir,
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
+                    false,
                     no_config,
                     active,
                     cache,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -228,16 +240,19 @@ pub(crate) async fn remove(
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
+                    no_sync,
                     no_config,
                     active,
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -247,16 +262,18 @@ pub(crate) async fn remove(
         }
         RemoveTarget::Script(script) => {
             let interpreter = ScriptInterpreter::discover(
-                Pep723ItemRef::Script(&script),
+                (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                no_sync,
                 no_config,
                 active,
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter();
@@ -265,9 +282,17 @@ pub(crate) async fn remove(
         }
     };
 
+    let _lock = target
+        .acquire_lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
+
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };
@@ -279,11 +304,12 @@ pub(crate) async fn remove(
     let lock = match project::lock::LockOperation::new(
         mode,
         &settings.resolver,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -292,9 +318,9 @@ pub(crate) async fn remove(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -308,17 +334,6 @@ pub(crate) async fn remove(
         // If we're not syncing, exit early.
         return Ok(ExitStatus::Success);
     };
-
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::from_all_extras();
-    let install_options = InstallOptions::default();
-
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -338,18 +353,20 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
-        &DependencyGroups::default().with_defaults(default_groups),
-        EditableMode::Editable,
-        install_options,
+        &extras,
+        &groups,
+        None,
+        InstallOptions::default(),
         Modifications::Exact,
+        None,
         (&settings).into(),
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -358,9 +375,9 @@ pub(crate) async fn remove(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -370,6 +387,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),
@@ -418,7 +436,7 @@ impl RemoveTarget {
                 let project = project
                     .with_pyproject_toml(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
-                    )
+                    )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project))
             }

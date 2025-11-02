@@ -11,12 +11,12 @@ use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
-use crate::preferences::{Entry, Preferences};
+use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
-use crate::universal_marker::UniversalMarker;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
@@ -85,6 +85,7 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
@@ -107,6 +108,7 @@ impl CandidateSelector {
             reinstall,
             index,
             env,
+            tags,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -117,7 +119,7 @@ impl CandidateSelector {
         let installed = if reinstall {
             None
         } else {
-            Self::get_installed(package_name, range, installed_packages)
+            Self::get_installed(package_name, range, installed_packages, tags)
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
@@ -125,8 +127,7 @@ impl CandidateSelector {
             if let Some(installed) = installed {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }
@@ -150,8 +151,7 @@ impl CandidateSelector {
             }) {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }
@@ -179,6 +179,7 @@ impl CandidateSelector {
         reinstall: bool,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -190,7 +191,7 @@ impl CandidateSelector {
                 if index.is_some_and(|index| !entry.index().matches(index)) {
                     return None;
                 }
-                Either::Left(std::iter::once((entry.marker(), entry.pin().version())))
+                Either::Left(std::iter::once((entry.pin().version(), entry.source())))
             }
             [..] => {
                 type Entries<'a> = SmallVec<[&'a Entry; 3]>;
@@ -221,7 +222,7 @@ impl CandidateSelector {
                 Either::Right(
                     preferences
                         .into_iter()
-                        .map(|entry| (entry.marker(), entry.pin().version())),
+                        .map(|entry| (entry.pin().version(), entry.source())),
                 )
             }
         };
@@ -234,21 +235,23 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             env,
+            tags,
         )
     }
 
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
-        preferences: impl Iterator<Item = (&'a UniversalMarker, &'a Version)>,
+        preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
-        for (marker, version) in preferences {
+        for (version, source) in preferences {
             // Respect the version range for this requirement.
             if !range.contains(version) {
                 continue;
@@ -262,12 +265,24 @@ impl CandidateSelector {
                     [] => {}
                     [dist] => {
                         if dist.version() == version {
-                            debug!("Found installed version of {dist} that satisfies preference in {range}");
+                            debug!(
+                                "Found installed version of {dist} that satisfies preference in {range}"
+                            );
+
+                            // Verify that the installed distribution is compatible with the environment.
+                            if tags.is_some_and(|tags| {
+                                let Ok(Some(wheel_tags)) = dist.read_tags() else {
+                                    return false;
+                                };
+                                !wheel_tags.is_compatible(tags)
+                            }) {
+                                debug!("Platform tags mismatch for installed {dist}");
+                                continue;
+                            }
 
                             return Some(Candidate {
                                 name: package_name,
                                 version,
-                                prioritized: None,
                                 dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                     dist,
                                 )),
@@ -278,7 +293,9 @@ impl CandidateSelector {
                     // We do not consider installed distributions with multiple versions because
                     // during installation these must be reinstalled from the remote
                     _ => {
-                        debug!("Ignoring installed versions of {package_name}: multiple distributions found");
+                        debug!(
+                            "Ignoring installed versions of {package_name}: multiple distributions found"
+                        );
                     }
                 }
             }
@@ -288,9 +305,14 @@ impl CandidateSelector {
                 let allow = match self.prerelease_strategy.allows(package_name, env) {
                     AllowPrerelease::Yes => true,
                     AllowPrerelease::No => false,
-                    // If the pre-release is "global" (i.e., provided via a lockfile, rather than
-                    // a fork), accept it unless pre-releases are completely banned.
-                    AllowPrerelease::IfNecessary => marker.is_true(),
+                    // If the pre-release was provided via an existing file, rather than from the
+                    // current solve, accept it unless pre-releases are completely banned.
+                    AllowPrerelease::IfNecessary => match source {
+                        PreferenceSource::Resolver => false,
+                        PreferenceSource::Lock
+                        | PreferenceSource::Environment
+                        | PreferenceSource::RequirementsTxt => true,
+                    },
                 };
                 if !allow {
                     continue;
@@ -346,6 +368,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         installed_packages: &'a InstalledPackages,
+        tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
         match installed_dists.as_slice() {
@@ -358,11 +381,20 @@ impl CandidateSelector {
                     return None;
                 }
 
-                debug!("Found installed version of {dist} that satisfies {range}");
+                // Verify that the installed distribution is compatible with the environment.
+                if tags.is_some_and(|tags| {
+                    let Ok(Some(wheel_tags)) = dist.read_tags() else {
+                        return false;
+                    };
+                    !wheel_tags.is_compatible(tags)
+                }) {
+                    debug!("Platform tags mismatch for installed {dist}");
+                    return None;
+                }
+
                 return Some(Candidate {
                     name: package_name,
                     version,
-                    prioritized: None,
                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     choice_kind: VersionChoiceKind::Installed,
                 });
@@ -526,7 +558,9 @@ impl CandidateSelector {
                 let Some(dist) = maybe_dist.prioritized_dist() else {
                     continue;
                 };
-                trace!("Found candidate for package {package_name} with range {range} after {steps} steps: {version} version");
+                trace!(
+                    "Found candidate for package {package_name} with range {range} after {steps} steps: {version} version"
+                );
                 Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
             };
 
@@ -538,10 +572,14 @@ impl CandidateSelector {
             // exclude-newer in our error messages.
             if matches!(
                 candidate.dist(),
-                CandidateDist::Incompatible(
-                    IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
-                        | IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_))
-                )
+                CandidateDist::Incompatible {
+                    incompatible_dist: IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(
+                        _
+                    )) | IncompatibleDist::Wheel(
+                        IncompatibleWheel::ExcludeNewer(_)
+                    ),
+                    ..
+                }
             ) {
                 continue;
             }
@@ -564,7 +602,7 @@ impl CandidateSelector {
             // even though there are compatible wheels on PyPI. Thus, we need to ensure that we
             // return the first _compatible_ candidate across all indexes, if such a candidate
             // exists.
-            if matches!(candidate.dist(), CandidateDist::Incompatible(_)) {
+            if matches!(candidate.dist(), CandidateDist::Incompatible { .. }) {
                 if incompatible.is_none() {
                     incompatible = Some(candidate);
                 }
@@ -584,7 +622,9 @@ impl CandidateSelector {
             return incompatible;
         }
 
-        trace!("Exhausted all candidates for package {package_name} with range {range} after {steps} steps");
+        trace!(
+            "Exhausted all candidates for package {package_name} with range {range} after {steps} steps"
+        );
         None
     }
 }
@@ -592,7 +632,25 @@ impl CandidateSelector {
 #[derive(Debug, Clone)]
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
-    Incompatible(IncompatibleDist),
+    Incompatible {
+        /// The reason the prioritized distribution is incompatible.
+        incompatible_dist: IncompatibleDist,
+        /// The prioritized distribution that had no compatible wheelr or sdist.
+        prioritized_dist: &'a PrioritizedDist,
+    },
+}
+
+impl CandidateDist<'_> {
+    /// For an installable dist, return the prioritized distribution.
+    fn prioritized(&self) -> Option<&PrioritizedDist> {
+        match self {
+            Self::Compatible(dist) => dist.prioritized(),
+            Self::Incompatible {
+                incompatible_dist: _,
+                prioritized_dist: prioritized,
+            } => Some(prioritized),
+        }
+    }
 }
 
 impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
@@ -611,7 +669,10 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             } else {
                 IncompatibleDist::Unavailable
             };
-            CandidateDist::Incompatible(dist)
+            CandidateDist::Incompatible {
+                incompatible_dist: dist,
+                prioritized_dist: value,
+            }
         }
     }
 }
@@ -631,9 +692,9 @@ pub(crate) enum VersionChoiceKind {
 impl Display for VersionChoiceKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VersionChoiceKind::Preference => f.write_str("preference"),
-            VersionChoiceKind::Installed => f.write_str("installed"),
-            VersionChoiceKind::Compatible => f.write_str("compatible"),
+            Self::Preference => f.write_str("preference"),
+            Self::Installed => f.write_str("installed"),
+            Self::Compatible => f.write_str("compatible"),
         }
     }
 }
@@ -644,8 +705,6 @@ pub(crate) struct Candidate<'a> {
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
-    /// The prioritized distribution for the package.
-    prioritized: Option<&'a PrioritizedDist>,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
     /// Whether this candidate was selected from a preference.
@@ -662,7 +721,6 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
-            prioritized: Some(dist),
             dist: CandidateDist::from(dist),
             choice_kind,
         }
@@ -699,7 +757,7 @@ impl<'a> Candidate<'a> {
 
     /// Return the prioritized distribution for the candidate.
     pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
-        self.prioritized
+        self.dist.prioritized()
     }
 }
 
@@ -710,7 +768,7 @@ impl Name for Candidate<'_> {
 }
 
 impl DistributionMetadata for Candidate<'_> {
-    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef {
+    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef<'_> {
         uv_distribution_types::VersionOrUrlRef::Version(self.version)
     }
 }

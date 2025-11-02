@@ -11,23 +11,25 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PreviewMode, Reinstall,
-    SourceStrategy,
+    BuildKind, BuildOptions, Constraints, IndexStrategy, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
-    IsBuildBackendError, Name, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
@@ -35,8 +37,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
-    InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -64,12 +66,12 @@ pub enum BuildDispatchError {
 impl IsBuildBackendError for BuildDispatchError {
     fn is_build_backend_error(&self) -> bool {
         match self {
-            BuildDispatchError::Tags(_)
-            | BuildDispatchError::Resolve(_)
-            | BuildDispatchError::Join(_)
-            | BuildDispatchError::Anyhow(_)
-            | BuildDispatchError::Prepare(_) => false,
-            BuildDispatchError::BuildFrontend(err) => err.is_build_backend_error(),
+            Self::Tags(_)
+            | Self::Resolve(_)
+            | Self::Join(_)
+            | Self::Anyhow(_)
+            | Self::Prepare(_) => false,
+            Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
     }
 }
@@ -79,7 +81,7 @@ impl IsBuildBackendError for BuildDispatchError {
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
-    constraints: Constraints,
+    constraints: &'a Constraints,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
@@ -87,24 +89,27 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: SourceStrategy,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
-    preview: PreviewMode,
+    preview: Preview,
 }
 
 impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
-        constraints: Constraints,
+        constraints: &'a Constraints,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
@@ -112,15 +117,18 @@ impl<'a> BuildDispatch<'a> {
         shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
+        config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
+        extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: ExcludeNewer,
         sources: SourceStrategy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Self {
         Self {
             client,
@@ -133,7 +141,10 @@ impl<'a> BuildDispatch<'a> {
             dependency_metadata,
             index_strategy,
             config_settings,
+            config_settings_package,
             build_isolation,
+            extra_build_requires,
+            extra_build_variables,
             link_mode,
             build_options,
             hasher,
@@ -167,7 +178,7 @@ impl<'a> BuildDispatch<'a> {
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
-    fn interpreter(&self) -> &Interpreter {
+    async fn interpreter(&self) -> &Interpreter {
         self.interpreter
     }
 
@@ -177,6 +188,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.shared_state.build_arena
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
@@ -191,8 +206,16 @@ impl BuildContext for BuildDispatch<'_> {
         self.build_options
     }
 
+    fn build_isolation(&self) -> BuildIsolation<'_> {
+        self.build_isolation
+    }
+
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
+    }
+
+    fn config_settings_package(&self) -> &PackageConfigSettings {
+        self.config_settings_package
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -207,6 +230,14 @@ impl BuildContext for BuildDispatch<'_> {
         &self.workspace_cache
     }
 
+    fn extra_build_requires(&self) -> &ExtraBuildRequires {
+        self.extra_build_requires
+    }
+
+    fn extra_build_variables(&self) -> &ExtraBuildVariables {
+        self.extra_build_variables
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -219,13 +250,14 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
             OptionsBuilder::new()
-                .exclude_newer(self.exclude_newer)
+                .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
+            self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
@@ -284,11 +316,15 @@ impl BuildContext for BuildDispatch<'_> {
             extraneous: _,
         } = Planner::new(resolution).build(
             site_packages,
+            InstallationStrategy::Permissive,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
             self.index_locations,
             self.config_settings,
+            self.config_settings_package,
+            self.extra_build_requires(),
+            self.extra_build_variables,
             self.cache(),
             venv,
             tags,
@@ -359,7 +395,7 @@ impl BuildContext for BuildDispatch<'_> {
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv)
+            wheels = Installer::new(venv, self.preview)
                 .with_link_mode(self.link_mode)
                 .with_cache(self.cache)
                 .install(wheels)
@@ -412,6 +448,29 @@ impl BuildContext for BuildDispatch<'_> {
             build_stack.insert(dist.distribution_id());
         }
 
+        // Get package-specific config settings if available; otherwise, use global settings.
+        let config_settings = if let Some(name) = dist_name {
+            if let Some(package_settings) = self.config_settings_package.get(name) {
+                package_settings.clone().merge(self.config_settings.clone())
+            } else {
+                self.config_settings.clone()
+            }
+        } else {
+            self.config_settings.clone()
+        };
+
+        // Get package-specific environment variables if available.
+        let mut environment_variables = self.build_extra_env_vars.clone();
+        if let Some(name) = dist_name {
+            if let Some(package_vars) = self.extra_build_variables.get(name) {
+                environment_variables.extend(
+                    package_vars
+                        .iter()
+                        .map(|(key, value)| (OsString::from(key), OsString::from(value))),
+                );
+            }
+        }
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -425,13 +484,15 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             sources,
             self.workspace_cache(),
-            self.config_settings.clone(),
+            config_settings,
             self.build_isolation,
+            self.extra_build_requires,
             &build_stack,
             build_kind,
-            self.build_extra_env_vars.clone(),
+            environment_variables,
             build_output,
             self.concurrency.builds,
+            self.preview,
         )
         .boxed_local()
         .await?;
@@ -446,12 +507,6 @@ impl BuildContext for BuildDispatch<'_> {
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
-        // Direct builds are a preview feature with the uv build backend.
-        if self.preview.is_disabled() {
-            trace!("Preview is disabled, not checking for direct build");
-            return Ok(None);
-        }
-
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
         } else {
@@ -519,6 +574,8 @@ pub struct SharedState {
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
+    /// Build directories for any PEP 517 builds executed during resolution or installation.
+    build_arena: BuildArena<SourceBuild>,
 }
 
 impl SharedState {
@@ -531,6 +588,7 @@ impl SharedState {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
+            build_arena: self.build_arena.clone(),
             ..Default::default()
         }
     }
@@ -553,5 +611,10 @@ impl SharedState {
     /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
+    }
+
+    /// Return the [`BuildArena`] used by the [`SharedState`].
+    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.build_arena
     }
 }

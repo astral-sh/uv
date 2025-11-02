@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
 
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, GroupName};
 
+use crate::marker::tree::MarkerValueList;
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -128,7 +129,7 @@ impl Display for CanonicalMarkerValueString {
     }
 }
 
-/// The [`ExtraName`] value used in `extra` markers.
+/// The [`ExtraName`] value used in `extra` and `extras` markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueExtra {
     /// A valid [`ExtraName`].
@@ -156,6 +157,39 @@ impl Display for CanonicalMarkerValueExtra {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),
+        }
+    }
+}
+
+/// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
+///
+/// Used for PEP 751 markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum CanonicalMarkerListPair {
+    /// A valid [`ExtraName`].
+    Extras(ExtraName),
+    /// A valid [`GroupName`].
+    DependencyGroup(GroupName),
+    /// For leniency, preserve invalid values.
+    Arbitrary { key: MarkerValueList, value: String },
+}
+
+impl CanonicalMarkerListPair {
+    /// The key (RHS) of the marker expression.
+    pub(crate) fn key(&self) -> MarkerValueList {
+        match self {
+            Self::Extras(_) => MarkerValueList::Extras,
+            Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::Arbitrary { key, .. } => *key,
+        }
+    }
+
+    /// The value (LHS) of the marker expression.
+    pub(crate) fn value(&self) -> String {
+        match self {
+            Self::Extras(extra) => extra.to_string(),
+            Self::DependencyGroup(group) => group.to_string(),
+            Self::Arbitrary { value, .. } => value.clone(),
         }
     }
 }

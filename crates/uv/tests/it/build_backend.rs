@@ -1,10 +1,10 @@
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use std::env;
 use std::io::BufReader;
 use std::path::Path;
@@ -24,6 +24,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -49,13 +50,9 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg(BUILT_BY_UV_TEST_SCRIPT)
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -83,6 +80,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -136,13 +134,9 @@ fn built_by_uv_direct() -> Result<()> {
 
     drop(wheel_dir);
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg(BUILT_BY_UV_TEST_SCRIPT)
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -160,13 +154,15 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
 
     // Without the editable, pytest fails.
     context.pip_install().arg("pytest").assert().success();
-    Command::new(context.interpreter())
+    context
+        .python_command()
         .arg("-m")
         .arg("pytest")
         .current_dir(built_by_uv)
@@ -197,7 +193,7 @@ fn built_by_uv_editable() -> Result<()> {
     drop(wheel_dir);
 
     // Now, pytest passes.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-m")
         .arg("pytest")
         // Avoid showing absolute paths and column dependent layout
@@ -216,7 +212,7 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;
@@ -226,9 +222,7 @@ fn preserve_executable_bit() -> Result<()> {
     let project_dir = context.temp_dir.path().join("preserve_executable_bit");
     context
         .init()
-        .arg("--build-backend")
-        .arg("uv")
-        .arg("--preview")
+        .arg("--lib")
         .arg(&project_dir)
         .assert()
         .success();
@@ -301,7 +295,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -320,8 +314,7 @@ fn rename_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -337,11 +330,9 @@ fn rename_module() -> Result<()> {
         .success();
 
     // Importing the module with the `module-name` name succeeds.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import bar")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -351,11 +342,9 @@ fn rename_module() -> Result<()> {
     "###);
 
     // Importing the package name fails, it was overridden by `module-name`.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import foo")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import foo"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -387,7 +376,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -399,8 +388,7 @@ fn rename_module_editable_build() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-editable")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -416,11 +404,9 @@ fn rename_module_editable_build() -> Result<()> {
         .success();
 
     // Importing the module with the `module-name` name succeeds.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import bar")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -449,8 +435,11 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-name = "Django_plugin"
     "#})?;
     fs_err::create_dir_all(context.temp_dir.join("src"))?;
 
@@ -458,28 +447,28 @@ fn build_module_name_normalization() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/django_plugin`
-    "###);
+    error: Expected a Python module at: src/Django_plugin/__init__.py
+    ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
     // Error case 2: A matching module, but no `__init__.py`.
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected an `__init__.py` at: `src/Django_plugin/__init__.py`
-    "###);
+    error: Expected a Python module at: src/Django_plugin/__init__.py
+    ");
 
     // Use `Django_plugin` instead of `django_plugin`
     context
@@ -508,11 +497,9 @@ fn build_module_name_normalization() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import Django_plugin")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r"
+        .arg("import Django_plugin"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -521,7 +508,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Error case 3: Multiple modules a matching name.
+    // Former error case 3, now accepted: Multiple modules a matching name.
     // Requires a case-sensitive filesystem.
     #[cfg(target_os = "linux")]
     {
@@ -534,14 +521,12 @@ fn build_module_name_normalization() -> Result<()> {
             .build_backend()
             .arg("build-wheel")
             .arg(&wheel_dir), @r"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
+        django_plugin-1.0.0-py3-none-any.whl
 
         ----- stderr -----
-        error: Expected an `__init__.py` at `django_plugin`, found multiple:
-        * `src/Django_plugin`
-        * `src/django_plugin`
         ");
     }
 
@@ -562,7 +547,7 @@ fn build_sdist_with_long_path() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
     context
@@ -579,8 +564,7 @@ fn build_sdist_with_long_path() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -606,21 +590,20 @@ fn sdist_error_without_module() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Missing source directory at: `src`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     fs_err::create_dir(context.temp_dir.join("src"))?;
@@ -628,15 +611,421 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/foo`
+    error: Expected a Python module at: src/foo/__init__.py
     ");
 
     Ok(())
+}
+
+#[test]
+fn complex_namespace_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let dist = context.temp_dir.child("dist");
+    dist.create_dir_all()?;
+
+    let init_py_a = indoc! {"
+        def one():
+            return 1
+    "};
+
+    let init_py_b = indoc! {"
+        from complex_project.part_a import one
+
+        def two():
+            return one() + one()
+    "};
+
+    let projects = [
+        ("complex-project", "part_a", init_py_a),
+        ("complex-project", "part_b", init_py_b),
+    ];
+
+    for (project_name, part_name, init_py) in projects {
+        let project = context
+            .temp_dir
+            .child(format!("{project_name}-{part_name}"));
+        let project_name_dist_info = project_name.replace('-', "_");
+        let pyproject_toml = formatdoc! {r#"
+            [project]
+            name = "{project_name}-{part_name}"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "{project_name_dist_info}.{part_name}"
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+            "#
+        };
+        project.child("pyproject.toml").write_str(&pyproject_toml)?;
+
+        project
+            .child("src")
+            .child(project_name_dist_info)
+            .child(part_name)
+            .child("__init__.py")
+            .write_str(init_py)?;
+
+        context
+            .build()
+            .arg(project.path())
+            .arg("--out-dir")
+            .arg(dist.path())
+            .assert()
+            .success();
+    }
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .pip_install()
+            .arg("complex-project-part-a")
+            .arg("complex-project-part-b")
+            .arg("--offline")
+            .arg("--find-links")
+            .arg(dist.path()),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + complex-project-part-a==1.0.0
+     + complex-project-part-b==1.0.0
+    "
+    );
+
+    uv_snapshot!(context.python_command()
+        .arg("-c")
+        .arg("from complex_project.part_b import two; print(two())"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2
+
+    ----- stderr -----
+    "
+    );
+
+    // Test editable installs
+    uv_snapshot!(
+        context.filters(),
+        context
+            .pip_install()
+            .arg("-e")
+            .arg("complex-project-part_a")
+            .arg("-e")
+            .arg("complex-project-part_b")
+            .arg("--offline"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - complex-project-part-a==1.0.0
+     + complex-project-part-a==1.0.0 (from file://[TEMP_DIR]/complex-project-part_a)
+     - complex-project-part-b==1.0.0
+     + complex-project-part-b==1.0.0 (from file://[TEMP_DIR]/complex-project-part_b)
+    "
+    );
+
+    uv_snapshot!(context.python_command()
+        .arg("-c")
+        .arg("from complex_project.part_b import two; print(two())"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2
+
+    ----- stderr -----
+    "
+    );
+    Ok(())
+}
+
+/// Test that a symlinked file (here: license) gets included.
+#[test]
+#[cfg(unix)]
+fn symlinked_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    context
+        .init()
+        .arg("--lib")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        license-files = ["LICENSE"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let license_file = context.temp_dir.child("LICENSE");
+    let license_symlink = project.child("LICENSE");
+
+    let license_text = "Project license";
+    license_file.write_str(license_text)?;
+    fs_err::os::unix::fs::symlink(license_file.path(), license_symlink.path())?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0.tar.gz
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("project-1.0.0-py3-none-any.whl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==1.0.0 (from file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl)
+    ");
+
+    // Check that we included the actual license text and not a broken symlink.
+    let installed_license = context
+        .site_packages()
+        .join("project-1.0.0.dist-info")
+        .join("licenses")
+        .join("LICENSE");
+    assert!(
+        fs_err::symlink_metadata(&installed_license)?
+            .file_type()
+            .is_file()
+    );
+    let license = fs_err::read_to_string(&installed_license)?;
+    assert_eq!(license, license_text);
+
+    Ok(())
+}
+
+/// Ignore invalid build backend settings when not building.
+///
+/// They may be from another `uv_build` version that has a different schema.
+#[test]
+fn invalid_build_backend_settings_are_ignored() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        # Error: `source-include` must be a list
+        source-include = "data/build-script.py"
+
+        [build-system]
+        requires = ["uv_build>=10000,<10001"]
+        build-backend = "uv_build"
+    "#})?;
+
+    // Since we are not building, this must pass without complaining about the error in
+    // `tool.uv.build-backend`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Error when there is a relative module root outside the project root, such as
+/// `tool.uv.build-backend.module-root = ".."`.
+#[test]
+fn error_on_relative_module_root_outside_project_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-root = ".."
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    context.temp_dir.child("__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Module root must be inside the project: ..
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Module root must be inside the project: ..
+    ");
+
+    Ok(())
+}
+
+/// Error when there is a relative data directory outside the project root, such as
+/// `tool.uv.build-backend.data.headers = "../headers"`.
+#[test]
+fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend.data]
+        headers = "../header"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let project_module = project.child("src/project");
+    project_module.create_dir_all()?;
+    project_module.child("__init__.py").touch()?;
+
+    context.temp_dir.child("headers").create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    ");
+
+    Ok(())
+}
+
+/// Show an explicit error when there is a venv in source tree.
+#[test]
+fn venv_in_source_tree() {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("--name")
+        .arg("foo")
+        .assert()
+        .success();
+
+    context
+        .venv()
+        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    ");
 }

@@ -24,7 +24,7 @@ def install_package(*, uv: str, package: str):
         check=True,
     )
 
-    logging.info(f"Checking that `{package}` can be imported.")
+    logging.info(f"Checking that `{package}` can be imported with `{sys.executable}`.")
     code = subprocess.run(
         [sys.executable, "-c", f"import {package}"],
         cwd=temp_dir,
@@ -82,7 +82,9 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) is installed.
-        logging.info("Checking that `pylint` is installed.")
+        logging.info(
+            f"Checking that `pylint` is installed with `{sys.executable} -m pip`."
+        )
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
@@ -197,8 +199,8 @@ if __name__ == "__main__":
         # Attempt to install NumPy.
         # This ensures that we can successfully install a package with native libraries.
         #
-        # NumPy doesn't distribute wheels for Python 3.13 (at time of writing).
-        if sys.version_info < (3, 13):
+        # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
+        if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
             install_package(uv=uv, package="numpy")
 
         # Attempt to install `pydantic_core`.

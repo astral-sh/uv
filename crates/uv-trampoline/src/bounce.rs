@@ -1,35 +1,36 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
-use windows::core::{s, BOOL, PSTR};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, TRUE,
+        CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     System::Console::{
-        GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
     },
     System::Environment::GetCommandLineA,
     System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
-        QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
     },
     System::Threading::{
-        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, WaitForInputIdle, WaitForSingleObject,
-        INFINITE, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA,
+        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
+        PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, WaitForInputIdle,
+        WaitForSingleObject,
     },
     UI::WindowsAndMessaging::{
-        CreateWindowExA, DestroyWindow, GetMessageA, PeekMessageA, PostMessageA, HWND_MESSAGE, MSG,
-        PEEK_MESSAGE_REMOVE_TYPE, WINDOW_EX_STYLE, WINDOW_STYLE,
+        CreateWindowExA, DestroyWindow, GetMessageA, HWND_MESSAGE, MSG, PEEK_MESSAGE_REMOVE_TYPE,
+        PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
+use windows::core::{BOOL, PSTR, s};
 
 use crate::{error, format, warn};
 
@@ -77,7 +78,34 @@ fn make_child_cmdline() -> CString {
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     match kind {
-        TrampolineKind::Python => {}
+        TrampolineKind::Python => {
+            // SAFETY: `std::env::set_var` is safe to call on Windows, and
+            // this code only ever runs on Windows.
+            unsafe {
+                // Setting this env var will cause `getpath.py` to set
+                // `executable` to the path to this trampoline. This is
+                // the approach taken by CPython for Python Launchers
+                // (in `launcher.c`). This allows virtual environments to
+                // be correctly detected when using trampolines.
+                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
+                // If this is not a virtual environment and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set =
+                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
+                }
+            }
+        }
         TrampolineKind::Script => {
             // Use the full executable name because CMD only passes the name of the executable (but not the path)
             // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
@@ -115,6 +143,20 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
         }
     }
     command.extend(br#"""#);
+}
+
+/// Checks if the given executable is part of a virtual environment
+///
+/// Checks if a `pyvenv.cfg` file exists in grandparent directory of the given executable.
+/// PEP 405 specifies a more robust procedure (checking both the parent and grandparent
+/// directory and then scanning for a `home` key), but in practice we have found this to
+/// be unnecessary.
+fn is_virtualenv(executable: &Path) -> bool {
+    executable
+        .parent()
+        .and_then(Path::parent)
+        .map(|path| path.join("pyvenv.cfg").is_file())
+        .unwrap_or(false)
 }
 
 /// Reads the executable binary from the back to find:
@@ -172,7 +214,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         buffer.truncate(read_bytes);
 
         let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
-            error_and_exit("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
+            error_and_exit(
+                "Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?",
+            );
         };
         kind = inner_kind;
 
@@ -186,14 +230,19 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    error_and_exit(&format!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len));
+                    error_and_exit(&format!(
+                        "Only paths with a length up to 32KBs are supported but the python path has a length of {}",
+                        path_len
+                    ));
                 }
 
                 // SAFETY: path len is guaranteed to be less than 32KBs
                 path_len as usize
             }
             None => {
-                error_and_exit("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
+                error_and_exit(
+                    "Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?",
+                );
             }
         };
 
@@ -212,7 +261,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
 
             if u64::from(bytes_to_read) > file_size {
-                error_and_exit("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
+                error_and_exit(
+                    "The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian",
+                );
             }
         }
     };
@@ -230,10 +281,18 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         parent_dir.join(path)
     };
 
-    // NOTICE: dunce adds 5kb~
-    let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-        error_and_exit("Failed to canonicalize script path");
-    });
+    let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
+        // NOTICE: dunce adds 5kb~
+        // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
+        // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
+        dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
+            error_and_exit("Failed to canonicalize script path");
+        })
+    } else {
+        // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
+        // avoid resolving junctions.
+        path
+    };
 
     (kind, path)
 }
@@ -357,6 +416,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
+#[allow(clippy::ptr_eq)]
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!

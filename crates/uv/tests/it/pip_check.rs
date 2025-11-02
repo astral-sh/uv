@@ -2,8 +2,8 @@ use anyhow::Result;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
-use crate::common::uv_snapshot;
 use crate::common::TestContext;
+use crate::common::uv_snapshot;
 
 #[test]
 fn check_compatible_packages() -> Result<()> {
@@ -186,4 +186,37 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn check_python_version() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("urllib3")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + urllib3==2.2.1
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_check().arg("--python-version").arg("3.7"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    Found 1 incompatibility
+    The package `urllib3` requires Python >=3.8, but `3.12.[X]` is installed
+    "
+    );
 }

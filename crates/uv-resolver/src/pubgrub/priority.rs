@@ -132,7 +132,7 @@ impl PubGrubPriorities {
             PubGrubPackageInner::System(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(3)),
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 // To ensure deterministic resolution, each (virtual) package needs to be registered
                 // on discovery (as dependency of another package), before we query it for
@@ -152,7 +152,7 @@ impl PubGrubPriorities {
                     Some(tiebreaker) => *tiebreaker,
                     None => {
                         if cfg!(debug_assertions) {
-                            panic!("Virtual package not known: `{package}`")
+                            panic!("Package not registered in prioritization: `{package:?}`")
                         } else {
                             PubGrubTiebreaker(Reverse(u32::MAX))
                         }

@@ -155,7 +155,8 @@ impl ExtrasSpecificationInner {
         self.include.names().chain(&self.exclude)
     }
 
-    /// Returns `true` if the specification includes the given extra.
+    /// Returns an iterator over all extras that are included in the specification,
+    /// assuming `all_names` is an iterator over all extras.
     pub fn extra_names<'a, Names>(
         &'a self,
         all_names: Names,
@@ -212,8 +213,8 @@ impl ExtrasSpecificationHistory {
     /// Conceptually this being an empty list should be equivalent to
     /// [`ExtrasSpecification::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
-    pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
-        let ExtrasSpecificationHistory {
+    pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
+        let Self {
             extra,
             no_extra,
             all_extras,
@@ -263,6 +264,14 @@ pub struct ExtrasSpecificationWithDefaults {
 }
 
 impl ExtrasSpecificationWithDefaults {
+    /// Do not enable any extras
+    ///
+    /// Many places in the code need to know what extras are active,
+    /// but various commands or subsystems never enable any extras,
+    /// in which case they want this.
+    pub fn none() -> Self {
+        ExtrasSpecification::default().with_defaults(DefaultExtras::default())
+    }
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, extra: &ExtraName) -> bool {
         self.cur.contains(extra) && !self.prev.contains(extra)
@@ -287,26 +296,26 @@ impl IncludeExtras {
     /// Returns `true` if the specification includes the given extra.
     pub fn contains(&self, extra: &ExtraName) -> bool {
         match self {
-            IncludeExtras::Some(extras) => extras.contains(extra),
-            IncludeExtras::All => true,
+            Self::Some(extras) => extras.contains(extra),
+            Self::All => true,
         }
     }
 
     /// Returns `true` if the specification will have no effect.
     pub fn is_empty(&self) -> bool {
         match self {
-            IncludeExtras::Some(extras) => extras.is_empty(),
+            Self::Some(extras) => extras.is_empty(),
             // Although technically this is a noop if they have no extras,
             // conceptually they're *trying* to have an effect, so treat it as one.
-            IncludeExtras::All => false,
+            Self::All => false,
         }
     }
 
     /// Iterate over all extras referenced in the [`IncludeExtras`].
-    pub fn names(&self) -> std::slice::Iter<ExtraName> {
+    pub fn names(&self) -> std::slice::Iter<'_, ExtraName> {
         match self {
-            IncludeExtras::Some(extras) => extras.iter(),
-            IncludeExtras::All => [].iter(),
+            Self::Some(extras) => extras.iter(),
+            Self::All => [].iter(),
         }
     }
 }

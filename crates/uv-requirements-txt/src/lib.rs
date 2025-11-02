@@ -40,6 +40,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use rustc_hash::FxHashSet;
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
@@ -52,8 +53,10 @@ use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
+use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
+#[cfg(feature = "http")]
+use uv_redacted::DisplaySafeUrl;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -168,6 +171,24 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self, RequirementsTxtFileError> {
+        let mut visited = VisitedFiles::Requirements {
+            requirements: &mut FxHashSet::default(),
+            constraints: &mut FxHashSet::default(),
+        };
+        Self::parse_impl(requirements_txt, working_dir, client_builder, &mut visited).await
+    }
+
+    /// See module level documentation
+    #[instrument(
+        skip_all,
+        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
+    )]
+    async fn parse_impl(
+        requirements_txt: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        client_builder: &BaseClientBuilder<'_>,
+        visited: &mut VisitedFiles<'_>,
+    ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
@@ -218,6 +239,7 @@ impl RequirementsTxt {
             requirements_dir,
             client_builder,
             requirements_txt,
+            visited,
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
@@ -234,12 +256,13 @@ impl RequirementsTxt {
     /// the current working directory. However, relative paths to sub-files (e.g., `-r ../requirements.txt`)
     /// are resolved against the directory of the containing `requirements.txt` file, to match
     /// `pip`'s behavior.
-    pub async fn parse_inner(
+    async fn parse_inner(
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
         client_builder: &BaseClientBuilder<'_>,
         requirements_txt: &Path,
+        visited: &mut VisitedFiles<'_>,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -274,14 +297,33 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_requirements =
-                        Box::pin(Self::parse(&sub_file, working_dir, client_builder))
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+                    match visited {
+                        VisitedFiles::Requirements { requirements, .. } => {
+                            if !requirements.insert(sub_file.clone()) {
+                                continue;
+                            }
+                        }
+                        // Treat any nested requirements or constraints as constraints. This differs
+                        // from `pip`, which seems to treat `-r` requirements in constraints files as
+                        // _requirements_, but we don't want to support that.
+                        VisitedFiles::Constraints { constraints } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                        }
+                    }
+                    let sub_requirements = Box::pin(Self::parse_impl(
+                        &sub_file,
+                        working_dir,
+                        client_builder,
+                        visited,
+                    ))
+                    .await
+                    .map_err(|err| RequirementsTxtParserError::Subfile {
+                        source: Box::new(err),
+                        start,
+                        end,
+                    })?;
 
                     // Disallow conflicting `--index-url` in nested `requirements` files.
                     if sub_requirements.index_url.is_some()
@@ -329,14 +371,35 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_constraints =
-                        Box::pin(Self::parse(&sub_file, working_dir, client_builder))
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+
+                    // Switch to constraints mode, if we aren't in it already.
+                    let mut visited = match visited {
+                        VisitedFiles::Requirements { constraints, .. } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                            VisitedFiles::Constraints { constraints }
+                        }
+                        VisitedFiles::Constraints { constraints } => {
+                            if !constraints.insert(sub_file.clone()) {
+                                continue;
+                            }
+                            VisitedFiles::Constraints { constraints }
+                        }
+                    };
+
+                    let sub_constraints = Box::pin(Self::parse_impl(
+                        &sub_file,
+                        working_dir,
+                        client_builder,
+                        &mut visited,
+                    ))
+                    .await
+                    .map_err(|err| RequirementsTxtParserError::Subfile {
+                        source: Box::new(err),
+                        start,
+                        end,
+                    })?;
 
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
@@ -393,7 +456,10 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::UnsupportedOption(flag) => {
                     if requirements_txt == Path::new("-") {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)", flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option from stdin: `{flag}`",
@@ -402,7 +468,11 @@ impl RequirementsTxt {
                         }
                     } else {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)", path = requirements_txt.user_display().cyan(), flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}`",
@@ -419,7 +489,7 @@ impl RequirementsTxt {
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
     pub fn update_from(&mut self, other: Self) {
-        let RequirementsTxt {
+        let Self {
             requirements,
             constraints,
             editables,
@@ -460,33 +530,33 @@ impl UnsupportedOption {
     /// The name of the unsupported option.
     fn name(self) -> &'static str {
         match self {
-            UnsupportedOption::PreferBinary => "--prefer-binary",
-            UnsupportedOption::RequireHashes => "--require-hashes",
-            UnsupportedOption::Pre => "--pre",
-            UnsupportedOption::TrustedHost => "--trusted-host",
-            UnsupportedOption::UseFeature => "--use-feature",
+            Self::PreferBinary => "--prefer-binary",
+            Self::RequireHashes => "--require-hashes",
+            Self::Pre => "--pre",
+            Self::TrustedHost => "--trusted-host",
+            Self::UseFeature => "--use-feature",
         }
     }
 
     /// Returns `true` if the option is supported on the CLI.
     fn cli(self) -> bool {
         match self {
-            UnsupportedOption::PreferBinary => false,
-            UnsupportedOption::RequireHashes => true,
-            UnsupportedOption::Pre => true,
-            UnsupportedOption::TrustedHost => true,
-            UnsupportedOption::UseFeature => false,
+            Self::PreferBinary => false,
+            Self::RequireHashes => true,
+            Self::Pre => true,
+            Self::TrustedHost => true,
+            Self::UseFeature => false,
         }
     }
 
     /// Returns an iterator over all unsupported options.
-    fn iter() -> impl Iterator<Item = UnsupportedOption> {
+    fn iter() -> impl Iterator<Item = Self> {
         [
-            UnsupportedOption::PreferBinary,
-            UnsupportedOption::RequireHashes,
-            UnsupportedOption::Pre,
-            UnsupportedOption::TrustedHost,
-            UnsupportedOption::UseFeature,
+            Self::PreferBinary,
+            Self::RequireHashes,
+            Self::Pre,
+            Self::TrustedHost,
+            Self::UseFeature,
         ]
         .iter()
         .copied()
@@ -942,11 +1012,11 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
-    let url = Url::from_str(path_utf8)
+    let url = DisplaySafeUrl::from_str(path_utf8)
         .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     let response = client
         .for_host(&url)
-        .get(url.clone())
+        .get(Url::from(url.clone()))
         .send()
         .await
         .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
@@ -1040,7 +1110,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(Url, reqwest_middleware::Error),
+    Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     InvalidUrl(String, url::ParseError),
 }
@@ -1068,7 +1138,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+                write!(
+                    f,
+                    "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?"
+                )
             }
             Self::NoBinary { specifier, .. } => {
                 write!(f, "Invalid specifier for `--no-binary`: {specifier}")
@@ -1119,7 +1192,7 @@ impl Display for RequirementsTxtParserError {
 
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self {
+        match self {
             Self::Io(err) => err.source(),
             Self::Url { source, .. } => Some(source),
             Self::FileUrl { .. } => None,
@@ -1291,13 +1364,30 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(feature = "http")]
 impl RequirementsTxtParserError {
-    fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+    fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
         Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
 
-    fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(url, err)
     }
+}
+
+/// Avoid infinite recursion through recursive inclusions, while also being mindful of nested
+/// requirements and constraint inclusions.
+#[derive(Debug)]
+enum VisitedFiles<'a> {
+    /// The requirements are included as regular requirements, and can recursively include both
+    /// requirements and constraints.
+    Requirements {
+        requirements: &'a mut FxHashSet<PathBuf>,
+        constraints: &'a mut FxHashSet<PathBuf>,
+    },
+    /// The requirements are included as constraints, all recursive inclusions are considered
+    /// constraints.
+    Constraints {
+        constraints: &'a mut FxHashSet<PathBuf>,
+    },
 }
 
 /// Calculates the column and line offset of a given cursor based on the
@@ -1342,12 +1432,14 @@ fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
     use anyhow::Result;
     use assert_fs::prelude::*;
     use fs_err as fs;
     use indoc::indoc;
+    use insta::assert_debug_snapshot;
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
@@ -1356,7 +1448,7 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, RequirementsTxt};
+    use crate::{RequirementsTxt, calculate_row_column};
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()
@@ -1394,7 +1486,7 @@ mod test {
         let actual = RequirementsTxt::parse(
             requirements_txt.clone(),
             &working_dir,
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -1443,10 +1535,13 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual =
-            RequirementsTxt::parse(&requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            &requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
 
@@ -1465,10 +1560,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1487,10 +1585,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap_err();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap_err();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1509,10 +1610,13 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt,
+            &working_dir,
+            &BaseClientBuilder::default(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
 
@@ -1535,7 +1639,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1580,7 +1684,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1613,7 +1717,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1646,7 +1750,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1679,7 +1783,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1710,7 +1814,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1743,7 +1847,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1774,7 +1878,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1806,7 +1910,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1839,7 +1943,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -1882,7 +1986,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             parent_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -1946,7 +2050,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2021,7 +2125,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2029,7 +2133,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [],
                 constraints: [],
@@ -2040,7 +2144,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Directory(
                                         ParsedDirectoryUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2052,12 +2156,14 @@ mod test {
                                                 fragment: None,
                                             },
                                             install_path: "/foo/bar",
-                                            editable: true,
-                                            virtual: false,
+                                            editable: Some(
+                                                true,
+                                            ),
+                                            virtual: None,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2092,7 +2198,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2121,7 +2227,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -2169,7 +2275,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2177,7 +2283,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2323,7 +2429,7 @@ mod test {
                 editables: [],
                 index_url: Some(
                     VerbatimUrl {
-                        url: Url {
+                        url: DisplaySafeUrl {
                             scheme: "https",
                             cannot_be_a_base: false,
                             username: "",
@@ -2349,7 +2455,7 @@ mod test {
                 no_binary: All,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2384,7 +2490,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap();
@@ -2392,7 +2498,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2401,7 +2507,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2417,7 +2523,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2450,7 +2556,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2466,7 +2572,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2499,7 +2605,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2515,7 +2621,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2552,7 +2658,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2568,7 +2674,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2601,7 +2707,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2617,7 +2723,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2650,7 +2756,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
+                                            url: DisplaySafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2666,7 +2772,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
+                                        url: DisplaySafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2707,7 +2813,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2726,7 +2832,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            &BaseClientBuilder::new(),
+            &BaseClientBuilder::default(),
         )
         .await
         .unwrap_err();
@@ -2765,5 +2871,99 @@ mod test {
 
         // Assert line and columns are expected
         assert_eq!(line_column, expected, "Issues with input: {input}");
+    }
+
+    /// Test different kinds of recursive inclusions with requirements and constraints
+    #[tokio::test]
+    async fn recursive_circular_inclusion() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let both = temp_dir.child("both.txt");
+        both.write_str(indoc! {"
+            pkg-both
+        "})?;
+        let both = temp_dir.child("both-recursive.txt");
+        both.write_str(indoc! {"
+            pkg-both-recursive
+            -r both-recursive.txt
+            -c both-recursive.txt
+        "})?;
+        let requirements_only = temp_dir.child("requirements-only.txt");
+        requirements_only.write_str(indoc! {"
+            pkg-requirements-only
+            -r requirements-only.txt
+        "})?;
+        let requirements_only = temp_dir.child("requirements-only-recursive.txt");
+        requirements_only.write_str(indoc! {"
+            pkg-requirements-only-recursive
+            -r requirements-only-recursive.txt
+        "})?;
+        let constraints_only = temp_dir.child("requirements-in-constraints.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-requirements-in-constraints
+            # Some nested recursion for good measure
+            -c constraints-only.txt
+        "})?;
+        let constraints_only = temp_dir.child("constraints-only.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-constraints-only
+            -c constraints-only.txt
+            # Using `-r` inside `-c`
+            -r requirements-in-constraints.txt
+        "})?;
+        let constraints_only = temp_dir.child("constraints-only-recursive.txt");
+        constraints_only.write_str(indoc! {"
+            pkg-constraints-only-recursive
+            -r constraints-only-recursive.txt
+        "})?;
+
+        let requirements = temp_dir.child("requirements.txt");
+        requirements.write_str(indoc! {"
+            # Even if a package was already included as a constraint, it is also included as
+            # requirement
+            -c both.txt
+            -r both.txt
+            -c both-recursive.txt
+            -r both-recursive.txt
+
+            -r requirements-only.txt
+            -r requirements-only-recursive.txt
+            -c constraints-only.txt
+            -c constraints-only-recursive.txt
+        "})?;
+
+        let parsed = RequirementsTxt::parse(
+            &requirements,
+            temp_dir.path(),
+            &BaseClientBuilder::default(),
+        )
+        .await?;
+
+        let requirements: BTreeSet<String> = parsed
+            .requirements
+            .iter()
+            .map(|entry| entry.requirement.to_string())
+            .collect();
+        let constraints: BTreeSet<String> =
+            parsed.constraints.iter().map(ToString::to_string).collect();
+
+        assert_debug_snapshot!(requirements, @r#"
+        {
+            "pkg-both",
+            "pkg-both-recursive",
+            "pkg-requirements-only",
+            "pkg-requirements-only-recursive",
+        }
+        "#);
+        assert_debug_snapshot!(constraints, @r#"
+        {
+            "pkg-both",
+            "pkg-both-recursive",
+            "pkg-constraints-only",
+            "pkg-constraints-only-recursive",
+            "pkg-requirements-in-constraints",
+        }
+        "#);
+
+        Ok(())
     }
 }

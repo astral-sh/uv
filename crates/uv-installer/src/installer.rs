@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::RAYON_INITIALIZE;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
+use uv_preview::Preview;
 use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
@@ -17,20 +18,25 @@ pub struct Installer<'a> {
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
-    installer_name: Option<String>,
-    installer_metadata: bool,
+    /// The name of the [`Installer`].
+    name: Option<String>,
+    /// The metadata associated with the [`Installer`].
+    metadata: bool,
+    /// Preview settings for the installer.
+    preview: Preview,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a PythonEnvironment) -> Self {
+    pub fn new(venv: &'a PythonEnvironment, preview: Preview) -> Self {
         Self {
             venv,
             link_mode: LinkMode::default(),
             cache: None,
             reporter: None,
-            installer_name: Some("uv".to_string()),
-            installer_metadata: true,
+            name: Some("uv".to_string()),
+            metadata: true,
+            preview,
         }
     }
 
@@ -62,7 +68,7 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
         Self {
-            installer_name,
+            name: installer_name,
             ..self
         }
     }
@@ -71,7 +77,7 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
         Self {
-            installer_metadata,
+            metadata: installer_metadata,
             ..self
         }
     }
@@ -84,8 +90,9 @@ impl<'a> Installer<'a> {
             cache,
             link_mode,
             reporter,
-            installer_name,
-            installer_metadata,
+            name: installer_name,
+            metadata: installer_metadata,
+            preview,
         } = self;
 
         if cache.is_some_and(Cache::is_temporary) {
@@ -105,12 +112,13 @@ impl<'a> Installer<'a> {
         rayon::spawn(move || {
             let result = install(
                 wheels,
-                layout,
-                installer_name,
+                &layout,
+                installer_name.as_deref(),
                 link_mode,
-                reporter,
+                reporter.as_ref(),
                 relocatable,
                 installer_metadata,
+                preview,
             );
 
             // This may fail if the main task was cancelled.
@@ -135,12 +143,13 @@ impl<'a> Installer<'a> {
 
         install(
             wheels,
-            self.venv.interpreter().layout(),
-            self.installer_name,
+            &self.venv.interpreter().layout(),
+            self.name.as_deref(),
             self.link_mode,
-            self.reporter,
+            self.reporter.as_ref(),
             self.venv.relocatable(),
-            self.installer_metadata,
+            self.metadata,
+            self.preview,
         )
     }
 }
@@ -149,19 +158,20 @@ impl<'a> Installer<'a> {
 #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
 fn install(
     wheels: Vec<CachedDist>,
-    layout: Layout,
-    installer_name: Option<String>,
+    layout: &Layout,
+    installer_name: Option<&str>,
     link_mode: LinkMode,
-    reporter: Option<Arc<dyn Reporter>>,
+    reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
+    preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
     LazyLock::force(&RAYON_INITIALIZE);
-    let locks = uv_install_wheel::Locks::default();
+    let locks = uv_install_wheel::Locks::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
-            &layout,
+            layout,
             relocatable,
             wheel.path(),
             wheel.filename(),
@@ -174,7 +184,8 @@ fn install(
             } else {
                 Some(wheel.cache_info())
             },
-            installer_name.as_deref(),
+            wheel.build_info(),
+            installer_name,
             installer_metadata,
             link_mode,
             &locks,

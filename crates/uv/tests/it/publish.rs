@@ -1,10 +1,16 @@
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
-use indoc::indoc;
+use fs_err::OpenOptions;
+use indoc::{formatdoc, indoc};
+use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::env::current_dir;
+use std::io::Write;
 use uv_static::EnvVars;
+use wiremock::matchers::{basic_auth, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
 fn username_password_no_longer_supported() {
@@ -72,9 +78,7 @@ fn mixed_credentials() {
         .arg("always")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -98,9 +102,7 @@ fn missing_trusted_publishing_permission() {
         .arg("always")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -108,8 +110,10 @@ fn missing_trusted_publishing_permission() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
-      Caused by: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
-    "###
+      Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
+      Caused by: GitHub Actions detection error
+      Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+    "
     );
 }
 
@@ -124,9 +128,7 @@ fn no_credentials() {
         .arg("https://test.pypi.org/legacy/")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true")
-        // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -134,12 +136,15 @@ fn no_credentials() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
-    Trusted publishing error: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
+    error: Trusted publishing failed
+      Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
+      Caused by: GitHub Actions detection error
+      Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Failed to send POST request
       Caused by: Missing credentials for https://test.pypi.org/legacy/
-    "###
+    "
     );
 }
 
@@ -384,5 +389,220 @@ fn invalid_index() {
     ----- stderr -----
     error: Index is missing a publish URL: `foo`
     "###
+    );
+}
+
+/// Ensure that we read index credentials from the environment when publishing.
+///
+/// <https://github.com/astral-sh/uv/issues/11836#issuecomment-3022735011>
+#[tokio::test]
+async fn read_index_credential_env_vars_for_check_url() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    context
+        .init()
+        .arg("--name")
+        .arg("astral-test-private")
+        .arg(".")
+        .assert()
+        .success();
+
+    context.build().arg("--wheel").assert().success();
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(false)
+        .open(context.temp_dir.join("pyproject.toml"))
+        .unwrap();
+    file.write_all(
+        formatdoc! {
+            r#"
+            [[tool.uv.index]]
+            name = "private-index"
+            url = "{index_uri}/simple/"
+            publish-url = "{index_uri}/upload"
+            "#,
+            index_uri = server.uri()
+        }
+        .as_bytes(),
+    )
+    .unwrap();
+
+    let filename = "astral_test_private-0.1.0-py3-none-any.whl";
+    let wheel = context.temp_dir.join("dist").join(filename);
+    let sha256 = format!("{:x}", Sha256::digest(fs_err::read(&wheel).unwrap()));
+
+    let simple_index = json! ({
+          "files": [
+            {
+              "filename": filename,
+              "hashes": {
+                "sha256": sha256
+              },
+              "url": format!("{}/{}", server.uri(), filename),
+            }
+        ]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/astral-test-private/"))
+        .and(basic_auth("username", "secret"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    // Test that we fail without credentials
+    uv_snapshot!(context.filters(), context.publish()
+        .current_dir(&context.temp_dir)
+        .arg(&wheel)
+        .arg("--index")
+        .arg("private-index")
+        .arg("--trusted-publishing")
+        .arg("never"),
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Failed to send POST request
+      Caused by: Missing credentials for http://[LOCALHOST]/upload
+    "
+    );
+    // Test that it works with credentials
+    uv_snapshot!(context.filters(), context.publish()
+        .current_dir(&context.temp_dir)
+        .arg(&wheel)
+        .arg("--index")
+        .arg("private-index")
+        .env("UV_INDEX_PRIVATE_INDEX_USERNAME", "username")
+        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret")
+        .arg("--trusted-publishing")
+        .arg("never"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    "
+    );
+}
+
+/// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
+#[tokio::test]
+async fn gitlab_trusted_publishing_pypi_id_token() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Audience endpoint (PyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"audience\":\"pypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Mint token endpoint returns a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
+        .env("PYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+/// Native GitLab CI trusted publishing using `TESTPYPI_ID_TOKEN`
+#[tokio::test]
+async fn gitlab_trusted_publishing_testpypi_id_token() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Audience endpoint (TestPyPI)
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("{\"audience\":\"testpypi\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Mint token endpoint returns a short-lived API token
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw("{\"token\":\"apitoken\"}", "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // Upload endpoint requires the minted token as Basic auth
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
+        .env(EnvVars::GITLAB_CI, "true")
+        .env_remove(EnvVars::GITHUB_ACTIONS)
+        .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
     );
 }

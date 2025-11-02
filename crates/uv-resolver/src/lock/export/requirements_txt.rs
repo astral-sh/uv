@@ -13,6 +13,7 @@ use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
@@ -23,7 +24,7 @@ use crate::{Installable, LockError};
 pub struct RequirementsTxtExport<'lock> {
     nodes: Vec<ExportableRequirement<'lock>>,
     hashes: bool,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
 }
 
 impl<'lock> RequirementsTxtExport<'lock> {
@@ -33,7 +34,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
-        editable: EditableMode,
+        editable: Option<EditableMode>,
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
@@ -45,7 +46,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {
@@ -94,7 +95,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     .expect("Internal Git URLs must have supported schemes");
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = Url::from(ParsedGitUrl {
+                    let url = DisplaySafeUrl::from(ParsedGitUrl {
                         url: git_url.clone(),
                         subdirectory: git.subdirectory.clone(),
                     });
@@ -102,12 +103,19 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Direct(url, direct) => {
-                    let url = Url::from(ParsedArchiveUrl {
+                    let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
-                    write!(f, "{} @ {}", package.id.name, url)?;
+                    write!(
+                        f,
+                        "{} @ {}",
+                        package.id.name,
+                        // TODO(zanieb): We should probably omit passwords here by default, but we
+                        // should change it in a breaking release and allow opt-in to include them.
+                        url.displayable_with_credentials()
+                    )?;
                 }
                 Source::Path(path) | Source::Directory(path) => {
                     if path.is_absolute() {
@@ -121,10 +129,10 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     }
                 }
                 Source::Editable(path) => match self.editable {
-                    EditableMode::Editable => {
+                    None | Some(EditableMode::Editable) => {
                         write!(f, "-e {}", anchor(path).portable_display())?;
                     }
-                    EditableMode::NonEditable => {
+                    Some(EditableMode::NonEditable) => {
                         if path.is_absolute() {
                             write!(
                                 f,

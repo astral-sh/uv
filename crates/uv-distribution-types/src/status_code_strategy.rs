@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::ops::Deref;
 
 use http::StatusCode;
@@ -66,7 +68,7 @@ impl IndexStatusCodeStrategy {
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
         match self {
-            IndexStatusCodeStrategy::Default => match status_code {
+            Self::Default => match status_code {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
                 StatusCode::UNAUTHORIZED => {
                     capabilities.set_unauthorized(index_url.clone());
@@ -78,15 +80,11 @@ impl IndexStatusCodeStrategy {
                 }
                 _ => IndexStatusCodeDecision::Fail(status_code),
             },
-            IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
+            Self::IgnoreErrorCodes { status_codes } => {
                 if status_codes.contains(&status_code) {
                     IndexStatusCodeDecision::Ignore
                 } else {
-                    IndexStatusCodeStrategy::Default.handle_status_code(
-                        status_code,
-                        index_url,
-                        capabilities,
-                    )
+                    Self::Default.handle_status_code(status_code, index_url, capabilities)
                 }
             }
         }
@@ -136,17 +134,17 @@ impl<'de> Deserialize<'de> for SerializableStatusCode {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerializableStatusCode {
-    fn schema_name() -> String {
-        "StatusCode".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("StatusCode")
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        let mut schema = gen.subschema_for::<u16>().into_object();
-        schema.metadata().description = Some("HTTP status code (100-599)".to_string());
-        schema.number().minimum = Some(100.0);
-        schema.number().maximum = Some(599.0);
-
-        schema.into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "number",
+            "minimum": 100,
+            "maximum": 599,
+            "description": "HTTP status code (100-599)"
+        })
     }
 }
 

@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 pub use dist_info_name::DistInfoName;
 pub use extra_name::{DefaultExtras, ExtraName};
-pub use group_name::{DefaultGroups, GroupName, PipGroupName, DEV_DEPENDENCIES};
+pub use group_name::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PipGroupName};
 pub use package_name::PackageName;
 
 use uv_small_str::SmallString;
@@ -153,8 +153,8 @@ pub enum InvalidPipGroupError {
 impl Display for InvalidPipGroupError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            InvalidPipGroupError::Name(e) => e.fmt(f),
-            InvalidPipGroupError::Path(e) => e.fmt(f),
+            Self::Name(e) => e.fmt(f),
+            Self::Path(e) => e.fmt(f),
         }
     }
 }

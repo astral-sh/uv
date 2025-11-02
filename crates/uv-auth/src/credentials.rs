@@ -1,33 +1,41 @@
+use std::borrow::Cow;
+use std::fmt;
+use std::io::Read;
+use std::io::Write;
+use std::str::FromStr;
+
 use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
-use std::borrow::Cow;
-use std::fmt;
-
+use http::Uri;
 use netrc::Netrc;
-use reqwest::header::HeaderValue;
+use reqsign::aws::DefaultSigner;
 use reqwest::Request;
-use std::io::Read;
-use std::io::Write;
+use reqwest::header::HeaderValue;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
+    /// RFC 7617 HTTP Basic Authentication
     Basic {
         /// The username to use for authentication.
         username: Username,
         /// The password to use for authentication.
         password: Option<Password>,
     },
+    /// RFC 6750 Bearer Token Authentication
     Bearer {
         /// The token to use for authentication.
-        token: Vec<u8>,
+        token: Token,
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Username(Option<String>);
 
 impl Username {
@@ -68,7 +76,8 @@ impl From<Option<String>> for Username {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Password(String);
 
 impl Password {
@@ -76,8 +85,14 @@ impl Password {
         Self(password)
     }
 
+    /// Return the [`Password`] as a string slice.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+
+    /// Convert the [`Password`] into its underlying [`String`].
+    pub fn into_string(self) -> String {
+        self.0
     }
 }
 
@@ -87,6 +102,36 @@ impl fmt::Debug for Password {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[serde(transparent)]
+pub struct Token(Vec<u8>);
+
+impl Token {
+    pub fn new(token: Vec<u8>) -> Self {
+        Self(token)
+    }
+
+    /// Return the [`Token`] as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    /// Convert the [`Token`] into its underlying [`Vec<u8>`].
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    /// Return whether the [`Token`] is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "****")
+    }
+}
 impl Credentials {
     /// Create a set of HTTP Basic Authentication credentials.
     #[allow(dead_code)]
@@ -100,7 +145,9 @@ impl Credentials {
     /// Create a set of Bearer Authentication credentials.
     #[allow(dead_code)]
     pub fn bearer(token: Vec<u8>) -> Self {
-        Self::Bearer { token }
+        Self::Bearer {
+            token: Token::new(token),
+        }
     }
 
     pub fn username(&self) -> Option<&str> {
@@ -131,6 +178,16 @@ impl Credentials {
         }
     }
 
+    pub fn is_authenticated(&self) -> bool {
+        match self {
+            Self::Basic {
+                username: _,
+                password,
+            } => password.is_some(),
+            Self::Bearer { token } => !token.is_empty(),
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
@@ -141,7 +198,11 @@ impl Credentials {
     /// Return [`Credentials`] for a [`Url`] from a [`Netrc`] file, if any.
     ///
     /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
-    pub(crate) fn from_netrc(netrc: &Netrc, url: &Url, username: Option<&str>) -> Option<Self> {
+    pub(crate) fn from_netrc(
+        netrc: &Netrc,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Option<Self> {
         let host = url.host_str()?;
         let entry = netrc
             .hosts
@@ -153,7 +214,7 @@ impl Credentials {
             return None;
         }
 
-        Some(Credentials::Basic {
+        Some(Self::Basic {
             username: Username::new(Some(entry.login.clone())),
             password: Some(Password(entry.password.clone())),
         })
@@ -257,7 +318,7 @@ impl Credentials {
         // Parse a `Bearer` authentication header.
         if let Some(token) = header.as_bytes().strip_prefix(b"Bearer ") {
             return Some(Self::Bearer {
-                token: token.to_vec(),
+                token: Token::new(token.to_vec()),
             });
         }
 
@@ -299,7 +360,7 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub fn apply(&self, mut url: Url) -> Url {
+    pub fn apply(&self, mut url: DisplaySafeUrl) -> DisplaySafeUrl {
         if let Some(username) = self.username() {
             let _ = url.set_username(username);
         }
@@ -318,6 +379,127 @@ impl Credentials {
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
         request
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Authentication {
+    /// HTTP Basic or Bearer Authentication credentials.
+    Credentials(Credentials),
+
+    /// AWS Signature Version 4 signing.
+    Signer(DefaultSigner),
+}
+
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Credentials(a), Self::Credentials(b)) => a == b,
+            (Self::Signer(..), Self::Signer(..)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Authentication {}
+
+impl From<Credentials> for Authentication {
+    fn from(credentials: Credentials) -> Self {
+        Self::Credentials(credentials)
+    }
+}
+
+impl From<DefaultSigner> for Authentication {
+    fn from(signer: DefaultSigner) -> Self {
+        Self::Signer(signer)
+    }
+}
+
+impl Authentication {
+    /// Return the password used for authentication, if any.
+    pub(crate) fn password(&self) -> Option<&str> {
+        match self {
+            Self::Credentials(credentials) => credentials.password(),
+            Self::Signer(..) => None,
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn username(&self) -> Option<&str> {
+        match self {
+            Self::Credentials(credentials) => credentials.username(),
+            Self::Signer(..) => None,
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn as_username(&self) -> Cow<'_, Username> {
+        match self {
+            Self::Credentials(credentials) => credentials.as_username(),
+            Self::Signer(..) => Cow::Owned(Username::none()),
+        }
+    }
+
+    /// Return the username used for authentication, if any.
+    pub(crate) fn to_username(&self) -> Username {
+        match self {
+            Self::Credentials(credentials) => credentials.to_username(),
+            Self::Signer(..) => Username::none(),
+        }
+    }
+
+    /// Return `true` if the object contains a means of authenticating.
+    pub(crate) fn is_authenticated(&self) -> bool {
+        match self {
+            Self::Credentials(credentials) => credentials.is_authenticated(),
+            Self::Signer(..) => true,
+        }
+    }
+
+    /// Return `true` if the object contains no credentials.
+    pub(crate) fn is_empty(&self) -> bool {
+        match self {
+            Self::Credentials(credentials) => credentials.is_empty(),
+            Self::Signer(..) => false,
+        }
+    }
+
+    /// Apply the authentication to the given request.
+    ///
+    /// Any existing credentials will be overridden.
+    #[must_use]
+    pub(crate) async fn authenticate(&self, mut request: Request) -> Request {
+        match self {
+            Self::Credentials(credentials) => credentials.authenticate(request),
+            Self::Signer(signer) => {
+                // Build an `http::Request` from the `reqwest::Request`.
+                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
+                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let mut http_req = http::Request::builder()
+                    .method(request.method().clone())
+                    .uri(uri)
+                    .body(())
+                    .unwrap();
+                *http_req.headers_mut() = request.headers().clone();
+
+                // Sign the parts.
+                let (mut parts, ()) = http_req.into_parts();
+                signer
+                    .sign(&mut parts, None)
+                    .await
+                    .expect("AWS signing should succeed");
+
+                // Copy over the signed headers.
+                request.headers_mut().extend(parts.headers);
+
+                // Copy over the signed path and query, if any.
+                if let Some(path_and_query) = parts.uri.path_and_query() {
+                    request.url_mut().set_path(path_and_query.path());
+                    request.url_mut().set_query(path_and_query.query());
+                }
+                request
+            }
+        }
     }
 }
 
@@ -439,6 +621,17 @@ mod tests {
         assert_eq!(
             debugged,
             "Basic { username: Username(Some(\"user\")), password: Some(****) }"
+        );
+    }
+
+    #[test]
+    fn test_bearer_token_obfuscation() {
+        let token = "super_secret_token";
+        let credentials = Credentials::bearer(token.into());
+        let debugged = format!("{credentials:?}");
+        assert!(
+            !debugged.contains(token),
+            "Token should be obfuscated in Debug impl: {debugged}"
         );
     }
 }

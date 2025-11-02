@@ -1,7 +1,7 @@
-use uv_python::platform::{Arch, Os};
+use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn python_list() {
@@ -361,21 +361,24 @@ fn python_list_downloads() {
     // Instead, we choose a Python version where our available distributions are stable
 
     // Test the default display, which requires reverting the test context disabling Python downloads
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
 
     // Show patch versions
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
     cpython-3.10.16-[PLATFORM]    <download available>
     cpython-3.10.15-[PLATFORM]    <download available>
@@ -396,6 +399,7 @@ fn python_list_downloads() {
     pypy-3.10.14-[PLATFORM]       <download available>
     pypy-3.10.13-[PLATFORM]       <download available>
     pypy-3.10.12-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -408,20 +412,21 @@ fn python_list_downloads_installed() {
 
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_python_names()
         .with_filtered_python_install_bin()
+        .with_filtered_python_names()
         .with_managed_python_dirs();
 
     // We do not test showing all interpreters — as it differs per platform
     // Instead, we choose a Python version where our available distributions are stable
 
     // First, the download is shown as available
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -430,7 +435,7 @@ fn python_list_downloads_installed() {
     // the URL
 
     // But not if `--only-installed` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -442,29 +447,31 @@ fn python_list_downloads_installed() {
     context.python_install().arg("3.10").assert().success();
 
     // Then, it should be listed as installed instead of available
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    managed/cpython-3.10.17-[PLATFORM]/[INSTALL-BIN]/python
+    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10.19-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
 
     // But, the display should be reverted if `--only-downloads` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
 
     // And should not be shown if `--no-managed-python` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----

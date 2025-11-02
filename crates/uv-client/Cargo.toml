@@ -1,7 +1,13 @@
 [package]
 name = "uv-client"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -22,8 +28,10 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-torch = { workspace = true }
 uv-version = { workspace = true }
@@ -36,6 +44,7 @@ async_zip = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+h2 = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
@@ -59,9 +68,10 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-http-body-util = { version = "0.1.2" }
-hyper = { version = "1.4.1", features = ["server", "http1"] }
-hyper-util = { version = "0.1.8", features = ["tokio"] }
-insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+insta = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
+tempfile = { workspace = true }

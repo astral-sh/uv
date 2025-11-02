@@ -1,5 +1,6 @@
-use std::fmt::Formatter;
-use std::str::FromStr;
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::{fmt::Formatter, str::FromStr};
 
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError};
 
@@ -11,6 +12,11 @@ impl RequiredVersion {
     /// Return `true` if the given version is required.
     pub fn contains(&self, version: &Version) -> bool {
         self.0.contains(version)
+    }
+
+    /// Returns the underlying [`VersionSpecifiers`].
+    pub fn specifiers(&self) -> &VersionSpecifiers {
+        &self.0
     }
 }
 
@@ -31,20 +37,15 @@ impl FromStr for RequiredVersion {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for RequiredVersion {
-    fn schema_name() -> String {
-        String::from("RequiredVersion")
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("RequiredVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A version specifier, e.g. `>=0.5.0` or `==0.5.0`.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`."
+        })
     }
 }
 

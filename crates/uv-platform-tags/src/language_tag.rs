@@ -140,12 +140,10 @@ impl FromStr for LanguageTag {
             Ok(Self::None)
         } else if let Some(py) = s.strip_prefix("py") {
             match py.len() {
-                0 => {
-                    return Err(ParseLanguageTagError::MissingMajorVersion {
-                        implementation: "Python",
-                        tag: s.to_string(),
-                    });
-                }
+                0 => Err(ParseLanguageTagError::MissingMajorVersion {
+                    implementation: "Python",
+                    tag: s.to_string(),
+                }),
                 1 => {
                     // Ex) `py3`
                     let major = py
@@ -236,8 +234,8 @@ pub enum ParseLanguageTagError {
 mod tests {
     use std::str::FromStr;
 
-    use crate::language_tag::ParseLanguageTagError;
     use crate::LanguageTag;
+    use crate::language_tag::ParseLanguageTagError;
 
     #[test]
     fn none() {

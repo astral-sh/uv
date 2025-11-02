@@ -1,4 +1,4 @@
-use crate::common::{self, get_bin, TestContext};
+use crate::common::{self, TestContext, get_bin};
 use anyhow::Result;
 use insta::assert_snapshot;
 use std::path::Path;
@@ -73,8 +73,8 @@ fn saleor() -> Result<()> {
 // Currently ignored because the project doesn't build with `uv` yet.
 //
 // Source: https://github.com/apache/airflow/blob/c55438d9b2eb9b6680641eefdd0cbc67a28d1d29/pyproject.toml
-#[ignore]
 #[test]
+#[ignore = "Airflow doesn't build with `uv` yet"]
 fn airflow() -> Result<()> {
     lock_ecosystem_package("3.12", "airflow")
 }

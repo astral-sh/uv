@@ -1,0 +1,25 @@
+[package]
+name = "uv-redacted"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ref-cast = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
+url = { workspace = true }
+
+[features]
+schemars = ["dep:schemars"]

@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
@@ -31,15 +30,13 @@ tempfile = { workspace = true }
 tokio = { workspace = true, optional = true}
 tracing = { workspace = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-winsafe = { workspace = true }
-
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 backon = { workspace = true }
 junction = { workspace = true }
+windows = { workspace = true }
 
 [features]
 default = []

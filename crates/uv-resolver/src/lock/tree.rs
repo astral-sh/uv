@@ -10,6 +10,7 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_console::human_readable_bytes;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -30,6 +31,10 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
+    lock: &'env Lock,
+    /// Whether to show sizes in the rendered output.
+    show_sizes: bool,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -41,9 +46,10 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
-        dev: &DependencyGroupsWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
         no_dedupe: bool,
         invert: bool,
+        show_sizes: bool,
     ) -> Self {
         // Identify any workspace members.
         //
@@ -95,7 +101,7 @@ impl<'env> TreeDisplay<'env> {
             // Add an edge from the root.
             graph.add_edge(root, index, Edge::Prod(None));
 
-            if dev.prod() {
+            if groups.prod() {
                 // Push its dependencies on the queue.
                 if seen.insert((id, None)) {
                     queue.push_back((id, None));
@@ -114,7 +120,7 @@ impl<'env> TreeDisplay<'env> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
+                    if groups.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -356,40 +362,58 @@ impl<'env> TreeDisplay<'env> {
 
         // Compute the list of roots.
         let roots = {
-            let mut edges = vec![];
+            // If specific packages were requested, use them as roots.
+            if !packages.is_empty() {
+                let mut roots = graph
+                    .node_indices()
+                    .filter(|index| {
+                        let Node::Package(package_id) = graph[*index] else {
+                            return false;
+                        };
+                        packages.contains(&package_id.name)
+                    })
+                    .collect::<Vec<_>>();
 
-            // Remove any cycles.
-            let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
-                .map(|e| e.id())
-                .collect();
-            for edge_id in feedback_set {
-                if let Some((source, target)) = graph.edge_endpoints(edge_id) {
-                    if let Some(weight) = graph.remove_edge(edge_id) {
-                        edges.push((source, target, weight));
+                // Sort the roots.
+                roots.sort_by_key(|index| &graph[*index]);
+
+                roots
+            } else {
+                let mut edges = vec![];
+
+                // Remove any cycles.
+                let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
+                    .map(|e| e.id())
+                    .collect();
+                for edge_id in feedback_set {
+                    if let Some((source, target)) = graph.edge_endpoints(edge_id) {
+                        if let Some(weight) = graph.remove_edge(edge_id) {
+                            edges.push((source, target, weight));
+                        }
                     }
                 }
+
+                // Find the root nodes: nodes with no incoming edges, or only an edge from the proxy.
+                let mut roots = graph
+                    .node_indices()
+                    .filter(|index| {
+                        graph
+                            .edges_directed(*index, Direction::Incoming)
+                            .next()
+                            .is_none()
+                    })
+                    .collect::<Vec<_>>();
+
+                // Sort the roots.
+                roots.sort_by_key(|index| &graph[*index]);
+
+                // Re-add the removed edges.
+                for (source, target, weight) in edges {
+                    graph.add_edge(source, target, weight);
+                }
+
+                roots
             }
-
-            // Find the root nodes: nodes with no incoming edges, or only an edge from the proxy.
-            let mut roots = graph
-                .node_indices()
-                .filter(|index| {
-                    graph
-                        .edges_directed(*index, Direction::Incoming)
-                        .next()
-                        .is_none()
-                })
-                .collect::<Vec<_>>();
-
-            // Sort the roots.
-            roots.sort_by_key(|index| &graph[*index]);
-
-            // Re-add the removed edges.
-            for (source, target, weight) in edges {
-                graph.add_edge(source, target, weight);
-            }
-
-            roots
         };
 
         Self {
@@ -398,6 +422,8 @@ impl<'env> TreeDisplay<'env> {
             latest,
             depth,
             no_dedupe,
+            lock,
+            show_sizes,
         }
     }
 
@@ -444,6 +470,17 @@ impl<'env> TreeDisplay<'env> {
                     Edge::Dev(group, _) => {
                         let _ = write!(line, " (group: {group})");
                     }
+                }
+            }
+
+            // Append compressed wheel size, if available in the lockfile.
+            // Keep it simple: use the first wheel entry that includes a size.
+            if self.show_sizes {
+                let package = self.lock.find_by_id(package_id);
+                if let Some(size_bytes) = package.wheels.iter().find_map(|wheel| wheel.size) {
+                    let (bytes, unit) = human_readable_bytes(size_bytes);
+                    line.push(' ');
+                    line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
                 }
             }
 

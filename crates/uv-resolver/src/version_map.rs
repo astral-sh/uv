@@ -1,9 +1,10 @@
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::Bound;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
 use pubgrub::Ranges;
+use rustc_hash::FxHashMap;
 use tracing::instrument;
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
@@ -11,17 +12,18 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
-use uv_pypi_types::{HashDigest, Yanked};
+use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, ExcludeNewerTimestamp, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -56,12 +58,25 @@ impl VersionMap {
         let mut stable = false;
         let mut local = false;
         let mut map = BTreeMap::new();
+        let mut core_metadata = FxHashMap::default();
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
+            // Deserialize the version.
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
+
+            // Deserialize the metadata.
+            let core_metadatum =
+                rkyv::deserialize::<Option<ResolutionMetadata>, rkyv::rancor::Error>(
+                    &datum.metadata,
+                )
+                .expect("archived metadata always deserializes");
+            if let Some(core_metadatum) = core_metadatum {
+                core_metadata.insert(version.clone(), core_metadatum);
+            }
+
             stable |= version.is_stable();
             local |= version.is_local();
             map.insert(
@@ -103,6 +118,7 @@ impl VersionMap {
                 map,
                 stable,
                 local,
+                core_metadata,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
@@ -111,7 +127,7 @@ impl VersionMap {
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
-                exclude_newer: exclude_newer.copied(),
+                exclude_newer: exclude_newer.and_then(|en| en.exclude_newer_package(package_name)),
             }),
         }
     }
@@ -137,6 +153,14 @@ impl VersionMap {
 
         Self {
             inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+        }
+    }
+
+    /// Return the [`ResolutionMetadata`] for the given version, if any.
+    pub fn get_metadata(&self, version: &Version) -> Option<&ResolutionMetadata> {
+        match self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(ref lazy) => lazy.core_metadata.get(version),
         }
     }
 
@@ -173,7 +197,7 @@ impl VersionMap {
     pub(crate) fn iter(
         &self,
         range: &Ranges<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
@@ -309,6 +333,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///
@@ -343,7 +368,6 @@ struct VersionMapEager {
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 struct VersionMapLazy {
     /// A map from version to possibly-initialized distribution.
     map: BTreeMap<Version, LazyPrioritizedDist>,
@@ -351,6 +375,8 @@ struct VersionMapLazy {
     stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
+    /// The pre-populated metadata for each version.
+    core_metadata: FxHashMap<Version, ResolutionMetadata>,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleMetadata>,
@@ -364,7 +390,7 @@ struct VersionMapLazy {
     /// in the current environment.
     tags: Option<Tags>,
     /// Whether files newer than this timestamp should be excluded or not.
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: Option<ExcludeNewerTimestamp>,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
@@ -419,7 +445,7 @@ impl VersionMapLazy {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
-                let (excluded, upload_time) = if let Some(exclude_newer) = self.exclude_newer {
+                let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
                             (true, Some(upload_time))

@@ -6,20 +6,20 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 use crate::Metadata;
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Box<[Requirement]>,
-    pub provides_extras: Box<[ExtraName]>,
+    pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
@@ -33,7 +33,7 @@ impl RequiresDist {
             requires_dist: Box::into_iter(metadata.requires_dist)
                 .map(Requirement::from)
                 .collect(),
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
         }
@@ -61,6 +61,7 @@ impl RequiresDist {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
+            ..DiscoveryOptions::default()
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
@@ -107,41 +108,10 @@ impl RequiresDist {
             SourceStrategy::Disabled => &empty,
         };
 
-        // Collect the dependency groups.
-        let dependency_groups = {
-            // First, collect `tool.uv.dev_dependencies`
-            let dev_dependencies = project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref());
-
-            // Then, collect `dependency-groups`
-            let dependency_groups = project_workspace
-                .current_project()
-                .pyproject_toml()
-                .dependency_groups
-                .iter()
-                .flatten()
-                .collect::<BTreeMap<_, _>>();
-
-            // Flatten the dependency groups.
-            let mut dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
-
-            // Add the `dev` group, if `dev-dependencies` is defined.
-            if let Some(dev_dependencies) = dev_dependencies {
-                dependency_groups
-                    .entry(DEV_DEPENDENCIES.clone())
-                    .or_insert_with(Vec::new)
-                    .extend(dev_dependencies.clone());
-            }
-
-            dependency_groups
-        };
+        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+            project_workspace.current_project().root(),
+            project_workspace.current_project().pyproject_toml(),
+        )?;
 
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
@@ -150,9 +120,10 @@ impl RequiresDist {
         // Lower the dependency groups.
         let dependency_groups = dependency_groups
             .into_iter()
-            .map(|(name, requirements)| {
+            .map(|(name, flat_group)| {
                 let requirements = match source_strategy {
-                    SourceStrategy::Enabled => requirements
+                    SourceStrategy::Enabled => flat_group
+                        .requirements
                         .into_iter()
                         .flat_map(|requirement| {
                             let requirement_name = requirement.name.clone();
@@ -182,9 +153,11 @@ impl RequiresDist {
                             )
                         })
                         .collect::<Result<Box<_>, _>>(),
-                    SourceStrategy::Disabled => {
-                        Ok(requirements.into_iter().map(Requirement::from).collect())
-                    }
+                    SourceStrategy::Disabled => Ok(flat_group
+                        .requirements
+                        .into_iter()
+                        .map(Requirement::from)
+                        .collect()),
                 }?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
@@ -226,7 +199,7 @@ impl RequiresDist {
             name: metadata.name,
             requires_dist,
             dependency_groups,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         })
     }
@@ -244,7 +217,7 @@ impl RequiresDist {
             for source in sources.iter() {
                 if let Some(extra) = source.extra() {
                     // If the extra doesn't exist at all, error.
-                    if !metadata.provides_extras.contains(extra) {
+                    if !metadata.provides_extra.contains(extra) {
                         return Err(MetadataError::MissingSourceExtra(
                             name.clone(),
                             extra.clone(),
@@ -265,7 +238,7 @@ impl RequiresDist {
 
                 if let Some(group) = source.group() {
                     // If the group doesn't exist at all, error.
-                    let Some(dependencies) = dependency_groups.get(group) else {
+                    let Some(flat_group) = dependency_groups.get(group) else {
                         return Err(MetadataError::MissingSourceGroup(
                             name.clone(),
                             group.clone(),
@@ -273,7 +246,8 @@ impl RequiresDist {
                     };
 
                     // If there is no such requirement with the group, error.
-                    if !dependencies
+                    if !flat_group
+                        .requirements
                         .iter()
                         .any(|requirement| requirement.name == *name)
                     {
@@ -295,7 +269,7 @@ impl From<Metadata> for RequiresDist {
         Self {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: metadata.dependency_groups,
             dynamic: metadata.dynamic,
         }
@@ -466,8 +440,8 @@ mod test {
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
-    use crate::metadata::requires_dist::FlatRequiresDist;
     use crate::RequiresDist;
+    use crate::metadata::requires_dist::FlatRequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
@@ -486,7 +460,8 @@ mod test {
             &WorkspaceCache::default(),
         )
         .await?;
-        let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
+        let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents)?;
+        let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
@@ -645,14 +620,13 @@ mod test {
             tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
           |                ^
-        invalid string
-        expected `"`, `'`
-        "###);
+        missing opening quote, expected `"`
+        "#);
     }
 
     #[tokio::test]
