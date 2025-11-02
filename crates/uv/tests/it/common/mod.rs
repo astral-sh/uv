@@ -128,6 +128,22 @@ impl TestContext {
         self
     }
 
+    /// Set the "http timeout" for all commands in this context.
+    pub fn with_http_timeout(mut self, http_timeout: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_TIMEOUT.into(), http_timeout.into()));
+        self
+    }
+
+    /// Set the "concurrent installs" for all commands in this context.
+    pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_INSTALLS.into(),
+            concurrent_installs.into(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for messages like "Resolved 10 packages" which
     /// can differ between platforms.
     ///
@@ -223,6 +239,10 @@ impl TestContext {
         ));
         self.filters.push((
             "managed installations, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "search path or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
@@ -647,7 +667,7 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern, format!("[PYTHON-{version}]"))),
             );
 
             // And for the symlink we created in the test the Python path
@@ -1838,19 +1858,18 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Test package for direct URLs in branches"
         requires-python = ">=3.11,<3.13"
         {body}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
         "#
     };
     fs_err::create_dir_all(dir)?;
     fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
-    fs_err::create_dir(dir.join(name))?;
-    fs_err::write(dir.join(name).join("__init__.py"), "")?;
+    fs_err::create_dir_all(dir.join("src").join(name))?;
+    fs_err::write(dir.join("src").join(name).join("__init__.py"), "")?;
     Ok(())
 }
 

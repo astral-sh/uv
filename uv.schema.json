@@ -203,6 +203,16 @@
         "type": "string"
       }
     },
+    "exclude-dependencies": {
+      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "exclude-newer": {
       "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
       "anyOf": [
@@ -2515,6 +2525,11 @@
           "description": "Use the CPU-only PyTorch index.",
           "type": "string",
           "const": "cpu"
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 13.0.",
+          "type": "string",
+          "const": "cu130"
         },
         {
           "description": "Use the PyTorch index for CUDA 12.9.",

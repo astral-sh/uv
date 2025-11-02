@@ -43,10 +43,7 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-codspeed-criterion-compat = { version = "3.0.2", default-features = false, optional = true }
-criterion = { version = "0.7.0", default-features = false, features = [
-  "async_tokio",
-] }
+criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 jiff = { workspace = true }
 tokio = { workspace = true }
 
@@ -54,5 +51,4 @@ tokio = { workspace = true }
 ignored = ["uv-extract"]
 
 [features]
-codspeed = ["codspeed-criterion-compat"]
 static = ["uv-extract/static"]

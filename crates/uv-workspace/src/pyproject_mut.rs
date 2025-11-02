@@ -622,6 +622,41 @@ impl PyProjectTomlMut {
         Ok(added)
     }
 
+    /// Ensure that an optional dependency group exists, creating an empty group if it doesn't.
+    pub fn ensure_optional_dependency(&mut self, extra: &ExtraName) -> Result<(), Error> {
+        // Get or create `project.optional-dependencies`.
+        let optional_dependencies = self
+            .project()?
+            .entry("optional-dependencies")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        // Check if the extra already exists.
+        let extra_exists = optional_dependencies
+            .iter()
+            .any(|(key, _value)| ExtraName::from_str(key).is_ok_and(|e| e == *extra));
+
+        // If the extra doesn't exist, create it.
+        if !extra_exists {
+            optional_dependencies.insert(extra.as_ref(), Item::Value(Value::Array(Array::new())));
+        }
+
+        // If `project.optional-dependencies` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(optional_dependencies) = self
+            .project()?
+            .get_mut("optional-dependencies")
+            .and_then(Item::as_inline_table_mut)
+        {
+            optional_dependencies.fmt();
+        }
+
+        Ok(())
+    }
+
     /// Adds a dependency to `dependency-groups`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -691,6 +726,54 @@ impl PyProjectTomlMut {
         }
 
         Ok(added)
+    }
+
+    /// Ensure that a dependency group exists, creating an empty group if it doesn't.
+    pub fn ensure_dependency_group(&mut self, group: &GroupName) -> Result<(), Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let was_sorted = dependency_groups
+            .get_values()
+            .iter()
+            .filter_map(|(dotted_ks, _)| dotted_ks.first())
+            .map(|k| k.get())
+            .is_sorted();
+
+        // Check if the group already exists.
+        let group_exists = dependency_groups
+            .iter()
+            .any(|(key, _value)| GroupName::from_str(key).is_ok_and(|g| g == *group));
+
+        // If the group doesn't exist, create it.
+        if !group_exists {
+            dependency_groups.insert(group.as_ref(), Item::Value(Value::Array(Array::new())));
+
+            // To avoid churn in pyproject.toml, we only sort new group keys if the
+            // existing keys were sorted.
+            if was_sorted {
+                dependency_groups.sort_values();
+            }
+        }
+
+        // If `dependency-groups` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(dependency_groups) = self
+            .doc
+            .get_mut("dependency-groups")
+            .and_then(Item::as_inline_table_mut)
+        {
+            dependency_groups.fmt();
+        }
+
+        Ok(())
     }
 
     /// Set the constraint for a requirement for an existing dependency.
@@ -1141,10 +1224,18 @@ impl PyProjectTomlMut {
             .get_mut("project")
             .and_then(Item::as_table_mut)
             .ok_or(Error::MalformedWorkspace)?;
-        project.insert(
-            "version",
-            Item::Value(Value::String(Formatted::new(version.to_string()))),
-        );
+
+        if let Some(existing) = project.get_mut("version") {
+            if let Some(value) = existing.as_value_mut() {
+                let mut formatted = Value::from(version.to_string());
+                *formatted.decor_mut() = value.decor().clone();
+                *value = formatted;
+            } else {
+                *existing = Item::Value(Value::from(version.to_string()));
+            }
+        } else {
+            project.insert("version", Item::Value(Value::from(version.to_string())));
+        }
 
         Ok(())
     }

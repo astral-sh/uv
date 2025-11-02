@@ -201,6 +201,10 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let path = uv_fs::normalize_path(&path);
+        // Trim trailing slashes.
+        let path = path.components().collect::<PathBuf>();
 
         let project_path = path
             .ancestors()
@@ -657,6 +661,20 @@ impl Workspace {
         overrides.clone()
     }
 
+    /// Returns the set of dependency exclusions for the workspace.
+    pub fn exclude_dependencies(&self) -> Vec<uv_normalize::PackageName> {
+        let Some(excludes) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.exclude_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        excludes.clone()
+    }
+
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(constraints) = self
@@ -968,17 +986,19 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
+            // Normalize the member glob to remove leading `./` and other relative path components
+            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
                 workspace_root.simplified().to_string_lossy().as_ref(),
             ))
-            .join(member_glob.as_str())
+            .join(normalized_glob.as_ref())
             .to_string_lossy()
             .to_string();
             for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+                .map_err(|err| WorkspaceError::Pattern(absolute_glob.clone(), err))?
             {
                 let member_root = member_root
-                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.to_string(), err))?;
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.clone(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -1363,6 +1383,10 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let project_path = uv_fs::normalize_path(&project_path);
+        // Trim trailing slashes.
+        let project_path = project_path.components().collect::<PathBuf>();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1563,10 +1587,12 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
+        // Normalize the exclude glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(exclude_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(exclude_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let exclude_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1584,10 +1610,12 @@ fn is_included_in_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
+        // Normalize the member glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(member_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -2045,6 +2073,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2145,6 +2174,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2358,6 +2388,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2467,6 +2498,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2589,6 +2621,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2685,6 +2718,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,

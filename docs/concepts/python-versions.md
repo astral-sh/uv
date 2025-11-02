@@ -444,7 +444,7 @@ As Python does not publish official distributable CPython binaries, uv instead u
 distributions from the Astral
 [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
 `python-build-standalone` is also is used in many other Python projects, like
-[Rye](https://github.com/astral-sh/rye), [Mise](https://mise.jdx.dev/lang/python.html), and
+[Mise](https://mise.jdx.dev/lang/python.html) and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
@@ -453,8 +453,7 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 
 These distributions have some behavior quirks, generally as a consequence of portability; see the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details. Additionally, some platforms may not be supported (e.g., distributions
-are not yet available for musl Linux on ARM).
+documentation for details.
 
 ### PyPy distributions
 
@@ -465,6 +464,15 @@ PyPy distributions are provided by the [PyPy project](https://pypy.org).
 Pyodide distributions are provided by the [Pyodide project](https://github.com/pyodide/pyodide).
 
 Pyodide is a port of CPython for the WebAssembly / Emscripten platform.
+
+## Transparent x86_64 emulation on aarch64
+
+Both macOS and Windows support running x86_64 binaries on aarch64 through transparent emulation.
+This is called [Rosetta 2](https://support.apple.com/en-gb/102527) or
+[Windows on ARM (WoA) emulation](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation).
+It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Python interpreter on
+aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
+for its architecture, either all x86_64 or all aarch64.
 
 ## Registration in the Windows registry
 

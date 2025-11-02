@@ -19,6 +19,9 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
+// We retry no more than this many times when polling for login status.
+const STATUS_RETRY_LIMIT: u32 = 60;
+
 /// Login to a service.
 pub(crate) async fn login(
     service: Service,
@@ -38,12 +41,16 @@ pub(crate) async fn login(
             bail!("Cannot specify a password when logging in to pyx");
         }
 
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+        let client = BaseClientBuilder::new(
+            network_settings.connectivity,
+            network_settings.native_tls,
+            network_settings.allow_insecure_host.clone(),
+            preview,
+            network_settings.timeout,
+            network_settings.retries,
+        )
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .build();
 
         let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         let jwt = PyxJwt::decode(&access_token)?;
@@ -211,6 +218,7 @@ pub(crate) async fn pyx_login_with_browser(
         url
     };
 
+    let mut retry = 0;
     let credentials = loop {
         let response = client
             .for_host(store.api())
@@ -221,6 +229,7 @@ pub(crate) async fn pyx_login_with_browser(
             // Retry on 404.
             reqwest::StatusCode::NOT_FOUND => {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                retry += 1;
             }
             // Parse the credentials on success.
             _ if response.status().is_success() => {
@@ -231,6 +240,12 @@ pub(crate) async fn pyx_login_with_browser(
             status => {
                 break Err(anyhow::anyhow!("Failed to login with code `{status}`"));
             }
+        }
+
+        if retry >= STATUS_RETRY_LIMIT {
+            break Err(anyhow::anyhow!(
+                "Login session timed out after {STATUS_RETRY_LIMIT} seconds"
+            ));
         }
     }?;
 

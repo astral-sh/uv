@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -72,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -82,7 +83,7 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -263,8 +264,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(environment.interpreter(), lock_check)
             } else {
                 LockMode::Write(environment.interpreter())
             };
@@ -355,9 +356,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
@@ -587,8 +588,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used alongside `--no-project`");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
@@ -604,8 +605,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used outside of a project");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project",);
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
@@ -739,8 +740,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if locked {
-                    LockMode::Locked(venv.interpreter())
+                } else if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {
@@ -1099,7 +1100,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Copy each entrypoint from the base environments to the ephemeral environment,
                 // updating the Python executable target to ensure they run in the ephemeral
                 // environment.
-                for entry in fs_err::read_dir(interpreter.scripts())? {
+                let scripts = match fs_err::read_dir(interpreter.scripts()) {
+                    Ok(scripts) => scripts,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err.into()),
+                };
+                for entry in scripts {
                     let entry = entry?;
                     if !entry.file_type()?.is_file() {
                         continue;
@@ -1200,23 +1206,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
         )?;
 
-        #[allow(clippy::map_identity)]
-        let commands = interpreter
-            .scripts()
-            .read_dir()
-            .ok()
-            .into_iter()
-            .flatten()
-            .map(|entry| match entry {
-                Ok(entry) => Ok(entry),
-                Err(err) => {
-                    // If we can't read the entry, fail.
-                    // This could be a symptom of a more serious problem.
-                    warn!("Failed to read entry: {}", err);
-                    Err(err)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?
+        let scripts = match fs_err::read_dir(interpreter.scripts()) {
+            Ok(scripts) => scripts.into_iter().collect::<Result<Vec<_>, _>>()?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => return Err(err.into()),
+        };
+
+        let commands = scripts
             .into_iter()
             .filter(|entry| {
                 entry
@@ -1226,7 +1222,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows)
+                let path = if cfg!(windows)
                     && path
                         .extension()
                         .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
@@ -1235,9 +1231,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     path.with_extension("")
                 } else {
                     path
-                }
-            })
-            .map(|path| {
+                };
+
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -1740,9 +1735,24 @@ impl RunCommand {
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
                 let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
 
+                let client = client_builder.build();
+                let mut response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
+
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if url.host_str() == Some("gist.github.com") {
-                    url = resolve_gist_url(&url, &client_builder).await?;
+                if response.url().host_str() == Some("gist.github.com") {
+                    url =
+                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
+                            .await?;
+
+                    response = client
+                        .for_host(&url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await?;
                 }
 
                 let file_stem = url
@@ -1754,13 +1764,6 @@ impl RunCommand {
                     .prefix(file_stem)
                     .suffix(".py")
                     .tempfile()?;
-
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();

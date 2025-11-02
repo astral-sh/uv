@@ -61,6 +61,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The excludes for the project.
+    pub excludes: Vec<PackageName>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -345,6 +347,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        excludes: &[RequirementsSource],
         groups: Option<&GroupsSpecification>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
@@ -378,6 +381,20 @@ impl RequirementsSpecification {
             ));
         }
 
+        // Disallow `pylock.toml` files as excludes.
+        if let Some(pylock_toml) = excludes.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an exclude file",
+                pylock_toml.user_display()
+            ));
+        }
+
         // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
         // overrides.
         if let Some(pylock_toml) = requirements.iter().find_map(|source| {
@@ -397,12 +414,12 @@ impl RequirementsSpecification {
             }
             if !constraints.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify additional requirements with a `pylock.toml` file"
+                    "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
             if !overrides.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify constraints with a `pylock.toml` file"
+                    "Cannot specify overrides with a `pylock.toml` file"
                 ));
             }
 
@@ -582,6 +599,24 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
+        // Collect excludes.
+        for source in excludes {
+            let source = Self::from_source(source, client_builder).await?;
+            for req_spec in source.requirements {
+                match req_spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        spec.excludes.push(requirement.name);
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        return Err(anyhow::anyhow!(
+                            "Unnamed requirements are not allowed as exclusions (found: `{requirement}`)"
+                        ));
+                    }
+                }
+            }
+            spec.excludes.extend(source.excludes.into_iter());
+        }
+
         Ok(spec)
     }
 
@@ -597,7 +632,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], None, client_builder).await
+        Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].

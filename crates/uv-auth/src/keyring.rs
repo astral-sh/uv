@@ -404,12 +404,13 @@ mod tests {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user")),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user"));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]
@@ -417,12 +418,13 @@ mod tests {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]
@@ -430,12 +432,13 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]

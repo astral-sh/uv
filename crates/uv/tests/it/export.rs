@@ -4618,3 +4618,45 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
 
     Ok(())
 }
+
+/// The members in the workspace (`foo`) and in the lockfile (`bar`) mismatch.
+#[test]
+fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("uv.lock");
+    pyproject_toml.write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "bar"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}

@@ -30,6 +30,7 @@ use uv_cli::{
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
+use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
@@ -83,6 +84,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(uv_fs::normalize_path_buf)
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
+
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
 
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
@@ -169,14 +173,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            let settings = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+            let settings = GlobalSettings::resolve(
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            );
             let client_builder = BaseClientBuilder::new(
                 settings.network_settings.connectivity,
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
-            )
-            .retries_from_env()?;
+                settings.network_settings.timeout,
+                settings.network_settings.retries,
+            );
             Some(
                 RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
                     .await?,
@@ -305,14 +314,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
-    // Load environment variables not handled by Clap
-    let environment = EnvironmentOptions::new()?;
-
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(
+        &cli.top_level.global_args,
+        filesystem.as_ref(),
+        &environment,
+    );
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Set the global flags.
+    uv_flags::init(EnvironmentFlags::from(&environment))
+        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
@@ -355,7 +369,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (durations_layer, _duration_guard) = logging::setup_durations()?;
+    let (durations_layer, _duration_guard) =
+        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
@@ -441,8 +456,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
-    )
-    .retries_from_env()?;
+        globals.network_settings.timeout,
+        globals.network_settings.retries,
+    );
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
@@ -453,6 +469,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -475,6 +492,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -495,6 +513,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args,
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
+                &environment,
             );
             show_settings!(args);
 
@@ -549,6 +568,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -563,9 +587,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
@@ -732,6 +758,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -795,9 +826,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
                 &groups,
@@ -1017,7 +1050,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, cache, printer)
+            commands::cache_prune(args.ci, args.force, cache, printer)
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
@@ -1056,7 +1089,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.wheel,
                 args.list,
                 args.build_logs,
+                args.gitignore,
                 args.force_pep517,
+                args.clear,
                 build_constraints,
                 args.hash_checking,
                 args.python,
@@ -1358,6 +1393,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -1371,6 +1411,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 &entrypoints,
                 args.python,
@@ -1405,6 +1446,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_version_specifiers,
                 args.show_with,
                 args.show_extras,
+                args.show_python,
                 &cache,
                 printer,
             )
@@ -1414,7 +1456,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1677,6 +1719,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
+                &environment,
                 &client_builder,
                 username,
                 password,
@@ -1826,7 +1869,7 @@ async fn run_project(
                 command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -1877,7 +1920,7 @@ async fn run_project(
 
             Box::pin(commands::sync(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.active,
@@ -1933,7 +1976,7 @@ async fn run_project(
 
             Box::pin(commands::lock(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.refresh,
@@ -2038,7 +2081,7 @@ async fn run_project(
 
             Box::pin(commands::add(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2096,7 +2139,7 @@ async fn run_project(
 
             Box::pin(commands::remove(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2140,7 +2183,7 @@ async fn run_project(
                 args.package,
                 explicit_project,
                 args.dry_run,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2177,7 +2220,7 @@ async fn run_project(
             Box::pin(commands::tree(
                 project_dir,
                 args.groups,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.universal,
                 args.depth,
@@ -2231,7 +2274,7 @@ async fn run_project(
                 args.extras,
                 args.groups,
                 args.editable,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.include_annotations,
                 args.include_header,
