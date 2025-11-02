@@ -9,6 +9,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::ParsedUrl;
+use uv_settings::EnvironmentOptions;
 
 #[derive(Parser)]
 pub(crate) struct ValidateZipArgs {
@@ -17,9 +18,16 @@ pub(crate) struct ValidateZipArgs {
     cache_args: CacheArgs,
 }
 
-pub(crate) async fn validate_zip(args: ValidateZipArgs) -> Result<()> {
+pub(crate) async fn validate_zip(
+    args: ValidateZipArgs,
+    environment: EnvironmentOptions,
+) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().timeout(environment.http_timeout),
+        cache,
+    )
+    .build();
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only archive URLs are supported");

@@ -202,6 +202,37 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`exclude-dependencies`](#exclude-dependencies) {: #exclude-dependencies }
+
+Dependencies to exclude when resolving the project's dependencies.
+
+Excludes are used to prevent a package from being selected during resolution,
+regardless of whether it's requested by any other package. When a package is excluded,
+it will be omitted from the dependency list entirely.
+
+Including a package as an exclusion will prevent it from being installed, even if
+it's requested by transitive dependencies. This can be useful for removing optional
+dependencies or working around packages with broken dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Exclude Werkzeug from being installed, even if transitive dependencies request it.
+exclude-dependencies = ["werkzeug"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.
@@ -1047,7 +1078,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 
@@ -2095,11 +2126,12 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ### [`trusted-publishing`](#trusted-publishing) {: #trusted-publishing }
 
-Configure trusted publishing via GitHub Actions.
+Configure trusted publishing.
 
-By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-from a fork).
+By default, uv checks for trusted publishing when running in a supported environment, but
+ignores it if it isn't configured.
+
+uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
 
 **Default value**: `automatic`
 
@@ -2427,7 +2459,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 

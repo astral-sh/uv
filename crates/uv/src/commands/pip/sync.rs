@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::Conflicts;
@@ -33,7 +33,7 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
-use uv_torch::{TorchMode, TorchStrategy};
+use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
@@ -102,6 +102,7 @@ pub(crate) async fn pip_sync(
 
     // Initialize a few defaults.
     let overrides = &[];
+    let excludes = &[];
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -113,6 +114,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -127,6 +129,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         extras,
         Some(groups),
         &client_builder,
@@ -289,8 +292,16 @@ pub(crate) async fn pip_sync(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
             TorchStrategy::from_mode(
                 mode,
+                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -453,6 +464,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),
@@ -525,6 +537,7 @@ pub(crate) async fn pip_sync(
     match operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         Modifications::Exact,
         &reinstall,
         &build_options,

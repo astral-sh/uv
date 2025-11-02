@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -82,7 +83,6 @@ use crate::{
     marker,
 };
 pub(crate) use provider::MetadataUnavailable;
-use uv_torch::TorchStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -111,6 +111,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    excludes: Excludes,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -240,6 +241,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
+            excludes: manifest.excludes,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -1866,6 +1868,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -2938,18 +2941,42 @@ impl ForkState {
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
+
                 if !has_url && missing_lower_bound && strategy_lowest {
-                    warn_user_once!(
-                        "The direct dependency `{name}` is unpinned. \
-                        Consider setting a lower bound when using `--resolution lowest` \
-                        or `--resolution lowest-direct` to avoid using outdated versions.",
-                        name = package.name_no_root().unwrap(),
-                    );
+                    let name = package.name_no_root().unwrap();
+                    // Handle cases where a package is listed both without and with a lower bound.
+                    // Example:
+                    // ```
+                    // "coverage[toml] ; python_version < '3.11'",
+                    // "coverage >= 7.10.0",
+                    // ```
+                    let bound_on_other_package = dependencies.iter().any(|other| {
+                        Some(name) == other.package.name()
+                            && !other
+                                .version
+                                .bounding_range()
+                                .map(|(lowest, _highest)| lowest == Bound::Unbounded)
+                                .unwrap_or(true)
+                    });
+
+                    if !bound_on_other_package {
+                        warn_user_once!(
+                            "The direct dependency `{name}` is unpinned. \
+                            Consider setting a lower bound when using `--resolution lowest` \
+                            or `--resolution lowest-direct` to avoid using outdated versions.",
+                        );
+                    }
                 }
             }
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
+            // As we're adding an incompatibility from the proxy package to the base package,
+            // we need to register the base package.
+            if let Some(base_package) = package.base_package() {
+                self.priorities
+                    .insert(&base_package, version, &self.fork_urls);
+            }
         }
 
         Ok(())
@@ -2962,6 +2989,24 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                parent: _,
+                url: _,
+            } = dependency;
+
+            let Some(base_package) = package.base_package() else {
+                continue;
+            };
+
+            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
+            self.pubgrub
+                .add_proxy_package(proxy_package, base_package_id, version.clone());
+        }
+
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),

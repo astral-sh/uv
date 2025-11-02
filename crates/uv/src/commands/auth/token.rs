@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_auth::{AuthBackend, Service};
@@ -27,13 +26,16 @@ pub(crate) async fn token(
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
-
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+        let client = BaseClientBuilder::new(
+            network_settings.connectivity,
+            network_settings.native_tls,
+            network_settings.allow_insecure_host.clone(),
+            preview,
+            network_settings.timeout,
+            network_settings.retries,
+        )
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .build();
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);
@@ -110,6 +112,13 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
 
         // Similarly, if the refresh token expired, prompt for login.
         Err(err) if err.is_unauthorized() => {
+            if store.has_auth_token() {
+                return Err(
+                    anyhow::Error::from(err).context("Failed to authenticate with access token")
+                );
+            } else if store.has_api_key() {
+                return Err(anyhow::Error::from(err).context("Failed to authenticate with API key"));
+            }
             debug!(
                 "Received 401 (Unauthorized) response from refresh endpoint; prompting for login..."
             );
@@ -121,6 +130,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         }
     };
 
-    writeln!(printer.stdout(), "{}", token.cyan())?;
+    writeln!(printer.stdout(), "{}", token.as_str())?;
     Ok(())
 }

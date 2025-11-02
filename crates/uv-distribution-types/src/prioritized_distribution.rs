@@ -860,7 +860,7 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("arm64"),
+                    value: arcstr::literal!("ARM64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -1051,7 +1051,7 @@ mod tests {
         );
         assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-win_arm64.whl",
-            "sys_platform == 'win32' and platform_machine == 'arm64'",
+            "sys_platform == 'win32' and platform_machine == 'ARM64'",
         );
         assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
@@ -1127,6 +1127,10 @@ mod tests {
         assert_implied_markers(
             "numpy-1.0-cp310-cp310-win32.whl",
             "python_full_version == '3.10.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'x86'",
+        );
+        assert_implied_markers(
+            "pywin32-311-cp314-cp314-win_arm64.whl",
+            "python_full_version == '3.14.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'ARM64'",
         );
         assert_implied_markers(
             "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",

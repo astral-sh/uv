@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -181,7 +180,7 @@ pub(crate) async fn pip_list(
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
-            println!("{output}");
+            writeln!(printer.stdout_important(), "{output}")?;
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -255,13 +254,18 @@ pub(crate) async fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                println!("{}", elems.join(" ").trim_end());
+                writeln!(printer.stdout_important(), "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                println!("{}=={}", dist.name().bold(), dist.version());
+                writeln!(
+                    printer.stdout_important(),
+                    "{}=={}",
+                    dist.name().bold(),
+                    dist.version()
+                )?;
             }
         }
     }

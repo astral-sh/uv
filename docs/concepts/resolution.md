@@ -457,14 +457,13 @@ versions of the specified package.
 
 ## Conflicting dependencies
 
-uv requires that all optional dependencies ("extras") declared by the project are compatible with
-each other and resolves all optional dependencies together when creating the lockfile.
+uv requires that all dependencies declared by a project are compatible with each other and resolves
+all dependencies together when creating the lockfile. This includes project dependencies, optional
+dependencies ("extras"), and dependency groups (development dependencies).
 
-If optional dependencies declared in one extra are not compatible with those in another extra, uv
-will fail to resolve the requirements of the project with an error.
-
-To work around this, uv supports declaring conflicting extras. For example, consider two sets of
-optional dependencies that conflict with one another:
+If dependencies declared in one extra are not compatible with those in another extra, uv will fail
+to resolve the requirements of the project with an error. For example, consider two sets of optional
+dependencies that conflict with one another:
 
 ```toml title="pyproject.toml"
 [project.optional-dependencies]
@@ -482,8 +481,9 @@ $ uv lock
       And because your project requires myproject[extra1] and myproject[extra2], we can conclude that your projects's requirements are unsatisfiable.
 ```
 
-But if you specify that `extra1` and `extra2` are conflicting, uv will resolve them separately.
-Specify conflicts in the `tool.uv` section:
+To work around this, uv supports explicit declaration of conflicts. If you specify that `extra1` and
+`extra2` are conflicting, uv will resolve them separately. Specify conflicts in the `tool.uv`
+section:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -495,8 +495,8 @@ conflicts = [
 ]
 ```
 
-Now, running `uv lock` will succeed. Note though, that now you cannot install both `extra1` and
-`extra2` at the same time:
+Now, running `uv lock` will succeed. However, now you cannot install both `extra1` and `extra2` at
+the same time:
 
 ```console
 $ uv sync --extra extra1 --extra extra2
@@ -507,7 +507,8 @@ error: extra `extra1`, extra `extra2` are incompatible with the declared conflic
 This error occurs because installing both `extra1` and `extra2` would result in installing two
 different versions of a package into the same environment.
 
-The above strategy for dealing with conflicting extras also works with dependency groups:
+The above strategy for dealing with conflicting optional dependencies also works with dependency
+groups:
 
 ```toml title="pyproject.toml"
 [dependency-groups]
@@ -525,6 +526,103 @@ conflicts = [
 
 The only difference from conflicting extras is that you need to use the `group` key instead of
 `extra`.
+
+When using a workspace with multiple projects, the same restrictions apply — uv requires all
+workspace members to be compatible with each other. Similarly, conflicts can be declared across
+workspace members.
+
+For example, consider the following workspace:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+
+[project.optional-dependencies]
+extra1 = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+
+[project.optional-dependencies]
+extra2 = ["numpy==2.0.0"]
+```
+
+To declare a conflict between extras in these different workspace members, use the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1", extra = "extra1" },
+      { package = "member2", extra = "extra2" },
+    ],
+]
+```
+
+It's also possible for the project dependencies (i.e., `project.dependencies`) of one workspace
+member to conflict with the extra of another member, for example:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+dependencies = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+
+[project.optional-dependencies]
+extra2 = ["numpy==2.0.0"]
+```
+
+This conflict can also be declared using the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1" },
+      { package = "member2", extra = "extra2" },
+    ],
+]
+```
+
+Similarly, it's possible for some workspace members to have conflicting project dependencies:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+dependencies = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+dependencies = ["numpy==2.0.0"]
+```
+
+This conflict can also be declared using the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1" },
+      { package = "member2" },
+    ],
+]
+```
+
+These workspace members will not be installable together, e.g., the workspace root cannot define:
+
+```toml title="pyproject.toml"
+[project]
+name = "root"
+dependencies = ["member1", "member2"]
+```
 
 ## Lower bounds
 

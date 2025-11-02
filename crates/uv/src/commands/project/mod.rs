@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -57,7 +57,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{
+    InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+};
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -76,14 +78,19 @@ pub(crate) mod version;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `{2}` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
     )]
     MissingLockfile,
+
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -320,14 +327,9 @@ impl std::fmt::Display for ConflictError {
             .iter()
             .all(|conflict| matches!(conflict.kind(), ConflictKind::Group(..)))
         {
-            let conflict_source = if self.set.is_inferred_conflict() {
-                "transitively inferred"
-            } else {
-                "declared"
-            };
             write!(
                 f,
-                "Groups {} are incompatible with the {conflict_source} conflicts: {{{set}}}",
+                "Groups {} are incompatible with the conflicts: {{{set}}}",
                 conjunction(
                     self.conflicts
                         .iter()
@@ -1006,16 +1008,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1368,7 +1372,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1408,7 +1414,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1560,7 +1568,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1600,7 +1610,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1868,6 +1880,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
@@ -1987,6 +2000,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2124,6 +2138,7 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
@@ -2223,6 +2238,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2243,6 +2259,7 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
+            InstallationStrategy::Permissive,
             &marker_env,
             &tags,
             config_setting,
@@ -2354,6 +2371,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2388,6 +2406,7 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
@@ -2434,7 +2453,7 @@ pub(crate) async fn init_script_python_requirement(
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        PythonRequest::parse(request)
+        Some(PythonRequest::parse(request))
     } else if let (false, Some(request)) = (
         no_pin_python,
         PythonVersionFile::discover(
@@ -2445,14 +2464,14 @@ pub(crate) async fn init_script_python_requirement(
         .and_then(PythonVersionFile::into_version),
     ) {
         // (2) Request from `.python-version`
-        request
+        Some(request)
     } else {
-        // (3) Assume any Python version
-        PythonRequest::Any
+        // (3) No explicit request
+        None
     };
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        python_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

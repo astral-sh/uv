@@ -5,11 +5,10 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use ref_cast::RefCast;
-use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, retries_from_env};
+use uv_client::BaseClientBuilder;
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
@@ -231,8 +230,7 @@ impl PythonInstallation {
 
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware from performing uncontrolled retries.
-        let retry_policy =
-            ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
+        let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build();
 
         info!("Fetching requested Python...");
@@ -491,7 +489,7 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.variant),
+            _ => format!("+{}", self.variant),
         };
         write!(
             f,
@@ -632,7 +630,7 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         // and prerelease (with special formatting for the variant).
         let variant = match self.0.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+            _ => format!("+{}", self.0.variant),
         };
         write!(
             f,

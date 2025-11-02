@@ -62,6 +62,23 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the set of dependency exclusions for the [`LockTarget`].
+    pub(crate) fn exclude_dependencies(self) -> Vec<uv_normalize::PackageName> {
+        match self {
+            Self::Workspace(workspace) => workspace.exclude_dependencies(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.exclude_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
     /// Returns the set of constraints for the [`LockTarget`].
     pub(crate) fn constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {

@@ -174,7 +174,7 @@
       ]
     },
     "dependency-metadata": {
-      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
       "type": [
         "array",
         "null"
@@ -195,6 +195,16 @@
     },
     "environments": {
       "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude-dependencies": {
+      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
       "type": [
         "array",
         "null"
@@ -586,7 +596,7 @@
       ]
     },
     "trusted-publishing": {
-      "description": "Configure trusted publishing via GitHub Actions.\n\nBy default, uv checks for trusted publishing when running in GitHub Actions, but ignores it\nif it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request\nfrom a fork).",
+      "description": "Configure trusted publishing.\n\nBy default, uv checks for trusted publishing when running in a supported environment, but\nignores it if it isn't configured.\n\nuv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.",
       "anyOf": [
         {
           "$ref": "#/definitions/TrustedPublishing"
@@ -1302,7 +1312,7 @@
           ]
         },
         "dependency-metadata": {
-          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
           "type": [
             "array",
             "null"
@@ -2195,7 +2205,7 @@
         "name": {
           "$ref": "#/definitions/PackageName"
         },
-        "provides-extras": {
+        "provides-extra": {
           "type": "array",
           "default": [],
           "items": {
@@ -2517,6 +2527,11 @@
           "const": "cpu"
         },
         {
+          "description": "Use the PyTorch index for CUDA 13.0.",
+          "type": "string",
+          "const": "cu130"
+        },
+        {
           "description": "Use the PyTorch index for CUDA 12.9.",
           "type": "string",
           "const": "cu129"
@@ -2742,7 +2757,7 @@
           ]
         },
         {
-          "description": "Try trusted publishing when we're already in GitHub Actions, continue if that fails.",
+          "description": "Attempt trusted publishing when we're in a supported environment, continue if that fails.\n\nSupported environments include GitHub Actions and GitLab CI/CD.",
           "type": "string",
           "const": "automatic"
         }

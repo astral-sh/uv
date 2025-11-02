@@ -901,6 +901,49 @@ fn init_script_shebang() -> Result<()> {
     Ok(())
 }
 
+// Make sure that `uv init --script` picks the latest non-pre-release version of Python
+// for the `requires-python` constraint.
+#[cfg(feature = "python-patch")]
+#[test]
+fn init_script_picks_latest_stable_version() -> Result<()> {
+    let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
+    // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
+    // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
+    let context =
+        TestContext::new_with_versions(managed_versions).with_versions_as_managed(managed_versions);
+
+    let script_path = context.temp_dir.join("main.py");
+
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("main.py"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `main.py`
+    "#);
+
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(
+        resulting_script, @r#"
+        # /// script
+        # requires-python = ">=3.13"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from main.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "#
+    );
+
+    Ok(())
+}
+
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {
@@ -2396,7 +2439,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2404,7 +2447,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
     insta::with_settings!({
@@ -3279,6 +3322,9 @@ fn init_app_build_backend_maturin() -> Result<()> {
         python-packages = ["foo"]
         python-source = "src"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
         build-backend = "maturin"
@@ -3320,18 +3366,17 @@ fn init_app_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3346,7 +3391,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3356,7 +3401,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3407,6 +3452,9 @@ fn init_app_build_backend_scikit() -> Result<()> {
         [tool.scikit-build]
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]
@@ -3530,6 +3578,9 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         python-packages = ["foo"]
         python-source = "src"
 
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
         build-backend = "maturin"
@@ -3571,18 +3622,17 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3597,7 +3647,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3607,7 +3657,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3655,6 +3705,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         [tool.scikit-build]
         minimum-version = "build-system.requires"
         build-dir = "build/{wheel_tag}"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.10", "pybind11"]

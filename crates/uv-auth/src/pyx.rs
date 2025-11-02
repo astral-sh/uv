@@ -15,6 +15,7 @@ use uv_small_str::SmallString;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
+use crate::credentials::Token;
 use crate::{AccessToken, Credentials, Realm};
 
 /// Retrieve the pyx API key from the environment variable, or return `None`.
@@ -84,7 +85,7 @@ impl From<PyxTokens> for Credentials {
 impl From<AccessToken> for Credentials {
     fn from(access_token: AccessToken) -> Self {
         Self::Bearer {
-            token: access_token.into_bytes(),
+            token: Token::new(access_token.into_bytes()),
         }
     }
 }
@@ -261,11 +262,24 @@ impl PyxTokenStore {
         Ok(())
     }
 
+    /// Returns `true` if the user appears to have an authentication token set.
+    pub fn has_auth_token(&self) -> bool {
+        read_pyx_auth_token().is_some()
+    }
+
+    /// Returns `true` if the user appears to have an API key set.
+    pub fn has_api_key(&self) -> bool {
+        read_pyx_api_key().is_some()
+    }
+
+    /// Returns `true` if the user appears to have OAuth tokens stored on disk.
+    pub fn has_oauth_tokens(&self) -> bool {
+        self.subdirectory.join("tokens.json").is_file()
+    }
+
     /// Returns `true` if the user appears to have credentials (which may be invalid).
     pub fn has_credentials(&self) -> bool {
-        read_pyx_auth_token().is_some()
-            || read_pyx_api_key().is_some()
-            || self.subdirectory.join("tokens.json").is_file()
+        self.has_auth_token() || self.has_api_key() || self.has_oauth_tokens()
     }
 
     /// Read the tokens from the store.
@@ -355,9 +369,9 @@ impl PyxTokenStore {
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
         // Decode the access token.
-        let jwt = Jwt::decode(match &tokens {
-            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token.as_str(),
-            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token.as_str(),
+        let jwt = PyxJwt::decode(match &tokens {
+            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
+            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
         })?;
 
         // If the access token is expired, refresh it.
@@ -490,14 +504,20 @@ impl TokenStoreError {
 
 /// The payload of the JWT.
 #[derive(Debug, serde::Deserialize)]
-struct Jwt {
-    exp: Option<i64>,
+pub struct PyxJwt {
+    /// The expiration time of the JWT, as a Unix timestamp.
+    pub exp: Option<i64>,
+    /// The issuer of the JWT.
+    pub iss: Option<String>,
+    /// The name of the organization, if any.
+    #[serde(rename = "urn:pyx:org_name")]
+    pub name: Option<String>,
 }
 
-impl Jwt {
+impl PyxJwt {
     /// Decode the JWT from the access token.
-    fn decode(access_token: &str) -> Result<Self, JwtError> {
-        let mut token_segments = access_token.splitn(3, '.');
+    pub fn decode(access_token: &AccessToken) -> Result<Self, JwtError> {
+        let mut token_segments = access_token.as_str().splitn(3, '.');
 
         let _header = token_segments.next().ok_or(JwtError::MissingHeader)?;
         let payload = token_segments.next().ok_or(JwtError::MissingPayload)?;

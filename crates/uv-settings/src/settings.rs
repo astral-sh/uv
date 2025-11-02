@@ -22,7 +22,6 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
-use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -115,6 +114,9 @@ pub struct Options {
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -719,7 +721,7 @@ pub struct ResolverInstallerSchema {
     ///   to all versions of the package.
     /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
     /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-    /// - (Optional) `provides-extras`: The extras provided by the package.
+    /// - (Optional) `provides-extra`: The extras provided by the package.
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
@@ -958,7 +960,7 @@ pub struct ResolverInstallerSchema {
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -1007,26 +1009,15 @@ pub struct PythonInstallMirrors {
     pub python_downloads_json_url: Option<String>,
 }
 
-impl Default for PythonInstallMirrors {
-    fn default() -> Self {
-        Self::resolve(None, None, None)
-    }
-}
-
 impl PythonInstallMirrors {
-    pub fn resolve(
-        python_mirror: Option<String>,
-        pypy_mirror: Option<String>,
-        python_downloads_json_url: Option<String>,
-    ) -> Self {
-        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
-        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
-        let python_downloads_json_url_env =
-            std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
         Self {
-            python_install_mirror: python_mirror_env.or(python_mirror),
-            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
-            python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
+            python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
+            pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .or(other.python_downloads_json_url),
         }
     }
 }
@@ -1427,7 +1418,7 @@ pub struct PipOptions {
     ///   to all versions of the package.
     /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
     /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-    /// - (Optional) `provides-extras`: The extras provided by the package.
+    /// - (Optional) `provides-extra`: The extras provided by the package.
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
@@ -2122,6 +2113,7 @@ pub struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
@@ -2192,6 +2184,7 @@ impl From<OptionsWire> for Options {
             pip,
             cache_keys,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,
@@ -2266,15 +2259,16 @@ impl From<OptionsWire> for Options {
             cache_keys,
             build_backend,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,
             required_environments,
-            install_mirrors: PythonInstallMirrors::resolve(
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
                 python_downloads_json_url,
-            ),
+            },
             conflicts,
             publish: PublishOptions {
                 publish_url,
@@ -2308,11 +2302,12 @@ pub struct PublishOptions {
     )]
     pub publish_url: Option<DisplaySafeUrl>,
 
-    /// Configure trusted publishing via GitHub Actions.
+    /// Configure trusted publishing.
     ///
-    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-    /// from a fork).
+    /// By default, uv checks for trusted publishing when running in a supported environment, but
+    /// ignores it if it isn't configured.
+    ///
+    /// uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
     #[option(
         default = "automatic",
         value_type = "str",

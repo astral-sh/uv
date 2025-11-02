@@ -13,8 +13,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification,
-    Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -25,7 +25,7 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
@@ -34,7 +34,7 @@ use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -54,6 +54,7 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
     groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
@@ -80,6 +81,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        excludes,
         groups,
         client_builder,
     )
@@ -92,7 +94,7 @@ pub(crate) async fn read_constraints(
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
     Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], None, client_builder)
+        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
             .await?
             .constraints,
     )
@@ -103,7 +105,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
+    excludes: Vec<PackageName>,
+    source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
@@ -167,7 +170,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(source_trees.iter().map(PathBuf::as_path))
+            .resolve(source_trees.iter())
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -282,7 +285,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and overrides.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
@@ -290,6 +293,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
+    let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -318,6 +322,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
+        excludes,
         preferences,
         project,
         workspace_members,
@@ -436,6 +441,7 @@ impl Changelog {
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
+    installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
@@ -462,6 +468,7 @@ pub(crate) async fn install(
     let plan = Planner::new(resolution)
         .build(
             site_packages,
+            installation,
             reinstall,
             build_options,
             hasher,
@@ -686,7 +693,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -736,9 +743,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {}",
+                    "Using {} {}{}",
                     implementation.pretty(),
-                    interpreter.python_version()
+                    interpreter.python_version(),
+                    interpreter.variant().suffix(),
                 )
                 .dimmed()
             )?;
@@ -747,9 +755,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {} interpreter at: {}",
+                    "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
+                    interpreter.variant().suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -759,16 +768,18 @@ pub(crate) fn report_interpreter(
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().suffix().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }

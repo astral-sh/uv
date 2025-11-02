@@ -28,6 +28,7 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -338,7 +339,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -437,6 +438,8 @@ pub enum Commands {
     ///
     /// - `<version>` e.g. `3`, `3.12`, `3.12.3`
     /// - `<version-specifier>` e.g. `>=3.12,<3.13`
+    /// - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    /// - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     /// - `<implementation>` e.g. `cpython` or `cp`
     /// - `<implementation>@<version>` e.g. `cpython@3.12`
     /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -773,6 +776,13 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache clean` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache clean` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]
@@ -792,6 +802,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache prune` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache prune` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -1228,6 +1245,16 @@ pub struct PipCompileArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -1879,6 +1906,16 @@ pub struct PipInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -2618,6 +2655,20 @@ pub struct BuildArgs {
     #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
+    /// Clear the output directory before the build, removing stale artifacts.
+    #[arg(long)]
+    pub clear: bool,
+
+    #[arg(long, overrides_with("no_create_gitignore"), hide = true)]
+    pub create_gitignore: bool,
+
+    /// Do not create a `.gitignore` file in the output directory.
+    ///
+    /// By default, uv creates a `.gitignore` file in the output directory to exclude build
+    /// artifacts from version control. When this flag is used, the file will be omitted.
+    #[arg(long, overrides_with("create_gitignore"))]
+    pub no_create_gitignore: bool,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -2753,6 +2804,18 @@ pub struct VenvArgs {
     /// environment.
     #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
     pub clear: bool,
+
+    /// Fail without prompting if any existing files or directories are present at the target path.
+    ///
+    /// By default, when a TTY is available, `uv venv` will prompt to clear a non-empty directory.
+    /// When `--no-clear` is used, the command will exit with an error instead of prompting.
+    #[clap(
+        long,
+        overrides_with = "clear",
+        conflicts_with = "allow_existing",
+        hide = true
+    )]
+    pub no_clear: bool,
 
     /// Preserve any existing files or directories at the target path.
     ///
@@ -3077,7 +3140,7 @@ pub struct RunArgs {
     /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -3085,7 +3148,7 @@ pub struct RunArgs {
     /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -3129,7 +3192,7 @@ pub struct RunArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3192,8 +3255,8 @@ pub struct RunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
-    pub env_file: Vec<PathBuf>,
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<String>,
 
     /// Avoid reading environment variables from a `.env` file.
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
@@ -3396,7 +3459,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
@@ -3410,7 +3473,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -3458,7 +3521,7 @@ pub struct SyncArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3690,20 +3753,34 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--locked`.
-    #[arg(long, alias = "locked", env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"])]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
     pub check: bool,
+
+    /// Check if the lockfile is up-to-date.
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--check`.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date.
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "check")]
+    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
-    #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked"
+    )]
     pub dry_run: bool,
 
     /// Lock the specified Python script, rather than the current project.
@@ -4121,7 +4198,7 @@ pub struct TreeArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4247,11 +4324,11 @@ pub struct ExportArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -4296,7 +4373,7 @@ pub struct ExportArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4791,6 +4868,16 @@ pub struct ToolInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -4869,6 +4956,10 @@ pub struct ToolListArgs {
     /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
     pub show_extras: bool,
+
+    /// Whether to display the Python version associated with run each tool.
+    #[arg(long)]
+    pub show_python: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -5342,7 +5433,7 @@ pub struct PythonListArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
 
@@ -5425,7 +5516,7 @@ pub struct PythonInstallArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    #[arg(long)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5434,13 +5525,13 @@ pub struct PythonInstallArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    #[arg(long)]
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
@@ -5473,6 +5564,17 @@ pub struct PythonInstallArgs {
     pub default: bool,
 }
 
+impl PythonInstallArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct PythonUpgradeArgs {
     /// The directory Python installations are stored in.
@@ -5498,7 +5600,7 @@ pub struct PythonUpgradeArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    #[arg(long)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5507,7 +5609,7 @@ pub struct PythonUpgradeArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    #[arg(long)]
     pub pypy_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
@@ -5520,8 +5622,19 @@ pub struct PythonUpgradeArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
+}
+
+impl PythonUpgradeArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
 }
 
 #[derive(Args)]
@@ -6635,11 +6748,12 @@ pub struct PublishArgs {
     )]
     pub token: Option<String>,
 
-    /// Configure using trusted publishing through GitHub Actions.
+    /// Configure trusted publishing.
     ///
-    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-    /// from a fork).
+    /// By default, uv checks for trusted publishing when running in a supported environment, but
+    /// ignores it if it isn't configured.
+    ///
+    /// uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
     #[arg(long)]
     pub trusted_publishing: Option<TrustedPublishing>,
 
@@ -6664,14 +6778,15 @@ pub struct PublishArgs {
     /// Check an index URL for existing files to skip duplicate uploads.
     ///
     /// This option allows retrying publishing that failed after only some, but not all files have
-    /// been uploaded, and handles error due to parallel uploads of the same file.
+    /// been uploaded, and handles errors due to parallel uploads of the same file.
     ///
     /// Before uploading, the index is checked. If the exact same file already exists in the index,
     /// the file will not be uploaded. If an error occurred during the upload, the index is checked
     /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
     /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
-    /// file succeeds even without `--check-url`, while most other indexes error.
+    /// file succeeds even without `--check-url`, while most other indexes error. When uploading to
+    /// pyx, the index URL can be inferred automatically from the publish URL.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
     #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]

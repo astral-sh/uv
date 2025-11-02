@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -18,14 +19,14 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
     InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -72,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -82,7 +83,7 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -104,10 +105,9 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
-    env_file: Vec<PathBuf>,
-    no_env_file: bool,
+    env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
@@ -164,39 +164,37 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let workspace_cache = WorkspaceCache::default();
 
     // Read from the `.env` file, if necessary.
-    if !no_env_file {
-        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-            match dotenvy::from_path(env_file_path) {
-                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!(
-                        "No environment file found at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::Io(err)) => {
-                    bail!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::LineParse(content, position)) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}` at position {position}: {content}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Err(err) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}`: {err}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Ok(()) => {
-                    debug!(
-                        "Read environment file at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
+    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+        match dotenvy::from_path(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "No environment file found at: `{}`",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::Io(err)) => {
+                bail!(
+                    "Failed to read environment file `{}`: {err}",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::LineParse(content, position)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` at position {position}: {content}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Err(err) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {err}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Ok(()) => {
+                debug!(
+                    "Read environment file at: `{}`",
+                    env_file_path.simplified_display()
+                );
             }
         }
     }
@@ -247,7 +245,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
-                cache,
+                &cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -266,8 +264,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(environment.interpreter(), lock_check)
             } else {
                 LockMode::Write(environment.interpreter())
             };
@@ -284,7 +282,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryResolveLogger)
                 },
                 concurrency,
-                cache,
+                &cache,
                 &workspace_cache,
                 printer,
                 preview,
@@ -331,7 +329,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
@@ -358,9 +356,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
@@ -385,7 +383,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -440,7 +438,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -471,7 +469,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     printer,
                     preview,
                 )
@@ -484,7 +482,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -588,8 +588,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used alongside `--no-project`");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
@@ -605,8 +605,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used outside of a project");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project",);
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
@@ -657,7 +657,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -684,7 +684,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -704,7 +706,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     no_sync,
                     no_config,
                     active,
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -738,8 +740,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if locked {
-                    LockMode::Locked(venv.interpreter())
+                } else if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {
@@ -757,7 +759,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryResolveLogger)
                     },
                     concurrency,
-                    cache,
+                    &cache,
                     &workspace_cache,
                     printer,
                     preview,
@@ -845,7 +847,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -895,7 +897,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -917,7 +919,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -999,7 +1003,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 printer,
                 preview,
             )
@@ -1043,7 +1047,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 base_interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -1094,7 +1100,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Copy each entrypoint from the base environments to the ephemeral environment,
                 // updating the Python executable target to ensure they run in the ephemeral
                 // environment.
-                for entry in fs_err::read_dir(interpreter.scripts())? {
+                let scripts = match fs_err::read_dir(interpreter.scripts()) {
+                    Ok(scripts) => scripts,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err.into()),
+                };
+                for entry in scripts {
                     let entry = entry?;
                     if !entry.file_type()?.is_file() {
                         continue;
@@ -1195,23 +1206,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
         )?;
 
-        #[allow(clippy::map_identity)]
-        let commands = interpreter
-            .scripts()
-            .read_dir()
-            .ok()
-            .into_iter()
-            .flatten()
-            .map(|entry| match entry {
-                Ok(entry) => Ok(entry),
-                Err(err) => {
-                    // If we can't read the entry, fail.
-                    // This could be a symptom of a more serious problem.
-                    warn!("Failed to read entry: {}", err);
-                    Err(err)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?
+        let scripts = match fs_err::read_dir(interpreter.scripts()) {
+            Ok(scripts) => scripts.into_iter().collect::<Result<Vec<_>, _>>()?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => return Err(err.into()),
+        };
+
+        let commands = scripts
             .into_iter()
             .filter(|entry| {
                 entry
@@ -1221,7 +1222,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows)
+                let path = if cfg!(windows)
                     && path
                         .extension()
                         .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
@@ -1230,9 +1231,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     path.with_extension("")
                 } else {
                     path
-                }
-            })
-            .map(|path| {
+                };
+
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -1355,6 +1355,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        InstallationStrategy::Permissive,
         &markers,
         tags,
         config_setting,
@@ -1734,9 +1735,24 @@ impl RunCommand {
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
                 let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
 
+                let client = client_builder.build();
+                let mut response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
+
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if url.host_str() == Some("gist.github.com") {
-                    url = resolve_gist_url(&url, &client_builder).await?;
+                if response.url().host_str() == Some("gist.github.com") {
+                    url =
+                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
+                            .await?;
+
+                    response = client
+                        .for_host(&url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await?;
                 }
 
                 let file_stem = url
@@ -1748,13 +1764,6 @@ impl RunCommand {
                     .prefix(file_stem)
                     .suffix(".py")
                     .tempfile()?;
-
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();

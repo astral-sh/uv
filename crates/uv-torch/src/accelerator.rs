@@ -6,6 +6,11 @@ use tracing::debug;
 use uv_pep440::Version;
 use uv_static::EnvVars;
 
+#[cfg(windows)]
+use serde::Deserialize;
+#[cfg(windows)]
+use wmi::{COMLibrary, WMIConnection};
+
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
     #[error(transparent)]
@@ -60,6 +65,7 @@ impl Accelerator {
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
+    /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
@@ -185,6 +191,50 @@ impl Accelerator {
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
+        }
+
+        // Detect Intel GPU via WMI on Windows
+        #[cfg(windows)]
+        {
+            #[derive(Deserialize, Debug)]
+            #[serde(rename = "Win32_VideoController")]
+            #[serde(rename_all = "PascalCase")]
+            struct VideoController {
+                #[serde(rename = "PNPDeviceID")]
+                pnp_device_id: Option<String>,
+                name: Option<String>,
+            }
+
+            match COMLibrary::new() {
+                Ok(com_library) => match WMIConnection::new(com_library) {
+                    Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
+                        Ok(gpu_controllers) => {
+                            for gpu_controller in gpu_controllers {
+                                if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
+                                    if pnp_device_id
+                                        .contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
+                                    {
+                                        debug!(
+                                            "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
+                                            pnp_device_id, gpu_controller.name
+                                        );
+                                        return Ok(Some(Self::Xpu));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to query WMI for video controllers: {e}");
+                        }
+                    },
+                    Err(e) => {
+                        debug!("Failed to create WMI connection: {e}");
+                    }
+                },
+                Err(e) => {
+                    debug!("Failed to initialize COM library: {e}");
+                }
+            }
         }
 
         debug!("Failed to detect GPU driver version");

@@ -651,6 +651,20 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Whether the error is due to a lock being held.
+fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
+    if matches!(err, std::fs::TryLockError::WouldBlock) {
+        return true;
+    }
+
+    // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
+    if cfg!(windows) && err.raw_os_error() == Some(33) {
+        return true;
+    }
+
+    false
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 #[must_use]
@@ -669,8 +683,7 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                if !matches!(err, std::fs::TryLockError::WouldBlock) {
-                    // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -691,9 +704,72 @@ impl LockedFile {
         }
     }
 
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
-    /// context, as this can block the runtime while waiting for another process to release the
-    /// lock.
+    /// Inner implementation for [`LockedFile::acquire_no_wait`].
+    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        match file.file().try_lock_exclusive() {
+            Ok(()) => {
+                debug!("Acquired lock for `{resource}`");
+                Some(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
+                    debug!("Try lock error: {err:?}");
+                }
+                debug!("Lock is busy for `{resource}`");
+                None
+            }
+        }
+    }
+
+    /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
+    /// [`LockedFile::acquire_blocking`].
+    fn lock_file_shared_blocking(
+        file: fs_err::File,
+        resource: &str,
+    ) -> Result<Self, std::io::Error> {
+        trace!(
+            "Checking shared lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
+        // TODO(konsti): Update fs_err to support this.
+        match FileExt::try_lock_shared(file.file()) {
+            Ok(()) => {
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
+                if !is_known_already_locked_error(&err) {
+                    debug!("Try lock error: {err:?}");
+                }
+                info!(
+                    "Waiting to acquire shared lock for `{resource}` at `{}`",
+                    file.path().user_display(),
+                );
+                FileExt::lock_shared(file.file()).map_err(|err| {
+                    // Not an fs_err method, we need to build our own path context
+                    std::io::Error::other(format!(
+                        "Could not acquire shared lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
+                })?;
+
+                debug!("Acquired shared lock for `{resource}`");
+                Ok(Self(file))
+            }
+        }
+    }
+
+    /// The same as [`LockedFile::acquire`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
     pub fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
@@ -701,6 +777,19 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
+    }
+
+    /// The same as [`LockedFile::acquire_blocking`], but for synchronous contexts.
+    ///
+    /// Do not use from an async context, as this can block the runtime while waiting for another
+    /// process to release the lock.
+    pub fn acquire_shared_blocking(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        Self::lock_file_shared_blocking(file, &resource)
     }
 
     /// Acquire a cross-process lock for a resource using a file at the provided path.
@@ -712,6 +801,29 @@ impl LockedFile {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+    }
+
+    /// Acquire a cross-process read lock for a shared resource using a file at the provided path.
+    #[cfg(feature = "tokio")]
+    pub async fn acquire_shared(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = Self::create(path)?;
+        let resource = resource.to_string();
+        tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
+            .await?
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path
+    ///
+    /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
+    ///
+    /// If the lock is not immediately available, [`None`] is returned.
+    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
+        let file = Self::create(path).ok()?;
+        let resource = resource.to_string();
+        Self::lock_file_no_wait(file, &resource)
     }
 
     #[cfg(unix)]

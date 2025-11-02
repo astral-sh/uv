@@ -151,30 +151,152 @@ that use the local tag for different hardware accelerators such as torch. While 
 mapping between wheel tags and markers, we can do a mapping for well-known platforms, including
 Windows, Linux and macOS.
 
+## Metadata consistency
+
+uv, similar to poetry, requires that wheels of a single version of a package in a specific index
+have the same dependencies (`Requires-Dist` in `METADATA`), including wheels build from a source
+distribution. More generally, uv assumes that each wheel has the same `METADATA` file in its
+dist-info directory.
+
+numpy 2.3.2 for example has 73 wheels. Without this assumption, uv would have to make 73 network
+requests to fetch its metadata, instead of a single one. Another problem we would have without
+metadata consistency is the lack of a 1:1 mapping between markers and wheel tags. Wheel tags can
+include the glibc version while the PEP 508 markers cannot represent it. If wheels had different
+metadata, a universal resolver would have to track two dimensions simultaneously, PEP 508 markers
+and wheel tags. This would increase complexity a lot, and the correspondence between the two is not
+properly specified. PEP 508 markers have been introduced specifically to allow different
+dependencies between different platform, i.e. to have a single dependency declaration for all
+wheels, such as `project.[optional-]dependencies`. If the markers are not sufficient, we should
+extend PEP 508 markers instead of using a parallel system of wheel tags.
+
+Another aspect of metadata consistency is that a source distribution must build into a wheel with
+the same metadata as the wheels, or if there are no wheels, into the same metadata each time. If
+this assumption is violated, sound dependency locking becomes impossible: Consider a package A has a
+source distribution. During resolution, we build A v1 and obtain the dependencies `B>=2,<3`. We lock
+`A==1` and `B==2`. When installing the lockfile on the target machine, we build again and obtain
+dependencies `B>=3,<4` and `C>=1,<2`. The lockfile fails to install: Due to the changed constraints,
+the locked version of `B` is incompatible, and there's no locked candidate for `C`. Re-resolving
+after this would both be a reproducibility problem (the lockfile is effectively ignored) and a
+security concern (`C` has not been reviewed, neither was `B==3`). It's possible to fail on
+installation if that happens, but a late error, possibly during deployment, is a bad user
+experience. There is already a case where uv fails on installation, packages with no source
+distribution and only platform specific wheels incompatible with the current platform. While uv has
+[required environments](https://docs.astral.sh/uv/concepts/resolution/#required-environments) as
+mitigation, this requires a not well known configuration option, and questions around (un)supported
+environments are one of the most common problem for uv users. A similar situation with source
+distributions should be avoided.
+
+While older versions of torch and tensorflow had inconsistent metadata, all recent versions have
+consistent metadata, and we are not aware of any major package with inconsistent metadata. There is
+however no requirement in the Python packaging standards that metadata must be consistent, and
+requests to enforce this in the standards have been rejected
+(https://discuss.python.org/t/enforcing-consistent-metadata-for-packages/50008).
+
+There are packages that have native code that links against the native code in another package, such
+as torch. These package may support building against a range of torch versions, but once built, they
+are constrained to a specific torch version, and the runtime torch version must match the build-time
+version. These are currently a pain point across all package managers, as all major package managers
+from pip to uv cache source distribution builds. uv supports multiple builds depending on the
+version of the already installed package using
+[ `tool.uv.extra-build-dependencies`](https://docs.astral.sh/uv/concepts/projects/config/#augmenting-build-dependencies)
+with `match-runtime = true`. This is a workaround that needs to be made on the user side for each
+affected package, instead of library developers declaring this requirement, which would be possible
+with native standards support.
+
 ## Requires-python
 
 To ensure that a resolution with `requires-python = ">=3.9"` can actually be installed for the
 included Python versions, uv requires that all dependencies have the same minimum Python version.
 Package versions that declare a higher minimum Python version, e.g., `requires-python = ">=3.10"`,
-are rejected, because a resolution with that version can't be installed on Python 3.9. For
-simplicity and forward compatibility, only lower bounds in `requires-python` are respected. For
-example, if a package declares `requires-python = ">=3.8,<4"`, the `<4` marker is not propagated to
-the entire resolution.
+are rejected, because a resolution with that version can't be installed on Python 3.9. This ensures
+that when you are on an old Python version, you can install old packages, instead of getting newer
+packages that require newer Python syntax or standard library features.
 
-This default is a problem for packages that use the version-dependent C API of CPython, such as
-numpy. Each numpy release support 4 Python minor versions, e.g., numpy 2.0.0 has wheels for CPython
-3.9 through 3.12 and declares `requires-python = ">=3.9"`, while numpy 2.1.0 has wheels for CPython
-3.10 through 3.13 and declares `requires-python = ">=3.10"`. The means that when we resolve a
-`numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, we resolve numpy 2.0.0 and
-the lockfile doesn't install on Python 3.13 or newer. To alleviate this, whenever we reject a
-version due to a too high Python requirement, we fork on that Python version. This behavior is
-controlled by `--fork-strategy`. In the example case, upon encountering numpy 2.1.0 we fork into
-Python versions `>=3.9,<3.10` and `>=3.10` and resolve two different numpy versions:
+uv ignores upper-bounds on `requires-python`, with special handling for packages with only
+ABI-specific wheels. For example, if a package declares `requires-python = ">=3.8,<4"`, the `<4`
+part is ignored. There is a detailed discussion with drawbacks and alternatives in
+[#4022](https://github.com/astral-sh/uv/issues/4022) and this
+[DPO thread](https://discuss.python.org/t/requires-python-upper-limits/12663), this section
+summarizes the aspects most relevant to uv's design.
+
+For most projects, it's not possible to determine whether they will be compatible with a new version
+before it's released, so blocking newer versions in advance would block users from upgrading or
+testing newer Python versions. The exceptions are packages which use the unstable C ABI or internals
+of CPython such as its bytecode format.
+
+Introducing a `requires-python` upper bound to a project that previously wasn't using one will not
+prevent the project from being used on a too recent Python version. Instead of failing, the resolver
+will pick an older version without the bound, circumventing the bound.
+
+For the resolution to be as universally installable as possible, uv ensures that the selected
+dependency versions are compatible with the `requires-python` range of the project. For example, for
+a project with `requires-python = ">=3.12"`, uv will not use a dependency version with
+`requires-python = ">=3.13"`, as otherwise the resolution is not installable on Python 3.12, which
+the project declares to support. Applying the same logic to upper bounds means that bumping the
+upper Python version bound on a project makes it compatible with less dependency versions,
+potentially failing to resolve when no version of a dependency supports the required range. (Bumping
+the lower Python version bound has the inverse effect, it only increases the set of supported
+dependency versions.)
+
+Note that this is different for Conda, as the Conda solver also determines the Python version, so it
+can choose a lower Python version instead. Conda can also change metadata after a release, so it can
+update compatibility for a new Python version, while metadata on PyPI cannot be changed once
+published.
+
+Ignoring an upper bound is a problem for packages such as numpy which use the version-dependent C
+API of CPython. As of writing, each numpy release support 4 Python minor versions, e.g., numpy 2.0.0
+has wheels for CPython 3.9 through 3.12 and declares `requires-python = ">=3.9"`, while numpy 2.1.0
+has wheels for CPython 3.10 through 3.13 and declares `requires-python = ">=3.10"`. This means that
+when uv resolves a `numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, it
+selects numpy 2.0.0 and the lockfile doesn't install on Python 3.13 or newer. To alleviate this,
+whenever uv rejects a version that requires a newer Python version, we fork by splitting the
+resolution markers on that Python version. This behavior can be controlled by `--fork-strategy`. In
+the example case, upon encountering numpy 2.1.0 we fork into Python versions `>=3.9,<3.10` and
+`>=3.10` and resolve two different numpy versions:
 
 ```
 numpy==2.0.0; python_version >= "3.9" and python_version < "3.10"
 numpy==2.1.0; python_version >= "3.10"
 ```
+
+There's one case where uv does consider the upper bound: When the project uses an upper bound on
+requires Python, such as `requires-python = "==3.13.*"` for an application that only deploys to
+Python 3.13. uv prunes wheels from the lockfile that are outside the range (e.g., `cp312` and
+`cp314`) in a post-processing step, which does not influence the resolution itself.
+
+## URL dependencies
+
+In uv, a dependency can either be a registry dependency, a package with a version specifier or the
+plain package name, or a URL dependency. All requirements in the form `{name} @ {url}` are URL
+dependencies, and also all dependencies that have a `git`,` url`, `path`, or `workspace` source.
+
+When a URL is declared for a package, uv pins the package to this URL, and the version this URL
+implies. If there are two conflicting URLs for a package, the resolver errors, as a URL can only be
+declared as something akin to an exact `==` pin, and not as list of URLs. A list of URLs is
+supported through [flat indexes](../../concepts/indexes.md#flat-indexes) instead.
+
+uv requires that URLs are either declared directly (in the project, in a
+[workspace member](../../concepts/projects/workspaces.md), in a
+[constraint](../../concepts/resolution.md#dependency-constraints), or in an
+[override](../../concepts/resolution.md#dependency-overrides), any location that is discovered
+directly), or by other URL dependencies. uv discovers all URL dependencies and their transitive URL
+dependencies ahead of the resolution and pins all packages to the URLs and the versions they imply.
+
+uv does not allow URLs in index packages. This has two reasons: One is a security and predictability
+aspect, that forbids registry distributions to point to non-registry distributions and helps
+auditing which URLs can be accessed. For example, when only using one index URL and no URL
+dependencies, uv will not install any package from outside the index.
+
+The other is that URLs can add additional versions to the resolution. Say the root package depends
+on foo, bar, and baz, all registry dependencies. foo depends on `bar >= 2`, but bar only has version
+1 on the index. With the incremental approach, this is an error: foo cannot be fulfilled, there is a
+resolver error. If URLs on index packages were allowed, it could be that there is a version of baz
+declares a dependency on baz-core and that has a version that declares
+`bar @ https://example.com/bar-2-py3-none-any.whl` adding a version of bar that makes requirements
+resolve. If a dependency can add new versions, discarding any version in the resolver would require
+looking at all possible versions of all direct and transitive dependencies. This breaks the core
+assumption incremental resolvers make that the set of versions for a package is static and would
+require to always fetch the metadata for all possibly reachable version.
 
 ## Prioritization
 

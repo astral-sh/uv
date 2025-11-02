@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -28,6 +28,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
+    #[error("No pyproject.toml found at: {0}")]
+    MissingPyprojectToml(PathBuf),
     #[error("Failed to parse entry: `{0}`")]
     LoweringError(PackageName, #[source] Box<LoweringError>),
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
@@ -58,7 +60,7 @@ pub struct Metadata {
     // Optional fields
     pub requires_dist: Box<[Requirement]>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub provides_extras: Box<[ExtraName]>,
+    pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
@@ -74,7 +76,7 @@ impl Metadata {
                 .map(Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
         }
@@ -94,13 +96,13 @@ impl Metadata {
         let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
-            provides_extras,
+            provides_extra,
             dependency_groups,
             dynamic,
         } = RequiresDist::from_project_maybe_workspace(
@@ -119,7 +121,7 @@ impl Metadata {
             version: metadata.version,
             requires_dist,
             requires_python: metadata.requires_python,
-            provides_extras,
+            provides_extra,
             dependency_groups,
             dynamic,
         })

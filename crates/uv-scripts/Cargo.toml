@@ -3,6 +3,13 @@ name = "uv-scripts"
 version = "0.0.1"
 edition = { workspace = true }
 description = "Parse PEP 723-style Python scripts."
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
 
 [lib]
 doctest = false
