@@ -133,9 +133,7 @@ pub(crate) async fn init(
                                 "current directory"
                             };
                             anyhow::bail!(
-                                "The {} (`{}`) is not a valid package name. Please provide a package name with `--name`.",
-                                directory_description,
-                                directory_name
+                                "The {directory_description} (`{directory_name}`) is not a valid package name. Please provide a package name with `--name`."
                             );
                         }
                     }
