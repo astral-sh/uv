@@ -8,14 +8,16 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
+use uv_configuration::{IndexStrategy, NoBinary, NoBuild, TargetTriple, macos_deployment_target};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
     IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::CanonicalMarkerValueString;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
+use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
@@ -583,7 +585,7 @@ impl PubGrubReportFormatter<'_> {
                             }
                             // Check for unavailable versions due to incompatible tags.
                             IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
-                                if let Some(hint) = self.tag_hint(
+                                if let Some(hints) = self.tag_hint(
                                     name,
                                     set,
                                     *tag,
@@ -593,7 +595,7 @@ impl PubGrubReportFormatter<'_> {
                                     env,
                                     tags,
                                 ) {
-                                    output_hints.insert(hint);
+                                    output_hints.extend(hints);
                                 }
                             }
                             _ => {}
@@ -725,7 +727,7 @@ impl PubGrubReportFormatter<'_> {
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
-    ) -> Option<PubGrubHint> {
+    ) -> Option<Vec<PubGrubHint>> {
         let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
             index.explicit().get(&(name.clone(), url.clone()))
         } else {
@@ -748,12 +750,12 @@ impl PubGrubReportFormatter<'_> {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(PubGrubHint::LanguageTags {
+                    Some(vec![PubGrubHint::LanguageTags {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
                         best,
-                    })
+                    }])
                 }
             }
             IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
@@ -773,12 +775,12 @@ impl PubGrubReportFormatter<'_> {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(PubGrubHint::AbiTags {
+                    Some(vec![PubGrubHint::AbiTags {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
                         best,
-                    })
+                    }])
                 }
             }
             IncompatibleTag::Platform => {
@@ -799,11 +801,26 @@ impl PubGrubReportFormatter<'_> {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(PubGrubHint::PlatformTags {
+                    let mut hints = Vec::new();
+                    hints.push(PubGrubHint::PlatformTags {
                         package: name.clone(),
                         version: candidate.version().clone(),
-                        tags,
-                    })
+                        tags: tags.clone(),
+                    });
+                    if env.marker_environment().is_some_and(|marker| {
+                        marker.get_string(CanonicalMarkerValueString::SysPlatform)
+                            == TargetTriple::Macos.sys_platform()
+                    }) {
+                        let required = tags
+                            .iter()
+                            .filter(|tag| tag.is_macos())
+                            .filter_map(PlatformTag::major_minor)
+                            .min();
+                        if let Some(required) = required {
+                            hints.push(PubGrubHint::PlatformMacosDeploymentTarget { required });
+                        }
+                    }
+                    Some(hints)
                 }
             }
         }
@@ -1149,6 +1166,11 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
+    PlatformMacosDeploymentTarget {
+        /// The minimum macOS version required by the available wheels.
+        // excluded from `PartialEq` and `Hash`
+        required: (u16, u16),
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1219,6 +1241,9 @@ enum PubGrubHintCore {
     PlatformTags {
         package: PackageName,
     },
+    PlatformMacosDeploymentTarget {
+        required: (u16, u16),
+    },
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1279,6 +1304,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
+            PubGrubHint::PlatformMacosDeploymentTarget { required } => {
+                Self::PlatformMacosDeploymentTarget { required }
+            }
         }
     }
 }
@@ -1684,6 +1712,24 @@ impl std::fmt::Display for PubGrubHint {
                     tags.iter()
                         .map(|tag| format!("`{}`", tag.cyan()))
                         .join(", "),
+                )
+            }
+            Self::PlatformMacosDeploymentTarget { required } => {
+                let format_version = |(major, minor): (u16, u16)| format!("{major}.{minor}");
+                let current = macos_deployment_target().unwrap_or((13, 0));
+                let current_version = format_version(current);
+                let required_version = format_version(*required);
+                let assignment =
+                    format!("{}={}", EnvVars::MACOSX_DEPLOYMENT_TARGET, required_version);
+                write!(
+                    f,
+                    "{}{} Wheels are built for macOS {} or newer; set environment variable {} (e.g. {}) to target a compatible minimum deployment target (current minimum is {})",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    required_version.cyan(),
+                    EnvVars::MACOSX_DEPLOYMENT_TARGET.cyan(),
+                    assignment.green(),
+                    current_version.cyan(),
                 )
             }
         }
