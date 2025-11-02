@@ -132,9 +132,12 @@ impl Accelerator {
             .output()
         {
             if output.status.success() {
-                let driver_version = Version::from_str(&String::from_utf8(output.stdout)?)?;
-                debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
-                return Ok(Some(Self::Cuda { driver_version }));
+                let stdout = String::from_utf8(output.stdout)?;
+                if let Some(first_line) = stdout.lines().next() {
+                    let driver_version = Version::from_str(first_line.trim())?;
+                    debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
+                    return Ok(Some(Self::Cuda { driver_version }));
+                }
             }
 
             debug!(
@@ -353,5 +356,21 @@ mod tests {
         let content = "NVRM version: NVIDIA UNIX x86_64 Kernel Module  375.74  Wed Jun 14 01:39:39 PDT 2017\nGCC version:  gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.4)";
         let result = parse_proc_driver_nvidia_version(content).unwrap();
         assert_eq!(result, Some(Version::from_str("375.74").unwrap()));
+    }
+
+    #[test]
+    fn nvidia_smi_multi_gpu() {
+        // Test that we can parse nvidia-smi output with multiple GPUs (multiple lines)
+        let single_gpu = "572.60\n";
+        if let Some(first_line) = single_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
+
+        let multi_gpu = "572.60\n572.60\n";
+        if let Some(first_line) = multi_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
     }
 }
