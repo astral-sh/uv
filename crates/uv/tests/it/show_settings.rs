@@ -4643,7 +4643,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -8449,7 +8449,7 @@ fn preview_features_from_pyproject_toml() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8584,7 +8584,7 @@ fn preview_features_from_uv_toml() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8721,7 +8721,7 @@ fn preview_features_precedence_command_line_over_config() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8850,7 +8850,7 @@ fn preview_features_precedence_command_line_over_env() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8986,7 +8986,7 @@ fn preview_boolean_still_works() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -9124,7 +9124,7 @@ fn no_preview_overrides_everything() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Never,
+        color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
