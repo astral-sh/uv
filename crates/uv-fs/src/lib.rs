@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use tempfile::NamedTempFile;
@@ -554,10 +553,12 @@ pub fn persist_with_retry_sync(
 /// Iterate over the subdirectories of a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn directories(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+pub fn directories(
+    path: impl AsRef<Path>,
+) -> Result<impl Iterator<Item = PathBuf>, std::io::Error> {
     let entries = match path.as_ref().read_dir() {
         Ok(entries) => Some(entries),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => return Err(err),
     };
     Ok(entries
@@ -577,10 +578,10 @@ pub fn directories(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBu
 /// Iterate over the entries in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn entries(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+pub fn entries(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, std::io::Error> {
     let entries = match path.as_ref().read_dir() {
         Ok(entries) => Some(entries),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => return Err(err),
     };
     Ok(entries
@@ -599,10 +600,10 @@ pub fn entries(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, 
 /// Iterate over the files in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn files(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+pub fn files(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, std::io::Error> {
     let entries = match path.as_ref().read_dir() {
         Ok(entries) => Some(entries),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => return Err(err),
     };
     Ok(entries
@@ -653,16 +654,16 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
 
 /// Whether the error is due to a lock being held.
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
-    if matches!(err, std::fs::TryLockError::WouldBlock) {
-        return true;
+    match err {
+        std::fs::TryLockError::WouldBlock => true,
+        std::fs::TryLockError::Error(err) => {
+            // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
+            if cfg!(windows) && err.raw_os_error() == Some(33) {
+                return true;
+            }
+            false
+        }
     }
-
-    // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
-    if cfg!(windows) && err.raw_os_error() == Some(33) {
-        return true;
-    }
-
-    false
 }
 
 /// A file lock that is automatically released when dropped.
@@ -683,6 +684,7 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures.
                 if !is_known_already_locked_error(&err) {
                     debug!("Try lock error: {err:?}");
                 }
@@ -690,14 +692,7 @@ impl LockedFile {
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
-                file.file().lock().map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire lock for `{resource}` at `{}`: {}",
-                        file.path().user_display(),
-                        err
-                    ))
-                })?;
+                file.lock()?;
                 debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
@@ -710,7 +705,7 @@ impl LockedFile {
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
         );
-        match file.file().try_lock_exclusive() {
+        match file.try_lock() {
             Ok(()) => {
                 debug!("Acquired lock for `{resource}`");
                 Some(Self(file))
@@ -736,8 +731,7 @@ impl LockedFile {
             "Checking shared lock for `{resource}` at `{}`",
             file.path().user_display()
         );
-        // TODO(konsti): Update fs_err to support this.
-        match FileExt::try_lock_shared(file.file()) {
+        match file.try_lock_shared() {
             Ok(()) => {
                 debug!("Acquired shared lock for `{resource}`");
                 Ok(Self(file))
@@ -751,15 +745,7 @@ impl LockedFile {
                     "Waiting to acquire shared lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
-                FileExt::lock_shared(file.file()).map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire shared lock for `{resource}` at `{}`: {}",
-                        file.path().user_display(),
-                        err
-                    ))
-                })?;
-
+                file.lock_shared()?;
                 debug!("Acquired shared lock for `{resource}`");
                 Ok(Self(file))
             }
@@ -881,11 +867,10 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = self.0.file().unlock() {
+        if let Err(err) = self.0.unlock() {
             error!(
-                "Failed to unlock {}; program may be stuck: {}",
-                self.0.path().display(),
-                err
+                "Failed to unlock resource at `{}`; program may be stuck: {err}",
+                self.0.path().display()
             );
         } else {
             debug!("Released lock at `{}`", self.0.path().display());
