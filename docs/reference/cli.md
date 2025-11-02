@@ -6120,7 +6120,7 @@ uv cache dir [OPTIONS]
 
 Show the cache size.
 
-Displays the total size of the cache directory. This includes all cached wheels, source distributions, and other cached data. The default output format is raw bytes, suitable for parsing in scripts. Use `--human` for human-readable output.
+Displays the total size of the cache directory. This includes all downloaded and built wheels, source distributions, and other cached data. By default, outputs the size in raw bytes; use `--human` for human-readable output.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -6149,8 +6149,8 @@ uv cache size [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-cache-size--directory"><a href="#uv-cache-size--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-cache-size--help"><a href="#uv-cache-size--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="uv-cache-size--human"><a href="#uv-cache-size--human"><code>--human</code></a>, <code>--human-readable</code>, <code>-H</code></dt><dd><p>Display size in human-readable format (e.g., 1.2 GiB instead of raw bytes)</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-cache-size--help"><a href="#uv-cache-size--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-cache-size--human"><a href="#uv-cache-size--human"><code>--human</code></a>, <code>--human-readable</code>, <code>-H</code></dt><dd><p>Display the cache size in human-readable format (e.g., <code>1.2 GiB</code> instead of raw bytes)</p>
 </dd><dt id="uv-cache-size--managed-python"><a href="#uv-cache-size--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-cache-size--native-tls"><a href="#uv-cache-size--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>

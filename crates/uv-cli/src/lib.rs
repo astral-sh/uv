@@ -757,7 +757,6 @@ pub enum CacheCommand {
     Prune(PruneArgs),
     /// Show the cache directory.
     ///
-    ///
     /// By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
     /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
@@ -772,9 +771,9 @@ pub enum CacheCommand {
     Dir,
     /// Show the cache size.
     ///
-    /// Displays the total size of the cache directory. This includes all cached wheels, source
-    /// distributions, and other cached data. The default output format is raw bytes, suitable
-    /// for parsing in scripts. Use `--human` for human-readable output.
+    /// Displays the total size of the cache directory. This includes all downloaded and built
+    /// wheels, source distributions, and other cached data. By default, outputs the size in raw
+    /// bytes; use `--human` for human-readable output.
     Size(SizeArgs),
 }
 
@@ -819,7 +818,7 @@ pub struct PruneArgs {
 
 #[derive(Args, Debug)]
 pub struct SizeArgs {
-    /// Display size in human-readable format (e.g., 1.2 GiB instead of raw bytes)
+    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
     pub human: bool,
 }
