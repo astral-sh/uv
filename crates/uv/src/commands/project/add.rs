@@ -18,8 +18,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -32,6 +31,7 @@ use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
@@ -59,18 +59,19 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     no_install_project: bool,
     no_install_workspace: bool,
+    no_install_local: bool,
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
@@ -88,7 +89,7 @@ pub(crate) async fn add(
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -122,6 +123,9 @@ pub(crate) async fn add(
             }
             RequirementsSource::SetupPy(_) => {
                 bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
+            }
+            RequirementsSource::Pep723Script(_) => {
+                bail!("Adding requirements from a PEP 723 script is not supported in `uv add`");
             }
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
@@ -173,9 +177,9 @@ pub(crate) async fn add(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if locked {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
@@ -188,12 +192,6 @@ pub(crate) async fn add(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
@@ -225,7 +223,7 @@ pub(crate) async fn add(
         let interpreter = ScriptInterpreter::discover(
             (&script).into(),
             python.as_deref().map(PythonRequest::parse),
-            &network_settings,
+            &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
@@ -295,7 +293,7 @@ pub(crate) async fn add(
                 project_dir,
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -317,7 +315,7 @@ pub(crate) async fn add(
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 no_sync,
@@ -343,12 +341,9 @@ pub(crate) async fn add(
         })
         .ok();
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(settings.resolver.keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder
+        .clone()
+        .keyring(settings.resolver.keyring_provider);
 
     // Read the requirements.
     let RequirementsSpecification {
@@ -358,6 +353,7 @@ pub(crate) async fn add(
     } = RequirementsSpecification::from_sources(
         &requirements,
         &constraints,
+        &[],
         &[],
         None,
         &client_builder,
@@ -397,11 +393,9 @@ pub(crate) async fn add(
             let hasher = HashStrategy::default();
             let sources = SourceStrategy::Enabled;
 
-            settings.resolver.index_locations.cache_index_credentials();
-
             // Initialize the registry client.
-            let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_locations(&settings.resolver.index_locations)
+            let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
@@ -652,6 +646,22 @@ pub(crate) async fn add(
         &mut toml,
     )?;
 
+    // If no requirements were added but a dependency group or optional dependency was specified,
+    // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
+    // --group <name>` or `uv add -r requirements.txt --optional <extra>` is called with an empty
+    // requirements file.
+    if edits.is_empty() {
+        match &dependency_type {
+            DependencyType::Group(group) => {
+                toml.ensure_dependency_group(group)?;
+            }
+            DependencyType::Optional(extra) => {
+                toml.ensure_optional_dependency(extra)?;
+            }
+            _ => {}
+        }
+    }
+
     // Validate any indexes that were provided on the command-line to ensure
     // they point to existing non-empty directories when using path URLs.
     let mut valid_indexes = Vec::with_capacity(indexes.len());
@@ -735,16 +745,17 @@ pub(crate) async fn add(
         &edits,
         lock_state,
         sync_state,
-        locked,
+        lock_check,
         no_install_project,
         no_install_workspace,
+        no_install_local,
         &defaulted_extras,
         &defaulted_groups,
         raw,
         bounds,
         constraints,
         &settings,
-        &network_settings,
+        &client_builder,
         installer_metadata,
         concurrency,
         cache,
@@ -759,7 +770,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -965,16 +976,17 @@ async fn lock_and_sync(
     edits: &[DependencyEdit],
     lock_state: UniversalState,
     sync_state: PlatformState,
-    locked: bool,
+    lock_check: LockCheck,
     no_install_project: bool,
     no_install_workspace: bool,
+    no_install_local: bool,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
@@ -982,13 +994,13 @@ async fn lock_and_sync(
     preview: Preview,
 ) -> Result<(), ProjectError> {
     let mut lock = project::lock::LockOperation::new(
-        if locked {
-            LockMode::Locked(target.interpreter())
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(target.interpreter(), lock_check)
         } else {
             LockMode::Write(target.interpreter())
         },
         &settings.resolver,
-        network_settings,
+        client_builder,
         &lock_state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -1104,13 +1116,13 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::LockOperation::new(
-                if locked {
-                    LockMode::Locked(target.interpreter())
+                if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(target.interpreter(), lock_check)
                 } else {
                     LockMode::Write(target.interpreter())
                 },
                 &settings.resolver,
-                network_settings,
+                client_builder,
                 &lock_state,
                 Box::new(SummaryResolveLogger),
                 concurrency,
@@ -1153,12 +1165,17 @@ async fn lock_and_sync(
         venv,
         extras,
         groups,
-        EditableMode::Editable,
-        InstallOptions::new(no_install_project, no_install_workspace, vec![]),
+        None,
+        InstallOptions::new(
+            no_install_project,
+            no_install_workspace,
+            no_install_local,
+            vec![],
+        ),
         Modifications::Sufficient,
         None,
         settings.into(),
-        network_settings,
+        client_builder,
         &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -1390,7 +1407,7 @@ impl AddTarget {
                 let project = project
                     .with_pyproject_toml(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
-                    )
+                    )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
             }

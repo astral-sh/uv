@@ -13,9 +13,9 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_configuration::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_platform::{Error as PlatformError, Os};
@@ -320,6 +320,10 @@ pub struct ManagedPythonInstallation {
     ///
     /// Empty when self was constructed from a path.
     sha256: Option<Cow<'static, str>>,
+    /// The build version of the Python installation.
+    ///
+    /// Empty when self was constructed from a path without a BUILD file.
+    build: Option<Cow<'static, str>>,
 }
 
 impl ManagedPythonInstallation {
@@ -329,6 +333,7 @@ impl ManagedPythonInstallation {
             key: download.key().clone(),
             url: Some(download.url().clone()),
             sha256: download.sha256().cloned(),
+            build: download.build().map(Cow::Borrowed),
         }
     }
 
@@ -342,11 +347,19 @@ impl ManagedPythonInstallation {
 
         let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
+        // Try to read the BUILD file if it exists
+        let build = match fs::read_to_string(path.join("BUILD")) {
+            Ok(content) => Some(Cow::Owned(content.trim().to_string())),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err.into()),
+        };
+
         Ok(Self {
             path,
             key,
             url: None,
             sha256: None,
+            build,
         })
     }
 
@@ -455,6 +468,11 @@ impl ManagedPythonInstallation {
         self.key.platform()
     }
 
+    /// The build version of this installation, if available.
+    pub fn build(&self) -> Option<&str> {
+        self.build.as_deref()
+    }
+
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
     }
@@ -556,7 +574,7 @@ impl ManagedPythonInstallation {
         let stdlib = if self.key.os().is_windows() {
             self.python_dir().join("Lib")
         } else {
-            let lib_suffix = self.key.variant.suffix();
+            let lib_suffix = self.key.variant.lib_suffix();
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
@@ -587,7 +605,7 @@ impl ManagedPythonInstallation {
                     self.path(),
                     self.key.major,
                     self.key.minor,
-                    self.key.variant.suffix(),
+                    self.key.variant.lib_suffix(),
                 )?;
             }
         }
@@ -614,6 +632,15 @@ impl ManagedPythonInstallation {
                     macos_dylib::patch_dylib_install_name(dylib_path)?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Ensure the build version is written to a BUILD file in the installation directory.
+    pub fn ensure_build_file(&self) -> Result<(), Error> {
+        if let Some(ref build) = self.build {
+            let build_file = self.path.join("BUILD");
+            fs::write(&build_file, build.as_ref())?;
         }
         Ok(())
     }
@@ -654,19 +681,22 @@ impl ManagedPythonInstallation {
         if (self.key.major, self.key.minor) != (other.key.major, other.key.minor) {
             return false;
         }
-        // Require a newer, or equal patch version (for pre-release upgrades)
-        if self.key.patch <= other.key.patch {
+        // If the patch versions are the same, we're handling a pre-release upgrade
+        if self.key.patch == other.key.patch {
+            return match (self.key.prerelease, other.key.prerelease) {
+                // Require a newer pre-release, if present on both
+                (Some(self_pre), Some(other_pre)) => self_pre > other_pre,
+                // Allow upgrade from pre-release to stable
+                (None, Some(_)) => true,
+                // Do not upgrade from pre-release to stable, or for matching versions
+                (_, None) => false,
+            };
+        }
+        // Require a newer patch version
+        if self.key.patch < other.key.patch {
             return false;
         }
-        if let Some(other_pre) = other.key.prerelease {
-            if let Some(self_pre) = self.key.prerelease {
-                return self_pre > other_pre;
-            }
-            // Do not upgrade from non-prerelease to prerelease
-            return false;
-        }
-        // Do not upgrade if the patch versions are the same
-        self.key.patch != other.key.patch
+        true
     }
 
     pub fn url(&self) -> Option<&str> {
@@ -830,7 +860,7 @@ impl PythonMinorVersionLink {
                 .is_ok_and(|metadata| {
                     // Check that this is a reparse point, which indicates this
                     // is a symlink or junction.
-                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
         }
     }
@@ -935,4 +965,233 @@ impl fmt::Display for ManagedPythonInstallation {
 pub fn python_executable_dir() -> Result<PathBuf, Error> {
     uv_dirs::user_executable_directory(Some(EnvVars::UV_PYTHON_BIN_DIR))
         .ok_or(Error::NoExecutableDirectory)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::implementation::LenientImplementationName;
+    use crate::installation::PythonInstallationKey;
+    use crate::{ImplementationName, PythonVariant};
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use uv_pep440::{Prerelease, PrereleaseKind};
+    use uv_platform::Platform;
+
+    fn create_test_installation(
+        implementation: ImplementationName,
+        major: u8,
+        minor: u8,
+        patch: u8,
+        prerelease: Option<Prerelease>,
+        variant: PythonVariant,
+    ) -> ManagedPythonInstallation {
+        let platform = Platform::from_str("linux-x86_64-gnu").unwrap();
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(implementation),
+            major,
+            minor,
+            patch,
+            prerelease,
+            platform,
+            variant,
+        );
+        ManagedPythonInstallation {
+            path: PathBuf::from("/test/path"),
+            key,
+            url: None,
+            sha256: None,
+            build: None,
+        }
+    }
+
+    #[test]
+    fn test_is_upgrade_of_same_version() {
+        let installation = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+
+        // Same patch version should not be an upgrade
+        assert!(!installation.is_upgrade_of(&installation));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_patch_version() {
+        let older = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+        let newer = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+        );
+
+        // Newer patch version should be an upgrade
+        assert!(newer.is_upgrade_of(&older));
+        // Older patch version should not be an upgrade
+        assert!(!older.is_upgrade_of(&newer));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_minor_version() {
+        let py310 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+        let py311 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            11,
+            0,
+            None,
+            PythonVariant::Default,
+        );
+
+        // Different minor versions should not be upgrades
+        assert!(!py311.is_upgrade_of(&py310));
+        assert!(!py310.is_upgrade_of(&py311));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_implementation() {
+        let cpython = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+        let pypy = create_test_installation(
+            ImplementationName::PyPy,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+        );
+
+        // Different implementations should not be upgrades
+        assert!(!pypy.is_upgrade_of(&cpython));
+        assert!(!cpython.is_upgrade_of(&pypy));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_variant() {
+        let default = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+        let freethreaded = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Freethreaded,
+        );
+
+        // Different variants should not be upgrades
+        assert!(!freethreaded.is_upgrade_of(&default));
+        assert!(!default.is_upgrade_of(&freethreaded));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease() {
+        let stable = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+        );
+        let prerelease = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+        );
+
+        // A stable version is an upgrade from prerelease
+        assert!(stable.is_upgrade_of(&prerelease));
+
+        // Prerelease are not upgrades of stable versions
+        assert!(!prerelease.is_upgrade_of(&stable));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease_to_prerelease() {
+        let alpha1 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+        );
+        let alpha2 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 2,
+            }),
+            PythonVariant::Default,
+        );
+
+        // Later prerelease should be an upgrade
+        assert!(alpha2.is_upgrade_of(&alpha1));
+        // Earlier prerelease should not be an upgrade
+        assert!(!alpha1.is_upgrade_of(&alpha2));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease_same_patch() {
+        let prerelease = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+        );
+
+        // Same prerelease should not be an upgrade
+        assert!(!prerelease.is_upgrade_of(&prerelease));
+    }
 }

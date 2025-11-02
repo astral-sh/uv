@@ -14,7 +14,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    Preview, PreviewFeatures, TargetTriple, Upgrade,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -22,9 +22,10 @@ use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
@@ -50,14 +51,14 @@ use crate::commands::project::{
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
+    InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     active: Option<bool>,
@@ -65,7 +66,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -74,7 +75,7 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -153,7 +154,7 @@ pub(crate) async fn sync(
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 false,
@@ -170,7 +171,7 @@ pub(crate) async fn sync(
             ScriptEnvironment::get_or_init(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -218,9 +219,9 @@ pub(crate) async fn sync(
                 ));
             }
 
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
-                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
@@ -252,10 +253,11 @@ pub(crate) async fn sync(
                 environment.clone(),
                 spec,
                 modifications,
+                python_platform.as_ref(),
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
-                &network_settings,
+                &client_builder,
                 &PlatformState::default(),
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
@@ -288,7 +290,7 @@ pub(crate) async fn sync(
                 // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -304,8 +306,8 @@ pub(crate) async fn sync(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(environment.interpreter())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
@@ -320,7 +322,7 @@ pub(crate) async fn sync(
     let outcome = match LockOperation::new(
         mode,
         &settings.resolver,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -334,20 +336,22 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) => {
+        Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
-                Outcome::LockMismatch(prev, cur)
+                Outcome::LockMismatch(prev, cur, lock_source)
             } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
-                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                    ProjectError::LockMismatch(prev, cur, lock_source)
+                        .to_string()
+                        .bold()
                 )?;
                 return Ok(ExitStatus::Failure);
             }
@@ -391,7 +395,7 @@ pub(crate) async fn sync(
         modifications,
         python_platform.as_ref(),
         (&settings).into(),
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -406,7 +410,7 @@ pub(crate) async fn sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -415,11 +419,13 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur) => {
+        Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
                 printer.stderr(),
                 "{}",
-                ProjectError::LockMismatch(prev, cur).to_string().bold()
+                ProjectError::LockMismatch(prev, cur, lock_source)
+                    .to_string()
+                    .bold()
             )?;
             Ok(ExitStatus::Failure)
         }
@@ -433,7 +439,7 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 }
 
 impl Outcome {
@@ -444,7 +450,7 @@ impl Outcome {
                 LockResult::Changed(_, lock) => lock,
                 LockResult::Unchanged(lock) => lock,
             },
-            Self::LockMismatch(_prev, cur) => cur,
+            Self::LockMismatch(_prev, cur, _lock_source) => cur,
         }
     }
 }
@@ -559,12 +565,12 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -641,12 +647,7 @@ pub(super) async fn do_sync(
     }
     .into_inner();
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -716,15 +717,12 @@ pub(super) async fn do_sync(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
-    index_locations.cache_index_credentials();
-
     // Populate credentials from the target.
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
@@ -790,6 +788,7 @@ pub(super) async fn do_sync(
     operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Strict,
         modifications,
         reinstall,
         build_options,
@@ -834,20 +833,48 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 }
 
 /// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolution {
+fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
-        EditableMode::Editable => resolution,
+        None => resolution,
 
-        // Filter out any editable distributions.
-        EditableMode::NonEditable => resolution.map(|dist| {
+        // Filter out any non-editable distributions.
+        Some(EditableMode::Editable) => resolution.map(|dist| {
             let ResolvedDist::Installable { dist, version } = dist else {
                 return None;
             };
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
                 install_path,
-                editable: Some(true),
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(true),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+
+        // Filter out any editable distributions.
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
                 r#virtual,
                 url,
             })) = dist.as_ref()
@@ -879,11 +906,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
             if let Some(root_url) = index.root_url() {
                 uv_auth::store_credentials(&root_url, credentials.clone());
             }
+            uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
 
@@ -1252,7 +1278,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                         LockResult::Unchanged(..) => match mode {
                             // When `--frozen` is used, we don't check the lockfile
                             LockMode::Frozen => LockAction::Use,
-                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                            LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }
                         },

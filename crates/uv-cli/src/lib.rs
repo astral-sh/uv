@@ -8,10 +8,11 @@ use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::{Args, Parser, Subcommand};
 
+use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -19,6 +20,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -26,6 +28,7 @@ use uv_resolver::{
     AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -336,7 +339,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -398,6 +401,13 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Manage authentication.
+    #[command(
+        after_help = "Use `uv help auth` for more details.",
+        after_long_help = ""
+    )]
+    Auth(AuthNamespace),
+
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
@@ -428,6 +438,8 @@ pub enum Commands {
     ///
     /// - `<version>` e.g. `3`, `3.12`, `3.12.3`
     /// - `<version-specifier>` e.g. `>=3.12,<3.13`
+    /// - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    /// - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     /// - `<implementation>` e.g. `cpython` or `cp`
     /// - `<implementation>@<version>` e.g. `cpython@3.12`
     /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -764,6 +776,13 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache clean` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache clean` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]
@@ -783,6 +802,13 @@ pub struct PruneArgs {
     /// that were built from source.
     #[arg(long)]
     pub ci: bool,
+
+    /// Force removal of the cache, ignoring in-use checks.
+    ///
+    /// By default, `uv cache prune` will block until no process is reading the cache. When
+    /// `--force` is used, `uv cache prune` will proceed without taking a lock.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -1183,7 +1209,10 @@ fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
-    /// Include all packages listed in the given `requirements.in` files.
+    /// Include the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
     /// requirements for the relevant project.
@@ -1216,6 +1245,16 @@ pub struct PipCompileArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -1437,8 +1476,14 @@ pub struct PipCompileArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1529,7 +1574,10 @@ pub struct PipCompileArgs {
 
 #[derive(Args)]
 pub struct PipSyncArgs {
-    /// Include all packages listed in the given `requirements.txt` files.
+    /// Include the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will
     /// extract the requirements for the relevant project.
@@ -1763,8 +1811,14 @@ pub struct PipSyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1815,7 +1869,10 @@ pub struct PipInstallArgs {
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
-    /// Install all packages listed in the given `requirements.txt` or `pylock.toml` files.
+    /// Install the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
     /// requirements for the relevant project.
@@ -1849,6 +1906,16 @@ pub struct PipInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -2066,8 +2133,14 @@ pub struct PipInstallArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -2128,7 +2201,10 @@ pub struct PipUninstallArgs {
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
-    /// Uninstall all packages listed in the given requirements files.
+    /// Uninstall the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
@@ -2372,6 +2448,33 @@ pub struct PipCheckArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// The Python version against which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the version of the current
+    /// interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which packages should be checked.
+    ///
+    /// By default, the installed packages are checked against the platform of the current
+    /// interpreter.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -2552,6 +2655,20 @@ pub struct BuildArgs {
     #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
+    /// Clear the output directory before the build, removing stale artifacts.
+    #[arg(long)]
+    pub clear: bool,
+
+    #[arg(long, overrides_with("no_create_gitignore"), hide = true)]
+    pub create_gitignore: bool,
+
+    /// Do not create a `.gitignore` file in the output directory.
+    ///
+    /// By default, uv creates a `.gitignore` file in the output directory to exclude build
+    /// artifacts from version control. When this flag is used, the file will be omitted.
+    #[arg(long, overrides_with("create_gitignore"))]
+    pub no_create_gitignore: bool,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -2687,6 +2804,18 @@ pub struct VenvArgs {
     /// environment.
     #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
     pub clear: bool,
+
+    /// Fail without prompting if any existing files or directories are present at the target path.
+    ///
+    /// By default, when a TTY is available, `uv venv` will prompt to clear a non-empty directory.
+    /// When `--no-clear` is used, the command will exit with an error instead of prompting.
+    #[clap(
+        long,
+        overrides_with = "clear",
+        conflicts_with = "allow_existing",
+        hide = true
+    )]
+    pub no_clear: bool,
 
     /// Preserve any existing files or directories at the target path.
     ///
@@ -3011,7 +3140,7 @@ pub struct RunArgs {
     /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -3019,7 +3148,7 @@ pub struct RunArgs {
     /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -3063,7 +3192,7 @@ pub struct RunArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3101,9 +3230,14 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
+    /// Install any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3121,8 +3255,8 @@ pub struct RunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
-    pub env_file: Vec<PathBuf>,
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<String>,
 
     /// Avoid reading environment variables from a `.env` file.
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
@@ -3151,7 +3285,10 @@ pub struct RunArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with all packages listed in the given `requirements.txt` files.
+    /// Run with the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// and `pylock.toml`.
     ///
     /// The same environment semantics as `--with` apply.
     ///
@@ -3286,6 +3423,29 @@ pub struct RunArgs {
     /// If uv reaches the maximum recursion depth, it will exit with an error.
     #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
     pub max_recursion_depth: Option<u32>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -3299,7 +3459,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
@@ -3313,7 +3473,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -3361,7 +3521,7 @@ pub struct SyncArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3385,9 +3545,14 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
+    /// Install any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3434,6 +3599,14 @@ pub struct SyncArgs {
     /// allows optimal layer caching.
     #[arg(long)]
     pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long)]
+    pub no_install_local: bool,
 
     /// Do not install the given package(s).
     ///
@@ -3503,6 +3676,7 @@ pub struct SyncArgs {
         conflicts_with = "package",
         conflicts_with = "no_install_project",
         conflicts_with = "no_install_workspace",
+        conflicts_with = "no_install_local",
         conflicts_with = "extra",
         conflicts_with = "all_extras",
         conflicts_with = "no_extra",
@@ -3544,8 +3718,14 @@ pub struct SyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
-    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -3573,20 +3753,34 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--locked`.
-    #[arg(long, alias = "locked", env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"])]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
     pub check: bool,
+
+    /// Check if the lockfile is up-to-date.
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--check`.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date.
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "check")]
+    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
-    #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked"
+    )]
     pub dry_run: bool,
 
     /// Lock the specified Python script, rather than the current project.
@@ -3632,7 +3826,10 @@ pub struct AddArgs {
     #[arg(group = "sources")]
     pub packages: Vec<String>,
 
-    /// Add all packages listed in the given `requirements.txt` files.
+    /// Add the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
@@ -3847,6 +4044,14 @@ pub struct AddArgs {
     /// allows optimal layer caching.
     #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
     pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_local: bool,
 }
 
 #[derive(Args)]
@@ -3993,7 +4198,7 @@ pub struct TreeArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4119,11 +4324,11 @@ pub struct ExportArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
     /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
@@ -4168,7 +4373,7 @@ pub struct ExportArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4206,9 +4411,14 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("no_header"), hide = true)]
     pub header: bool,
 
+    /// Export any non-editable dependencies, including the project and any workspace members, as
+    /// editable.
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.
@@ -4238,6 +4448,14 @@ pub struct ExportArgs {
     /// exclusion of all the workspace members while retaining their dependencies.
     #[arg(long, alias = "no-install-workspace")]
     pub no_emit_workspace: bool,
+
+    /// Do not include local path dependencies in the exported requirements.
+    ///
+    /// Omits the current project, workspace members, and any other local (path or editable)
+    /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
+    /// and CI flows that want to export and cache third-party dependencies first.
+    #[arg(long, alias = "no-install-local")]
+    pub no_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
@@ -4320,6 +4538,41 @@ pub struct FormatArgs {
     /// `uv format -- src/module/foo.py` to format a specific file.
     #[arg(last = true)]
     pub extra_args: Vec<String>,
+
+    /// Avoid discovering a project or workspace.
+    ///
+    /// Instead of running the formatter in the context of the current project, run it in the
+    /// context of the current directory. This is useful when the current directory is not a
+    /// project.
+    #[arg(long)]
+    pub no_project: bool,
+}
+
+#[derive(Args)]
+pub struct AuthNamespace {
+    #[command(subcommand)]
+    pub command: AuthCommand,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommand {
+    /// Login to a service
+    Login(AuthLoginArgs),
+    /// Logout of a service
+    Logout(AuthLogoutArgs),
+    /// Show the authentication token for a service
+    Token(AuthTokenArgs),
+    /// Show the path to the uv credentials directory.
+    ///
+    /// By default, credentials are stored in the uv data directory at
+    /// `$XDG_DATA_HOME/uv/credentials` or `$HOME/.local/share/uv/credentials` on Unix and
+    /// `%APPDATA%\uv\data\credentials` on Windows.
+    ///
+    /// The credentials directory may be overridden with `$UV_CREDENTIALS_DIR`.
+    ///
+    /// Credentials are only stored in this directory when the plaintext backend is used, as
+    /// opposed to the native backend, which uses the system keyring.
+    Dir(AuthDirArgs),
 }
 
 #[derive(Args)]
@@ -4440,7 +4693,10 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with all packages listed in the given `requirements.txt` files.
+    /// Run with the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// and `pylock.toml`.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
@@ -4518,6 +4774,29 @@ pub struct ToolRunArgs {
     #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
 
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
@@ -4547,7 +4826,10 @@ pub struct ToolInstallArgs {
     #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Include all requirements listed in the given `requirements.txt` files.
+    /// Run with the packages listed in the given files.
+    ///
+    /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
+    /// and `pylock.toml`.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
@@ -4586,6 +4868,16 @@ pub struct ToolInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -4622,6 +4914,29 @@ pub struct ToolInstallArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
@@ -4641,6 +4956,10 @@ pub struct ToolListArgs {
     /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
     pub show_extras: bool,
+
+    /// Whether to display the Python version associated with run each tool.
+    #[arg(long)]
+    pub show_python: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -4702,6 +5021,29 @@ pub struct ToolUpgradeArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `13.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting iOS, the default minimum version is `13.0`. Use
+    /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
+    ///
+    /// When targeting Android, the default minimum Android API level is `24`. Use
+    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 
     // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`, and
     // `--upgrade-package` options hidden, and the `--no-upgrade` option removed.
@@ -5091,7 +5433,7 @@ pub struct PythonListArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
 
@@ -5174,7 +5516,7 @@ pub struct PythonInstallArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    #[arg(long)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5183,13 +5525,13 @@ pub struct PythonInstallArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    #[arg(long)]
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
@@ -5222,6 +5564,17 @@ pub struct PythonInstallArgs {
     pub default: bool,
 }
 
+impl PythonInstallArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct PythonUpgradeArgs {
     /// The directory Python installations are stored in.
@@ -5247,7 +5600,7 @@ pub struct PythonUpgradeArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    #[arg(long)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -5256,7 +5609,7 @@ pub struct PythonUpgradeArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    #[arg(long)]
     pub pypy_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
@@ -5269,8 +5622,19 @@ pub struct PythonUpgradeArgs {
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
-    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    #[arg(long)]
     pub python_downloads_json_url: Option<String>,
+}
+
+impl PythonUpgradeArgs {
+    #[must_use]
+    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+        PythonInstallMirrors {
+            python_install_mirror: self.mirror.clone(),
+            pypy_install_mirror: self.pypy_mirror.clone(),
+            python_downloads_json_url: self.python_downloads_json_url.clone(),
+        }
+    }
 }
 
 #[derive(Args)]
@@ -5384,6 +5748,86 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+}
+
+#[derive(Args)]
+pub struct AuthLogoutArgs {
+    /// The domain or URL of the service to logout from.
+    pub service: Service,
+
+    /// The username to logout.
+    #[arg(long, short)]
+    pub username: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `logout`, which uses the system keyring
+    /// via an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthLoginArgs {
+    /// The domain or URL of the service to log into.
+    pub service: Service,
+
+    /// The username to use for the service.
+    #[arg(long, short, conflicts_with = "token")]
+    pub username: Option<String>,
+
+    /// The password to use for the service.
+    ///
+    /// Use `-` to read the password from stdin.
+    #[arg(long, conflicts_with = "token")]
+    pub password: Option<String>,
+
+    /// The token to use for the service.
+    ///
+    /// The username will be set to `__token__`.
+    ///
+    /// Use `-` to read the token from stdin.
+    #[arg(long, short, conflicts_with = "username", conflicts_with = "password")]
+    pub token: Option<String>,
+
+    /// The keyring provider to use for storage of credentials.
+    ///
+    /// Only `--keyring-provider native` is supported for `login`, which uses the system keyring via
+    /// an integration built into uv.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthTokenArgs {
+    /// The domain or URL of the service to lookup.
+    pub service: Service,
+
+    /// The username to lookup.
+    #[arg(long, short)]
+    pub username: Option<String>,
+
+    /// The keyring provider to use for reading credentials.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthDirArgs {
+    /// The domain or URL of the service to lookup.
+    pub service: Option<Service>,
 }
 
 #[derive(Args)]
@@ -6240,6 +6684,10 @@ pub struct DisplayTreeArgs {
     /// Show the latest available version of each package in the tree.
     #[arg(long)]
     pub outdated: bool,
+
+    /// Show compressed wheel sizes for packages in the tree.
+    #[arg(long)]
+    pub show_sizes: bool,
 }
 
 #[derive(Args, Debug)]
@@ -6300,11 +6748,12 @@ pub struct PublishArgs {
     )]
     pub token: Option<String>,
 
-    /// Configure using trusted publishing through GitHub Actions.
+    /// Configure trusted publishing.
     ///
-    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-    /// from a fork).
+    /// By default, uv checks for trusted publishing when running in a supported environment, but
+    /// ignores it if it isn't configured.
+    ///
+    /// uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
     #[arg(long)]
     pub trusted_publishing: Option<TrustedPublishing>,
 
@@ -6329,14 +6778,15 @@ pub struct PublishArgs {
     /// Check an index URL for existing files to skip duplicate uploads.
     ///
     /// This option allows retrying publishing that failed after only some, but not all files have
-    /// been uploaded, and handles error due to parallel uploads of the same file.
+    /// been uploaded, and handles errors due to parallel uploads of the same file.
     ///
     /// Before uploading, the index is checked. If the exact same file already exists in the index,
     /// the file will not be uploaded. If an error occurred during the upload, the index is checked
     /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
     /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
-    /// file succeeds even without `--check-url`, while most other indexes error.
+    /// file succeeds even without `--check-url`, while most other indexes error. When uploading to
+    /// pyx, the index URL can be inferred automatically from the publish URL.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
     #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]
@@ -6344,6 +6794,13 @@ pub struct PublishArgs {
 
     #[arg(long, hide = true)]
     pub skip_existing: bool,
+
+    /// Perform a dry run without uploading files.
+    ///
+    /// When enabled, the command will check for existing files if `--check-url` is provided,
+    /// and will perform validation against the index if supported, but will not upload any files.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

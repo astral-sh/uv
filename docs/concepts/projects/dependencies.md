@@ -78,13 +78,16 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
-### Importing dependencies
+### Importing dependencies from requirements files
 
 Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
 
 ```
 uv add -r requirements.txt
 ```
+
+See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
+for more details.
 
 ## Removing dependencies
 
@@ -540,8 +543,8 @@ installation of Excel parsers and `matplotlib` unless someone explicitly require
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
-from extra name to its dependencies, following
-[dependency specifiers](#dependency-specifiers-pep-508) syntax.
+from extra name to its dependencies, following [dependency specifiers](#dependency-specifiers)
+syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
@@ -715,6 +718,26 @@ default-groups = "all"
 
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
     To exclude a specific default group, use `--no-group <name>`.
+
+### Group `requires-python`
+
+By default, dependency groups must be compatible with your project's `requires-python` range.
+
+If a dependency group requires a different range of Python versions than your project, you can
+specify a `requires-python` for the group in `[tool.uv.dependency-groups]`, e.g.:
+
+```toml title="pyproject.toml" hl_lines="9-10"
+[project]
+name = "example"
+version = "0.0.0"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.12"}
+```
 
 ### Legacy `dev-dependencies`
 

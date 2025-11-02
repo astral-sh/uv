@@ -9,14 +9,16 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, Preview,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject_mut::Error;
@@ -36,7 +38,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -61,14 +63,14 @@ pub(crate) async fn project_version(
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -100,7 +102,7 @@ pub(crate) async fn project_version(
             python,
             install_mirrors,
             &settings,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             concurrency,
@@ -295,14 +297,14 @@ pub(crate) async fn project_version(
         Box::pin(lock_and_sync(
             project,
             project_dir,
-            locked,
+            lock_check,
             frozen,
             active,
             no_sync,
             python,
             install_mirrors,
             &settings,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             installer_metadata,
@@ -356,7 +358,10 @@ async fn find_target(
         VirtualProject::Project(
             Workspace::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    project: uv_workspace::ProjectDiscovery::Required,
+                    ..DiscoveryOptions::default()
+                },
                 &WorkspaceCache::default(),
             )
             .await
@@ -367,7 +372,10 @@ async fn find_target(
     } else {
         VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                project: uv_workspace::ProjectDiscovery::Required,
+                ..DiscoveryOptions::default()
+            },
             &WorkspaceCache::default(),
         )
         .await
@@ -390,7 +398,7 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)
@@ -405,7 +413,7 @@ async fn print_frozen_version(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -422,7 +430,7 @@ async fn print_frozen_version(
         project_dir,
         &DependencyGroupsWithDefaults::none(),
         python.as_deref().map(PythonRequest::parse),
-        &network_settings,
+        &client_builder,
         python_preference,
         python_downloads,
         &install_mirrors,
@@ -445,7 +453,7 @@ async fn print_frozen_version(
     let lock = match project::lock::LockOperation::new(
         LockMode::Frozen,
         &settings.resolver,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -459,7 +467,7 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -494,14 +502,14 @@ async fn print_frozen_version(
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -531,7 +539,7 @@ async fn lock_and_sync(
             project_dir,
             &groups,
             python.as_deref().map(PythonRequest::parse),
-            &network_settings,
+            &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
@@ -553,7 +561,7 @@ async fn lock_and_sync(
             &groups,
             python.as_deref().map(PythonRequest::parse),
             &install_mirrors,
-            &network_settings,
+            &client_builder,
             python_preference,
             python_downloads,
             no_sync,
@@ -571,8 +579,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };
@@ -585,7 +593,7 @@ async fn lock_and_sync(
     let lock = match project::lock::LockOperation::new(
         mode,
         &settings.resolver,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -599,7 +607,7 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -638,12 +646,12 @@ async fn lock_and_sync(
         venv,
         &extras,
         &groups,
-        EditableMode::Editable,
+        None,
         install_options,
         Modifications::Sufficient,
         None,
         settings.into(),
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -658,7 +666,7 @@ async fn lock_and_sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }

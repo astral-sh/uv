@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum TrustedPublishing {
-    /// Try trusted publishing when we're already in GitHub Actions, continue if that fails.
+    /// Attempt trusted publishing when we're in a supported environment, continue if that fails.
+    ///
+    /// Supported environments include GitHub Actions and GitLab CI/CD.
     #[default]
     Automatic,
     // Force trusted publishing.

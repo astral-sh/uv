@@ -578,7 +578,7 @@ fn display_tree_inner(
     lines: &mut Vec<String>,
     depth: usize,
 ) {
-    let prefix = "  ".repeat(depth).to_string();
+    let prefix = "  ".repeat(depth);
     match error {
         DerivationTree::Derived(derived) => {
             display_tree_inner(&derived.cause1, lines, depth + 1);
@@ -775,7 +775,7 @@ fn collapse_no_versions_of_workspace_members(
                     // Then, if the package is a workspace member...
                     let (PubGrubPackageInner::Package { name, .. }
                     | PubGrubPackageInner::Extra { name, .. }
-                    | PubGrubPackageInner::Dev { name, .. }) = &**package
+                    | PubGrubPackageInner::Group { name, .. }) = &**package
                     else {
                         return;
                     };

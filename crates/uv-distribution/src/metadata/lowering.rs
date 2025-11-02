@@ -222,19 +222,18 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
@@ -306,22 +305,24 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member
-                                .pyproject_toml()
-                                .is_package(!workspace.is_required_member(&requirement.name))
-                            {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(true),
-                                    r#virtual: Some(false),
-                                }
                             } else {
-                                RequirementSource::Directory {
-                                    install_path: install_path.into_boxed_path(),
-                                    url,
-                                    editable: Some(false),
-                                    r#virtual: Some(true),
+                                let value = workspace.required_members().get(&requirement.name);
+                                let is_required_member = value.is_some();
+                                let editability = value.copied().flatten();
+                                if member.pyproject_toml().is_package(!is_required_member) {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(editability.unwrap_or(true)),
+                                        r#virtual: Some(false),
+                                    }
+                                } else {
+                                    RequirementSource::Directory {
+                                        install_path: install_path.into_boxed_path(),
+                                        url,
+                                        editable: Some(false),
+                                        r#virtual: Some(true),
+                                    }
                                 }
                             };
                             (source, marker)
@@ -454,19 +455,18 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                uv_auth::store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = None;
                             let source = registry_source(&requirement, index, conflict);

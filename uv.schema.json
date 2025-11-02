@@ -174,7 +174,7 @@
       ]
     },
     "dependency-metadata": {
-      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
       "type": [
         "array",
         "null"
@@ -195,6 +195,16 @@
     },
     "environments": {
       "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude-dependencies": {
+      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
       "type": [
         "array",
         "null"
@@ -226,7 +236,7 @@
       ]
     },
     "extra-build-dependencies": {
-      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages, like,\n`pip`, and do not declare them as build dependencies.",
+      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages like\n`pip`, and do not declare them as build dependencies.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExtraBuildDependencies"
@@ -586,7 +596,7 @@
       ]
     },
     "trusted-publishing": {
-      "description": "Configure trusted publishing via GitHub Actions.\n\nBy default, uv checks for trusted publishing when running in GitHub Actions, but ignores it\nif it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request\nfrom a fork).",
+      "description": "Configure trusted publishing.\n\nBy default, uv checks for trusted publishing when running in a supported environment, but\nignores it if it isn't configured.\n\nuv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.",
       "anyOf": [
         {
           "$ref": "#/definitions/TrustedPublishing"
@@ -1302,7 +1312,7 @@
           ]
         },
         "dependency-metadata": {
-          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extras`: The extras provided by the package.",
+          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When\nprovided, enables the resolver to use the specified metadata instead of querying the\nregistry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)\nstandard, though only the following fields are respected:\n\n- `name`: The name of the package.\n- (Optional) `version`: The version of the package. If omitted, the metadata will be applied\n  to all versions of the package.\n- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).\n- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).\n- (Optional) `provides-extra`: The extras provided by the package.",
           "type": [
             "array",
             "null"
@@ -2133,6 +2143,13 @@
           "description": "A dependency on another package in the workspace.",
           "type": "object",
           "properties": {
+            "editable": {
+              "description": "Whether the package should be installed as editable. Defaults to `true`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "extra": {
               "anyOf": [
                 {
@@ -2188,7 +2205,7 @@
         "name": {
           "$ref": "#/definitions/PackageName"
         },
-        "provides-extras": {
+        "provides-extra": {
           "type": "array",
           "default": [],
           "items": {
@@ -2290,6 +2307,11 @@
           "description": "An `x86_64` Linux target.",
           "type": "string",
           "const": "x86_64-unknown-linux-musl"
+        },
+        {
+          "description": "A RISCV64 Linux target.",
+          "type": "string",
+          "const": "riscv64-unknown-linux"
         },
         {
           "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
@@ -2422,9 +2444,34 @@
           "const": "aarch64-manylinux_2_40"
         },
         {
+          "description": "An ARM64 Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
+          "type": "string",
+          "const": "aarch64-linux-android"
+        },
+        {
+          "description": "An `x86_64` Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
+          "type": "string",
+          "const": "x86_64-linux-android"
+        },
+        {
           "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.",
           "type": "string",
           "const": "wasm32-pyodide2024"
+        },
+        {
+          "description": "An ARM64 target for iOS device\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "arm64-apple-ios"
+        },
+        {
+          "description": "An ARM64 target for iOS simulator\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "arm64-apple-ios-simulator"
+        },
+        {
+          "description": "An `x86_64` target for iOS simulator\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",
+          "type": "string",
+          "const": "x86_64-apple-ios-simulator"
         }
       ]
     },
@@ -2478,6 +2525,11 @@
           "description": "Use the CPU-only PyTorch index.",
           "type": "string",
           "const": "cpu"
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 13.0.",
+          "type": "string",
+          "const": "cu130"
         },
         {
           "description": "Use the PyTorch index for CUDA 12.9.",
@@ -2705,7 +2757,7 @@
           ]
         },
         {
-          "description": "Try trusted publishing when we're already in GitHub Actions, continue if that fails.",
+          "description": "Attempt trusted publishing when we're in a supported environment, continue if that fails.\n\nSupported environments include GitHub Actions and GitLab CI/CD.",
           "type": "string",
           "const": "automatic"
         }

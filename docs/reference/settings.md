@@ -202,45 +202,33 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
-### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+### [`exclude-dependencies`](#exclude-dependencies) {: #exclude-dependencies }
 
-Additional build dependencies for packages.
+Dependencies to exclude when resolving the project's dependencies.
 
-This allows extending the PEP 517 build environment for the project's dependencies with
-additional packages. This is useful for packages that assume the presence of packages, like,
-`pip`, and do not declare them as build dependencies.
+Excludes are used to prevent a package from being selected during resolution,
+regardless of whether it's requested by any other package. When a package is excluded,
+it will be omitted from the dependency list entirely.
+
+Including a package as an exclusion will prevent it from being installed, even if
+it's requested by transitive dependencies. This can be useful for removing optional
+dependencies or working around packages with broken dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
 
 **Default value**: `[]`
 
-**Type**: `dict`
+**Type**: `list[str]`
 
 **Example usage**:
 
 ```toml title="pyproject.toml"
-
-[tool.uv.extra-build-dependencies]
-pytest = ["pip"]
-```
-
----
-
-### [`extra-build-variables`](#extra-build-variables) {: #extra-build-variables }
-
-Extra environment variables to set when building certain packages.
-
-Environment variables will be added to the environment when building the
-specified packages.
-
-**Default value**: `{}`
-
-**Type**: `dict[str, dict[str, str]]`
-
-**Example usage**:
-
-```toml title="pyproject.toml"
-
-[tool.uv.extra-build-variables]
-flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+[tool.uv]
+# Exclude Werkzeug from being installed, even if transitive dependencies request it.
+exclude-dependencies = ["werkzeug"]
 ```
 
 ---
@@ -1090,7 +1078,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 
@@ -1188,14 +1176,12 @@ additional packages. This is useful for packages that assume the presence of pac
 
     ```toml
     [tool.uv]
-    [extra-build-dependencies]
-    pytest = ["setuptools"]
+    extra-build-dependencies = { pytest = ["setuptools"] }
     ```
 === "uv.toml"
 
     ```toml
-    [extra-build-dependencies]
-    pytest = ["setuptools"]
+    extra-build-dependencies = { pytest = ["setuptools"] }
     ```
 
 ---
@@ -1216,14 +1202,13 @@ specified packages.
 === "pyproject.toml"
 
     ```toml
-    [tool.uv.extra-build-variables]
-    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    [tool.uv]
+    extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
     ```
 === "uv.toml"
 
     ```toml
-    [tool.uv.extra-build-variables]
-    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
     ```
 
 ---
@@ -2141,11 +2126,12 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ### [`trusted-publishing`](#trusted-publishing) {: #trusted-publishing }
 
-Configure trusted publishing via GitHub Actions.
+Configure trusted publishing.
 
-By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-from a fork).
+By default, uv checks for trusted publishing when running in a supported environment, but
+ignores it if it isn't configured.
+
+uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
 
 **Default value**: `automatic`
 
@@ -2473,7 +2459,7 @@ standard, though only the following fields are respected:
   to all versions of the package.
 - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
 - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
+- (Optional) `provides-extra`: The extras provided by the package.
 
 **Default value**: `[]`
 
@@ -2741,15 +2727,13 @@ additional packages. This is useful for packages that assume the presence of pac
 
     ```toml
     [tool.uv.pip]
-    [extra-build-dependencies]
-    pytest = ["setuptools"]
+    extra-build-dependencies = { pytest = ["setuptools"] }
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    [extra-build-dependencies]
-    pytest = ["setuptools"]
+    extra-build-dependencies = { pytest = ["setuptools"] }
     ```
 
 ---
@@ -2772,15 +2756,13 @@ specified packages.
 
     ```toml
     [tool.uv.pip]
-    [extra-build-variables]
-    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    [extra-build-variables]
-    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
     ```
 
 ---

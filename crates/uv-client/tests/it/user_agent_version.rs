@@ -12,8 +12,8 @@ use std::str::FromStr;
 use tokio::net::TcpListener;
 use url::Url;
 use uv_cache::Cache;
-use uv_client::LineHaul;
 use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, LineHaul};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
@@ -52,7 +52,7 @@ async fn test_user_agent_has_version() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // Send request to our dummy server
     let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
@@ -128,7 +128,8 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
-    let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
+    let mut builder =
+        RegistryClientBuilder::new(BaseClientBuilder::default(), cache).markers(&markers);
 
     let linux = Platform::new(
         Os::Manylinux {

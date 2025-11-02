@@ -563,3 +563,81 @@ fn tool_list_show_extras() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_show_python() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` with python 3.12
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Test with --show-python
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-python")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [CPython 3.12.[X]]
+    - black
+    - blackd
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_list_show_all() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` without extras
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `flask` with extras and additional requirements
+    context
+        .tool_install()
+        .arg("flask[async,dotenv]")
+        .arg("--with")
+        .arg("requests")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Test with all flags
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--show-extras")
+    .arg("--show-with")
+    .arg("--show-version-specifiers")
+    .arg("--show-paths")
+    .arg("--show-python")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0] [CPython 3.12.[X]] ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [extras: async, dotenv] [with: requests] [CPython 3.12.[X]] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+
+    ----- stderr -----
+    "###);
+}

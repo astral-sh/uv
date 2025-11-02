@@ -7,9 +7,9 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_configuration::Preview;
 use uv_fs::{LockedFile, Simplified};
 use uv_pep440::Version;
+use uv_preview::Preview;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;

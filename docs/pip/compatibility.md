@@ -481,3 +481,11 @@ is.
 For example, `uv pip install foo bar` prioritizes newer versions of `foo` over `bar` and could
 result in a different resolution than `uv pip install bar foo`. Similarly, this behavior applies to
 the ordering of requirements in input files for `uv pip compile`.
+
+## Wheel filename and metadata validation
+
+By default, uv will reject wheels whose filenames are inconsistent with the wheel metadata inside
+the file. For example, a wheel named `foo-1.0.0-py3-none-any.whl` that contains metadata indicating
+the version is `1.0.1` will be rejected by uv, but accepted by pip.
+
+To force uv to accept such wheels, set `UV_SKIP_WHEEL_FILENAME_CHECK=1` in the environment.

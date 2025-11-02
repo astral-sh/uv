@@ -734,7 +734,7 @@ fn tool_run_cache() {
     Resolved [N] packages in [TIME]
     "###);
 
-    // Verify that `--refresh` recreates everything.
+    // Verify that `--refresh` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -742,7 +742,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -751,17 +751,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
-    // Verify that `--refresh-package` recreates everything. We may want to change this.
+    // Verify that `--refresh-package` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -770,7 +762,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -779,15 +771,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that varying the interpreter leads to a fresh environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2653,6 +2637,80 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .arg("script.py")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    ");
+
+    // Error when the script is not a valid PEP723 script.
+    let script = context.temp_dir.child("not_pep723_script.py");
+    script.write_str("import anyio")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("not_pep723_script.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `not_pep723_script.py` does not contain inline script metadata
+    ");
+
+    // Error when the script doesn't exist.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("missing_file.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `missing_file.py` (not found)
     ");
 
     Ok(())

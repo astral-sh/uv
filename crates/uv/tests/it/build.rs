@@ -1442,7 +1442,7 @@ fn build_fast_path() -> Result<()> {
     uv_snapshot!(context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
-        .arg(context.temp_dir.join("output1")), @r###"
+        .arg(context.temp_dir.join("output1")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1452,7 +1452,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel from source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1487,7 +1487,7 @@ fn build_fast_path() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1495,7 +1495,7 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building wheel (uv build backend)...
     Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output3")
@@ -1507,7 +1507,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1517,7 +1517,7 @@ fn build_fast_path() -> Result<()> {
     Building wheel (uv build backend)...
     Successfully built output4/built_by_uv-0.1.0.tar.gz
     Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
-    "###);
+    ");
     context
         .temp_dir
         .child("output4")
@@ -2006,7 +2006,7 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
+      ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
@@ -2078,9 +2078,188 @@ fn venv_included_in_sdist() -> Result<()> {
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid tar file
       ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
-      ╰─▶ symlink destination for [PYTHON-3.12] is outside of the target directory
+      ╰─▶ symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
       help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
     ");
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery works with and without trailing slash.
+///
+/// <https://github.com/astral-sh/uv/issues/13914>
+#[test]
+fn test_workspace_trailing_slash() {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace with a root and a member.
+    context.init().arg("--lib").assert().success();
+    context.init().arg("--lib").arg("child").assert().success();
+
+    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check that workspace discovery still works.
+    uv_snapshot!(context.filters(), context.build().arg("child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    // Check general normalization too.
+    uv_snapshot!(context.filters(), context.build().arg("./child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/child-0.1.0.tar.gz
+    Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+}
+
+/// Test `uv build --clear`.
+#[test]
+fn build_clear() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Regular build
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    // Add a marker file to verify `--clear` removes it
+    fs_err::write(project.child("dist").child("marker.txt"), "marker")?;
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    // Build with `--clear` to remove the marker file
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("marker.txt")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test `uv build --no-create-gitignore`.
+#[test]
+fn build_no_gitignore() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    context.init().arg(project.path()).assert().success();
+
+    // Default build with `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::is_file());
+
+    fs_err::remove_dir_all(project.child("dist"))?;
+
+    // Build with `--no-create-gitignore` that does not create `.gitignore`
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child(".gitignore")
+        .assert(predicate::path::missing());
 
     Ok(())
 }

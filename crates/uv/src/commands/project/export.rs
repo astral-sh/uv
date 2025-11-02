@@ -7,11 +7,12 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    Preview,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};
@@ -29,7 +30,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -63,8 +64,8 @@ pub(crate) async fn export(
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
-    locked: bool,
+    editable: Option<EditableMode>,
+    lock_check: LockCheck,
     frozen: bool,
     include_annotations: bool,
     include_header: bool,
@@ -72,7 +73,7 @@ pub(crate) async fn export(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -134,7 +135,7 @@ pub(crate) async fn export(
             ExportTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -152,7 +153,7 @@ pub(crate) async fn export(
                 project_dir,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -171,8 +172,8 @@ pub(crate) async fn export(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(interpreter.as_ref().unwrap())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))
         && !LockTarget::from(&target).lock_path().is_file()
     {
@@ -189,7 +190,7 @@ pub(crate) async fn export(
     let lock = match LockOperation::new(
         mode,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         Box::new(DefaultResolveLogger),
         concurrency,
@@ -203,7 +204,7 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }

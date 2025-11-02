@@ -19,7 +19,7 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{BuildOptions, Constraints};
+use uv_configuration::{BuildOptions, Constraints, InstallTarget};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
@@ -42,12 +42,12 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitUrl,
+    ParsedGitUrl, PyProjectToml,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
-use uv_workspace::WorkspaceMember;
+use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
@@ -170,7 +170,7 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker
 });
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     /// The (major) version of the lockfile format.
@@ -314,7 +314,7 @@ impl Lock {
                     )?;
                 }
             }
-            if let Some(group) = dist.dev.as_ref() {
+            if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
@@ -1163,6 +1163,23 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.excludes.is_empty() {
+                let excludes = self
+                    .manifest
+                    .excludes
+                    .iter()
+                    .map(|name| {
+                        serde::Serialize::serialize(&name, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let excludes = match excludes.as_slice() {
+                    [] => Array::new(),
+                    [name] => Array::from_iter([name]),
+                    excludes => each_element_on_its_line_array(excludes.iter()),
+                };
+                manifest_table.insert("excludes", value(excludes));
+            }
+
             if !self.manifest.build_constraints.is_empty() {
                 let build_constraints = self
                     .manifest
@@ -1229,11 +1246,11 @@ impl Lock {
                     if let Some(requires_python) = metadata.requires_python.as_ref() {
                         table.insert("requires-python", value(requires_python.to_string()));
                     }
-                    if !metadata.provides_extras.is_empty() {
+                    if !metadata.provides_extra.is_empty() {
                         table.insert(
                             "provides-extras",
                             value(serde::Serialize::serialize(
-                                &metadata.provides_extras,
+                                &metadata.provides_extra,
                                 toml_edit::ser::ValueSerializer::new(),
                             )?),
                         );
@@ -1269,7 +1286,7 @@ impl Lock {
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
+    pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
         for dist in &self.packages {
             if &dist.id.name == name {
@@ -1332,7 +1349,7 @@ impl Lock {
         }
 
         let expected: BTreeSet<_> = provides_extra.iter().collect();
-        let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
             let expected = Box::into_iter(provides_extra).collect();
@@ -1443,15 +1460,17 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
-        required_members: &BTreeSet<PackageName>,
+        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        excludes: &[PackageName],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         tags: &Tags,
+        markers: &MarkerEnvironment,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -1471,17 +1490,37 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            // We don't require a build system, if the workspace member is a dependency
-            let expected = !member
-                .pyproject_toml()
-                .is_package(!required_members.contains(name));
-            let actual = self
-                .find_by_name(name)
-                .ok()
-                .flatten()
-                .map(|package| matches!(package.id.source, Source::Virtual(_)));
-            if actual != Some(expected) {
-                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
+            let source = self.find_by_name(name).ok().flatten();
+
+            // Determine whether the member was required by any other member.
+            let value = required_members.get(name);
+            let is_required_member = value.is_some();
+            let editability = value.copied().flatten();
+
+            // Verify that the member is virtual (or not).
+            let expected_virtual = !member.pyproject_toml().is_package(!is_required_member);
+            let actual_virtual =
+                source.map(|package| matches!(package.id.source, Source::Virtual(..)));
+            if actual_virtual != Some(expected_virtual) {
+                return Ok(SatisfiesResult::MismatchedVirtual(
+                    name.clone(),
+                    expected_virtual,
+                ));
+            }
+
+            // Verify that the member is editable (or not).
+            let expected_editable = if expected_virtual {
+                false
+            } else {
+                editability.unwrap_or(true)
+            };
+            let actual_editable =
+                source.map(|package| matches!(package.id.source, Source::Editable(..)));
+            if actual_editable != Some(expected_editable) {
+                return Ok(SatisfiesResult::MismatchedEditable(
+                    name.clone(),
+                    expected_editable,
+                ));
             }
         }
 
@@ -1539,6 +1578,15 @@ impl Lock {
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same excludes.
+        {
+            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
+            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
             }
         }
 
@@ -1704,8 +1752,12 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist =
-                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
+                let dist = package.to_dist(
+                    root,
+                    TagPolicy::Preferred(tags),
+                    &BuildOptions::default(),
+                    markers,
+                )?;
 
                 let metadata = {
                     let id = dist.version_id();
@@ -1763,7 +1815,7 @@ impl Lock {
                 }
 
                 // Validate the `provides-extras` metadata.
-                match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                match self.satisfies_provides_extra(metadata.provides_extra, package) {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1788,13 +1840,29 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = database
-                    .requires_dist(root.join(source_tree))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?;
+                let parent = root.join(source_tree);
+                let path = parent.join("pyproject.toml");
+                let metadata =
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => {
+                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
+                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                                    path: path.clone(),
+                                    err,
+                                })?;
+                            database
+                                .requires_dist(&parent, &pyproject_toml)
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                        Err(err) => {
+                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                        }
+                    };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -1804,7 +1872,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extras, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -1839,6 +1907,7 @@ impl Lock {
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
+                        markers,
                     )?;
 
                     let metadata = {
@@ -1885,7 +1954,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -1995,6 +2064,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from editable to non-editable or vice versa.
+    MismatchedEditable(PackageName, bool),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
@@ -2005,6 +2076,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of excludes.
+    MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
@@ -2104,6 +2177,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The excludes provided to the resolver.
+    #[serde(default)]
+    excludes: BTreeSet<PackageName>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<Requirement>,
@@ -2120,6 +2196,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        excludes: impl IntoIterator<Item = PackageName>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
@@ -2129,6 +2206,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
@@ -2157,6 +2235,7 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
+            excludes: self.excludes,
             build_constraints: self
                 .build_constraints
                 .into_iter()
@@ -2324,14 +2403,14 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
-        let provides_extras = if id.source.is_immutable() {
+        let provides_extra = if id.source.is_immutable() {
             Box::default()
         } else {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
-                .provides_extras
+                .provides_extra
                 .clone()
         };
         let dependency_groups = if id.source.is_immutable() {
@@ -2364,7 +2443,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
-                provides_extras,
+                provides_extra,
                 dependency_groups,
             },
         })
@@ -2473,6 +2552,7 @@ impl Package {
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
+        markers: &MarkerEnvironment,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -2575,19 +2655,23 @@ impl Package {
                 kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
             (false, false) => Err(LockError {
                 kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
         }
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<WheelTagHint> {
+    fn tag_hint(
+        &self,
+        tag_policy: TagPolicy<'_>,
+        markers: &MarkerEnvironment,
+    ) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -2598,6 +2682,7 @@ impl Package {
             self.id.version.as_ref(),
             &filenames,
             tag_policy.tags(),
+            markers,
         )
     }
 
@@ -2754,6 +2839,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -2828,6 +2914,7 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: file_url,
                     yanked: None,
+                    zstd: None,
                 });
 
                 let index = IndexUrl::from(
@@ -2971,10 +3058,10 @@ impl Package {
                 }
             }
 
-            if !self.metadata.provides_extras.is_empty() {
+            if !self.metadata.provides_extra.is_empty() {
                 let provides_extras = self
                     .metadata
-                    .provides_extras
+                    .provides_extra
                     .iter()
                     .map(|extra| {
                         serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
@@ -3034,6 +3121,14 @@ impl Package {
         self.id.version.as_ref()
     }
 
+    /// Returns the Git SHA of the package, if it is a Git source.
+    pub fn git_sha(&self) -> Option<&GitOid> {
+        match &self.id.source {
+            Source::Git(_, git) => Some(&git.precise),
+            _ => None,
+        }
+    }
+
     /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
@@ -3076,6 +3171,9 @@ impl Package {
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
+            if let Some(zstd) = wheel.zstd.as_ref() {
+                hashes.extend(zstd.hash.as_ref().map(|h| h.0.clone()));
+            }
         }
         HashDigests::from(hashes)
     }
@@ -3101,7 +3199,7 @@ impl Package {
 
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
-        &self.metadata.provides_extras
+        &self.metadata.provides_extra
     }
 
     /// Returns the dependency groups the package provides, if any.
@@ -3122,6 +3220,14 @@ impl Package {
     /// Returns the resolved PEP 735 dependency groups of the package.
     pub fn resolved_dependency_groups(&self) -> &BTreeMap<GroupName, Vec<Dependency>> {
         &self.dependency_groups
+    }
+
+    /// Returns an [`InstallTarget`] view for filtering decisions.
+    pub fn as_install_target(&self) -> InstallTarget<'_> {
+        InstallTarget {
+            name: self.name(),
+            is_local: self.id.source.is_local(),
+        }
     }
 }
 
@@ -3168,38 +3274,10 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default)]
-    provides_extras: Box<[ExtraName]>,
+    #[serde(default, rename = "provides-extras")]
+    provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-}
-
-impl PackageMetadata {
-    fn unwire(self, requires_python: &RequiresPython) -> Self {
-        // We need to complexify these markers so things like
-        // `requires_python < '0'` get normalized to False
-        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
-            requirements
-                .into_iter()
-                .map(|mut requirement| {
-                    let complexified_marker =
-                        requires_python.complexify_markers(requirement.marker);
-                    requirement.marker = complexified_marker;
-                    requirement
-                })
-                .collect()
-        };
-
-        Self {
-            requires_dist: unwire_requirements(self.requires_dist),
-            provides_extras: self.provides_extras,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
-                .collect(),
-        }
-    }
 }
 
 impl PackageWire {
@@ -3209,20 +3287,22 @@ impl PackageWire {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
-        if let Some(version) = &self.id.version {
-            for wheel in &self.wheels {
-                if *version != wheel.filename.version
-                    && *version != wheel.filename.version.clone().without_local()
-                {
-                    return Err(LockError::from(LockErrorKind::InconsistentVersions {
-                        name: self.id.name,
-                        version: version.clone(),
-                        wheel: wheel.clone(),
-                    }));
+        if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
+            if let Some(version) = &self.id.version {
+                for wheel in &self.wheels {
+                    if *version != wheel.filename.version
+                        && *version != wheel.filename.version.clone().without_local()
+                    {
+                        return Err(LockError::from(LockErrorKind::InconsistentVersions {
+                            name: self.id.name,
+                            version: version.clone(),
+                            wheel: wheel.clone(),
+                        }));
+                    }
                 }
+                // We can't check the source dist version since it does not need to contain the version
+                // in the filename.
             }
-            // We can't check the source dist version since it does not need to contain the version
-            // in the filename.
         }
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
@@ -3233,7 +3313,7 @@ impl PackageWire {
 
         Ok(Package {
             id: self.id,
-            metadata: self.metadata.unwire(requires_python),
+            metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -3640,6 +3720,14 @@ impl Source {
         }
         table.insert("source", value(source_table));
     }
+
+    /// Check if a package is local by examining its source.
+    pub(crate) fn is_local(&self) -> bool {
+        matches!(
+            self,
+            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
+        )
+    }
 }
 
 impl Display for Source {
@@ -3729,19 +3817,15 @@ impl TryFrom<SourceWire> for Source {
             Git { git } => {
                 let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
-                        given: git.to_string(),
+                        given: git.clone(),
                         err,
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
                 let git_source = GitSource::from_url(&url)
                     .map_err(|err| match err {
-                        GitSourceError::InvalidSha => SourceParseError::InvalidSha {
-                            given: git.to_string(),
-                        },
-                        GitSourceError::MissingSha => SourceParseError::MissingSha {
-                            given: git.to_string(),
-                        },
+                        GitSourceError::InvalidSha => SourceParseError::InvalidSha { given: git },
+                        GitSourceError::MissingSha => SourceParseError::MissingSha { given: git },
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
@@ -4226,11 +4310,11 @@ impl From<SourceDistWire> for SourceDist {
 impl From<GitReference> for GitSourceKind {
     fn from(value: GitReference) -> Self {
         match value {
-            GitReference::Branch(branch) => Self::Branch(branch.to_string()),
-            GitReference::Tag(tag) => Self::Tag(tag.to_string()),
-            GitReference::BranchOrTag(rev) => Self::Rev(rev.to_string()),
-            GitReference::BranchOrTagOrCommit(rev) => Self::Rev(rev.to_string()),
-            GitReference::NamedRef(rev) => Self::Rev(rev.to_string()),
+            GitReference::Branch(branch) => Self::Branch(branch),
+            GitReference::Tag(tag) => Self::Tag(tag),
+            GitReference::BranchOrTag(rev) => Self::Rev(rev),
+            GitReference::BranchOrTagOrCommit(rev) => Self::Rev(rev),
+            GitReference::NamedRef(rev) => Self::Rev(rev),
             GitReference::DefaultBranch => Self::DefaultBranch,
         }
     }
@@ -4299,6 +4383,12 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     url
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+struct ZstdWheel {
+    hash: Option<Hash>,
+    size: Option<u64>,
+}
+
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -4329,6 +4419,8 @@ struct Wheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
+    /// The zstandard-compressed wheel metadata, if any.
+    zstd: Option<ZstdWheel>,
 }
 
 impl Wheel {
@@ -4437,12 +4529,17 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
+        let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
+            hash: zstd.hashes.iter().max().cloned().map(Hash::from),
+            size: zstd.size,
+        });
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
             filename,
+            zstd,
         })
     }
 
@@ -4455,6 +4552,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4467,6 +4565,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
+            zstd: None,
         }
     }
 
@@ -4500,6 +4599,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -4542,6 +4649,14 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
+                    zstd: self
+                        .zstd
+                        .as_ref()
+                        .map(|zstd| uv_distribution_types::Zstd {
+                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
+                            size: zstd.size,
+                        })
+                        .map(Box::new),
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
@@ -4577,6 +4692,9 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
+    /// The zstandard-compressed wheel metadata, if any.
+    #[serde(alias = "zstd")]
+    zstd: Option<ZstdWheel>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -4632,6 +4750,19 @@ impl Wheel {
         if let Some(upload_time) = self.upload_time {
             table.insert("upload-time", Value::from(upload_time.to_string()));
         }
+        if let Some(zstd) = &self.zstd {
+            let mut inner = InlineTable::new();
+            if let Some(ref hash) = zstd.hash {
+                inner.insert("hash", Value::from(hash.to_string()));
+            }
+            if let Some(size) = zstd.size {
+                inner.insert(
+                    "size",
+                    toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+                );
+            }
+            table.insert("zstd", Value::from(inner));
+        }
         Ok(table)
     }
 }
@@ -4666,6 +4797,7 @@ impl TryFrom<WheelWire> for Wheel {
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
+            zstd: wire.zstd,
             filename,
         })
     }
@@ -4711,11 +4843,12 @@ impl Dependency {
     ) -> Self {
         let simplified_marker =
             SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
+        let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
             extra,
             simplified_marker,
-            complexified_marker,
+            complexified_marker: UniversalMarker::from_combined(complexified_marker),
         }
     }
 
@@ -5170,6 +5303,7 @@ enum WheelTagHint {
         version: Option<Version>,
         tags: BTreeSet<PlatformTag>,
         best: Option<PlatformTag>,
+        markers: MarkerEnvironment,
     },
 }
 
@@ -5180,6 +5314,7 @@ impl WheelTagHint {
         version: Option<&Version>,
         filenames: &[&WheelFilename],
         tags: &Tags,
+        markers: &MarkerEnvironment,
     ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
@@ -5232,17 +5367,18 @@ impl WheelTagHint {
             }
             TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
                 let best = tags.platform_tag().cloned();
-                let tags = Self::platform_tags(filenames.iter().copied(), tags)
+                let incompatible_tags = Self::platform_tags(filenames.iter().copied(), tags)
                     .cloned()
                     .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
+                if incompatible_tags.is_empty() {
                     None
                 } else {
                     Some(Self::PlatformTags {
                         package: name.clone(),
                         version: version.cloned(),
-                        tags,
+                        tags: incompatible_tags,
                         best,
+                        markers: markers.clone(),
                     })
                 }
             }
@@ -5254,18 +5390,14 @@ impl WheelTagHint {
     fn python_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = LanguageTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::python_tags).copied()
     }
 
     /// Returns an iterator over the compatible Python tags of the available wheels.
     fn abi_tags<'a>(
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = AbiTag> + 'a {
-        filenames
-            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
-            .copied()
+        filenames.flat_map(WheelFilename::abi_tags).copied()
     }
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
@@ -5286,6 +5418,18 @@ impl WheelTagHint {
                 [].iter()
             }
         })
+    }
+
+    fn suggest_environment_marker(markers: &MarkerEnvironment) -> String {
+        let sys_platform = markers.sys_platform();
+        let platform_machine = markers.platform_machine();
+
+        // Generate the marker string based on actual environment values
+        if platform_machine.is_empty() {
+            format!("sys_platform == '{sys_platform}'")
+        } else {
+            format!("sys_platform == '{sys_platform}' and platform_machine == '{platform_machine}'")
+        }
     }
 }
 
@@ -5431,9 +5575,11 @@ impl std::fmt::Display for WheelTagHint {
                 version,
                 tags,
                 best,
+                markers,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
                 if let Some(best) = best {
+                    let example_marker = Self::suggest_environment_marker(markers);
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
                     } else {
@@ -5444,9 +5590,9 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", package.cyan())
                     };
-                    writeln!(
+                    write!(
                         f,
-                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
+                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
                         "hint".bold().cyan(),
                         ":".bold(),
                         best,
@@ -5454,6 +5600,7 @@ impl std::fmt::Display for WheelTagHint {
                         tags.iter()
                             .map(|tag| format!("`{}`", tag.cyan()))
                             .join(", "),
+                        format!("\"{example_marker}\"").cyan(),
                         "tool.uv.required-environments".green()
                     )
                 } else {
@@ -5782,7 +5929,7 @@ enum LockErrorKind {
     },
     /// A package has inconsistent versions in a single entry
     // Using name instead of id since the version in the id is part of the conflict.
-    #[error("The entry for package `{name}` v{version} has wheel `{wheel_filename}` with inconsistent version: v{wheel_version} ", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version)]
+    #[error("The entry for package `{name}` ({version}) has wheel `{wheel_filename}` with inconsistent version ({wheel_version}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version, env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     InconsistentVersions {
         /// The name of the package with the inconsistent entry.
         name: PackageName,
@@ -5803,6 +5950,18 @@ enum LockErrorKind {
     },
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
+    #[error("Failed to read `{path}`")]
+    UnreadablePyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: std::io::Error,
+    },
+    #[error("Failed to parse `{path}`")]
+    InvalidPyprojectToml {
+        path: PathBuf,
+        #[source]
+        err: toml::de::Error,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.

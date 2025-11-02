@@ -757,6 +757,71 @@ werkzeug==3.0.1
     Ok(())
 }
 
+#[test]
+fn install_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    // Update the script file.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a `pyproject.toml` file with a `poetry` section.
 #[test]
 fn install_pyproject_toml_poetry() -> Result<()> {
@@ -8745,7 +8810,7 @@ fn no_extension() {
 
 /// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
 #[test]
-fn switch_platform() -> Result<()> {
+fn switch_python_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8954,7 +9019,7 @@ fn missing_top_level() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
@@ -11377,7 +11442,7 @@ fn pep_751_mix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify additional requirements with a `pylock.toml` file
+    error: Cannot specify constraints with a `pylock.toml` file
     "
     );
 
@@ -11599,7 +11664,7 @@ requires_python = "==3.13.*"
     "
     );
 
-    // `--group pylock.toml:test` should be rejeceted.
+    // `--group pylock.toml:test` should be rejected.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11970,7 +12035,7 @@ fn install_python_preference() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -12122,6 +12187,25 @@ fn config_settings_package() -> Result<()> {
     assert!(finder.exists());
 
     Ok(())
+}
+
+#[test]
+fn reject_invalid_archive_member_names() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheeldiff2==0.0.1`
+      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    "
+    );
 }
 
 #[test]
@@ -12291,6 +12375,87 @@ fn reject_invalid_short_usize_zip64() {
       ╰─▶ zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
     "
     );
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16068>
+#[test]
+fn already_installed_url_dependency_no_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar")
+        .child("src")
+        .child("bar")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install `foo`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    // Install `bar` with `--no-sources`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./bar").arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+    ");
+
+    Ok(())
 }
 
 /// Test that build dependencies respect locked versions from the resolution.
@@ -12717,4 +12882,159 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn switch_platform() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + cffi==1.16.0
+     + pycparser==2.21
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("linux"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `cffi` was built for a different platform
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ cffi==1.16.0
+    "
+    );
+}
+
+/// `uv pip install --no-sources` should allow non-registry installations, for compatibility with `pip install`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15190>
+#[test]
+fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a simple local package.
+    let local_pkg = context.temp_dir.child("local_pkg");
+    local_pkg.create_dir_all()?;
+
+    local_pkg.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "iniconfig"
+        version = "2.0.0"
+        description = "Local test package"
+        requires-python = ">=3.7"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    local_pkg.child("src").child("iniconfig").create_dir_all()?;
+    local_pkg
+        .child("src")
+        .child("iniconfig")
+        .child("__init__.py")
+        .write_str("__version__ = '2.0.0'")?;
+
+    // Step 1: Install as editable first.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--editable")
+        .arg("./local_pkg"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+    "
+    );
+
+    // Step 2: Use `--no-sources`; we should retain the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_with_system_interpreter() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
+
+    // We use a managed Python version here to ensure consistent output across systems
+    context.python_install().arg("3.12").assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--system")
+        .arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+
+      This Python installation is managed by uv and should not be modified.
+
+    hint: Virtual environments were not considered due to the `--system` flag
+    "
+    );
 }

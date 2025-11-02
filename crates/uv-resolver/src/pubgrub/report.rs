@@ -25,7 +25,8 @@ use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
@@ -400,9 +401,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
+                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
                     Some("your project".to_string())
                 } else {
                     Some(format!("{package}"))
@@ -411,7 +412,7 @@ impl PubGrubReportFormatter<'_> {
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
-            PubGrubPackageInner::Dev { name, .. } if self.workspace_members.contains(name) => {
+            PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
             _ => None,
@@ -428,9 +429,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+                self.is_single_project_workspace() && extra.is_none() && group.is_none()
             }
             _ => false,
         }
@@ -647,7 +648,7 @@ impl PubGrubReportFormatter<'_> {
 
                     if package_name == dependency_name
                         && (dependency.extra().is_none() || package.extra() == dependency.extra())
-                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && (dependency.group().is_none() || dependency.group() == package.group())
                         && workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnItself {
@@ -1022,13 +1023,13 @@ pub(crate) enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -1344,21 +1345,21 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` could not be parsed.\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` was invalid:\n{}",
+                    "{}{} The structure of `{}` was invalid\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidVersionMetadata {
@@ -1548,7 +1549,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex { index } => {
                 write!(
                     f,
-                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "{}{} An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     index.without_credentials().cyan(),

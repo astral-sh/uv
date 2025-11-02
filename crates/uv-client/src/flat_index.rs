@@ -204,7 +204,7 @@ impl<'a> FlatIndexClient<'a> {
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, &base) {
+                        match File::try_from_pypi(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
@@ -305,6 +305,7 @@ impl<'a> FlatIndexClient<'a> {
                 upload_time_utc_ms: None,
                 url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
+                zstd: None,
             };
 
             let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
@@ -320,6 +321,63 @@ impl<'a> FlatIndexClient<'a> {
                 index: flat_index.clone(),
             });
         }
+
+        dists.sort_by(|a, b| {
+            a.filename
+                .cmp(&b.filename)
+                .then_with(|| a.index.cmp(&b.index))
+        });
+
         Ok(FlatIndexEntries::from_entries(dists))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fs_err::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn read_from_directory_sorts_distributions() {
+        let dir = tempdir().unwrap();
+
+        let filenames = [
+            "beta-2.0.0-py3-none-any.whl",
+            "alpha-1.0.0.tar.gz",
+            "alpha-1.0.0-py3-none-any.whl",
+        ];
+
+        for name in &filenames {
+            let mut file = File::create(dir.path().join(name)).unwrap();
+            file.write_all(b"").unwrap();
+        }
+
+        let entries = FlatIndexClient::read_from_directory(
+            dir.path(),
+            &IndexUrl::parse(&dir.path().to_string_lossy(), None).unwrap(),
+        )
+        .unwrap();
+
+        let actual = entries
+            .entries
+            .iter()
+            .map(|entry| entry.filename.to_string())
+            .collect::<Vec<_>>();
+
+        let mut expected = filenames
+            .iter()
+            .map(|name| DistFilename::try_from_normalized_filename(name).unwrap())
+            .collect::<Vec<_>>();
+
+        expected.sort();
+
+        let expected = expected
+            .into_iter()
+            .map(|filename| filename.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
     }
 }

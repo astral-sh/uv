@@ -12,7 +12,8 @@ uv [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-run"><code>uv run</code></a></dt><dd><p>Run a command or script</p></dd>
+<dl class="cli-reference"><dt><a href="#uv-auth"><code>uv auth</code></a></dt><dd><p>Manage authentication</p></dd>
+<dt><a href="#uv-run"><code>uv run</code></a></dt><dd><p>Run a command or script</p></dd>
 <dt><a href="#uv-init"><code>uv init</code></a></dt><dd><p>Create a new project</p></dd>
 <dt><a href="#uv-add"><code>uv add</code></a></dt><dd><p>Add dependencies to the project</p></dd>
 <dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove dependencies from the project</p></dd>
@@ -32,6 +33,307 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-self"><code>uv self</code></a></dt><dd><p>Manage the uv executable</p></dd>
 <dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p></dd>
 </dl>
+
+## uv auth
+
+Manage authentication
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv auth [OPTIONS] <COMMAND>
+```
+
+<h3 class="cli-reference">Commands</h3>
+
+<dl class="cli-reference"><dt><a href="#uv-auth-login"><code>uv auth login</code></a></dt><dd><p>Login to a service</p></dd>
+<dt><a href="#uv-auth-logout"><code>uv auth logout</code></a></dt><dd><p>Logout of a service</p></dd>
+<dt><a href="#uv-auth-token"><code>uv auth token</code></a></dt><dd><p>Show the authentication token for a service</p></dd>
+<dt><a href="#uv-auth-dir"><code>uv auth dir</code></a></dt><dd><p>Show the path to the uv credentials directory</p></dd>
+</dl>
+
+### uv auth login
+
+Login to a service
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv auth login [OPTIONS] <SERVICE>
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-login--service"><a href="#uv-auth-login--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to log into</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-login--allow-insecure-host"><a href="#uv-auth-login--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-auth-login--cache-dir"><a href="#uv-auth-login--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-auth-login--color"><a href="#uv-auth-login--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-auth-login--config-file"><a href="#uv-auth-login--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-auth-login--directory"><a href="#uv-auth-login--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-auth-login--help"><a href="#uv-auth-login--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-auth-login--keyring-provider"><a href="#uv-auth-login--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>The keyring provider to use for storage of credentials.</p>
+<p>Only <code>--keyring-provider native</code> is supported for <code>login</code>, which uses the system keyring via an integration built into uv.</p>
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p><p>Possible values:</p>
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul></dd><dt id="uv-auth-login--managed-python"><a href="#uv-auth-login--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-login--native-tls"><a href="#uv-auth-login--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-auth-login--no-cache"><a href="#uv-auth-login--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-auth-login--no-config"><a href="#uv-auth-login--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-auth-login--no-managed-python"><a href="#uv-auth-login--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-login--no-progress"><a href="#uv-auth-login--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-auth-login--no-python-downloads"><a href="#uv-auth-login--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-auth-login--offline"><a href="#uv-auth-login--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-login--password"><a href="#uv-auth-login--password"><code>--password</code></a> <i>password</i></dt><dd><p>The password to use for the service.</p>
+<p>Use <code>-</code> to read the password from stdin.</p>
+</dd><dt id="uv-auth-login--project"><a href="#uv-auth-login--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-auth-login--quiet"><a href="#uv-auth-login--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-auth-login--token"><a href="#uv-auth-login--token"><code>--token</code></a>, <code>-t</code> <i>token</i></dt><dd><p>The token to use for the service.</p>
+<p>The username will be set to <code>__token__</code>.</p>
+<p>Use <code>-</code> to read the token from stdin.</p>
+</dd><dt id="uv-auth-login--username"><a href="#uv-auth-login--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username to use for the service</p>
+</dd><dt id="uv-auth-login--verbose"><a href="#uv-auth-login--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
+
+### uv auth logout
+
+Logout of a service
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv auth logout [OPTIONS] <SERVICE>
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-logout--service"><a href="#uv-auth-logout--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to logout from</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-logout--allow-insecure-host"><a href="#uv-auth-logout--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-auth-logout--cache-dir"><a href="#uv-auth-logout--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-auth-logout--color"><a href="#uv-auth-logout--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-auth-logout--config-file"><a href="#uv-auth-logout--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-auth-logout--directory"><a href="#uv-auth-logout--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-auth-logout--help"><a href="#uv-auth-logout--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-auth-logout--keyring-provider"><a href="#uv-auth-logout--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>The keyring provider to use for storage of credentials.</p>
+<p>Only <code>--keyring-provider native</code> is supported for <code>logout</code>, which uses the system keyring via an integration built into uv.</p>
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p><p>Possible values:</p>
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul></dd><dt id="uv-auth-logout--managed-python"><a href="#uv-auth-logout--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-logout--native-tls"><a href="#uv-auth-logout--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-auth-logout--no-cache"><a href="#uv-auth-logout--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-auth-logout--no-config"><a href="#uv-auth-logout--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-auth-logout--no-managed-python"><a href="#uv-auth-logout--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-logout--no-progress"><a href="#uv-auth-logout--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-auth-logout--no-python-downloads"><a href="#uv-auth-logout--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-auth-logout--offline"><a href="#uv-auth-logout--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-logout--project"><a href="#uv-auth-logout--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-auth-logout--quiet"><a href="#uv-auth-logout--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-auth-logout--username"><a href="#uv-auth-logout--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username to logout</p>
+</dd><dt id="uv-auth-logout--verbose"><a href="#uv-auth-logout--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
+
+### uv auth token
+
+Show the authentication token for a service
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv auth token [OPTIONS] <SERVICE>
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-token--service"><a href="#uv-auth-token--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to lookup</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-token--allow-insecure-host"><a href="#uv-auth-token--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-auth-token--cache-dir"><a href="#uv-auth-token--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-auth-token--color"><a href="#uv-auth-token--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-auth-token--config-file"><a href="#uv-auth-token--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-auth-token--directory"><a href="#uv-auth-token--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-auth-token--help"><a href="#uv-auth-token--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-auth-token--keyring-provider"><a href="#uv-auth-token--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>The keyring provider to use for reading credentials</p>
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p><p>Possible values:</p>
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul></dd><dt id="uv-auth-token--managed-python"><a href="#uv-auth-token--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-token--native-tls"><a href="#uv-auth-token--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-auth-token--no-cache"><a href="#uv-auth-token--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-auth-token--no-config"><a href="#uv-auth-token--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-auth-token--no-managed-python"><a href="#uv-auth-token--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-token--no-progress"><a href="#uv-auth-token--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-auth-token--no-python-downloads"><a href="#uv-auth-token--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-auth-token--offline"><a href="#uv-auth-token--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-token--project"><a href="#uv-auth-token--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-auth-token--quiet"><a href="#uv-auth-token--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-auth-token--username"><a href="#uv-auth-token--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username to lookup</p>
+</dd><dt id="uv-auth-token--verbose"><a href="#uv-auth-token--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
+
+### uv auth dir
+
+Show the path to the uv credentials directory.
+
+By default, credentials are stored in the uv data directory at `$XDG_DATA_HOME/uv/credentials` or `$HOME/.local/share/uv/credentials` on Unix and `%APPDATA%\uv\data\credentials` on Windows.
+
+The credentials directory may be overridden with `$UV_CREDENTIALS_DIR`.
+
+Credentials are only stored in this directory when the plaintext backend is used, as opposed to the native backend, which uses the system keyring.
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv auth dir [OPTIONS] [SERVICE]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-dir--service"><a href="#uv-auth-dir--service"<code>SERVICE</code></a></dt><dd><p>The domain or URL of the service to lookup</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-auth-dir--allow-insecure-host"><a href="#uv-auth-dir--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-auth-dir--cache-dir"><a href="#uv-auth-dir--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-auth-dir--color"><a href="#uv-auth-dir--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-auth-dir--config-file"><a href="#uv-auth-dir--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-auth-dir--directory"><a href="#uv-auth-dir--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-auth-dir--help"><a href="#uv-auth-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-auth-dir--managed-python"><a href="#uv-auth-dir--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-dir--native-tls"><a href="#uv-auth-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-auth-dir--no-cache"><a href="#uv-auth-dir--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-auth-dir--no-config"><a href="#uv-auth-dir--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-auth-dir--no-managed-python"><a href="#uv-auth-dir--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-auth-dir--no-progress"><a href="#uv-auth-dir--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-auth-dir--no-python-downloads"><a href="#uv-auth-dir--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-auth-dir--offline"><a href="#uv-auth-dir--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-auth-dir--project"><a href="#uv-auth-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-auth-dir--quiet"><a href="#uv-auth-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-auth-dir--verbose"><a href="#uv-auth-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
 
 ## uv run
 
@@ -92,7 +394,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-run--directory"><a href="#uv-run--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-run--env-file"><a href="#uv-run--env-file"><code>--env-file</code></a> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-run--env-file"><a href="#uv-run--env-file"><code>--env-file</code></a> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
 <p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
 <p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--exact"><a href="#uv-run--exact"><code>--exact</code></a></dt><dd><p>Perform an exact sync, removing extraneous packages.</p>
 <p>When enabled, uv will remove any extraneous packages from the environment. By default, <code>uv run</code> will make the minimum necessary changes to satisfy the requirements.</p>
@@ -193,7 +495,7 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-run--no-index"><a href="#uv-run--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+<p>May also be set with the <code>UV_NO_GROUP</code> environment variable.</p></dd><dt id="uv-run--no-index"><a href="#uv-run--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 </dd><dt id="uv-run--no-managed-python"><a href="#uv-run--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-run--no-progress"><a href="#uv-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
@@ -233,7 +535,60 @@ uv run [OPTIONS] [COMMAND]
 <p>If the interpreter request is satisfied by a discovered environment, the environment will be
 used.</p>
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-run--quiet"><a href="#uv-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-run--python-platform"><a href="#uv-run--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
+</ul></dd><dt id="uv-run--quiet"><a href="#uv-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-run--refresh"><a href="#uv-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="uv-run--refresh-package"><a href="#uv-run--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
@@ -256,7 +611,8 @@ used.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 </dd><dt id="uv-run--with-editable"><a href="#uv-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
-</dd><dt id="uv-run--with-requirements"><a href="#uv-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files.</p>
+</dd><dt id="uv-run--with-requirements"><a href="#uv-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, and <code>pylock.toml</code>.</p>
 <p>The same environment semantics as <code>--with</code> apply.</p>
 <p>Using <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> files is not allowed.</p>
 </dd></dl>
@@ -333,7 +689,7 @@ uv init [OPTIONS] [PATH]
 </dd><dt id="uv-init--directory"><a href="#uv-init--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-init--help"><a href="#uv-init--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-init--help"><a href="#uv-init--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-init--lib"><a href="#uv-init--lib"><code>--lib</code></a>, <code>--library</code></dt><dd><p>Create a project for a library.</p>
 <p>A library is a project that is intended to be built and distributed as a Python package.</p>
 </dd><dt id="uv-init--managed-python"><a href="#uv-init--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
@@ -461,7 +817,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-add--directory"><a href="#uv-add--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-add--editable"><a href="#uv-add--editable"><code>--editable</code></a></dt><dd><p>Add the requirements as editable</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-add--editable"><a href="#uv-add--editable"><code>--editable</code></a></dt><dd><p>Add the requirements as editable</p>
 </dd><dt id="uv-add--exclude-newer"><a href="#uv-add--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-add--exclude-newer-package"><a href="#uv-add--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
@@ -540,6 +896,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-add--no-config"><a href="#uv-add--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-add--no-index"><a href="#uv-add--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+</dd><dt id="uv-add--no-install-local"><a href="#uv-add--no-install-local"><code>--no-install-local</code></a></dt><dd><p>Do not install local path dependencies</p>
+<p>Skips the current project, workspace members, and any other local (path or editable) packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache heavy third-party dependencies first and layer local packages separately.</p>
 </dd><dt id="uv-add--no-install-project"><a href="#uv-add--no-install-project"><code>--no-install-project</code></a></dt><dd><p>Do not install the current project.</p>
 <p>By default, the current project is installed into the environment with all of its dependencies. The <code>--no-install-project</code> option allows the project to be excluded, but all of its dependencies are still installed. This is particularly useful in situations like building Docker images where installing the project separately from its dependencies allows optimal layer caching.</p>
 </dd><dt id="uv-add--no-install-workspace"><a href="#uv-add--no-install-workspace"><code>--no-install-workspace</code></a></dt><dd><p>Do not install any workspace members, including the current project.</p>
@@ -584,7 +942,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--refresh-package"><a href="#uv-add--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 </dd><dt id="uv-add--reinstall"><a href="#uv-add--reinstall"><code>--reinstall</code></a>, <code>--force-reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they're already installed. Implies <code>--refresh</code></p>
 </dd><dt id="uv-add--reinstall-package"><a href="#uv-add--reinstall-package"><code>--reinstall-package</code></a> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it's already installed. Implies <code>--refresh-package</code></p>
-</dd><dt id="uv-add--requirements"><a href="#uv-add--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Add all packages listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-add--requirements"><a href="#uv-add--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Add the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code>.</p>
 </dd><dt id="uv-add--resolution"><a href="#uv-add--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 <p>May also be set with the <code>UV_RESOLUTION</code> environment variable.</p><p>Possible values:</p>
@@ -664,7 +1023,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-remove--directory"><a href="#uv-remove--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-remove--exclude-newer"><a href="#uv-remove--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-remove--exclude-newer"><a href="#uv-remove--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-remove--exclude-newer-package"><a href="#uv-remove--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -845,7 +1204,7 @@ uv version [OPTIONS] [VALUE]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-version--directory"><a href="#uv-version--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-version--dry-run"><a href="#uv-version--dry-run"><code>--dry-run</code></a></dt><dd><p>Don't write a new version to the <code>pyproject.toml</code></p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-version--dry-run"><a href="#uv-version--dry-run"><code>--dry-run</code></a></dt><dd><p>Don't write a new version to the <code>pyproject.toml</code></p>
 <p>Instead, the version will be displayed.</p>
 </dd><dt id="uv-version--exclude-newer"><a href="#uv-version--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -1034,7 +1393,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-sync--directory"><a href="#uv-sync--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-sync--dry-run"><a href="#uv-sync--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, without writing the lockfile or modifying the project environment.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-sync--dry-run"><a href="#uv-sync--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, without writing the lockfile or modifying the project environment.</p>
 <p>In dry-run mode, uv will resolve the project's dependencies and report on the resulting changes to both the lockfile and the project environment, but will not modify either.</p>
 </dd><dt id="uv-sync--exclude-newer"><a href="#uv-sync--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -1126,7 +1485,9 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-sync--no-index"><a href="#uv-sync--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+<p>May also be set with the <code>UV_NO_GROUP</code> environment variable.</p></dd><dt id="uv-sync--no-index"><a href="#uv-sync--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+</dd><dt id="uv-sync--no-install-local"><a href="#uv-sync--no-install-local"><code>--no-install-local</code></a></dt><dd><p>Do not install local path dependencies</p>
+<p>Skips the current project, workspace members, and any other local (path or editable) packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache heavy third-party dependencies first and layer local packages separately.</p>
 </dd><dt id="uv-sync--no-install-package"><a href="#uv-sync--no-install-package"><code>--no-install-package</code></a> <i>no-install-package</i></dt><dd><p>Do not install the given package(s).</p>
 <p>By default, all of the project's dependencies are installed into the environment. The <code>--no-install-package</code> option allows exclusion of specific packages. Note this can result in a broken environment, and should be used with caution.</p>
 </dd><dt id="uv-sync--no-install-project"><a href="#uv-sync--no-install-project"><code>--no-install-project</code></a></dt><dd><p>Do not install the current project.</p>
@@ -1178,7 +1539,9 @@ environment in the project.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--python-platform"><a href="#uv-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
-<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -1194,6 +1557,7 @@ environment in the project.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -1220,7 +1584,12 @@ environment in the project.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
 <li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
 </ul></dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-sync--refresh"><a href="#uv-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
@@ -1265,10 +1634,10 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-lock--cache-dir"><a href="#uv-lock--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-lock--check"><a href="#uv-lock--check"><code>--check</code></a>, <code>--locked</code></dt><dd><p>Check if the lockfile is up-to-date.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-lock--check"><a href="#uv-lock--check"><code>--check</code></a></dt><dd><p>Check if the lockfile is up-to-date.</p>
 <p>Asserts that the <code>uv.lock</code> would remain unchanged after a resolution. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 <p>Equivalent to <code>--locked</code>.</p>
-<p>May also be set with the <code>UV_LOCKED</code> environment variable.</p></dd><dt id="uv-lock--check-exists"><a href="#uv-lock--check-exists"><code>--check-exists</code></a>, <code>--frozen</code></dt><dd><p>Assert that a <code>uv.lock</code> exists without checking if it is up-to-date.</p>
+</dd><dt id="uv-lock--check-exists"><a href="#uv-lock--check-exists"><code>--check-exists</code></a>, <code>--frozen</code></dt><dd><p>Assert that a <code>uv.lock</code> exists without checking if it is up-to-date.</p>
 <p>Equivalent to <code>--frozen</code>.</p>
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-lock--color"><a href="#uv-lock--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
@@ -1287,7 +1656,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-lock--directory"><a href="#uv-lock--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-lock--dry-run"><a href="#uv-lock--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, without writing the lockfile.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-lock--dry-run"><a href="#uv-lock--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, without writing the lockfile.</p>
 <p>In dry-run mode, uv will resolve the project's dependencies and report on the resulting changes, but will not write the lockfile to disk.</p>
 </dd><dt id="uv-lock--exclude-newer"><a href="#uv-lock--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -1455,7 +1824,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-export--directory"><a href="#uv-export--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-export--exclude-newer"><a href="#uv-export--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-export--exclude-newer"><a href="#uv-export--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-export--exclude-newer-package"><a href="#uv-export--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -1544,7 +1913,9 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--no-dev"><a href="#uv-export--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 <p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
-<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
+<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-export--no-emit-local"><a href="#uv-export--no-emit-local"><code>--no-emit-local</code></a>, <code>--no-install-local</code></dt><dd><p>Do not include local path dependencies in the exported requirements.</p>
+<p>Omits the current project, workspace members, and any other local (path or editable) packages from the export. Only remote/indexed dependencies are written. Useful for Docker and CI flows that want to export and cache third-party dependencies first.</p>
+</dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 <p>By default, all of the project's dependencies are included in the exported requirements file. The <code>--no-emit-package</code> option allows exclusion of specific packages.</p>
 </dd><dt id="uv-export--no-emit-project"><a href="#uv-export--no-emit-project"><code>--no-emit-project</code></a>, <code>--no-install-project</code></dt><dd><p>Do not emit the current project.</p>
 <p>By default, the current project is included in the exported requirements file with all of its dependencies. The <code>--no-emit-project</code> option allows the project to be excluded, but all of its dependencies to remain included.</p>
@@ -1555,7 +1926,7 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-export--no-hashes"><a href="#uv-export--no-hashes"><code>--no-hashes</code></a></dt><dd><p>Omit hashes in the generated output</p>
+<p>May also be set with the <code>UV_NO_GROUP</code> environment variable.</p></dd><dt id="uv-export--no-hashes"><a href="#uv-export--no-hashes"><code>--no-hashes</code></a></dt><dd><p>Omit hashes in the generated output</p>
 </dd><dt id="uv-export--no-header"><a href="#uv-export--no-header"><code>--no-header</code></a></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
 </dd><dt id="uv-export--no-index"><a href="#uv-export--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 </dd><dt id="uv-export--no-managed-python"><a href="#uv-export--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
@@ -1655,7 +2026,7 @@ uv tree [OPTIONS]
 <p>[default: 255]</p></dd><dt id="uv-tree--directory"><a href="#uv-tree--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tree--exclude-newer"><a href="#uv-tree--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tree--exclude-newer"><a href="#uv-tree--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tree--exclude-newer-package"><a href="#uv-tree--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -1738,7 +2109,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
-</dd><dt id="uv-tree--no-index"><a href="#uv-tree--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+<p>May also be set with the <code>UV_NO_GROUP</code> environment variable.</p></dd><dt id="uv-tree--no-index"><a href="#uv-tree--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 </dd><dt id="uv-tree--no-managed-python"><a href="#uv-tree--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-tree--no-progress"><a href="#uv-tree--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
@@ -1792,6 +2163,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -1818,7 +2190,12 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
 <li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
 </ul></dd><dt id="uv-tree--python-version"><a href="#uv-tree--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The Python version to use when filtering the tree.</p>
 <p>For example, pass <code>--python-version 3.10</code> to display the dependencies that would be included when installing on Python 3.10.</p>
 <p>Defaults to the version of the discovered Python interpreter.</p>
@@ -1833,6 +2210,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul></dd><dt id="uv-tree--script"><a href="#uv-tree--script"><code>--script</code></a> <i>script</i></dt><dd><p>Show the dependency tree the specified PEP 723 Python script, rather than the current project.</p>
 <p>If provided, uv will resolve the dependencies based on its inline metadata table, in adherence with PEP 723.</p>
+</dd><dt id="uv-tree--show-sizes"><a href="#uv-tree--show-sizes"><code>--show-sizes</code></a></dt><dd><p>Show compressed wheel sizes for packages in the tree</p>
 </dd><dt id="uv-tree--universal"><a href="#uv-tree--universal"><code>--universal</code></a></dt><dd><p>Show a platform-independent dependency tree.</p>
 <p>Shows resolved package versions for all Python versions and platforms, rather than filtering to those that are relevant for the current environment.</p>
 <p>Multiple versions may be shown for a each package.</p>
@@ -1888,7 +2266,7 @@ uv format [OPTIONS] [-- <EXTRA_ARGS>...]
 </dd><dt id="uv-format--directory"><a href="#uv-format--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-format--help"><a href="#uv-format--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-format--help"><a href="#uv-format--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-format--managed-python"><a href="#uv-format--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-format--native-tls"><a href="#uv-format--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -1901,7 +2279,9 @@ uv format [OPTIONS] [-- <EXTRA_ARGS>...]
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-format--no-progress"><a href="#uv-format--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-format--no-python-downloads"><a href="#uv-format--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-format--no-project"><a href="#uv-format--no-project"><code>--no-project</code></a></dt><dd><p>Avoid discovering a project or workspace.</p>
+<p>Instead of running the formatter in the context of the current project, run it in the context of the current directory. This is useful when the current directory is not a project.</p>
+</dd><dt id="uv-format--no-python-downloads"><a href="#uv-format--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-format--offline"><a href="#uv-format--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-format--project"><a href="#uv-format--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
@@ -1996,7 +2376,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-tool-run--directory"><a href="#uv-tool-run--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-run--env-file"><a href="#uv-tool-run--env-file"><code>--env-file</code></a> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-run--env-file"><a href="#uv-tool-run--env-file"><code>--env-file</code></a> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
 <p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
 <p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p></dd><dt id="uv-tool-run--exclude-newer"><a href="#uv-tool-run--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -2097,7 +2477,60 @@ uv tool run [OPTIONS] [COMMAND]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-tool-run--python"><a href="#uv-tool-run--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-run--quiet"><a href="#uv-tool-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-run--python-platform"><a href="#uv-tool-run--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
+</ul></dd><dt id="uv-tool-run--quiet"><a href="#uv-tool-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-run--refresh"><a href="#uv-tool-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="uv-tool-run--refresh-package"><a href="#uv-tool-run--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
@@ -2117,7 +2550,8 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 <p>When used in a project, these dependencies will be layered on top of the uv tool's environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
-</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, and <code>pylock.toml</code>.</p>
 </dd></dl>
 
 ### uv tool install
@@ -2173,13 +2607,15 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-tool-install--directory"><a href="#uv-tool-install--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-install--editable"><a href="#uv-tool-install--editable"><code>--editable</code></a>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package's source directory are reflected without reinstallation</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-install--editable"><a href="#uv-tool-install--editable"><code>--editable</code></a>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package's source directory are reflected without reinstallation</p>
 </dd><dt id="uv-tool-install--exclude-newer"><a href="#uv-tool-install--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-install--exclude-newer-package"><a href="#uv-tool-install--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-tool-install--extra-index-url"><a href="#uv-tool-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt id="uv-tool-install--excludes"><a href="#uv-tool-install--excludes"><code>--excludes</code></a>, <code>--exclude</code> <i>excludes</i></dt><dd><p>Exclude packages from resolution using the given requirements files.</p>
+<p>Excludes files are <code>requirements.txt</code>-like files that specify packages to exclude from the resolution. When a package is excluded, it will be omitted from the dependency list entirely and its own dependencies will be ignored during the resolution phase. Excludes are unconditional in that requirement specifiers and markers are ignored; any package listed in the provided file will be omitted from all resolved environments.</p>
+<p>May also be set with the <code>UV_EXCLUDE</code> environment variable.</p></dd><dt id="uv-tool-install--extra-index-url"><a href="#uv-tool-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-tool-install--find-links"><a href="#uv-tool-install--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -2271,7 +2707,60 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-tool-install--python"><a href="#uv-tool-install--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the tool environment.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-install--quiet"><a href="#uv-tool-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-install--python-platform"><a href="#uv-tool-install--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
+</ul></dd><dt id="uv-tool-install--quiet"><a href="#uv-tool-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-install--refresh"><a href="#uv-tool-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="uv-tool-install--refresh-package"><a href="#uv-tool-install--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
@@ -2291,7 +2780,8 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 </dd><dt id="uv-tool-install--with-executables-from"><a href="#uv-tool-install--with-executables-from"><code>--with-executables-from</code></a> <i>with-executables-from</i></dt><dd><p>Install executables from the following packages</p>
-</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, and <code>pylock.toml</code>.</p>
 </dd></dl>
 
 ### uv tool upgrade
@@ -2343,7 +2833,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-tool-upgrade--directory"><a href="#uv-tool-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-upgrade--exclude-newer"><a href="#uv-tool-upgrade--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-upgrade--exclude-newer"><a href="#uv-tool-upgrade--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-upgrade--exclude-newer-package"><a href="#uv-tool-upgrade--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -2436,7 +2926,60 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-tool-upgrade--python"><a href="#uv-tool-upgrade--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>Upgrade a tool, and specify it to use the given Python interpreter to build its environment.
 Use with <code>--all</code> to apply to all tools.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-upgrade--quiet"><a href="#uv-tool-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-upgrade--python-platform"><a href="#uv-tool-upgrade--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
+</ul></dd><dt id="uv-tool-upgrade--quiet"><a href="#uv-tool-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-upgrade--reinstall"><a href="#uv-tool-upgrade--reinstall"><code>--reinstall</code></a>, <code>--force-reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they're already installed. Implies <code>--refresh</code></p>
 </dd><dt id="uv-tool-upgrade--reinstall-package"><a href="#uv-tool-upgrade--reinstall-package"><code>--reinstall-package</code></a> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it's already installed. Implies <code>--refresh-package</code></p>
@@ -2482,7 +3025,7 @@ uv tool list [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-list--directory"><a href="#uv-tool-list--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-list--help"><a href="#uv-tool-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-list--help"><a href="#uv-tool-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-tool-list--managed-python"><a href="#uv-tool-list--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-list--native-tls"><a href="#uv-tool-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -2506,6 +3049,7 @@ uv tool list [OPTIONS]
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-list--show-extras"><a href="#uv-tool-list--show-extras"><code>--show-extras</code></a></dt><dd><p>Whether to display the extra requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
+</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python version associated with run each tool</p>
 </dd><dt id="uv-tool-list--show-version-specifiers"><a href="#uv-tool-list--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 </dd><dt id="uv-tool-list--show-with"><a href="#uv-tool-list--show-with"><code>--show-with</code></a></dt><dd><p>Whether to display the additional requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -2549,7 +3093,7 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-uninstall--directory"><a href="#uv-tool-uninstall--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-uninstall--help"><a href="#uv-tool-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-uninstall--help"><a href="#uv-tool-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-tool-uninstall--managed-python"><a href="#uv-tool-uninstall--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-uninstall--native-tls"><a href="#uv-tool-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -2613,7 +3157,7 @@ uv tool update-shell [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-update-shell--directory"><a href="#uv-tool-update-shell--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-update-shell--help"><a href="#uv-tool-update-shell--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-update-shell--help"><a href="#uv-tool-update-shell--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-tool-update-shell--managed-python"><a href="#uv-tool-update-shell--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-update-shell--native-tls"><a href="#uv-tool-update-shell--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -2690,7 +3234,7 @@ from the following environment variables, in order of preference:</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-dir--directory"><a href="#uv-tool-dir--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-tool-dir--help"><a href="#uv-tool-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-tool-dir--help"><a href="#uv-tool-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-tool-dir--managed-python"><a href="#uv-tool-dir--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-tool-dir--native-tls"><a href="#uv-tool-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -2738,6 +3282,8 @@ The following Python version request formats are supported:
 
 - `<version>` e.g. `3`, `3.12`, `3.12.3`
 - `<version-specifier>` e.g. `>=3.12,<3.13`
+- `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
 - `<implementation>` e.g. `cpython` or `cp`
 - `<implementation>@<version>` e.g. `cpython@3.12`
 - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -2830,7 +3376,7 @@ uv python list [OPTIONS] [REQUEST]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-list--directory"><a href="#uv-python-list--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-list--help"><a href="#uv-python-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-list--help"><a href="#uv-python-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-list--managed-python"><a href="#uv-python-list--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-list--native-tls"><a href="#uv-python-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -2862,7 +3408,7 @@ uv python list [OPTIONS] [REQUEST]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-list--python-downloads-json-url"><a href="#uv-python-list--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
 <p>Note that currently, only local paths are supported.</p>
-<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p></dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-list--show-urls"><a href="#uv-python-list--show-urls"><code>--show-urls</code></a></dt><dd><p>Show the URLs of available Python downloads.</p>
 <p>By default, these display as <code>&lt;download available&gt;</code>.</p>
@@ -2922,7 +3468,7 @@ uv python install [OPTIONS] [TARGETS]...
 </dd><dt id="uv-python-install--directory"><a href="#uv-python-install--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-install--force"><a href="#uv-python-install--force"><code>--force</code></a>, <code>-f</code></dt><dd><p>Replace existing Python executables during installation.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-install--force"><a href="#uv-python-install--force"><code>--force</code></a>, <code>-f</code></dt><dd><p>Replace existing Python executables during installation.</p>
 <p>By default, uv will refuse to replace executables that it does not manage.</p>
 <p>Implies <code>--reinstall</code>.</p>
 </dd><dt id="uv-python-install--help"><a href="#uv-python-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -2934,7 +3480,7 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-install--mirror"><a href="#uv-python-install--mirror"><code>--mirror</code></a> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 <p>The provided URL will replace <code>https://github.com/astral-sh/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-<p>May also be set with the <code>UV_PYTHON_INSTALL_MIRROR</code> environment variable.</p></dd><dt id="uv-python-install--native-tls"><a href="#uv-python-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+</dd><dt id="uv-python-install--native-tls"><a href="#uv-python-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 <p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-python-install--no-bin"><a href="#uv-python-install--no-bin"><code>--no-bin</code></a></dt><dd><p>Do not install a Python executable into the <code>bin</code> directory.</p>
@@ -2959,9 +3505,9 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-install--pypy-mirror"><a href="#uv-python-install--pypy-mirror"><code>--pypy-mirror</code></a> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
 <p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-<p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p></dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+</dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
 <p>Note that currently, only local paths are supported.</p>
-<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p></dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-install--reinstall"><a href="#uv-python-install--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it's already installed.</p>
 <p>By default, uv will exit successfully if the version is already installed.</p>
@@ -3018,7 +3564,7 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-upgrade--directory"><a href="#uv-python-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-upgrade--help"><a href="#uv-python-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-upgrade--help"><a href="#uv-python-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-upgrade--install-dir"><a href="#uv-python-upgrade--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory Python installations are stored in.</p>
 <p>If provided, <code>UV_PYTHON_INSTALL_DIR</code> will need to be set for subsequent operations for uv to discover the Python installation.</p>
 <p>See <code>uv python dir</code> to view the current Python installation directory. Defaults to <code>~/.local/share/uv/python</code>.</p>
@@ -3027,7 +3573,7 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-upgrade--mirror"><a href="#uv-python-upgrade--mirror"><code>--mirror</code></a> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 <p>The provided URL will replace <code>https://github.com/astral-sh/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-<p>May also be set with the <code>UV_PYTHON_INSTALL_MIRROR</code> environment variable.</p></dd><dt id="uv-python-upgrade--native-tls"><a href="#uv-python-upgrade--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+</dd><dt id="uv-python-upgrade--native-tls"><a href="#uv-python-upgrade--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 <p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-python-upgrade--no-cache"><a href="#uv-python-upgrade--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
@@ -3048,9 +3594,9 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-upgrade--pypy-mirror"><a href="#uv-python-upgrade--pypy-mirror"><code>--pypy-mirror</code></a> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
 <p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-<p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p></dd><dt id="uv-python-upgrade--python-downloads-json-url"><a href="#uv-python-upgrade--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+</dd><dt id="uv-python-upgrade--python-downloads-json-url"><a href="#uv-python-upgrade--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
 <p>Note that currently, only local paths are supported.</p>
-<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p></dd><dt id="uv-python-upgrade--quiet"><a href="#uv-python-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="uv-python-upgrade--quiet"><a href="#uv-python-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-upgrade--reinstall"><a href="#uv-python-upgrade--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the latest Python patch, if it's already installed.</p>
 <p>By default, uv will exit successfully if the latest patch is already installed.</p>
@@ -3099,7 +3645,7 @@ uv python find [OPTIONS] [REQUEST]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-find--directory"><a href="#uv-python-find--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-find--help"><a href="#uv-python-find--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-find--help"><a href="#uv-python-find--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-find--managed-python"><a href="#uv-python-find--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-find--native-tls"><a href="#uv-python-find--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -3178,7 +3724,7 @@ uv python pin [OPTIONS] [REQUEST]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-pin--directory"><a href="#uv-python-pin--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-pin--global"><a href="#uv-python-pin--global"><code>--global</code></a></dt><dd><p>Update the global Python version pin.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-pin--global"><a href="#uv-python-pin--global"><code>--global</code></a></dt><dd><p>Update the global Python version pin.</p>
 <p>Writes the pinned Python version to a <code>.python-version</code> file in the uv user configuration directory: <code>XDG_CONFIG_HOME/uv</code> on Linux/macOS and <code>%APPDATA%/uv</code> on Windows.</p>
 <p>When a local Python version pin is not found in the working directory or an ancestor directory, this version will be used instead.</p>
 </dd><dt id="uv-python-pin--help"><a href="#uv-python-pin--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -3261,7 +3807,7 @@ from the following environment variables, in order of preference:</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-dir--directory"><a href="#uv-python-dir--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-dir--help"><a href="#uv-python-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-dir--help"><a href="#uv-python-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-dir--managed-python"><a href="#uv-python-dir--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-dir--native-tls"><a href="#uv-python-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -3326,7 +3872,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-uninstall--directory"><a href="#uv-python-uninstall--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-uninstall--help"><a href="#uv-python-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-uninstall--help"><a href="#uv-python-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-uninstall--install-dir"><a href="#uv-python-uninstall--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where the Python was installed</p>
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p></dd><dt id="uv-python-uninstall--managed-python"><a href="#uv-python-uninstall--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -3391,7 +3937,7 @@ uv python update-shell [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-update-shell--directory"><a href="#uv-python-update-shell--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-update-shell--help"><a href="#uv-python-update-shell--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-python-update-shell--help"><a href="#uv-python-update-shell--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-python-update-shell--managed-python"><a href="#uv-python-update-shell--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-update-shell--native-tls"><a href="#uv-python-update-shell--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -3453,7 +3999,8 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-pip-compile--src_file"><a href="#uv-pip-compile--src_file"<code>SRC_FILE</code></a></dt><dd><p>Include all packages listed in the given <code>requirements.in</code> files.</p>
+<dl class="cli-reference"><dt id="uv-pip-compile--src_file"><a href="#uv-pip-compile--src_file"<code>SRC_FILE</code></a></dt><dd><p>Include the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code>.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 <p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
 <p>The order of the requirements files and the requirements in them is used to determine priority during resolution.</p>
@@ -3500,7 +4047,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-pip-compile--directory"><a href="#uv-pip-compile--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-compile--emit-build-options"><a href="#uv-pip-compile--emit-build-options"><code>--emit-build-options</code></a></dt><dd><p>Include <code>--no-binary</code> and <code>--only-binary</code> entries in the generated output file</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-compile--emit-build-options"><a href="#uv-pip-compile--emit-build-options"><code>--emit-build-options</code></a></dt><dd><p>Include <code>--no-binary</code> and <code>--only-binary</code> entries in the generated output file</p>
 </dd><dt id="uv-pip-compile--emit-find-links"><a href="#uv-pip-compile--emit-find-links"><code>--emit-find-links</code></a></dt><dd><p>Include <code>--find-links</code> entries in the generated output file</p>
 </dd><dt id="uv-pip-compile--emit-index-annotation"><a href="#uv-pip-compile--emit-index-annotation"><code>--emit-index-annotation</code></a></dt><dd><p>Include comment annotations indicating the index used to resolve each package (e.g., <code># from https://pypi.org/simple</code>)</p>
 </dd><dt id="uv-pip-compile--emit-index-url"><a href="#uv-pip-compile--emit-index-url"><code>--emit-index-url</code></a></dt><dd><p>Include <code>--index-url</code> and <code>--extra-index-url</code> entries in the generated output file</p>
@@ -3509,7 +4056,9 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-compile--exclude-newer-package"><a href="#uv-pip-compile--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+</dd><dt id="uv-pip-compile--excludes"><a href="#uv-pip-compile--excludes"><code>--excludes</code></a>, <code>--exclude</code> <i>excludes</i></dt><dd><p>Exclude packages from resolution using the given requirements files.</p>
+<p>Excludes files are <code>requirements.txt</code>-like files that specify packages to exclude from the resolution. When a package is excluded, it will be omitted from the dependency list entirely and its own dependencies will be ignored during the resolution phase. Excludes are unconditional in that requirement specifiers and markers are ignored; any package listed in the provided file will be omitted from all resolved environments.</p>
+<p>May also be set with the <code>UV_EXCLUDE</code> environment variable.</p></dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-compile--extra-index-url"><a href="#uv-pip-compile--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3632,7 +4181,9 @@ by <code>--python-version</code>.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 </dd><dt id="uv-pip-compile--python-platform"><a href="#uv-pip-compile--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
-<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
@@ -3647,6 +4198,7 @@ by <code>--python-version</code>.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -3673,7 +4225,12 @@ by <code>--python-version</code>.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
 <li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
 </ul></dd><dt id="uv-pip-compile--python-version"><a href="#uv-pip-compile--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
 <p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
 <p>Defaults to the version of the Python interpreter used for resolution.</p>
@@ -3701,6 +4258,7 @@ by <code>--python-version</code>.</p>
 <ul>
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+<li><code>cu130</code>:  Use the PyTorch index for CUDA 13.0</li>
 <li><code>cu129</code>:  Use the PyTorch index for CUDA 12.9</li>
 <li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
@@ -3768,7 +4326,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="uv-pip-sync--src_file"><a href="#uv-pip-sync--src_file"<code>SRC_FILE</code></a></dt><dd><p>Include all packages listed in the given <code>requirements.txt</code> files.</p>
+<dl class="cli-reference"><dt id="uv-pip-sync--src_file"><a href="#uv-pip-sync--src_file"<code>SRC_FILE</code></a></dt><dd><p>Include the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code>.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 <p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
 </dd></dl>
@@ -3812,7 +4371,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-pip-sync--directory"><a href="#uv-pip-sync--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-sync--dry-run"><a href="#uv-pip-sync--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually install anything but resolve the dependencies and print the resulting plan</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-sync--dry-run"><a href="#uv-pip-sync--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually install anything but resolve the dependencies and print the resulting plan</p>
 </dd><dt id="uv-pip-sync--exclude-newer"><a href="#uv-pip-sync--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-sync--exclude-newer-package"><a href="#uv-pip-sync--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
@@ -3902,7 +4461,9 @@ be used with caution, as it can modify the system Python installation.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-sync--python-platform"><a href="#uv-pip-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
-<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -3918,6 +4479,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -3944,7 +4506,12 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
 <li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
 </ul></dd><dt id="uv-pip-sync--python-version"><a href="#uv-pip-sync--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the requirements (e.g., <code>3.7</code> or <code>3.7.9</code>).</p>
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 </dd><dt id="uv-pip-sync--quiet"><a href="#uv-pip-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
@@ -3974,6 +4541,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <ul>
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+<li><code>cu130</code>:  Use the PyTorch index for CUDA 13.0</li>
 <li><code>cu129</code>:  Use the PyTorch index for CUDA 12.9</li>
 <li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
@@ -4074,7 +4642,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-pip-install--directory"><a href="#uv-pip-install--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-install--dry-run"><a href="#uv-pip-install--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually install anything but resolve the dependencies and print the resulting plan</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-install--dry-run"><a href="#uv-pip-install--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually install anything but resolve the dependencies and print the resulting plan</p>
 </dd><dt id="uv-pip-install--editable"><a href="#uv-pip-install--editable"><code>--editable</code></a>, <code>-e</code> <i>editable</i></dt><dd><p>Install the editable package based on the provided local file path</p>
 </dd><dt id="uv-pip-install--exact"><a href="#uv-pip-install--exact"><code>--exact</code></a></dt><dd><p>Perform an exact sync, removing extraneous packages.</p>
 <p>By default, installing will make the minimum necessary changes to satisfy the requirements. When enabled, uv will update the environment to exactly match the requirements, removing packages that are not included in the requirements.</p>
@@ -4083,7 +4651,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-install--exclude-newer-package"><a href="#uv-pip-install--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>Can be provided multiple times for different packages.</p>
-</dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+</dd><dt id="uv-pip-install--excludes"><a href="#uv-pip-install--excludes"><code>--excludes</code></a>, <code>--exclude</code> <i>excludes</i></dt><dd><p>Exclude packages from resolution using the given requirements files.</p>
+<p>Excludes files are <code>requirements.txt</code>-like files that specify packages to exclude from the resolution. When a package is excluded, it will be omitted from the dependency list entirely and its own dependencies will be ignored during the resolution phase. Excludes are unconditional in that requirement specifiers and markers are ignored; any package listed in the provided file will be omitted from all resolved environments.</p>
+<p>May also be set with the <code>UV_EXCLUDE</code> environment variable.</p></dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-install--extra-index-url"><a href="#uv-pip-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -4191,7 +4761,9 @@ should be used with caution, as it can modify the system Python installation.</p
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-install--python-platform"><a href="#uv-pip-install--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
-<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 <p>Possible values:</p>
 <ul>
@@ -4207,6 +4779,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 <li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
 <li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
@@ -4233,7 +4806,12 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
 <li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
 </ul></dd><dt id="uv-pip-install--python-version"><a href="#uv-pip-install--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the requirements (e.g., <code>3.7</code> or <code>3.7.9</code>).</p>
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 </dd><dt id="uv-pip-install--quiet"><a href="#uv-pip-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
@@ -4249,7 +4827,8 @@ should be used with caution, as it can modify the system Python installation.</p
 <ul>
 <li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
-<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or <code>pylock.toml</code> files.</p>
+<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code>.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 <p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
 </dd><dt id="uv-pip-install--resolution"><a href="#uv-pip-install--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
@@ -4273,6 +4852,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <ul>
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+<li><code>cu130</code>:  Use the PyTorch index for CUDA 13.0</li>
 <li><code>cu129</code>:  Use the PyTorch index for CUDA 12.9</li>
 <li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
@@ -4359,7 +4939,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-uninstall--directory"><a href="#uv-pip-uninstall--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-uninstall--dry-run"><a href="#uv-pip-uninstall--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-uninstall--dry-run"><a href="#uv-pip-uninstall--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan</p>
 </dd><dt id="uv-pip-uninstall--help"><a href="#uv-pip-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-pip-uninstall--keyring-provider"><a href="#uv-pip-uninstall--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
@@ -4396,7 +4976,8 @@ should be used with caution, as it can modify the system Python installation.</p
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-uninstall--quiet"><a href="#uv-pip-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
-</dd><dt id="uv-pip-uninstall--requirements"><a href="#uv-pip-uninstall--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Uninstall all packages listed in the given requirements files</p>
+</dd><dt id="uv-pip-uninstall--requirements"><a href="#uv-pip-uninstall--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Uninstall the packages listed in the given files.</p>
+<p>The following formats are supported: <code>requirements.txt</code>, <code>.py</code> files with inline metadata, <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code>.</p>
 </dd><dt id="uv-pip-uninstall--system"><a href="#uv-pip-uninstall--system"><code>--system</code></a></dt><dd><p>Use the system Python to uninstall packages.</p>
 <p>By default, uv uninstalls from the virtual environment in the current working directory or any parent directory. The <code>--system</code> option instructs uv to instead use the first Python found in the system <code>PATH</code>.</p>
 <p>WARNING: <code>--system</code> is intended for use in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -4436,7 +5017,7 @@ uv pip freeze [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-freeze--directory"><a href="#uv-pip-freeze--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-freeze--exclude-editable"><a href="#uv-pip-freeze--exclude-editable"><code>--exclude-editable</code></a></dt><dd><p>Exclude any editable packages from output</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-freeze--exclude-editable"><a href="#uv-pip-freeze--exclude-editable"><code>--exclude-editable</code></a></dt><dd><p>Exclude any editable packages from output</p>
 </dd><dt id="uv-pip-freeze--help"><a href="#uv-pip-freeze--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-pip-freeze--managed-python"><a href="#uv-pip-freeze--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -4507,7 +5088,7 @@ uv pip list [OPTIONS]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-pip-list--directory"><a href="#uv-pip-list--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-list--editable"><a href="#uv-pip-list--editable"><code>--editable</code></a>, <code>-e</code></dt><dd><p>Only include editable projects</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-list--editable"><a href="#uv-pip-list--editable"><code>--editable</code></a>, <code>-e</code></dt><dd><p>Only include editable projects</p>
 </dd><dt id="uv-pip-list--exclude"><a href="#uv-pip-list--exclude"><code>--exclude</code></a> <i>exclude</i></dt><dd><p>Exclude the specified package(s) from the output</p>
 </dd><dt id="uv-pip-list--exclude-editable"><a href="#uv-pip-list--exclude-editable"><code>--exclude-editable</code></a></dt><dd><p>Exclude any editable packages from output</p>
 </dd><dt id="uv-pip-list--exclude-newer"><a href="#uv-pip-list--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -4619,7 +5200,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-show--directory"><a href="#uv-pip-show--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-show--files"><a href="#uv-pip-show--files"><code>--files</code></a>, <code>-f</code></dt><dd><p>Show the full list of installed files for each package</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-show--files"><a href="#uv-pip-show--files"><code>--files</code></a>, <code>-f</code></dt><dd><p>Show the full list of installed files for each package</p>
 </dd><dt id="uv-pip-show--help"><a href="#uv-pip-show--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-pip-show--managed-python"><a href="#uv-pip-show--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -4690,7 +5271,7 @@ uv pip tree [OPTIONS]
 <p>[default: 255]</p></dd><dt id="uv-pip-tree--directory"><a href="#uv-pip-tree--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-tree--exclude-newer"><a href="#uv-pip-tree--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-tree--exclude-newer"><a href="#uv-pip-tree--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-tree--extra-index-url"><a href="#uv-pip-tree--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -4752,6 +5333,7 @@ Python environment if no virtual environment is found.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-tree--quiet"><a href="#uv-pip-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-pip-tree--show-sizes"><a href="#uv-pip-tree--show-sizes"><code>--show-sizes</code></a></dt><dd><p>Show compressed wheel sizes for packages in the tree</p>
 </dd><dt id="uv-pip-tree--show-version-specifiers"><a href="#uv-pip-tree--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Show the version constraint(s) imposed on each package</p>
 </dd><dt id="uv-pip-tree--strict"><a href="#uv-pip-tree--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment, to detect packages with missing dependencies and other issues</p>
 </dd><dt id="uv-pip-tree--system"><a href="#uv-pip-tree--system"><code>--system</code></a></dt><dd><p>List packages in the system Python environment.</p>
@@ -4792,7 +5374,7 @@ uv pip check [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-check--directory"><a href="#uv-pip-check--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-pip-check--help"><a href="#uv-pip-check--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-pip-check--help"><a href="#uv-pip-check--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-pip-check--managed-python"><a href="#uv-pip-check--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-check--native-tls"><a href="#uv-pip-check--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -4817,7 +5399,62 @@ uv pip check [OPTIONS]
 <p>By default, uv checks packages in a virtual environment but will check packages in a system
 Python environment if no virtual environment is found.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-check--quiet"><a href="#uv-pip-check--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-check--python-platform"><a href="#uv-pip-check--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which packages should be checked.</p>
+<p>By default, the installed packages are checked against the platform of the current interpreter.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>13.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting iOS, the default minimum version is <code>13.0</code>. Use <code>IPHONEOS_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>14.0</code>.</p>
+<p>When targeting Android, the default minimum Android API level is <code>24</code>. Use <code>ANDROID_API_LEVEL</code> to specify a different minimum version, e.g., <code>26</code>.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>riscv64-unknown-linux</code>:  A RISCV64 Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-linux-android</code>:  An ARM64 Android target</li>
+<li><code>x86_64-linux-android</code>:  An <code>x86_64</code> Android target</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>arm64-apple-ios</code>:  An ARM64 target for iOS device</li>
+<li><code>arm64-apple-ios-simulator</code>:  An ARM64 target for iOS simulator</li>
+<li><code>x86_64-apple-ios-simulator</code>:  An <code>x86_64</code> target for iOS simulator</li>
+</ul></dd><dt id="uv-pip-check--python-version"><a href="#uv-pip-check--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The Python version against which packages should be checked.</p>
+<p>By default, the installed packages are checked against the version of the current interpreter.</p>
+</dd><dt id="uv-pip-check--quiet"><a href="#uv-pip-check--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-pip-check--system"><a href="#uv-pip-check--system"><code>--system</code></a></dt><dd><p>Check packages in the system Python environment.</p>
 <p>Disables discovery of virtual environments.</p>
@@ -4880,7 +5517,7 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-venv--directory"><a href="#uv-venv--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-venv--exclude-newer"><a href="#uv-venv--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-venv--exclude-newer"><a href="#uv-venv--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-venv--exclude-newer-package"><a href="#uv-venv--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -5010,7 +5647,8 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_BUILD_CONSTRAINT</code> environment variable.</p></dd><dt id="uv-build--cache-dir"><a href="#uv-build--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-build--color"><a href="#uv-build--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-build--clear"><a href="#uv-build--clear"><code>--clear</code></a></dt><dd><p>Clear the output directory before the build, removing stale artifacts</p>
+</dd><dt id="uv-build--color"><a href="#uv-build--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 <p>Possible values:</p>
 <ul>
@@ -5027,7 +5665,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-build--directory"><a href="#uv-build--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-build--exclude-newer"><a href="#uv-build--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-build--exclude-newer"><a href="#uv-build--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-build--exclude-newer-package"><a href="#uv-build--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
 <p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
@@ -5098,7 +5736,9 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p></dd><dt id="uv-build--no-cache"><a href="#uv-build--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-build--no-config"><a href="#uv-build--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-build--no-index"><a href="#uv-build--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-build--no-create-gitignore"><a href="#uv-build--no-create-gitignore"><code>--no-create-gitignore</code></a></dt><dd><p>Do not create a <code>.gitignore</code> file in the output directory.</p>
+<p>By default, uv creates a <code>.gitignore</code> file in the output directory to exclude build artifacts from version control. When this flag is used, the file will be omitted.</p>
+</dd><dt id="uv-build--no-index"><a href="#uv-build--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 </dd><dt id="uv-build--no-managed-python"><a href="#uv-build--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-build--no-progress"><a href="#uv-build--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
@@ -5185,9 +5825,9 @@ uv publish [OPTIONS] [FILES]...
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-publish--check-url"><a href="#uv-publish--check-url"><code>--check-url</code></a> <i>check-url</i></dt><dd><p>Check an index URL for existing files to skip duplicate uploads.</p>
-<p>This option allows retrying publishing that failed after only some, but not all files have been uploaded, and handles error due to parallel uploads of the same file.</p>
+<p>This option allows retrying publishing that failed after only some, but not all files have been uploaded, and handles errors due to parallel uploads of the same file.</p>
 <p>Before uploading, the index is checked. If the exact same file already exists in the index, the file will not be uploaded. If an error occurred during the upload, the index is checked again, to handle cases where the identical file was uploaded twice in parallel.</p>
-<p>The exact behavior will vary based on the index. When uploading to PyPI, uploading the same file succeeds even without <code>--check-url</code>, while most other indexes error.</p>
+<p>The exact behavior will vary based on the index. When uploading to PyPI, uploading the same file succeeds even without <code>--check-url</code>, while most other indexes error. When uploading to pyx, the index URL can be inferred automatically from the publish URL.</p>
 <p>The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).</p>
 <p>May also be set with the <code>UV_PUBLISH_CHECK_URL</code> environment variable.</p></dd><dt id="uv-publish--color"><a href="#uv-publish--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
@@ -5201,6 +5841,8 @@ uv publish [OPTIONS] [FILES]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-publish--directory"><a href="#uv-publish--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-publish--dry-run"><a href="#uv-publish--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run without uploading files.</p>
+<p>When enabled, the command will check for existing files if <code>--check-url</code> is provided, and will perform validation against the index if supported, but will not upload any files.</p>
 </dd><dt id="uv-publish--help"><a href="#uv-publish--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-publish--index"><a href="#uv-publish--index"><code>--index</code></a> <i>index</i></dt><dd><p>The name of an index in the configuration to use for publishing.</p>
 <p>The index must have a <code>publish-url</code> setting, for example:</p>
@@ -5249,11 +5891,12 @@ uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pyp
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-publish--token"><a href="#uv-publish--token"><code>--token</code></a>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
 <p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code> password.</p>
-<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p></dd><dt id="uv-publish--trusted-publishing"><a href="#uv-publish--trusted-publishing"><code>--trusted-publishing</code></a> <i>trusted-publishing</i></dt><dd><p>Configure using trusted publishing through GitHub Actions.</p>
-<p>By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request from a fork).</p>
+<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p></dd><dt id="uv-publish--trusted-publishing"><a href="#uv-publish--trusted-publishing"><code>--trusted-publishing</code></a> <i>trusted-publishing</i></dt><dd><p>Configure trusted publishing.</p>
+<p>By default, uv checks for trusted publishing when running in a supported environment, but ignores it if it isn't configured.</p>
+<p>uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.</p>
 <p>Possible values:</p>
 <ul>
-<li><code>automatic</code>:  Try trusted publishing when we're already in GitHub Actions, continue if that fails</li>
+<li><code>automatic</code>:  Attempt trusted publishing when we're in a supported environment, continue if that fails</li>
 <li><code>always</code></li>
 <li><code>never</code></li>
 </ul></dd><dt id="uv-publish--username"><a href="#uv-publish--username"><code>--username</code></a>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>
@@ -5314,6 +5957,8 @@ uv cache clean [OPTIONS] [PACKAGE]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-cache-clean--directory"><a href="#uv-cache-clean--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-cache-clean--force"><a href="#uv-cache-clean--force"><code>--force</code></a></dt><dd><p>Force removal of the cache, ignoring in-use checks.</p>
+<p>By default, <code>uv cache clean</code> will block until no process is reading the cache. When <code>--force</code> is used, <code>uv cache clean</code> will proceed without taking a lock.</p>
 </dd><dt id="uv-cache-clean--help"><a href="#uv-cache-clean--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-cache-clean--managed-python"><a href="#uv-cache-clean--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -5375,6 +6020,8 @@ uv cache prune [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-cache-prune--directory"><a href="#uv-cache-prune--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-cache-prune--force"><a href="#uv-cache-prune--force"><code>--force</code></a></dt><dd><p>Force removal of the cache, ignoring in-use checks.</p>
+<p>By default, <code>uv cache prune</code> will block until no process is reading the cache. When <code>--force</code> is used, <code>uv cache prune</code> will proceed without taking a lock.</p>
 </dd><dt id="uv-cache-prune--help"><a href="#uv-cache-prune--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-cache-prune--managed-python"><a href="#uv-cache-prune--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -5441,7 +6088,7 @@ uv cache dir [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-cache-dir--directory"><a href="#uv-cache-dir--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-cache-dir--help"><a href="#uv-cache-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-cache-dir--help"><a href="#uv-cache-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-cache-dir--managed-python"><a href="#uv-cache-dir--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-cache-dir--native-tls"><a href="#uv-cache-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -5520,7 +6167,7 @@ uv self update [OPTIONS] [TARGET_VERSION]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-self-update--directory"><a href="#uv-self-update--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-self-update--dry-run"><a href="#uv-self-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the update</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-self-update--dry-run"><a href="#uv-self-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the update</p>
 </dd><dt id="uv-self-update--help"><a href="#uv-self-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-self-update--managed-python"><a href="#uv-self-update--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -5580,7 +6227,7 @@ uv self version [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-self-version--directory"><a href="#uv-self-version--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-self-version--help"><a href="#uv-self-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-self-version--help"><a href="#uv-self-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-self-version--managed-python"><a href="#uv-self-version--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-self-version--native-tls"><a href="#uv-self-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
@@ -5632,7 +6279,7 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--directory"><a href="#uv-generate-shell-completion--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-generate-shell-completion--managed-python"><a href="#uv-generate-shell-completion--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--managed-python"><a href="#uv-generate-shell-completion--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--no-managed-python"><a href="#uv-generate-shell-completion--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
@@ -5678,7 +6325,7 @@ uv help [OPTIONS] [COMMAND]...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-help--directory"><a href="#uv-help--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-help--help"><a href="#uv-help--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+<p>May also be set with the <code>UV_WORKING_DIRECTORY</code> environment variable.</p></dd><dt id="uv-help--help"><a href="#uv-help--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-help--managed-python"><a href="#uv-help--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-help--native-tls"><a href="#uv-help--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>

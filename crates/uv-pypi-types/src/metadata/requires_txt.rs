@@ -1,19 +1,19 @@
-use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
-use serde::Deserialize;
 use std::io::BufRead;
 use std::str::FromStr;
+
 use uv_normalize::ExtraName;
 use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement};
+
+use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
 
 /// `requires.txt` metadata as defined in <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>.
 ///
 /// This is a subset of the full metadata specification, and only includes the fields that are
 /// included in the legacy `requires.txt` file.
-#[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone)]
 pub struct RequiresTxt {
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
-    pub provides_extras: Vec<ExtraName>,
+    pub provides_extra: Vec<ExtraName>,
 }
 
 impl RequiresTxt {
@@ -22,7 +22,7 @@ impl RequiresTxt {
     /// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>
     pub fn parse(content: &[u8]) -> Result<Self, MetadataError> {
         let mut requires_dist = vec![];
-        let mut provides_extras = vec![];
+        let mut provides_extra = vec![];
         let mut current_marker = MarkerTree::default();
 
         for line in content.lines() {
@@ -52,7 +52,7 @@ impl RequiresTxt {
                 // Parse the extra.
                 let extra = if let Some(extra) = extra {
                     if let Ok(extra) = ExtraName::from_str(extra) {
-                        provides_extras.push(extra.clone());
+                        provides_extra.push(extra.clone());
                         Some(MarkerValueExtra::Extra(extra))
                     } else {
                         Some(MarkerValueExtra::Arbitrary(extra.to_string()))
@@ -103,7 +103,7 @@ impl RequiresTxt {
 
         Ok(Self {
             requires_dist,
-            provides_extras,
+            provides_extra,
         })
     }
 }

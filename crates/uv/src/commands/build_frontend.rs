@@ -15,7 +15,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, Preview,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
     SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -31,6 +31,7 @@ use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -48,7 +49,7 @@ use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 enum Error {
@@ -107,13 +108,15 @@ pub(crate) async fn build_frontend(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -132,13 +135,15 @@ pub(crate) async fn build_frontend(
         wheel,
         list,
         build_logs,
+        gitignore,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
         install_mirrors,
         settings,
-        network_settings,
+        client_builder,
         no_config,
         python_preference,
         python_downloads,
@@ -175,13 +180,15 @@ async fn build_impl(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -210,12 +217,6 @@ async fn build_impl(
         build_options,
         sources,
     } = settings;
-
-    let client_builder = BaseClientBuilder::default()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -346,7 +347,9 @@ async fn build_impl(
             client_builder.clone(),
             hash_checking,
             build_logs,
+            gitignore,
             force_pep517,
+            clear,
             build_constraints,
             build_isolation,
             extra_build_dependencies,
@@ -396,9 +399,15 @@ async fn build_impl(
                 let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
                     // TODO(konsti): astral-tokio-tar should use a proper error instead of
                     // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
                     if err.to_string().contains("/bin/python")
                         && std::error::Error::source(err).is_some_and(|err| {
-                            err.to_string().ends_with("outside of the target directory")
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
                         })
                     {
                         Some(
@@ -447,7 +456,9 @@ async fn build_package(
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
@@ -479,6 +490,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -526,8 +542,6 @@ async fn build_package(
     .await?
     .into_interpreter();
 
-    index_locations.cache_index_credentials();
-
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
@@ -553,9 +567,8 @@ async fn build_package(
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
@@ -619,7 +632,7 @@ async fn build_package(
         preview,
     );
 
-    prepare_output_directory(&output_dir).await?;
+    prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
     let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
@@ -1086,19 +1099,21 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
+async fn prepare_output_directory(output_dir: &Path, gitignore: bool) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
+    if gitignore {
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output_dir.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
     }
     Ok(())
 }

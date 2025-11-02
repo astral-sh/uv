@@ -620,7 +620,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
-        editable: EditableMode,
+        editable: Option<EditableMode>,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -631,7 +631,7 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
@@ -736,8 +736,9 @@ impl<'lock> PylockToml {
                             .into_boxed_path(),
                     ),
                     editable: match editable {
-                        EditableMode::NonEditable => None,
-                        EditableMode::Editable => sdist.editable,
+                        None => sdist.editable,
+                        Some(EditableMode::NonEditable) => None,
+                        Some(EditableMode::Editable) => Some(true),
                     },
                     subdirectory: None,
                 }),
@@ -902,7 +903,7 @@ impl<'lock> PylockToml {
         let mut doc = toml_edit::DocumentMut::new();
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
-        doc.insert("created-by", value(self.created_by.to_string()));
+        doc.insert("created-by", value(self.created_by.as_str()));
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
@@ -1143,13 +1144,13 @@ impl<'lock> PylockToml {
                         kind: Box::new(PylockTomlErrorKind::IncompatibleWheelOnly(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                     (false, false) => Err(PylockTomlError {
                         kind: Box::new(PylockTomlErrorKind::NeitherSourceDistNorWheel(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                 };
             };
@@ -1278,7 +1279,7 @@ impl PylockTomlPackage {
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tags: &Tags) -> Option<WheelTagHint> {
+    fn tag_hint(&self, tags: &Tags, markers: &MarkerEnvironment) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -1286,7 +1287,7 @@ impl PylockTomlPackage {
             .filter_map(|wheel| wheel.filename(&self.name).ok())
             .collect::<Vec<_>>();
         let filenames = filenames.iter().map(Cow::as_ref).collect::<Vec<_>>();
-        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags)
+        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags, markers)
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
@@ -1369,6 +1370,7 @@ impl PylockTomlWheel {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
+            zstd: None,
         });
 
         Ok(RegistryBuiltWheel {
@@ -1525,6 +1527,7 @@ impl PylockTomlSdist {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
+            zstd: None,
         });
 
         Ok(RegistrySourceDist {

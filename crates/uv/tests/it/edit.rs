@@ -1838,6 +1838,7 @@ fn update_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1897,6 +1898,7 @@ fn add_existing_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1953,6 +1955,7 @@ fn update_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2008,6 +2011,7 @@ fn add_existing_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2069,6 +2073,7 @@ fn remove_both_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -2160,6 +2165,7 @@ fn remove_both_dev_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -2248,25 +2254,12 @@ fn add_workspace_editable() -> Result<()> {
 
     let child1 = context.temp_dir.join("child1");
 
-    // `--no-editable` should error.
+    // `--no-editable` should add `editable = false`.
     let mut add_cmd = context.add();
     add_cmd
         .arg("child2")
         .arg("--no-editable")
         .current_dir(&child1);
-
-    uv_snapshot!(context.filters(), add_cmd, @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
-    "###);
-
-    // `--editable` should not.
-    let mut add_cmd = context.add();
-    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r"
     success: true
@@ -2301,7 +2294,50 @@ fn add_workspace_editable() -> Result<()> {
         build-backend = "hatchling.build"
 
         [tool.uv.sources]
-        child2 = { workspace = true }
+        child2 = { workspace = true, editable = false }
+        "#
+        );
+    });
+
+    // `--editable` should not.
+    let mut add_cmd = context.add();
+    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     ~ child2==0.1.0 (from file://[TEMP_DIR]/child2)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child2",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        child2 = { workspace = true, editable = true }
         "#
         );
     });
@@ -4638,9 +4674,9 @@ fn add_lower_bound_local() -> Result<()> {
         name = "local-simple-a"
         version = "1.2.3+foo"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:cd1855a98a7b0dce1f4617f2f2089906936344392d4bdd7720503e9f3c0b1544" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:9a430e6d5e9cd3ab906ea412b00ea8a1bad7c59fd64df2278a2527a60a665751" },
         ]
 
         [[package]]
@@ -4752,6 +4788,412 @@ fn add_non_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_virtual_empty() -> Result<()> {
+    // testing how `uv add` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    // Add normal dep (doesn't make sense)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    // Add dependency-group (can make sense!)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+
+        [dependency-groups]
+        dev = [
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_virtual_dependency_group() -> Result<()> {
+    // testing basic `uv add --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // Add to existing group
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    // Add to new group
+    uv_snapshot!(context.filters(), context.add()
+        .arg("sortedcontainers")
+        .arg("--group").arg("baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Audited 2 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
+        baz = [
+            "sortedcontainers>=2.4.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_empty_requirements_group() -> Result<()> {
+    // Test that `uv add -r requirements.txt --group <name>` creates an empty group
+    // when the requirements file is empty
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("-r").arg("requirements.txt")
+        .arg("--group").arg("user"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        user = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_empty_requirements_optional() -> Result<()> {
+    // Test that `uv add -r requirements.txt --optional <extra>` creates an empty extra
+    // when the requirements file is empty
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("-r").arg("requirements.txt")
+        .arg("--optional").arg("extra"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn remove_virtual_empty() -> Result<()> {
+    // testing how `uv remove` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+
+        "#,
+    )?;
+
+    // Remove normal dep (doesn't make sense)
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `project.dependencies`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    // Remove dependency-group (can make sense, but nothing there!)
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn remove_virtual_dependency_group() -> Result<()> {
+    // testing basic `uv remove --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // Remove from group
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = []
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#
+        );
+    });
+
+    // Remove from non-existent group
+    uv_snapshot!(context.filters(), context.remove()
+        .arg("sortedcontainers")
+        .arg("--group").arg("baz"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `sortedcontainers` could not be found in `dependency-groups.baz`
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = []
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
         "#
         );
     });
@@ -5765,7 +6207,7 @@ fn add_group_to_unsorted() -> Result<()> {
     Ok(())
 }
 
-/// Remomve a requirement from a dependency group.
+/// Remove a requirement from a dependency group.
 #[test]
 fn remove_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -6464,17 +6906,18 @@ fn remove_repeated() -> Result<()> {
         anyio_local = anyio_local.portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6501,15 +6944,16 @@ fn remove_repeated() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6536,16 +6980,17 @@ fn remove_repeated() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -12152,7 +12597,7 @@ fn add_empty_ignore_error_codes() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://download.pytorch.org/whl/cpu) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
+          hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );

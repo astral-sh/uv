@@ -215,7 +215,7 @@ fn run_no_args() -> Result<()> {
         "#
     })?;
 
-    // Run without specifying any argunments.
+    // Run without specifying any arguments.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.run(), @r###"
     success: false
@@ -3313,9 +3313,9 @@ fn run_module_stdin() {
     "###);
 }
 
-/// When the `pyproject.toml` file is invalid.
+/// Test for how run reacts to a pyproject.toml without a `[project]`
 #[test]
-fn run_project_toml_error() -> Result<()> {
+fn virtual_empty() -> Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -3331,25 +3331,28 @@ fn run_project_toml_error() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // `run` should fail
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    "###);
-
-    // `run --no-project` should not
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    // `run` should work fine
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Audited in [TIME]
     ");
+
+    // `run --no-project` should also work fine
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    "###);
 
     Ok(())
 }
@@ -4086,7 +4089,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
-        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4101,7 +4104,7 @@ fn run_linked_environment_path() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
@@ -5032,7 +5035,7 @@ fn run_groups_requires_python() -> Result<()> {
         dev = ["sniffio"]
 
         [tool.uv.dependency-groups]
-        foo = {requires-python=">=3.14"}
+        foo = {requires-python=">=3.100"}
         bar = {requires-python=">=3.13"}
         dev = {requires-python=">=3.12"}
         "#,
@@ -5101,10 +5104,10 @@ fn run_groups_requires_python() -> Result<()> {
     // See https://github.com/astral-sh/uv/issues/14160
     let output = context
         .run()
+        .arg("-vv")
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions")
-        .arg("-vv")
         .output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -5165,7 +5168,7 @@ fn run_groups_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
 
     Ok(())
@@ -5957,4 +5960,137 @@ fn run_python_preference_no_project() {
 
     ----- stderr -----
     ");
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/15518>
+#[test]
+fn isolate_child_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "iniconfig"
+        ]
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    // Sync the parent package.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("python").arg("-c").arg("import iniconfig"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import iniconfig"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn run_only_group_and_extra_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = ["pytest"]
+
+        [dependency-groups]
+        dev = ["ruff"]
+        "#,
+    )?;
+
+    // Using --only-group and --extra together should error.
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--extra").arg("test").arg("python").arg("-c").arg("print('hello')"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
+
+    Usage: uv run --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    // Using --only-group and --all-extras together should also error.
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--all-extras").arg("python").arg("-c").arg("print('hello')"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
+
+    Usage: uv run --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    Ok(())
 }

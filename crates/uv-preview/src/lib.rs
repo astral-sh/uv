@@ -18,6 +18,8 @@ bitflags::bitflags! {
         const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
         const DETECT_MODULE_CONFLICTS = 1 << 7;
         const FORMAT = 1 << 8;
+        const NATIVE_AUTH = 1 << 9;
+        const S3_ENDPOINT = 1 << 10;
     }
 }
 
@@ -36,6 +38,8 @@ impl PreviewFeatures {
             Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
             Self::DETECT_MODULE_CONFLICTS => "detect-module-conflicts",
             Self::FORMAT => "format",
+            Self::NATIVE_AUTH => "native-auth",
+            Self::S3_ENDPOINT => "s3-endpoint",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -82,6 +86,8 @@ impl FromStr for PreviewFeatures {
                 "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
                 "detect-module-conflicts" => Self::DETECT_MODULE_CONFLICTS,
                 "format" => Self::FORMAT,
+                "native-auth" => Self::NATIVE_AUTH,
+                "s3-endpoint" => Self::S3_ENDPOINT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -257,6 +263,7 @@ mod tests {
             "detect-module-conflicts"
         );
         assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
+        assert_eq!(PreviewFeatures::S3_ENDPOINT.flag_as_str(), "s3-endpoint");
     }
 
     #[test]

@@ -17,7 +17,6 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
-uv-configuration = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
@@ -26,6 +25,7 @@ uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true }

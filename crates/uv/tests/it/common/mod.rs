@@ -18,11 +18,11 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
-
 use tokio::io::AsyncWriteExt;
+
 use uv_cache::{Cache, CacheBucket};
-use uv_configuration::Preview;
 use uv_fs::Simplified;
+use uv_preview::Preview;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
@@ -32,23 +32,27 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.47";
+pub const PACKSE_VERSION: &str = "0.3.53";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/vendor/", url.trim_end_matches('/')))
         .ok()
         .unwrap_or(format!(
-            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/vendor/"
         ))
 }
 
 pub fn packse_index_url() -> String {
-    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
-        "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
-    ))
+    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
+        .map(|url| format!("{}/simple-html/", url.trim_end_matches('/')))
+        .ok()
+        .unwrap_or(format!(
+            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
+        ))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
@@ -121,6 +125,22 @@ impl TestContext {
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
         self.extra_env
             .push((EnvVars::UV_EXCLUDE_NEWER.into(), exclude_newer.into()));
+        self
+    }
+
+    /// Set the "http timeout" for all commands in this context.
+    pub fn with_http_timeout(mut self, http_timeout: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_TIMEOUT.into(), http_timeout.into()));
+        self
+    }
+
+    /// Set the "concurrent installs" for all commands in this context.
+    pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_INSTALLS.into(),
+            concurrent_installs.into(),
+        ));
         self
     }
 
@@ -208,6 +228,10 @@ impl TestContext {
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
+            "search path or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
             "registry or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
@@ -220,28 +244,32 @@ impl TestContext {
     /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
-        use env::consts::EXE_SUFFIX;
-        let exe_suffix = regex::escape(EXE_SUFFIX);
+        for name in ["python", "pypy"] {
+            // Note we strip version numbers from the executable names because, e.g., on Windows
+            // `python.exe` is the equivalent to a Unix `python3.12`.`
+            let suffix = if cfg!(windows) {
+                // On Windows, we'll require a `.exe` suffix for disambiguation
+                // We'll also strip version numbers if present, which is not common for `python.exe`
+                // but can occur for, e.g., `pypy3.12.exe`
+                let exe_suffix = regex::escape(env::consts::EXE_SUFFIX);
+                format!(r"(\d\.\d+|\d)?{exe_suffix}")
+            } else {
+                // On Unix, we'll strip version numbers
+                if name == "python" {
+                    // We can't require them in this case since `/python` is common
+                    r"(\d\.\d+|\d)?(t|d|td)?".to_string()
+                } else {
+                    // However, for other names we'll require them to avoid over-matching
+                    r"(\d\.\d+|\d)(t|d|td)?".to_string()
+                }
+            };
 
-        self.filters.push((
-            format!(r"python\d.\d\d{exe_suffix}"),
-            "[PYTHON]".to_string(),
-        ));
-        self.filters
-            .push((format!(r"python\d{exe_suffix}"), "[PYTHON]".to_string()));
-
-        if cfg!(windows) {
-            // On Windows, we want to filter out all `python.exe` instances
-            self.filters
-                .push((format!(r"python{exe_suffix}"), "[PYTHON]".to_string()));
-            // Including ones where we'd already stripped the `.exe` in another filter
-            self.filters
-                .push((r"[\\/]python".to_string(), "/[PYTHON]".to_string()));
-        } else {
-            // On Unix, it's a little trickier — we don't want to clobber use of `python` in the
-            // middle of something else, e.g., `cpython`. For this reason, we require a leading `/`.
-            self.filters
-                .push((format!(r"/python{exe_suffix}"), "/[PYTHON]".to_string()));
+            self.filters.push((
+                // We use a leading path separator to help disambiguate cases where the name is not
+                // used in a path.
+                format!(r"[\\/]{name}{suffix}"),
+                format!("/[{}]", name.to_uppercase()),
+            ));
         }
 
         self
@@ -270,15 +298,34 @@ impl TestContext {
     /// the virtual environment equivalent.
     #[must_use]
     pub fn with_filtered_python_install_bin(mut self) -> Self {
+        // We don't want to eagerly match paths that aren't actually Python executables, so we
+        // do our best to detect that case
+        let suffix = if cfg!(windows) {
+            let exe_suffix = regex::escape(env::consts::EXE_SUFFIX);
+            // On Windows, we usually don't have a version attached but we might, e.g., for pypy3.12
+            format!(r"(\d\.\d+|\d)?{exe_suffix}")
+        } else {
+            // On Unix, we'll require a version to be attached to avoid over-matching
+            r"\d\.\d+|\d".to_string()
+        };
+
         if cfg!(unix) {
             self.filters.push((
-                r"[\\/]bin/python".to_string(),
-                "/[INSTALL-BIN]/python".to_string(),
+                format!(r"[\\/]bin/python({suffix})"),
+                "/[INSTALL-BIN]/python$1".to_string(),
+            ));
+            self.filters.push((
+                format!(r"[\\/]bin/pypy({suffix})"),
+                "/[INSTALL-BIN]/pypy$1".to_string(),
             ));
         } else {
             self.filters.push((
-                r"[\\/]python".to_string(),
-                "/[INSTALL-BIN]/python".to_string(),
+                format!(r"[\\/]python({suffix})"),
+                "/[INSTALL-BIN]/python$1".to_string(),
+            ));
+            self.filters.push((
+                format!(r"[\\/]pypy({suffix})"),
+                "/[INSTALL-BIN]/pypy$1".to_string(),
             ));
         }
         self
@@ -389,7 +436,7 @@ impl TestContext {
     )?                      # (we allow the patch version to be missing entirely, e.g., in a request)
     (?:(?:a|b|rc)[0-9]+)?   # Pre-release version component, e.g., `a6` or `rc2`
     (?:[td])?               # A short variant, such as `t` (for freethreaded) or `d` (for debug)
-    (?:\+[a-z]+)?           # A long variant, such as `+free-threaded`
+    (?:(\+[a-z]+)+)?        # A long variant, such as `+freethreaded` or `+freethreaded+debug`
   )
   -
   [a-z0-9]+                 # Operating system (e.g., 'macos')
@@ -435,6 +482,15 @@ impl TestContext {
                     .bucket(CacheBucket::Python)
                     .into()
             }),
+        ));
+        self
+    }
+
+    #[must_use]
+    pub fn with_empty_python_install_mirror(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_PYTHON_INSTALL_MIRROR.into(),
+            String::new().into(),
         ));
         self
     }
@@ -597,7 +653,7 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern, format!("[PYTHON-{version}]"))),
             );
 
             // And for the symlink we created in the test the Python path
@@ -720,13 +776,16 @@ impl TestContext {
         // Remove the version from the packse url in lockfile snapshots. This avoids having a huge
         // diff any time we upgrade packse
         filters.push((
-            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/"),
-            "https://astral-sh.github.io/packse/PACKSE_VERSION/".to_string(),
+            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}"),
+            "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
         ));
-        filters.push((
-            format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
-            "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
-        ));
+        // Developer convenience
+        if let Ok(packse_test_index) = env::var(EnvVars::UV_TEST_PACKSE_INDEX) {
+            filters.push((
+                packse_test_index.trim_end_matches('/').to_string(),
+                "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
+            ));
+        }
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
         // Avoid breaking the tests when bumping the uv version
@@ -831,6 +890,10 @@ impl TestContext {
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
+            .env(
+                EnvVars::XDG_DATA_HOME,
+                self.home_dir.join("data").as_os_str(),
+            )
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
@@ -845,7 +908,6 @@ impl TestContext {
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
-            .env_remove(EnvVars::XDG_DATA_HOME)
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
@@ -1249,6 +1311,42 @@ impl TestContext {
         self.add_shared_env(&mut command, false);
 
         command
+    }
+
+    /// Create a `uv auth login` command.
+    pub fn auth_login(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("login");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth logout` command.
+    pub fn auth_logout(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("logout");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth token` command.
+    pub fn auth_token(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("token");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Set `HOME` to the real home directory.
+    ///
+    /// We need this for testing commands which use the macOS keychain.
+    #[must_use]
+    pub fn with_real_home(mut self) -> Self {
+        if let Some(home) = env::var_os(EnvVars::HOME) {
+            self.extra_env
+                .push((EnvVars::HOME.to_string().into(), home));
+        }
+        self
     }
 
     /// Run the given python code and check whether it succeeds.
@@ -1738,19 +1836,18 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Test package for direct URLs in branches"
         requires-python = ">=3.11,<3.13"
         {body}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
         "#
     };
     fs_err::create_dir_all(dir)?;
     fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
-    fs_err::create_dir(dir.join(name))?;
-    fs_err::write(dir.join(name).join("__init__.py"), "")?;
+    fs_err::create_dir_all(dir.join("src").join(name))?;
+    fs_err::write(dir.join("src").join(name).join("__init__.py"), "")?;
     Ok(())
 }
 
@@ -1796,7 +1893,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
         .collect();
 
-    let client = uv_client::BaseClientBuilder::new()
+    let client = uv_client::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
         .build();
     let url = url.parse().unwrap();

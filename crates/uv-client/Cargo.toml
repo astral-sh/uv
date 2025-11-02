@@ -2,6 +2,12 @@
 name = "uv-client"
 version = "0.0.1"
 edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -22,6 +28,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
 uv-redacted = { workspace = true }
@@ -37,6 +44,7 @@ async_zip = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+h2 = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
@@ -66,3 +74,4 @@ hyper-util = { workspace = true }
 insta = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
+tempfile = { workspace = true }
