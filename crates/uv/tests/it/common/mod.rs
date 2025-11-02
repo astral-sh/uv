@@ -169,6 +169,20 @@ impl TestContext {
         self
     }
 
+    /// Add extra filtering for cache size output
+    #[must_use]
+    pub fn with_filtered_cache_size(mut self) -> Self {
+        // Filter raw byte counts (numbers on their own line)
+        self.filters
+            .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
+        // Filter human-readable sizes (e.g., "384.2 KiB")
+        self.filters.push((
+            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
+            "[SIZE]\n".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Windows-compatible missing file errors.
     pub fn with_filtered_missing_file_error(mut self) -> Self {
         // The exact message string depends on the system language, so we remove it.
@@ -1261,6 +1275,14 @@ impl TestContext {
     pub fn prune(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("cache").arg("prune");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv cache size` command.
+    pub fn cache_size(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("cache").arg("size");
         self.add_shared_options(&mut command, false);
         command
     }
