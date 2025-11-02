@@ -490,18 +490,15 @@ the version is `1.0.1` will be rejected by uv, but accepted by pip.
 
 To force uv to accept such wheels, set `UV_SKIP_WHEEL_FILENAME_CHECK=1` in the environment.
 
-## Package names in `pip list`
+## Package name normalization
 
-In `uv pip list`, uv outputs
-[normalized package names](https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization).
-This differs from `pip list`, which displays the original
-[distribution package names](https://packaging.python.org/en/latest/discussions/distribution-package-vs-import-package/#what-s-a-distribution-package)
-without normalization. `uv pip list` uses normalized packages names to maintain consistency with how
-packages are referenced across the rest of uv.
+By default, uv normalizes package names to match their
+[PEP 503-compliant forms](https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization)
+and uses those normalized names in all output contexts. This differs from pip, which tends to
+preserve the verbatim package name as published on the registry.
 
-This is something to be aware of if scripts or code are parsing the output of `pip list`.
-
-For example:
+For example, `uv pip list` displays normalized packages names (e.g., `docstring-parser`), while
+`pip list` displays non-normalized package names (e.g., `docstring_parser`):
 
 ```shell
 (venv) $ diff --side-by-side  <(pip list) <(uv pip list)
@@ -514,6 +511,3 @@ pip              25.1					    	pip              25.1
 PyMuPDFb         1.24.10				      |	pymupdfb         1.24.10
 PyPDF2           3.0.1					      |	pypdf2           3.0.1
 ```
-
-`uv pip list` outputs `docstring-parser` with a hyphen instead of an underscore, `pymupdfb` is
-lowercased, etc.
