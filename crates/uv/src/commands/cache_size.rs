@@ -2,11 +2,11 @@ use std::fmt::Write;
 
 use anyhow::Result;
 
+use crate::commands::{ExitStatus, human_readable_bytes};
+use crate::printer::Printer;
 use uv_cache::Cache;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
-use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
 
 /// Display the total size of the cache.
 pub(crate) fn cache_size(
