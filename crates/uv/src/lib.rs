@@ -1060,7 +1060,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
-        }) => commands::cache_size(&cache, args.human, printer),
+        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::BuildSettings::resolve(args, filesystem, environment);

@@ -3,7 +3,8 @@ use std::fmt::Write;
 use anyhow::Result;
 
 use uv_cache::Cache;
-
+use uv_preview::{Preview, PreviewFeatures};
+use uv_warnings::warn_user;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
@@ -12,7 +13,15 @@ pub(crate) fn cache_size(
     cache: &Cache,
     human_readable: bool,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
+    if !preview.is_enabled(PreviewFeatures::CACHE_SIZE) {
+        warn_user!(
+            "`uv cache size` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::CACHE_SIZE
+        );
+    }
+
     if !cache.root().exists() {
         if human_readable {
             writeln!(printer.stdout_important(), "0B")?;
