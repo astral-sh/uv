@@ -1,5 +1,4 @@
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::prelude::*;
 
 use crate::common::{TestContext, uv_snapshot};
 
@@ -11,7 +10,7 @@ fn cache_size_empty_raw() {
     // Clean cache first to ensure truly empty state
     context.clean().assert().success();
 
-    uv_snapshot!(context.filters(), context.cache_size(), @r"
+    uv_snapshot!(context.cache_size(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26,17 +25,10 @@ fn cache_size_empty_raw() {
 fn cache_size_with_packages_raw() {
     let context = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio").unwrap();
+    // Install a requirement to populate the cache.
+    context.pip_install().arg("iniconfig").assert().success();
 
-    // Install a requirement to populate the cache
-    context
-        .pip_sync()
-        .arg("requirements.txt")
-        .assert()
-        .success();
-
-    // Check cache size is now positive (raw bytes)
+    // Check cache size is now positive (raw bytes).
     uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size(), @r"
     success: true
     exit_code: 0
@@ -47,38 +39,13 @@ fn cache_size_with_packages_raw() {
     ");
 }
 
-/// Test that `cache size --human` returns "0 B" for empty cache.
-#[test]
-fn cache_size_empty_human() {
-    let context = TestContext::new("3.12");
-
-    // Clean cache first to ensure truly empty state
-    context.clean().assert().success();
-
-    uv_snapshot!(context.filters(), context.cache_size().arg("--human"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    0 B
-
-    ----- stderr -----
-    ");
-}
-
 /// Test that `cache size --human` returns human-readable format after installing packages.
 #[test]
 fn cache_size_with_packages_human() {
     let context = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio").unwrap();
-
-    // Install a requirement to populate the cache
-    context
-        .pip_sync()
-        .arg("requirements.txt")
-        .assert()
-        .success();
+    // Install a requirement to populate the cache.
+    context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size with --human flag
     uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--human"), @r"

@@ -14,32 +14,30 @@ pub(crate) fn cache_size(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
-        // Return 0 bytes for non-existent cache
         if human_readable {
-            writeln!(printer.stdout(), "0 B")?;
+            writeln!(printer.stdout_important(), "0B")?;
         } else {
-            writeln!(printer.stdout(), "0")?;
+            writeln!(printer.stdout_important(), "0")?;
         }
         return Ok(ExitStatus::Success);
     }
 
     // Walk the entire cache root
     let total_bytes: u64 = walkdir::WalkDir::new(cache.root())
+        .follow_links(false)
         .into_iter()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter_map(|entry| match entry.metadata() {
             Ok(metadata) if metadata.is_file() => Some(metadata.len()),
             _ => None,
         })
         .sum();
 
-    // Output in requested format
     if human_readable {
-        let (size, unit) = human_readable_bytes(total_bytes);
-        writeln!(printer.stdout(), "{size:.1} {unit}")?;
+        let (bytes, unit) = human_readable_bytes(total_bytes);
+        writeln!(printer.stdout_important(), "{bytes:.1}{unit}")?;
     } else {
-        // Raw bytes (script-friendly)
-        writeln!(printer.stdout(), "{total_bytes}")?;
+        writeln!(printer.stdout_important(), "{total_bytes}")?;
     }
 
     Ok(ExitStatus::Success)
