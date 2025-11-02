@@ -580,8 +580,8 @@ pub struct VersionArgs {
     /// Update the project version using the given semantics
     ///
     /// This flag can be passed multiple times.
-    #[arg(group = "operation", long)]
-    pub bump: Vec<VersionBump>,
+    #[arg(group = "operation", long, value_name = "BUMP[=VALUE]")]
+    pub bump: Vec<VersionBumpSpec>,
 
     /// Don't write a new version to the `pyproject.toml`
     ///
@@ -689,6 +689,63 @@ pub enum VersionBump {
     Post,
     /// Increase the dev version (e.g., 1.2.3a4.dev6 => 1.2.3.dev7)
     Dev,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VersionBumpSpec {
+    pub bump: VersionBump,
+    pub value: Option<u64>,
+}
+
+impl std::fmt::Display for VersionBumpSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.value {
+            Some(value) => write!(f, "{}={value}", self.bump),
+            None => self.bump.fmt(f),
+        }
+    }
+}
+
+impl std::str::FromStr for VersionBumpSpec {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let (name, value) = input
+            .split_once('=')
+            .map_or((input, None), |(name, value)| (name, Some(value)));
+
+        let bump = match name.to_ascii_lowercase().as_str() {
+            "major" => VersionBump::Major,
+            "minor" => VersionBump::Minor,
+            "patch" => VersionBump::Patch,
+            "stable" => VersionBump::Stable,
+            "alpha" => VersionBump::Alpha,
+            "beta" => VersionBump::Beta,
+            "rc" => VersionBump::Rc,
+            "post" => VersionBump::Post,
+            "dev" => VersionBump::Dev,
+            _ => return Err(format!("invalid bump component `{name}`")),
+        };
+
+        if bump == VersionBump::Stable && value.is_some() {
+            return Err("`--bump stable` does not accept a value".to_string());
+        }
+
+        let value =
+            match value {
+                Some(raw) => {
+                    if raw.is_empty() {
+                        return Err("`--bump` values cannot be empty".to_string());
+                    }
+                    Some(raw.parse::<u64>().map_err(|_| {
+                        format!("invalid numeric value `{raw}` for `--bump {name}`")
+                    })?)
+                }
+                None => None,
+            };
+
+        Ok(Self { bump, value })
+    }
 }
 
 impl std::fmt::Display for VersionBump {

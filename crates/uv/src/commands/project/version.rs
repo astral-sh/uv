@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
-use uv_cli::{VersionBump, VersionFormat};
+use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
-use uv_pep440::{BumpCommand, PrereleaseKind, Version};
+use uv_pep440::{BumpCommand, Prerelease, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
@@ -56,7 +56,7 @@ pub(crate) fn self_version(
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBump>,
+    mut bump: Vec<VersionBumpSpec>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
@@ -164,29 +164,29 @@ pub(crate) async fn project_version(
         // because that makes perfect sense and is reasonable to do.
         let release_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Major | VersionBump::Minor | VersionBump::Patch
                 )
             })
             .collect();
         let prerelease_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
                 )
             })
             .collect();
         let post_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Post)
+            .filter(|spec| spec.bump == VersionBump::Post)
             .count();
         let stable_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Stable)
+            .filter(|spec| spec.bump == VersionBump::Stable)
             .count();
 
         // Very little reason to do "bump to stable" and then do other things,
@@ -252,25 +252,9 @@ pub(crate) async fn project_version(
 
         // Apply all the bumps
         let mut new_version = old_version.clone();
-        for bump in &bump {
-            let command = match *bump {
-                VersionBump::Major => BumpCommand::BumpRelease { index: 0 },
-                VersionBump::Minor => BumpCommand::BumpRelease { index: 1 },
-                VersionBump::Patch => BumpCommand::BumpRelease { index: 2 },
-                VersionBump::Alpha => BumpCommand::BumpPrerelease {
-                    kind: PrereleaseKind::Alpha,
-                },
-                VersionBump::Beta => BumpCommand::BumpPrerelease {
-                    kind: PrereleaseKind::Beta,
-                },
-                VersionBump::Rc => BumpCommand::BumpPrerelease {
-                    kind: PrereleaseKind::Rc,
-                },
-                VersionBump::Post => BumpCommand::BumpPost,
-                VersionBump::Dev => BumpCommand::BumpDev,
-                VersionBump::Stable => BumpCommand::MakeStable,
-            };
-            new_version.bump(command);
+
+        for spec in &bump {
+            apply_bump_spec(&mut new_version, spec);
         }
 
         if new_version <= old_version {
@@ -326,6 +310,77 @@ pub(crate) async fn project_version(
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
+}
+
+fn apply_bump_spec(version: &mut Version, spec: &VersionBumpSpec) {
+    match spec.bump {
+        VersionBump::Major => apply_release(version, 0, spec.value),
+        VersionBump::Minor => apply_release(version, 1, spec.value),
+        VersionBump::Patch => apply_release(version, 2, spec.value),
+        VersionBump::Stable => version.bump(BumpCommand::MakeStable),
+        VersionBump::Alpha => apply_prerelease(version, PrereleaseKind::Alpha, spec.value),
+        VersionBump::Beta => apply_prerelease(version, PrereleaseKind::Beta, spec.value),
+        VersionBump::Rc => apply_prerelease(version, PrereleaseKind::Rc, spec.value),
+        VersionBump::Post => apply_post(version, spec.value),
+        VersionBump::Dev => apply_dev(version, spec.value),
+    }
+}
+
+fn apply_release(version: &mut Version, index: usize, value: Option<u64>) {
+    if let Some(value) = value {
+        let mut release = version.release().to_vec();
+
+        let len = release.len().max(index + 1);
+
+        release.resize(len, 0);
+        release[index] = value;
+
+        for slot in release.iter_mut().skip(index + 1) {
+            *slot = 0;
+        }
+
+        *version = version
+            .clone()
+            .with_release(release)
+            .with_pre(None)
+            .with_post(None)
+            .with_dev(None);
+    } else {
+        version.bump(BumpCommand::BumpRelease { index });
+    }
+}
+
+fn apply_prerelease(version: &mut Version, kind: PrereleaseKind, value: Option<u64>) {
+    if let Some(value) = value {
+        let prerelease = Prerelease {
+            kind,
+            number: value,
+        };
+
+        *version = version
+            .clone()
+            .with_pre(Some(prerelease))
+            .with_post(None)
+            .with_dev(None);
+    } else {
+        version.bump(BumpCommand::BumpPrerelease { kind });
+    }
+}
+
+fn apply_post(version: &mut Version, value: Option<u64>) {
+    if let Some(value) = value {
+        *version = version.clone().with_post(Some(value)).with_dev(None);
+    } else {
+        version.bump(BumpCommand::BumpPost);
+    }
+}
+
+fn apply_dev(version: &mut Version, value: Option<u64>) {
+    if let Some(value) = value {
+        *version = version.clone().with_dev(Some(value));
+    } else {
+        version.bump(BumpCommand::BumpDev);
+    }
 }
 
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml

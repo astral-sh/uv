@@ -248,6 +248,45 @@ requires-python = ">=3.12"
     Ok(())
 }
 
+#[test]
+fn version_bump_patch_value() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "1.10.31"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch=40"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.31 => 1.10.40
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    assert_snapshot!(
+        pyproject,
+    @r#"
+    [project]
+    name = "myproject"
+    version = "1.10.40"
+    requires-python = ">=3.12"
+    "#
+    );
+    Ok(())
+}
+
 // Bump patch version (--short)
 #[test]
 fn version_bump_patch_short() -> Result<()> {
@@ -283,6 +322,43 @@ requires-python = ">=3.12"
     [project]
     name = "myproject"
     version = "1.10.32"
+    requires-python = ">=3.12"
+    "#
+    );
+    Ok(())
+}
+
+#[test]
+fn version_bump_patch_value_must_increase() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "0.0.12"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch=11"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: 0.0.12 => 0.0.11 didn't increase the version; provide the exact version to force an update
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    assert_snapshot!(
+        pyproject,
+    @r#"
+    [project]
+    name = "myproject"
+    version = "0.0.12"
     requires-python = ">=3.12"
     "#
     );
@@ -895,6 +971,85 @@ requires-python = ">=3.12"
     [project]
     name = "myproject"
     version = "9!2.3.4a5.post6.dev8+deadbeef6"
+    requires-python = ">=3.12"
+    "#
+    );
+    Ok(())
+}
+
+#[test]
+fn bump_dev_with_value() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "0.1.0.dev4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("dev=42"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 0.1.0.dev4 => 0.1.0.dev42
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    assert_snapshot!(
+        pyproject,
+    @r#"
+    [project]
+    name = "myproject"
+    version = "0.1.0.dev42"
+    requires-python = ">=3.12"
+    "#
+    );
+    Ok(())
+}
+
+#[test]
+fn bump_patch_and_dev_value() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "0.0.1"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch")
+        .arg("--bump").arg("dev=66463664"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 0.0.1 => 0.0.2.dev66463664
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    assert_snapshot!(
+        pyproject,
+    @r#"
+    [project]
+    name = "myproject"
+    version = "0.0.2.dev66463664"
     requires-python = ">=3.12"
     "#
     );
