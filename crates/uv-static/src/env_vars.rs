@@ -1110,11 +1110,6 @@ impl EnvVars {
     /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
     #[attr_added_in("0.8.1")]
     pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
-    
-    /// The visible devices for NVIDIA GPUs, to respect when querying `nvidia-smi` to detect GPU
-    /// drivers.
-    #[attr_added_in("0.9.8")]
-    pub const NVIDIA_VISIBLE_DEVICES: &'static str = "NVIDIA_VISIBLE_DEVICES";
 
     /// The URL to treat as an S3-compatible storage endpoint. Requests to this endpoint
     /// will be signed using AWS Signature Version 4 based on the `AWS_ACCESS_KEY_ID`,
@@ -1190,5 +1185,4 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
->>>>>>> main
 }

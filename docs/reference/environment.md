@@ -885,11 +885,6 @@ Comma-separated list of hostnames (e.g., `example.com`) and/or patterns (e.g., `
 
 Used to detect `NuShell` usage.
 
-### `NVIDIA_VISIBLE_DEVICES`
-
-The visible devices for NVIDIA GPUs, to respect when querying `nvidia-smi` to detect GPU
-drivers.
-
 ### `PAGER`
 <small class="added-in">added in `0.4.18`</small>
 
