@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-fs = { workspace = true }
+
 fs-err = { workspace = true }
 globwalk = { workspace = true }
 schemars = { workspace = true, optional = true }
