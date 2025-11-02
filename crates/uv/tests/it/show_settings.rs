@@ -8502,7 +8502,12 @@ fn preview_features() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features_from_pyproject_toml() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("never");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -8520,7 +8525,7 @@ fn preview_features_from_pyproject_toml() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Auto,
+        color: Never,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8638,7 +8643,12 @@ fn preview_features_from_pyproject_toml() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features_from_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("never");
 
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml
@@ -8655,7 +8665,7 @@ fn preview_features_from_uv_toml() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Auto,
+        color: Never,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8773,7 +8783,12 @@ fn preview_features_from_uv_toml() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features_precedence_command_line_over_config() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("never");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -8792,7 +8807,7 @@ fn preview_features_precedence_command_line_over_config() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Auto,
+        color: Never,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -8910,7 +8925,12 @@ fn preview_features_precedence_command_line_over_config() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features_precedence_command_line_over_env() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("auto");
 
     // Command line should override environment variable
     uv_snapshot!(context.filters(), context.version().arg("--show-settings").arg("--preview-features").arg("add-bounds").env(EnvVars::UV_PREVIEW_FEATURES, "json-output,format"), @r#"
@@ -9039,7 +9059,12 @@ fn preview_features_precedence_command_line_over_env() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_boolean_still_works() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("never");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -9057,7 +9082,7 @@ fn preview_boolean_still_works() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Auto,
+        color: Never,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
@@ -9175,7 +9200,12 @@ fn preview_boolean_still_works() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn no_preview_overrides_everything() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_concurrent_builds("12")
+        .with_concurrent_installs("12")
+        .with_link_mode("clone")
+        .with_http_retries("3")
+        .with_color("never");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -9195,7 +9225,7 @@ fn no_preview_overrides_everything() {
         required_version: None,
         quiet: 0,
         verbose: 0,
-        color: Auto,
+        color: Never,
         network_settings: NetworkSettings {
             connectivity: Online,
             native_tls: false,
