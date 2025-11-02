@@ -453,3 +453,32 @@ fn freeze_nonexistent_path() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn freeze_with_quiet_flag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    // Run `pip sync`.
+    context
+        .pip_sync()
+        .arg(requirements_txt.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze` with `--quiet` flag.
+    uv_snapshot!(context.pip_freeze().arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}

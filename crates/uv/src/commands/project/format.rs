@@ -2,12 +2,11 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use reqwest_retry::policies::ExponentialBackoff;
 use tokio::process::Command;
 
 use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, retries_from_env};
+use uv_client::BaseClientBuilder;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
@@ -64,9 +63,9 @@ pub(crate) async fn format(
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
 
+    let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     let client = client_builder.retries(0).build();
 
     // Get the path to Ruff, downloading it if necessary

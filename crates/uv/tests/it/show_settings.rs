@@ -67,6 +67,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -97,9 +98,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -267,6 +270,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -297,9 +301,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -468,6 +474,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -498,9 +505,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -701,6 +710,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -731,9 +741,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -903,6 +915,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -933,9 +946,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1081,6 +1096,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1111,9 +1127,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1308,6 +1326,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1338,9 +1357,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1543,6 +1564,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1573,9 +1595,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1836,6 +1860,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1866,9 +1891,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2060,6 +2087,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2090,9 +2118,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2243,6 +2273,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2273,9 +2304,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2476,6 +2509,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2506,9 +2540,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2732,6 +2768,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2762,9 +2799,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2905,6 +2944,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -2935,9 +2975,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3078,6 +3120,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3108,9 +3151,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3253,6 +3298,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3283,9 +3329,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3447,6 +3495,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3479,6 +3528,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         with_editable: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         python: None,
         python_platform: None,
@@ -3633,6 +3683,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3663,9 +3714,11 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3840,6 +3893,7 @@ fn resolve_both() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3870,9 +3924,11 @@ fn resolve_both() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4086,6 +4142,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4116,9 +4173,11 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4411,6 +4470,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4441,9 +4501,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4621,7 +4683,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4711,6 +4773,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4741,9 +4804,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4887,6 +4952,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -4917,9 +4983,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5082,6 +5150,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 },
             ],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5112,9 +5181,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5269,6 +5340,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5299,9 +5371,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5504,6 +5578,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5534,9 +5609,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5745,6 +5822,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -5775,9 +5853,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5981,6 +6061,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6011,9 +6092,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -6224,6 +6307,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6254,9 +6338,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -6460,6 +6546,7 @@ fn index_priority() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6490,9 +6577,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -6709,6 +6798,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6740,10 +6830,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6875,6 +6967,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -6906,10 +6999,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -7039,6 +7134,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7070,10 +7166,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -7205,6 +7303,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7236,10 +7335,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -7369,6 +7470,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7400,10 +7502,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -7534,6 +7638,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7565,10 +7670,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -7714,6 +7821,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7743,7 +7851,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -7827,6 +7935,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7856,7 +7965,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -7940,6 +8049,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -7969,7 +8079,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8053,6 +8163,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8082,7 +8193,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8166,6 +8277,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8195,7 +8307,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8281,6 +8393,7 @@ fn preview_features() {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8310,7 +8423,7 @@ fn preview_features() {
         short: false,
         output_format: Text,
         dry_run: false,
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         active: None,
         no_sync: false,
@@ -8415,6 +8528,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8445,9 +8559,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -8589,6 +8705,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8619,9 +8736,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -8786,6 +8905,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8816,9 +8936,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -8958,6 +9080,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -8988,9 +9111,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -9124,6 +9249,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9154,9 +9280,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -9291,6 +9419,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9321,9 +9450,11 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -9523,6 +9654,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9547,7 +9679,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9641,6 +9773,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9665,7 +9798,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9782,6 +9915,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9806,7 +9940,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -9898,6 +10032,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -9922,7 +10057,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -10004,6 +10139,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10028,7 +10164,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -10111,6 +10247,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10135,7 +10272,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         ),
     }
     LockSettings {
-        locked: false,
+        lock_check: Disabled,
         frozen: false,
         dry_run: Disabled,
         script: None,
@@ -10282,6 +10419,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10312,9 +10450,11 @@ fn build_isolation_override() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -10451,6 +10591,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
+            retries: 3,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -10481,9 +10622,11 @@ fn build_isolation_override() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],

@@ -50,13 +50,15 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{
+    InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     active: Option<bool>,
@@ -217,9 +219,9 @@ pub(crate) async fn sync(
                 ));
             }
 
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
-                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
@@ -304,8 +306,8 @@ pub(crate) async fn sync(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(environment.interpreter())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
@@ -338,16 +340,18 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) => {
+        Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
-                Outcome::LockMismatch(prev, cur)
+                Outcome::LockMismatch(prev, cur, lock_source)
             } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
-                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                    ProjectError::LockMismatch(prev, cur, lock_source)
+                        .to_string()
+                        .bold()
                 )?;
                 return Ok(ExitStatus::Failure);
             }
@@ -415,11 +419,13 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur) => {
+        Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
                 printer.stderr(),
                 "{}",
-                ProjectError::LockMismatch(prev, cur).to_string().bold()
+                ProjectError::LockMismatch(prev, cur, lock_source)
+                    .to_string()
+                    .bold()
             )?;
             Ok(ExitStatus::Failure)
         }
@@ -433,7 +439,7 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 }
 
 impl Outcome {
@@ -444,7 +450,7 @@ impl Outcome {
                 LockResult::Changed(_, lock) => lock,
                 LockResult::Unchanged(lock) => lock,
             },
-            Self::LockMismatch(_prev, cur) => cur,
+            Self::LockMismatch(_prev, cur, _lock_source) => cur,
         }
     }
 }
@@ -1272,7 +1278,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                         LockResult::Unchanged(..) => match mode {
                             // When `--frozen` is used, we don't check the lockfile
                             LockMode::Frozen => LockAction::Use,
-                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                            LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }
                         },

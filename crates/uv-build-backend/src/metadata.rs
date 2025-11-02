@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -105,6 +105,26 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
     }
 }
 
+/// A package name as provided in a `pyproject.toml`.
+#[derive(Debug, Clone)]
+struct VerbatimPackageName {
+    /// The package name as given in the `pyproject.toml`.
+    given: String,
+    /// The normalized package name.
+    normalized: PackageName,
+}
+
+impl<'de> Deserialize<'de> for VerbatimPackageName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let given = String::deserialize(deserializer)?;
+        let normalized = PackageName::from_str(&given).map_err(serde::de::Error::custom)?;
+        Ok(Self { given, normalized })
+    }
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(
@@ -123,7 +143,7 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     pub(crate) fn name(&self) -> &PackageName {
-        &self.project.name
+        &self.project.name.normalized
     }
 
     pub(crate) fn version(&self) -> &Version {
@@ -337,7 +357,7 @@ impl PyProjectToml {
                         PortableGlobParser::Pep639
                             .parse(license_glob)
                             .map_err(|err| Error::PortableGlob {
-                                field: license_glob.to_string(),
+                                field: license_glob.to_owned(),
                                 source: err,
                             })?;
                     license_globs_parsed.push(pep639_glob);
@@ -456,7 +476,7 @@ impl PyProjectToml {
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
-            name: self.project.name.to_string(),
+            name: self.project.name.given.clone(),
             version: self.project.version.to_string(),
             // Not supported.
             platforms: vec![],
@@ -579,7 +599,7 @@ impl PyProjectToml {
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project.
-    name: PackageName,
+    name: VerbatimPackageName,
     /// The version of the project.
     version: Version,
     /// The summary description of the project in one line.
@@ -854,6 +874,28 @@ mod tests {
             let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
+    }
+
+    #[test]
+    fn uppercase_package_name() {
+        let contents = r#"
+            [project]
+            name = "Hello-World"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
+            build-backend = "uv_build"
+        "#;
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+        assert_snapshot!(metadata.core_metadata_format(), @r"
+        Metadata-Version: 2.3
+        Name: Hello-World
+        Version: 0.1.0
+        ");
     }
 
     #[test]

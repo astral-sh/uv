@@ -1246,6 +1246,16 @@ pub struct PipCompileArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -1896,6 +1906,16 @@ pub struct PipInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -2635,6 +2655,20 @@ pub struct BuildArgs {
     #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
+    /// Clear the output directory before the build, removing stale artifacts.
+    #[arg(long)]
+    pub clear: bool,
+
+    #[arg(long, overrides_with("no_create_gitignore"), hide = true)]
+    pub create_gitignore: bool,
+
+    /// Do not create a `.gitignore` file in the output directory.
+    ///
+    /// By default, uv creates a `.gitignore` file in the output directory to exclude build
+    /// artifacts from version control. When this flag is used, the file will be omitted.
+    #[arg(long, overrides_with("create_gitignore"))]
+    pub no_create_gitignore: bool,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -3158,7 +3192,7 @@ pub struct RunArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3487,7 +3521,7 @@ pub struct SyncArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3719,20 +3753,34 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--locked`.
-    #[arg(long, alias = "locked", env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"])]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
     pub check: bool,
+
+    /// Check if the lockfile is up-to-date.
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--check`.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date.
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "check")]
+    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
-    #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked"
+    )]
     pub dry_run: bool,
 
     /// Lock the specified Python script, rather than the current project.
@@ -4150,7 +4198,7 @@ pub struct TreeArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4325,7 +4373,7 @@ pub struct ExportArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4819,6 +4867,16 @@ pub struct ToolInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.

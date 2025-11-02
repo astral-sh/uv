@@ -11727,7 +11727,7 @@ requires_python = "==3.13.*"
     "
     );
 
-    // `--group pylock.toml:test` should be rejeceted.
+    // `--group pylock.toml:test` should be rejected.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -12250,6 +12250,25 @@ fn config_settings_package() -> Result<()> {
     assert!(finder.exists());
 
     Ok(())
+}
+
+#[test]
+fn reject_invalid_archive_member_names() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheeldiff2==0.0.1`
+      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    "
+    );
 }
 
 #[test]
@@ -13052,4 +13071,33 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_with_system_interpreter() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
+
+    // We use a managed Python version here to ensure consistent output across systems
+    context.python_install().arg("3.12").assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--system")
+        .arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+
+      This Python installation is managed by uv and should not be modified.
+
+    hint: Virtual environments were not considered due to the `--system` flag
+    "
+    );
 }

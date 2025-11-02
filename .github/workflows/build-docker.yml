@@ -109,6 +109,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
+
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
@@ -281,6 +282,7 @@ jobs:
         with:
           images: |
             ${{ env.UV_GHCR_IMAGE }}
+            ${{ env.UV_DOCKERHUB_IMAGE }}
           flavor: |
             latest=false
           tags: |
@@ -311,7 +313,7 @@ jobs:
       - name: Add annotations to images
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         env:
-          IMAGES: "${{ env.UV_GHCR_IMAGE }}"
+          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
@@ -385,7 +387,7 @@ jobs:
       # minimized to just touch the GHCR manifest.
       - name: Add annotations to images
         env:
-          IMAGES: "${{ env.UV_GHCR_IMAGE }}"
+          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
           DIGEST: ${{ needs.docker-publish-base.outputs.image-digest }}
           TAGS: ${{ needs.docker-publish-base.outputs.image-tags }}
           ANNOTATIONS: ${{ needs.docker-publish-base.outputs.image-annotations }}

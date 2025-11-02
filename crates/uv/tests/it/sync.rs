@@ -3415,6 +3415,84 @@ fn sync_exclude_group() -> Result<()> {
 }
 
 #[test]
+fn sync_exclude_group_with_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        baz = ["certifi"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test single group exclusion via environment variable
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .env("UV_NO_GROUP", "bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Test multiple group exclusion via environment variable (space-separated)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .env("UV_NO_GROUP", "bar baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 4 packages in [TIME]
+    ");
+
+    // Test that CLI flag takes precedence over environment variable
+    // When --no-group is used on CLI, it overrides UV_NO_GROUP env var
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .arg("--no-group").arg("bar")
+        .env("UV_NO_GROUP", "baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + certifi==2024.2.2
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
 

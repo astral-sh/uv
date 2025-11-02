@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_auth::{AuthBackend, Service};
@@ -33,6 +32,7 @@ pub(crate) async fn token(
             network_settings.allow_insecure_host.clone(),
             preview,
             network_settings.timeout,
+            network_settings.retries,
         )
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .build();
@@ -130,6 +130,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         }
     };
 
-    writeln!(printer.stdout(), "{}", token.as_str().cyan())?;
+    writeln!(printer.stdout(), "{}", token.as_str())?;
     Ok(())
 }

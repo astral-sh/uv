@@ -129,6 +129,7 @@ pub(crate) async fn publish(
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
 
+    let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
@@ -222,6 +223,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
+            retry_policy,
             &credentials,
             check_url_client.as_ref(),
             &download_concurrency,

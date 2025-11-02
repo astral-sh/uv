@@ -3,6 +3,90 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.7
+
+Released on 2025-10-30.
+
+### Enhancements
+
+- Add Windows x86-32 emulation support to interpreter architecture checks ([#13475](https://github.com/astral-sh/uv/pull/13475))
+- Improve readability of progress bars ([#16509](https://github.com/astral-sh/uv/pull/16509))
+- Add GitHub attestations for uv release artifacts ([#11357](https://github.com/astral-sh/uv/pull/11357))
+
+### Bug fixes
+
+- Drop terminal coloring from `uv auth token` output ([#16504](https://github.com/astral-sh/uv/pull/16504))
+- Don't use UV_LOCKED to enable `--check` flag ([#16521](https://github.com/astral-sh/uv/pull/16521))
+
+## 0.9.6
+
+Released on 2025-10-29.
+
+This release contains an upgrade to Astral's fork of `async_zip`, which addresses potential sources of ZIP parsing differentials between uv and other Python packaging tooling. See [GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64) for additional details.
+
+### Security
+
+* Address ZIP parsing differentials ([GHSA-pqhf-p39g-3x64](https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64))
+
+### Python
+
+- Upgrade GraalPy to 25.0.1 ([#16401](https://github.com/astral-sh/uv/pull/16401))
+
+### Enhancements
+
+- Add `--clear` to `uv build` to remove old build artifacts ([#16371](https://github.com/astral-sh/uv/pull/16371))
+- Add `--no-create-gitignore` to `uv build` ([#16369](https://github.com/astral-sh/uv/pull/16369))
+- Do not error when a virtual environment directory cannot be removed due to a busy error ([#16394](https://github.com/astral-sh/uv/pull/16394))
+- Improve hint on `pip install --system` when externally managed ([#16392](https://github.com/astral-sh/uv/pull/16392))
+- Running `uv lock --check` with outdated lockfile will print that `--check` was passed, instead of `--locked`  ([#16322](https://github.com/astral-sh/uv/pull/16322))
+- Update `uv init` template for Maturin ([#16449](https://github.com/astral-sh/uv/pull/16449))
+- Improve ordering of Python sources in logs ([#16463](https://github.com/astral-sh/uv/pull/16463))
+- Restore DockerHub release images and annotations ([#16441](https://github.com/astral-sh/uv/pull/16441))
+
+### Bug fixes
+
+- Check for matching Python implementation during `uv python upgrade` ([#16420](https://github.com/astral-sh/uv/pull/16420))
+- Deterministically order `--find-links` distributions ([#16446](https://github.com/astral-sh/uv/pull/16446))
+- Don't panic in `uv export --frozen` when the lockfile is outdated ([#16407](https://github.com/astral-sh/uv/pull/16407))
+- Fix root of `uv tree` when `--package` is used with circular dependencies ([#15908](https://github.com/astral-sh/uv/pull/15908))
+- Show package list with `pip freeze --quiet` ([#16491](https://github.com/astral-sh/uv/pull/16491))
+- Limit `uv auth login pyx.dev` retries to 60s ([#16498](https://github.com/astral-sh/uv/pull/16498))
+- Add an empty group with `uv add --group ... -r ...` ([#16490](https://github.com/astral-sh/uv/pull/16490))
+
+### Documentation
+
+- Update docs for maturin build backend init template ([#16469](https://github.com/astral-sh/uv/pull/16469))
+- Update docs to reflect previous changes to signal forwarding semantics ([#16430](https://github.com/astral-sh/uv/pull/16430))
+- Add instructions for installing via MacPorts ([#16039](https://github.com/astral-sh/uv/pull/16039))
+
+## 0.9.5
+
+Released on 2025-10-21.
+
+This release contains an upgrade to `astral-tokio-tar`, which addresses a vulnerability in tar extraction on malformed archives with mismatching size information between the ustar header and PAX extensions. While the `astral-tokio-tar` advisory has been graded as "high" due its potential broader impact, the *specific* impact to uv is **low** due to a lack of novel attacker capability. Specifically, uv only processes tar archives from source distributions, which already possess the capability for full arbitrary code execution by design, meaning that an attacker gains no additional capabilities through `astral-tokio-tar`.
+
+Regardless, we take the hypothetical risk of parser differentials very seriously. Out of an abundance of caution, we have assigned this upgrade an advisory: https://github.com/astral-sh/uv/security/advisories/GHSA-w476-p2h3-79g9
+
+### Security
+
+* Upgrade `astral-tokio-tar` to 0.5.6 to address a parsing differential ([#16387](https://github.com/astral-sh/uv/pull/16387))
+
+### Enhancements
+
+- Add required environment marker example to hint ([#16244](https://github.com/astral-sh/uv/pull/16244))
+- Fix typo in MissingTopLevel warning ([#16351](https://github.com/astral-sh/uv/pull/16351))
+- Improve 403 Forbidden error message to indicate package may not exist ([#16353](https://github.com/astral-sh/uv/pull/16353))
+- Add a hint on `uv pip install` failure if the `--system` flag is used to select an externally managed interpreter ([#16318](https://github.com/astral-sh/uv/pull/16318))
+
+### Bug fixes
+
+- Fix backtick escaping for PowerShell ([#16307](https://github.com/astral-sh/uv/pull/16307))
+
+### Documentation
+
+- Document metadata consistency expectation ([#15683](https://github.com/astral-sh/uv/pull/15683))
+- Remove outdated aarch64 musl note ([#16385](https://github.com/astral-sh/uv/pull/16385))
+
 ## 0.9.4
 
 Released on 2025-10-17.
@@ -138,7 +222,7 @@ updated. This change should not break existing workflows.
 
 ## 0.8.x
 
-See [changeslogs/0.8.x](./changelogs/0.8.x.md)
+See [changelogs/0.8.x](./changelogs/0.8.x.md)
 
 ## 0.7.x
 

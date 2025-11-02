@@ -184,6 +184,7 @@ pub(crate) struct NetworkSettings {
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) timeout: Duration,
+    pub(crate) retries: u32,
 }
 
 impl NetworkSettings {
@@ -200,7 +201,6 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
-        let timeout = environment.http_timeout;
         let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
             .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
             .unwrap_or(false);
@@ -225,7 +225,8 @@ impl NetworkSettings {
             connectivity,
             native_tls,
             allow_insecure_host,
-            timeout,
+            timeout: environment.http_timeout,
+            retries: environment.http_retries,
         }
     }
 }
@@ -346,10 +347,37 @@ impl InitSettings {
     }
 }
 
+/// The source of a lock check operation.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheckSource {
+    /// The user invoked `uv <command> --locked`
+    Locked,
+    /// The user invoked `uv <command> --check`
+    Check,
+}
+
+impl std::fmt::Display for LockCheckSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Locked => write!(f, "--locked"),
+            Self::Check => write!(f, "--check"),
+        }
+    }
+}
+
+// Has lock check been enabled?
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheck {
+    /// Lockfile check is enabled.
+    Enabled(LockCheckSource),
+    /// Lockfile check is disabled.
+    Disabled,
+}
+
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
@@ -438,7 +466,11 @@ impl RunSettings {
             .unwrap_or_default();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
@@ -649,6 +681,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -678,6 +711,7 @@ impl ToolInstallSettings {
             with_executables_from,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             installer,
             force,
@@ -727,6 +761,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1262,7 +1300,7 @@ impl PythonPinSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1344,10 +1382,15 @@ impl SyncSettings {
         } else {
             DryRun::from_args(dry_run)
         };
+        let lock_check = if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
 
         Self {
             output_format,
-            locked,
+            lock_check,
             frozen,
             dry_run,
             script,
@@ -1400,7 +1443,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
@@ -1420,6 +1463,7 @@ impl LockSettings {
     ) -> Self {
         let LockArgs {
             check,
+            locked,
             check_exists,
             dry_run,
             script,
@@ -1434,8 +1478,16 @@ impl LockSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let lock_check = if check {
+            LockCheck::Enabled(LockCheckSource::Check)
+        } else if locked {
+            LockCheck::Enabled(LockCheckSource::Locked)
+        } else {
+            LockCheck::Disabled
+        };
+
         Self {
-            locked: check,
+            lock_check,
             frozen: check_exists,
             dry_run: DryRun::from_args(dry_run),
             script,
@@ -1453,7 +1505,7 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1602,7 +1654,11 @@ impl AddSettings {
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1645,7 +1701,7 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1706,7 +1762,11 @@ impl RemoveSettings {
             .collect();
 
         Self {
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1736,7 +1796,7 @@ pub(crate) struct VersionSettings {
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
@@ -1784,7 +1844,11 @@ impl VersionSettings {
             short,
             output_format,
             dry_run,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             active: flag(active, no_active, "active"),
             no_sync,
@@ -1806,7 +1870,7 @@ impl VersionSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
     pub(crate) groups: DependencyGroups,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
     pub(crate) depth: u8,
@@ -1869,7 +1933,11 @@ impl TreeSettings {
                 only_group,
                 all_groups,
             ),
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             universal,
             depth: tree.depth,
@@ -1905,7 +1973,7 @@ pub(crate) struct ExportSettings {
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
-    pub(crate) locked: bool,
+    pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
     pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
@@ -2000,7 +2068,11 @@ impl ExportSettings {
                 no_emit_package,
             ),
             output_file,
-            locked,
+            lock_check: if locked {
+                LockCheck::Enabled(LockCheckSource::Locked)
+            } else {
+                LockCheck::Disabled
+            },
             frozen,
             include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
             include_header: flag(header, no_header, "header").unwrap_or(true),
@@ -2053,9 +2125,11 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) excludes_from_workspace: Vec<uv_normalize::PackageName>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
@@ -2073,6 +2147,7 @@ impl PipCompileSettings {
             src_file,
             constraints,
             overrides,
+            excludes,
             extra,
             all_extras,
             no_all_extras,
@@ -2150,6 +2225,15 @@ impl PipCompileSettings {
             Vec::new()
         };
 
+        let excludes_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .exclude_dependencies
+                .clone()
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .build_constraint_dependencies
@@ -2185,8 +2269,13 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            excludes: excludes
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             constraints_from_workspace,
             overrides_from_workspace,
+            excludes_from_workspace,
             build_constraints_from_workspace,
             environments,
             refresh: Refresh::from(refresh),
@@ -2351,10 +2440,12 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editables: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) excludes_from_workspace: Vec<uv_normalize::PackageName>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
@@ -2374,6 +2465,7 @@ impl PipInstallSettings {
             editable,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             extra,
             all_extras,
@@ -2437,6 +2529,15 @@ impl PipInstallSettings {
             Vec::new()
         };
 
+        let excludes_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .exclude_dependencies
+                .clone()
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .build_constraint_dependencies
@@ -2463,6 +2564,10 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            excludes: excludes
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -2470,6 +2575,7 @@ impl PipInstallSettings {
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
+            excludes_from_workspace,
             build_constraints_from_workspace,
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
@@ -2806,7 +2912,9 @@ pub(crate) struct BuildSettings {
     pub(crate) wheel: bool,
     pub(crate) list: bool,
     pub(crate) build_logs: bool,
+    pub(crate) gitignore: bool,
     pub(crate) force_pep517: bool,
+    pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -2831,6 +2939,7 @@ impl BuildSettings {
             wheel,
             list,
             force_pep517,
+            clear,
             build_constraints,
             require_hashes,
             no_require_hashes,
@@ -2838,6 +2947,8 @@ impl BuildSettings {
             no_verify_hashes,
             build_logs,
             no_build_logs,
+            create_gitignore,
+            no_create_gitignore,
             python,
             build,
             refresh,
@@ -2857,11 +2968,14 @@ impl BuildSettings {
             wheel,
             list,
             build_logs: flag(build_logs, no_build_logs, "build-logs").unwrap_or(true),
+            force_pep517,
+            clear,
+            gitignore: flag(create_gitignore, no_create_gitignore, "create-gitignore")
+                .unwrap_or(true),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            force_pep517,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes"),
                 flag(verify_hashes, no_verify_hashes, "verify-hashes"),

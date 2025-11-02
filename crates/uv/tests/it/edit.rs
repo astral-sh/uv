@@ -4955,6 +4955,112 @@ fn add_virtual_dependency_group() -> Result<()> {
 }
 
 #[test]
+fn add_empty_requirements_group() -> Result<()> {
+    // Test that `uv add -r requirements.txt --group <name>` creates an empty group
+    // when the requirements file is empty
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("-r").arg("requirements.txt")
+        .arg("--group").arg("user"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        user = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_empty_requirements_optional() -> Result<()> {
+    // Test that `uv add -r requirements.txt --optional <extra>` creates an empty extra
+    // when the requirements file is empty
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("-r").arg("requirements.txt")
+        .arg("--optional").arg("extra"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
 fn remove_virtual_empty() -> Result<()> {
     // testing how `uv remove` reacts to a pyproject with no `[project]` and nothing useful to it
     let context = TestContext::new("3.12");
@@ -6101,7 +6207,7 @@ fn add_group_to_unsorted() -> Result<()> {
     Ok(())
 }
 
-/// Remomve a requirement from a dependency group.
+/// Remove a requirement from a dependency group.
 #[test]
 fn remove_group() -> Result<()> {
     let context = TestContext::new("3.12");
