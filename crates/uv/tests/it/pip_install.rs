@@ -3703,10 +3703,7 @@ fn build_prerelease_hint() -> Result<()> {
     "#})?;
 
     let mut command = context.pip_install();
-    command
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .arg(".");
+    command.arg("--index-url").arg(packse_index_url()).arg(".");
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
 
     uv_snapshot!(
