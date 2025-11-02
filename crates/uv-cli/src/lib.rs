@@ -4,8 +4,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
-use clap::builder::Styles;
+use clap::ValueEnum;
 use clap::builder::styling::{AnsiColor, Effects, Style};
+use clap::builder::{PossibleValue, Styles, TypedValueParser, ValueParserFactory};
+use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 
 use uv_auth::Service;
@@ -745,6 +747,45 @@ impl std::str::FromStr for VersionBumpSpec {
             };
 
         Ok(Self { bump, value })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct VersionBumpSpecValueParser;
+
+impl TypedValueParser for VersionBumpSpecValueParser {
+    type Value = VersionBumpSpec;
+
+    fn parse_ref(
+        &self,
+        _cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let raw = value.to_str().ok_or_else(|| {
+            clap::Error::raw(
+                ErrorKind::InvalidUtf8,
+                "`--bump` values must be valid UTF-8",
+            )
+        })?;
+        VersionBumpSpec::from_str(raw)
+            .map_err(|message| clap::Error::raw(ErrorKind::InvalidValue, message))
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(
+            VersionBump::value_variants()
+                .iter()
+                .filter_map(|variant| variant.to_possible_value()),
+        ))
+    }
+}
+
+impl ValueParserFactory for VersionBumpSpec {
+    type Parser = VersionBumpSpecValueParser;
+
+    fn value_parser() -> Self::Parser {
+        VersionBumpSpecValueParser
     }
 }
 
