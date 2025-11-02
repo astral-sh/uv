@@ -544,10 +544,8 @@ impl PubGrubReportFormatter<'_> {
             DerivationTree::External(External::Custom(package, set, reason)) => {
                 if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
-                    if options.flexibility == Flexibility::Configurable {
-                        if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(name, set, selector, env, output_hints);
-                        }
+                    if !fork_urls.contains_key(name) {
+                        self.prerelease_hint(name, set, selector, env, options, output_hints);
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -604,10 +602,8 @@ impl PubGrubReportFormatter<'_> {
             DerivationTree::External(External::NoVersions(package, set)) => {
                 if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
-                    if options.flexibility == Flexibility::Configurable {
-                        if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(name, set, selector, env, output_hints);
-                        }
+                    if !fork_urls.contains_key(name) {
+                        self.prerelease_hint(name, set, selector, env, options, output_hints);
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -936,14 +932,19 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
-    fn prerelease_available_hint(
+    fn prerelease_hint(
         &self,
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
+        options: &Options,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
+        if selector.prerelease_strategy().allows(name, env) == AllowPrerelease::Yes {
+            return;
+        }
+
         let any_prerelease = set.iter().any(|(start, end)| {
             // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
             if PrefixMatch::from_range(start, end).is_some() {
@@ -973,11 +974,19 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
-                hints.insert(PubGrubHint::PrereleaseRequested {
-                    name: name.clone(),
-                    range: set.clone(),
-                });
+            match options.flexibility {
+                Flexibility::Configurable => {
+                    hints.insert(PubGrubHint::PrereleaseRequested {
+                        name: name.clone(),
+                        range: set.clone(),
+                    });
+                }
+                Flexibility::Fixed => {
+                    hints.insert(PubGrubHint::BuildPrereleaseRequested {
+                        name: name.clone(),
+                        range: set.clone(),
+                    });
+                }
             }
         } else if let Some(version) = self.available_versions.get(name).and_then(|versions| {
             versions
@@ -987,11 +996,19 @@ impl PubGrubReportFormatter<'_> {
                 .find(|version| set.contains(version))
         }) {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
-                hints.insert(PubGrubHint::PrereleaseAvailable {
-                    package: name.clone(),
-                    version: version.clone(),
-                });
+            match options.flexibility {
+                Flexibility::Configurable => {
+                    hints.insert(PubGrubHint::PrereleaseAvailable {
+                        package: name.clone(),
+                        version: version.clone(),
+                    });
+                }
+                Flexibility::Fixed => {
+                    hints.insert(PubGrubHint::BuildPrereleaseAvailable {
+                        package: name.clone(),
+                        version: version.clone(),
+                    });
+                }
             }
         }
     }
@@ -1007,9 +1024,23 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
     },
+    /// The resolver runs with fixed options (e.g., for build environments) and requires explicit
+    /// pre-release opt-in for a package that only has pre-releases available.
+    BuildPrereleaseAvailable {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+    },
     /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
     /// package.
     PrereleaseRequested {
+        name: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        range: Range<Version>,
+    },
+    /// A requirement included a pre-release marker, but the resolver runs with fixed options
+    /// (e.g., for build environments) and cannot enable pre-releases automatically.
+    BuildPrereleaseRequested {
         name: PackageName,
         // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
@@ -1159,7 +1190,13 @@ enum PubGrubHintCore {
     PrereleaseAvailable {
         package: PackageName,
     },
+    BuildPrereleaseAvailable {
+        package: PackageName,
+    },
     PrereleaseRequested {
+        package: PackageName,
+    },
+    BuildPrereleaseRequested {
         package: PackageName,
     },
     NoIndex,
@@ -1228,8 +1265,14 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
+            PubGrubHint::BuildPrereleaseAvailable { package, .. } => {
+                Self::BuildPrereleaseAvailable { package }
+            }
             PubGrubHint::PrereleaseRequested { name: package, .. } => {
                 Self::PrereleaseRequested { package }
+            }
+            PubGrubHint::BuildPrereleaseRequested { name: package, .. } => {
+                Self::BuildPrereleaseRequested { package }
             }
             PubGrubHint::NoIndex => Self::NoIndex,
             PubGrubHint::Offline => Self::Offline,
@@ -1314,6 +1357,18 @@ impl std::fmt::Display for PubGrubHint {
                     "--prerelease=allow".green(),
                 )
             }
+            Self::BuildPrereleaseAvailable { package, version } => {
+                let spec = format!("{package}>={version}");
+                write!(
+                    f,
+                    "{}{} Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically.\n    Add {} to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    version.cyan(),
+                    spec.cyan(),
+                )
+            }
             Self::PrereleaseRequested { name, range } => {
                 write!(
                     f,
@@ -1323,6 +1378,17 @@ impl std::fmt::Display for PubGrubHint {
                     name.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     "--prerelease=allow".green(),
+                )
+            }
+            Self::BuildPrereleaseRequested { name, range } => {
+                write!(
+                    f,
+                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.\n    Add {} to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    name.cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                 )
             }
             Self::NoIndex => {
