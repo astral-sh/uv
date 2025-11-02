@@ -1361,7 +1361,7 @@ impl std::fmt::Display for PubGrubHint {
                 let spec = format!("{package}>={version}");
                 write!(
                     f,
-                    "{}{} Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically.\n    Add {} to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "{}{} Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically. Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
@@ -1383,7 +1383,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::BuildPrereleaseRequested { name, range } => {
                 write!(
                     f,
-                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.\n    Add {} to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     name.cyan(),

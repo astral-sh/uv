@@ -3709,7 +3709,7 @@ fn build_prerelease_hint() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         command,
-        @r###"
+        @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3722,9 +3722,8 @@ fn build_prerelease_hint() -> Result<()> {
       ╰─▶ Because only transitive-package-only-prereleases-in-range-b<0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
           And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically.
-              Add transitive-package-only-prereleases-in-range-b>=1.0.0a1 to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
-    "###
+          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    "
     );
 
     Ok(())
