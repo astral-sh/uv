@@ -4781,12 +4781,12 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.23.4"
+version = "0.23.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7211ff1b8f0d3adae1663b7da9ffe396eabe1ca25f0b0bee42b0da29a9ddce93"
+checksum = "6485ef6d0d9b5d0ec17244ff7eb05310113c3f316f2d14200d4de56b3cb98f8d"
 dependencies = [
  "indexmap",
- "serde",
+ "serde_core",
  "serde_spanned",
  "toml_datetime 0.7.3",
  "toml_parser",
@@ -5242,7 +5242,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -5470,7 +5470,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "uv-cache-key",
  "uv-configuration",
@@ -6290,7 +6290,7 @@ dependencies = [
  "serde",
  "serde-untagged",
  "thiserror 2.0.17",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "url",
  "uv-cache-key",
@@ -6473,7 +6473,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "url",
  "uv-cache-key",
@@ -6615,7 +6615,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.17",
  "toml",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "uv-cache",
  "uv-dirs",
@@ -6746,7 +6746,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "toml",
- "toml_edit 0.23.4",
+ "toml_edit 0.23.7",
  "tracing",
  "uv-build-backend",
  "uv-cache-key",
