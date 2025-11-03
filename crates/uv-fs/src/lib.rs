@@ -680,7 +680,10 @@ impl LockedFile {
         );
         match file.file().try_lock_exclusive() {
             Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
+                debug!(
+                    "Acquired lock for `{resource}` at `{}`",
+                    file.path().user_display()
+                );
                 Ok(Self(file))
             }
             Err(err) => {
@@ -701,7 +704,10 @@ impl LockedFile {
                     ))
                 })?;
 
-                debug!("Acquired lock for `{resource}`");
+                debug!(
+                    "Acquired lock for `{resource}` at `{}`",
+                    file.path().user_display()
+                );
                 Ok(Self(file))
             }
         }
@@ -715,7 +721,10 @@ impl LockedFile {
         );
         match file.file().try_lock_exclusive() {
             Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
+                debug!(
+                    "Acquired lock for `{resource}` at `{}`",
+                    file.path().user_display()
+                );
                 Some(Self(file))
             }
             Err(err) => {
