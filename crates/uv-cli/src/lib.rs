@@ -768,6 +768,7 @@ impl TypedValueParser for VersionBumpSpecValueParser {
                 "`--bump` values must be valid UTF-8",
             )
         })?;
+
         VersionBumpSpec::from_str(raw)
             .map_err(|message| clap::Error::raw(ErrorKind::InvalidValue, message))
     }
@@ -776,7 +777,7 @@ impl TypedValueParser for VersionBumpSpecValueParser {
         Some(Box::new(
             VersionBump::value_variants()
                 .iter()
-                .filter_map(|variant| variant.to_possible_value()),
+                .filter_map(ValueEnum::to_possible_value),
         ))
     }
 }
