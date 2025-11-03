@@ -185,14 +185,17 @@ impl TestContext {
                 self.extra_env.push((EnvVars::NO_COLOR.into(), "1".into()));
             }
             "always" => {
-                self.extra_env.push((EnvVars::FORCE_COLOR.into(), "1".into()));
+                self.extra_env
+                    .push((EnvVars::FORCE_COLOR.into(), "1".into()));
             }
             "auto" => {
                 // Auto is the default behavior, but we explicitly remove color-related env vars
                 // to ensure consistent behavior across environments
                 self.extra_env.push((EnvVars::NO_COLOR.into(), "".into()));
-                self.extra_env.push((EnvVars::FORCE_COLOR.into(), "".into()));
-                self.extra_env.push((EnvVars::CLICOLOR_FORCE.into(), "".into()));
+                self.extra_env
+                    .push((EnvVars::FORCE_COLOR.into(), "".into()));
+                self.extra_env
+                    .push((EnvVars::CLICOLOR_FORCE.into(), "".into()));
             }
             _ => {
                 panic!("Invalid color value: {color}. Use 'never', 'always', or 'auto'");
