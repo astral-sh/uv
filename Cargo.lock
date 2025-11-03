@@ -870,7 +870,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
  "windows-sys 0.61.0",
 ]
 
@@ -2057,7 +2057,7 @@ checksum = "ade6dfcba0dfb62ad59e59e7241ec8912af34fd29e0e743e3db992bd278e8b65"
 dependencies = [
  "console 0.16.1",
  "portable-atomic",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
  "unit-prefix",
  "web-time",
 ]
@@ -4523,7 +4523,7 @@ checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
 dependencies = [
  "smawk",
  "unicode-linebreak",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -5088,9 +5088,9 @@ checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a1a07cc7db3810833284e8d372ccdc6da29741639ecc70c9ec107df0fa6154c"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unit-prefix"
@@ -5247,7 +5247,7 @@ dependencies = [
  "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
  "url",
  "uuid",
  "uv-auth",
@@ -6150,7 +6150,7 @@ dependencies = [
  "rkyv",
  "serde",
  "tracing",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
  "unscanny",
  "uv-cache-key",
  "version-ranges",
@@ -6175,7 +6175,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "tracing-test",
- "unicode-width 0.2.1",
+ "unicode-width 0.2.2",
  "url",
  "uv-cache-key",
  "uv-fs",
