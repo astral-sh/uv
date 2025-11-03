@@ -170,6 +170,8 @@ pub enum PythonVariant {
     Debug,
     Freethreaded,
     FreethreadedDebug,
+    Gil,
+    GilDebug,
 }
 
 /// A Python discovery version request.
@@ -1685,18 +1687,34 @@ impl PythonVariant {
             Self::Debug => interpreter.debug_enabled(),
             Self::Freethreaded => interpreter.gil_disabled(),
             Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
+            Self::Gil => !interpreter.gil_disabled(),
+            Self::GilDebug => !interpreter.gil_disabled() && interpreter.debug_enabled(),
         }
     }
 
     /// Return the executable suffix for the variant, e.g., `t` for `python3.13t`.
     ///
     /// Returns an empty string for the default Python variant.
-    pub fn suffix(self) -> &'static str {
+    pub fn executable_suffix(self) -> &'static str {
         match self {
             Self::Default => "",
             Self::Debug => "d",
             Self::Freethreaded => "t",
             Self::FreethreadedDebug => "td",
+            Self::Gil => "",
+            Self::GilDebug => "d",
+        }
+    }
+
+    /// Return the suffix for display purposes, e.g., `+gil`.
+    pub fn display_suffix(self) -> &'static str {
+        match self {
+            Self::Default => "",
+            Self::Debug => "+debug",
+            Self::Freethreaded => "+freethreaded",
+            Self::FreethreadedDebug => "+freethreaded+debug",
+            Self::Gil => "+gil",
+            Self::GilDebug => "+gil+debug",
         }
     }
 
@@ -1704,22 +1722,22 @@ impl PythonVariant {
     /// `python3.13d` or `python3.13`.
     pub fn lib_suffix(self) -> &'static str {
         match self {
-            Self::Default | Self::Debug => "",
+            Self::Default | Self::Debug | Self::Gil | Self::GilDebug => "",
             Self::Freethreaded | Self::FreethreadedDebug => "t",
         }
     }
 
     pub fn is_freethreaded(self) -> bool {
         match self {
-            Self::Default | Self::Debug => false,
+            Self::Default | Self::Debug | Self::Gil | Self::GilDebug => false,
             Self::Freethreaded | Self::FreethreadedDebug => true,
         }
     }
 
     pub fn is_debug(self) -> bool {
         match self {
-            Self::Default | Self::Freethreaded => false,
-            Self::Debug | Self::FreethreadedDebug => true,
+            Self::Default | Self::Freethreaded | Self::Gil => false,
+            Self::Debug | Self::FreethreadedDebug | Self::GilDebug => true,
         }
     }
 }
@@ -2450,7 +2468,7 @@ impl fmt::Display for ExecutableName {
         if let Some(prerelease) = &self.prerelease {
             write!(f, "{prerelease}")?;
         }
-        f.write_str(self.variant.suffix())?;
+        f.write_str(self.variant.executable_suffix())?;
         f.write_str(EXE_SUFFIX)?;
         Ok(())
     }
@@ -3067,6 +3085,8 @@ impl FromStr for PythonVariant {
             "t" | "freethreaded" => Ok(Self::Freethreaded),
             "d" | "debug" => Ok(Self::Debug),
             "td" | "freethreaded+debug" => Ok(Self::FreethreadedDebug),
+            "gil" => Ok(Self::Gil),
+            "gil+debug" => Ok(Self::GilDebug),
             "" => Ok(Self::Default),
             _ => Err(()),
         }
@@ -3080,6 +3100,8 @@ impl fmt::Display for PythonVariant {
             Self::Debug => f.write_str("debug"),
             Self::Freethreaded => f.write_str("freethreaded"),
             Self::FreethreadedDebug => f.write_str("freethreaded+debug"),
+            Self::Gil => f.write_str("gil"),
+            Self::GilDebug => f.write_str("gil+debug"),
         }
     }
 }
@@ -3109,15 +3131,15 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
-            Self::Major(major, variant) => write!(f, "{major}{}", variant.suffix()),
+            Self::Major(major, variant) => write!(f, "{major}{}", variant.display_suffix()),
             Self::MajorMinor(major, minor, variant) => {
-                write!(f, "{major}.{minor}{}", variant.suffix())
+                write!(f, "{major}.{minor}{}", variant.display_suffix())
             }
             Self::MajorMinorPatch(major, minor, patch, variant) => {
-                write!(f, "{major}.{minor}.{patch}{}", variant.suffix())
+                write!(f, "{major}.{minor}.{patch}{}", variant.display_suffix())
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
-                write!(f, "{major}.{minor}{prerelease}{}", variant.suffix())
+                write!(f, "{major}.{minor}{prerelease}{}", variant.display_suffix())
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
