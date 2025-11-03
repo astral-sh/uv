@@ -59,13 +59,15 @@ For backwards compatibility, enabling preview features that do not exist will wa
 
 ## Configuration precedence
 
-When multiple preview configuration methods are used, the following precedence applies (highest to lowest):
+When multiple preview configuration methods are used, the following precedence applies (highest to
+lowest):
 
 1. Command line flags (`--no-preview`, `--preview`, `--preview-features`)
 2. Environment variables (`UV_PREVIEW`, `UV_PREVIEW_FEATURES`)
 3. Configuration files (`pyproject.toml`, `uv.toml`)
 
-For example, if you set `preview = true` in configuration but use `--no-preview` on the command line, preview features will be disabled.
+For example, if you set `preview = true` in configuration but use `--no-preview` on the command
+line, preview features will be disabled.
 
 ## Using preview features
 
