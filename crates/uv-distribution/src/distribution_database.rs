@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -20,8 +20,8 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, SourceDist, ToUrlError,
+    BuildInfo, BuildableSource, BuiltDist, CompatibleDist, Dist, File, HashPolicy, Hashed,
+    IndexUrl, InstalledDist, Name, RegistryBuiltDist, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -32,6 +32,7 @@ use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::remote::RemoteCacheResolver;
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
 
@@ -50,6 +51,7 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
+    resolver: RemoteCacheResolver<'a, Context>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -63,6 +65,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
+            resolver: RemoteCacheResolver::new(build_context),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
         }
@@ -379,6 +382,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // If the metadata is available in a remote cache, fetch it.
+        if let Ok(Some(wheel)) = self.get_remote_wheel(dist, tags, hashes).await {
+            return Ok(wheel);
+        }
+
+        // Otherwise, build the wheel locally.
+        self.build_wheel_inner(dist, tags, hashes).await
+    }
+
+    /// Convert a source distribution into a wheel, fetching it from the cache or building it if
+    /// necessary.
+    async fn build_wheel_inner(
+        &self,
+        dist: &SourceDist,
+        tags: &Tags,
+        hashes: HashPolicy<'_>,
+    ) -> Result<LocalWheel, Error> {
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
@@ -544,6 +564,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // Resolve the source distribution to a precise revision (i.e., a specific Git commit).
+        self.builder.resolve_revision(source, &self.client).await?;
+
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
             if let Some(metadata) = self
@@ -551,14 +574,25 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .dependency_metadata()
                 .get(dist.name(), dist.version())
             {
-                // If we skipped the build, we should still resolve any Git dependencies to precise
-                // commits.
-                self.builder.resolve_revision(source, &self.client).await?;
-
                 return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
 
+        // If the metadata is available in a remote cache, fetch it.
+        if let Ok(Some(metadata)) = self.get_remote_metadata(source, hashes).await {
+            return Ok(metadata);
+        }
+
+        // Otherwise, retrieve the metadata from the source distribution.
+        self.build_wheel_metadata_inner(source, hashes).await
+    }
+
+    /// Build the wheel metadata for a source distribution, or fetch it from the cache if possible.
+    async fn build_wheel_metadata_inner(
+        &self,
+        source: &BuildableSource<'_>,
+        hashes: HashPolicy<'_>,
+    ) -> Result<ArchiveMetadata, Error> {
         let metadata = self
             .builder
             .download_and_build_metadata(source, hashes, &self.client)
@@ -566,6 +600,88 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await?;
 
         Ok(metadata)
+    }
+
+    /// Fetch a wheel from a remote cache, if available.
+    async fn get_remote_wheel(
+        &self,
+        source: &SourceDist,
+        tags: &Tags,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<LocalWheel>, Error> {
+        let Some(index) = self
+            .resolver
+            .get_cached_distribution(&BuildableSource::Dist(source), Some(tags), &self.client)
+            .await?
+        else {
+            return Ok(None);
+        };
+        for prioritized_dist in index.iter() {
+            let Some(compatible_dist) = prioritized_dist.get() else {
+                continue;
+            };
+            match compatible_dist {
+                CompatibleDist::InstalledDist(..) => {}
+                CompatibleDist::SourceDist { sdist, .. } => {
+                    debug!("Found cached remote source distribution for: {source}");
+                    let dist = SourceDist::Registry(sdist.clone());
+                    return self.build_wheel_inner(&dist, tags, hashes).await.map(Some);
+                }
+                CompatibleDist::CompatibleWheel { wheel, .. }
+                | CompatibleDist::IncompatibleWheel { wheel, .. } => {
+                    debug!("Found cached remote built distribution for: {source}");
+                    let dist = BuiltDist::Registry(RegistryBuiltDist {
+                        wheels: vec![wheel.clone()],
+                        best_wheel_index: 0,
+                        sdist: None,
+                    });
+                    return self.get_wheel(&dist, hashes).await.map(Some);
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Fetch the wheel metadata from a remote cache, if available.
+    async fn get_remote_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<ArchiveMetadata>, Error> {
+        let Some(index) = self
+            .resolver
+            .get_cached_distribution(source, None, &self.client)
+            .await?
+        else {
+            return Ok(None);
+        };
+        for prioritized_dist in index.iter() {
+            let Some(compatible_dist) = prioritized_dist.get() else {
+                continue;
+            };
+            match compatible_dist {
+                CompatibleDist::InstalledDist(..) => {}
+                CompatibleDist::SourceDist { sdist, .. } => {
+                    debug!("Found cached remote source distribution for: {source}");
+                    let dist = SourceDist::Registry(sdist.clone());
+                    return self
+                        .build_wheel_metadata_inner(&BuildableSource::Dist(&dist), hashes)
+                        .await
+                        .map(Some);
+                }
+                CompatibleDist::CompatibleWheel { wheel, .. }
+                | CompatibleDist::IncompatibleWheel { wheel, .. } => {
+                    debug!("Found cached remote built distribution for: {source}");
+                    let dist = BuiltDist::Registry(RegistryBuiltDist {
+                        wheels: vec![wheel.clone()],
+                        best_wheel_index: 0,
+                        sdist: None,
+                    });
+                    return self.get_wheel_metadata(&dist, hashes).await.map(Some);
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

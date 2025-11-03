@@ -1567,6 +1567,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
+        // STOPSHIP(charlie): Here, we can fetch the pre-built wheel.
+
         // Fetch the Git repository.
         let fetch = self
             .build_context

@@ -730,7 +730,10 @@ impl RegistryClient {
     pub async fn fetch_simple_index(
         &self,
         index_url: &IndexUrl,
+        download_concurrency: &Semaphore,
     ) -> Result<SimpleIndexMetadata, Error> {
+        let _permit = download_concurrency.acquire().await;
+
         // Format the URL for PyPI.
         let mut url = index_url.url().clone();
         url.path_segments_mut()
@@ -1332,15 +1335,10 @@ pub struct VersionSourceDist {
 #[rkyv(derive(Debug))]
 pub struct SimpleIndexMetadata {
     /// The list of project names available in the index.
-    projects: Vec<PackageName>,
+    pub projects: Vec<PackageName>,
 }
 
 impl SimpleIndexMetadata {
-    /// Iterate over the projects in the index.
-    pub fn iter(&self) -> impl Iterator<Item = &PackageName> {
-        self.projects.iter()
-    }
-
     /// Create a [`SimpleIndexMetadata`] from a [`PypiSimpleIndex`].
     fn from_pypi_index(index: PypiSimpleIndex) -> Self {
         Self {
