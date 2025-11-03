@@ -182,6 +182,7 @@ pub enum DefaultGroups {
     List(Vec<GroupName>),
 }
 
+#[cfg(feature = "schemars")]
 impl schemars::JsonSchema for DefaultGroups {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("DefaultGroups")
