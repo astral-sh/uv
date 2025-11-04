@@ -326,7 +326,7 @@ impl PyVenvConfiguration {
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsStr, fs};
+    use std::ffi::OsStr;
 
     use indoc::indoc;
     use temp_env::with_vars;
@@ -343,19 +343,18 @@ mod tests {
         fs::create_dir_all(&conda_meta).unwrap();
         fs::write(conda_meta.join("pixi"), []).unwrap();
 
-        with_vars(
-            &[
-                (EnvVars::CONDA_ROOT, None),
-                (EnvVars::CONDA_PREFIX, Some(prefix.as_os_str())),
-                (EnvVars::CONDA_DEFAULT_ENV, Some(OsStr::new("example"))),
-            ],
-            || {
-                assert_eq!(
-                    CondaEnvironmentKind::from_prefix_path(prefix),
-                    CondaEnvironmentKind::Child
-                );
-            },
-        );
+        let vars = [
+            (EnvVars::CONDA_ROOT, None),
+            (EnvVars::CONDA_PREFIX, Some(prefix.as_os_str())),
+            (EnvVars::CONDA_DEFAULT_ENV, Some(OsStr::new("example"))),
+        ];
+
+        with_vars(&vars, || {
+            assert_eq!(
+                CondaEnvironmentKind::from_prefix_path(prefix),
+                CondaEnvironmentKind::Child
+            );
+        });
     }
 
     #[test]
