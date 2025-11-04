@@ -126,7 +126,7 @@ pub(crate) async fn sync(
 
             for name in &package {
                 if !project.workspace().packages().contains_key(name) {
-                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace",));
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
                 }
             }
 
