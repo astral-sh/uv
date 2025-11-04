@@ -867,23 +867,14 @@
         {
           "description": "All groups are defaulted",
           "type": "string",
-          "const": "All"
+          "const": "all"
         },
         {
           "description": "A list of groups",
-          "type": "object",
-          "properties": {
-            "List": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/GroupName"
-              }
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "List"
-          ]
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GroupName"
+          }
         }
       ]
     },

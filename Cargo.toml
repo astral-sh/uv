@@ -112,7 +112,6 @@ encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.11.0" }
 flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }
 fs-err = { version = "3.0.0", features = ["tokio"] }
-fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
@@ -171,7 +170,7 @@ serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
-spdx = { version = "0.10.6" }
+spdx = { version = "0.12.0" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }

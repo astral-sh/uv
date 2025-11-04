@@ -757,7 +757,6 @@ pub enum CacheCommand {
     Prune(PruneArgs),
     /// Show the cache directory.
     ///
-    ///
     /// By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
     /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
@@ -770,6 +769,12 @@ pub enum CacheCommand {
     /// Note that it is important for performance for the cache directory to be located on the same
     /// file system as the Python environment uv is operating on.
     Dir,
+    /// Show the cache size.
+    ///
+    /// Displays the total size of the cache directory. This includes all downloaded and built
+    /// wheels, source distributions, and other cached data. By default, outputs the size in raw
+    /// bytes; use `--human` for human-readable output.
+    Size(SizeArgs),
 }
 
 #[derive(Args, Debug)]
@@ -809,6 +814,13 @@ pub struct PruneArgs {
     /// `--force` is used, `uv cache prune` will proceed without taking a lock.
     #[arg(long)]
     pub force: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct SizeArgs {
+    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
+    #[arg(long = "human", short = 'H', alias = "human-readable")]
+    pub human: bool,
 }
 
 #[derive(Args)]
@@ -5265,7 +5277,12 @@ pub struct ToolUpgradeArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
     pub no_sources: bool,
 
     #[command(flatten)]
@@ -6183,7 +6200,12 @@ pub struct InstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options"
+    )]
     pub no_sources: bool,
 }
 
@@ -6371,7 +6393,12 @@ pub struct ResolverArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
     pub no_sources: bool,
 }
 
@@ -6609,7 +6636,12 @@ pub struct ResolverInstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
     pub no_sources: bool,
 }
 
