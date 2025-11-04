@@ -1513,9 +1513,9 @@ uv sync [OPTIONS]
 <ul>
 <li><code>text</code>:  Display the result in a human-readable format</li>
 <li><code>json</code>:  Display the result in JSON format</li>
-</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
-<p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
-<p>If the workspace member does not exist, uv will exit with an error.</p>
+</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for specific packages in the workspace.</p>
+<p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member packages.</p>
+<p>If any workspace member does not exist, uv will exit with an error.</p>
 </dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>

@@ -3669,14 +3669,14 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "package")]
     pub all_packages: bool,
 
-    /// Sync for a specific package in the workspace.
+    /// Sync for specific packages in the workspace.
     ///
     /// The workspace's environment (`.venv`) is updated to reflect the subset of dependencies
-    /// declared by the specified workspace member package.
+    /// declared by the specified workspace member packages.
     ///
-    /// If the workspace member does not exist, uv will exit with an error.
+    /// If any workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages")]
-    pub package: Option<PackageName>,
+    pub package: Vec<PackageName>,
 
     /// Sync the environment for a Python script, rather than the current project.
     ///

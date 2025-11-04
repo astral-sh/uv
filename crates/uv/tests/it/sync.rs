@@ -268,6 +268,115 @@ fn package() -> Result<()> {
     Ok(())
 }
 
+/// Sync multiple packages within a workspace.
+#[test]
+fn multiple_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo", "bar", "baz"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
+        baz = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("baz")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+        )?;
+
+    // Sync `foo` and `bar`.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + bar==0.1.0 (from file://[TEMP_DIR]/packages/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/packages/foo)
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Sync `foo`, `bar`, and `baz`.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar")
+        .arg("--package").arg("baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + baz==0.1.0 (from file://[TEMP_DIR]/packages/baz)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Test json output
 #[test]
 fn sync_json() -> Result<()> {
