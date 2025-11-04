@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-use uv_fs::{LockedFile, with_added_extension};
+use uv_fs::LockedFile;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 
@@ -238,7 +238,7 @@ impl TextCredentialStore {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let lock = with_added_extension(path, ".lock");
+        let lock = path.with_added_extension(".lock");
         Ok(LockedFile::acquire_blocking(lock, "credentials store")?)
     }
 
