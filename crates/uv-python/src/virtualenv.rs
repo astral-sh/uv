@@ -349,7 +349,7 @@ mod tests {
             (EnvVars::CONDA_DEFAULT_ENV, Some(OsStr::new("example"))),
         ];
 
-        with_vars(&vars, || {
+        with_vars(vars, || {
             assert_eq!(
                 CondaEnvironmentKind::from_prefix_path(prefix),
                 CondaEnvironmentKind::Child
