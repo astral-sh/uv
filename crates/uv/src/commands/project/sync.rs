@@ -447,8 +447,7 @@ impl Outcome {
     fn lock(&self) -> &Lock {
         match self {
             Self::Success(lock) => match lock {
-                LockResult::Changed(_, lock) => lock,
-                LockResult::Unchanged(lock) => lock,
+                LockResult::Changed(_, lock) | LockResult::Unchanged(lock) => lock,
             },
             Self::LockMismatch(_prev, cur, _lock_source) => cur,
         }

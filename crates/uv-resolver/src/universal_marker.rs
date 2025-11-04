@@ -694,9 +694,9 @@ impl<'a> ParsedRawExtra<'a> {
 
     fn package(&self) -> &'a str {
         match self {
-            Self::Project { package, .. } => package,
-            Self::Extra { package, .. } => package,
-            Self::Group { package, .. } => package,
+            Self::Project { package, .. }
+            | Self::Extra { package, .. }
+            | Self::Group { package, .. } => package,
         }
     }
 }

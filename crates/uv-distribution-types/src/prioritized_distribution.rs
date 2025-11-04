@@ -654,10 +654,10 @@ impl<'a> CompatibleDist<'a> {
     /// wheel.
     pub fn wheel(&self) -> Option<&RegistryBuiltWheel> {
         match self {
-            Self::InstalledDist(_) => None,
-            Self::SourceDist { .. } => None,
-            Self::CompatibleWheel { wheel, .. } => Some(wheel),
-            Self::IncompatibleWheel { wheel, .. } => Some(wheel),
+            Self::InstalledDist(_) | Self::SourceDist { .. } => None,
+            Self::CompatibleWheel { wheel, .. } | Self::IncompatibleWheel { wheel, .. } => {
+                Some(wheel)
+            }
         }
     }
 }

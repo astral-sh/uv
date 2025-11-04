@@ -1461,11 +1461,11 @@ impl std::ops::Deref for ProjectEnvironment {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Existing(environment) => environment,
-            Self::Replaced(environment) => environment,
-            Self::Created(environment) => environment,
-            Self::WouldReplace(_, environment, _) => environment,
-            Self::WouldCreate(_, environment, _) => environment,
+            Self::Existing(environment)
+            | Self::Replaced(environment)
+            | Self::Created(environment)
+            | Self::WouldReplace(_, environment, _)
+            | Self::WouldCreate(_, environment, _) => environment,
         }
     }
 }
@@ -1635,11 +1635,10 @@ impl ScriptEnvironment {
     #[allow(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
-            Self::Existing(environment) => Ok(environment),
-            Self::Replaced(environment) => Ok(environment),
-            Self::Created(environment) => Ok(environment),
-            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
-            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+            Self::Existing(environment)
+            | Self::Replaced(environment)
+            | Self::Created(environment) => Ok(environment),
+            Self::WouldReplace(..) | Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
         }
     }
 
@@ -1657,11 +1656,11 @@ impl std::ops::Deref for ScriptEnvironment {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Existing(environment) => environment,
-            Self::Replaced(environment) => environment,
-            Self::Created(environment) => environment,
-            Self::WouldReplace(_, environment, _) => environment,
-            Self::WouldCreate(_, environment, _) => environment,
+            Self::Existing(environment)
+            | Self::Replaced(environment)
+            | Self::Created(environment)
+            | Self::WouldReplace(_, environment, _)
+            | Self::WouldCreate(_, environment, _) => environment,
         }
     }
 }
@@ -2326,7 +2325,7 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
     let hasher = HashStrategy::default();
-    let preferences = Vec::default();
+    let preferences = vec![];
 
     // Determine the tags to use for resolution.
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
