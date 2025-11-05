@@ -1298,9 +1298,9 @@ mod tests {
     fn import_names_empty_list() {
         let temp_dir = TempDir::new().unwrap();
         let contents = extend_project(
-            r#"
+            r"
             import-names = []
-        "#,
+        ",
         );
         let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
@@ -1310,7 +1310,7 @@ mod tests {
         Metadata-Version: 2.5
         Name: hello-world
         Version: 0.1.0
-        Import-Name: 
+        Import-Name:
         "###);
     }
 
