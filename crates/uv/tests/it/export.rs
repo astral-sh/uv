@@ -4901,7 +4901,7 @@ fn cyclonedx_export_basic() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = ["urllib3==2.2.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -4939,52 +4939,27 @@ fn cyclonedx_export_basic() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-4@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-4@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0"
+            "urllib3-2@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-4@1.3.1",
+          "ref": "urllib3-2@2.2.0",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5564,7 +5539,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
         dependencies = ["typing-extensions"]
 
         [project.optional-dependencies]
-        async = ["anyio==3.7.0"]
+        url = ["urllib3==2.2.0"]
         pytest = ["iniconfig"]
 
         [build-system]
@@ -5623,7 +5598,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5644,7 +5619,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
         dependencies = ["typing-extensions"]
 
         [project.optional-dependencies]
-        async = ["anyio==3.7.0"]
+        url = ["urllib3==2.2.0"]
         pytest = ["iniconfig"]
 
         [build-system]
@@ -5683,76 +5658,51 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-4@2.0.0",
+          "bom-ref": "iniconfig-2@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-5@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
-        },
-        {
-          "type": "library",
-          "bom-ref": "typing-extensions-6@4.10.0",
+          "bom-ref": "typing-extensions-3@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-5@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-4@2.0.0",
+          "ref": "iniconfig-2@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0",
-            "iniconfig-4@2.0.0",
-            "typing-extensions-6@4.10.0"
+            "iniconfig-2@2.0.0",
+            "typing-extensions-3@4.10.0",
+            "urllib3-4@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-5@1.3.1",
+          "ref": "typing-extensions-3@4.10.0",
           "dependsOn": []
         },
         {
-          "ref": "typing-extensions-6@4.10.0",
+          "ref": "urllib3-4@2.2.0",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5770,7 +5720,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "child1", "child2"]
+        dependencies = ["urllib3==2.2.0", "child1", "child2"]
 
         [tool.uv.workspace]
         members = ["child1", "packages/*"]
@@ -5845,14 +5795,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "child1-3@0.1.0",
+          "bom-ref": "child1-2@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -5864,7 +5807,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "child2-4@0.2.9",
+          "bom-ref": "child2-3@0.2.9",
           "name": "child2",
           "version": "0.2.9",
           "properties": [
@@ -5876,68 +5819,50 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-5@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-6@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-7@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-5@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
+          "ref": "child1-2@0.1.0",
           "dependsOn": [
-            "idna-5@3.6",
-            "sniffio-7@1.3.1"
+            "iniconfig-4@2.0.0"
           ]
         },
         {
-          "ref": "child1-3@0.1.0",
-          "dependsOn": [
-            "iniconfig-6@2.0.0"
-          ]
-        },
-        {
-          "ref": "child2-4@0.2.9",
+          "ref": "child2-3@0.2.9",
           "dependsOn": []
         },
         {
-          "ref": "idna-5@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-6@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0",
-            "child1-3@0.1.0",
-            "child2-4@0.2.9"
+            "child1-2@0.1.0",
+            "child2-3@0.2.9",
+            "urllib3-5@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-7@1.3.1",
+          "ref": "urllib3-5@2.2.0",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5955,7 +5880,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "child"]
+        dependencies = ["urllib3==2.2.0", "child"]
 
         [tool.uv.workspace]
         members = ["child"]
@@ -6034,7 +5959,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6076,7 +6001,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         dependencies = ["typing-extensions"]
 
         [project.optional-dependencies]
-        async = ["anyio==3.7.0"]
+        url = ["urllib3==2.2.0"]
         test = ["iniconfig"]
 
         [build-system]
@@ -6153,7 +6078,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6223,7 +6148,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6241,7 +6166,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "child"]
+        dependencies = ["urllib3==2.2.0", "child"]
 
         [tool.uv.workspace]
         members = ["child"]
@@ -6306,21 +6231,14 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         ],
         "component": {
           "type": "library",
-          "bom-ref": "project-7",
+          "bom-ref": "project-5",
           "name": "project"
         }
       },
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "child-3@0.1.0",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -6332,24 +6250,17 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-4@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-5@2.0.0",
+          "bom-ref": "iniconfig-3@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-6@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         },
         {
           "type": "library",
@@ -6360,41 +6271,30 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": [
-            "idna-4@3.6",
-            "sniffio-6@1.3.1"
+            "iniconfig-3@2.0.0"
           ]
         },
         {
-          "ref": "child-3@0.1.0",
-          "dependsOn": [
-            "iniconfig-5@2.0.0"
-          ]
-        },
-        {
-          "ref": "idna-4@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-5@2.0.0",
+          "ref": "iniconfig-3@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0",
-            "child-3@0.1.0"
+            "child-2@0.1.0",
+            "urllib3-4@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-6@1.3.1",
+          "ref": "urllib3-4@2.2.0",
           "dependsOn": []
         },
         {
-          "ref": "project-7",
+          "ref": "project-5",
           "dependsOn": [
-            "child-3@0.1.0",
+            "child-2@0.1.0",
             "project-1@0.1.0"
           ]
         }
@@ -6418,7 +6318,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = ["urllib3==2.2.0"]
 
         [tool.uv.workspace]
         members = ["child1", "child2"]
@@ -6481,21 +6381,14 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         ],
         "component": {
           "type": "library",
-          "bom-ref": "project-8",
+          "bom-ref": "project-7",
           "name": "project"
         }
       },
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "child1-3@0.1.0",
+          "bom-ref": "child1-2@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -6507,7 +6400,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "child2-4@0.2.0",
+          "bom-ref": "child2-3@0.2.0",
           "name": "child2",
           "version": "0.2.0",
           "properties": [
@@ -6519,24 +6412,24 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-5@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-6@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-7@1.3.1",
+          "bom-ref": "sniffio-5@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-6@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         },
         {
           "type": "library",
@@ -6547,54 +6440,47 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
+          "ref": "child1-2@0.1.0",
           "dependsOn": [
-            "idna-5@3.6",
-            "sniffio-7@1.3.1"
+            "iniconfig-4@2.0.0"
           ]
         },
         {
-          "ref": "child1-3@0.1.0",
+          "ref": "child2-3@0.2.0",
           "dependsOn": [
-            "iniconfig-6@2.0.0"
+            "sniffio-5@1.3.1"
           ]
         },
         {
-          "ref": "child2-4@0.2.0",
-          "dependsOn": [
-            "sniffio-7@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-5@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-6@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0"
+            "urllib3-6@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-7@1.3.1",
+          "ref": "sniffio-5@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "project-8",
+          "ref": "urllib3-6@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-7",
           "dependsOn": [
-            "child1-3@0.1.0",
-            "child2-4@0.2.0",
+            "child1-2@0.1.0",
+            "child2-3@0.2.0",
             "project-1@0.1.0"
           ]
         }
       ]
     }
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 6 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6613,7 +6499,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["child1", "anyio==3.7.0"]
+        dependencies = ["child1", "urllib3==2.2.0"]
 
         [tool.uv.workspace]
         members = ["child1", "child2"]
@@ -6690,14 +6576,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "child1-3@0.1.0",
+          "bom-ref": "child1-2@0.1.0",
           "name": "child1",
           "version": "0.1.0",
           "properties": [
@@ -6709,7 +6588,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "child2-4@0.2.0",
+          "bom-ref": "child2-3@0.2.0",
           "name": "child2",
           "version": "0.2.0",
           "properties": [
@@ -6721,70 +6600,63 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-5@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-6@2.0.0",
+          "bom-ref": "iniconfig-4@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-7@1.3.1",
+          "bom-ref": "sniffio-5@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-6@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
+          "ref": "child1-2@0.1.0",
           "dependsOn": [
-            "idna-5@3.6",
-            "sniffio-7@1.3.1"
+            "child2-3@0.2.0",
+            "iniconfig-4@2.0.0"
           ]
         },
         {
-          "ref": "child1-3@0.1.0",
+          "ref": "child2-3@0.2.0",
           "dependsOn": [
-            "child2-4@0.2.0",
-            "iniconfig-6@2.0.0"
+            "sniffio-5@1.3.1"
           ]
         },
         {
-          "ref": "child2-4@0.2.0",
-          "dependsOn": [
-            "sniffio-7@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-5@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-6@2.0.0",
+          "ref": "iniconfig-4@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@3.7.0",
-            "child1-3@0.1.0"
+            "child1-2@0.1.0",
+            "urllib3-6@2.2.0"
           ]
         },
         {
-          "ref": "sniffio-7@1.3.1",
+          "ref": "sniffio-5@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-6@2.2.0",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 6 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6802,7 +6674,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio ; sys_platform == 'darwin'", "iniconfig"]
+        dependencies = ["urllib3 ; sys_platform == 'darwin'", "iniconfig"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6840,43 +6712,17 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@4.3.0",
-          "name": "anyio",
-          "version": "4.3.0",
-          "purl": "pkg:pypi/anyio@4.3.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'darwin'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'darwin'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-4@2.0.0",
+          "bom-ref": "iniconfig-2@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-5@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1",
+          "bom-ref": "urllib3-3@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1",
           "properties": [
             {
               "name": "uv:package:marker",
@@ -6887,35 +6733,24 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@4.3.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-5@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-4@2.0.0",
+          "ref": "iniconfig-2@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@4.3.0",
-            "iniconfig-4@2.0.0"
+            "iniconfig-2@2.0.0",
+            "urllib3-3@2.2.1"
           ]
         },
         {
-          "ref": "sniffio-5@1.3.1",
+          "ref": "urllib3-3@2.2.1",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 3 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7545,7 +7380,7 @@ fn cyclonedx_export_group() -> Result<()> {
         dependencies = ["typing-extensions"]
 
         [dependency-groups]
-        foo = ["anyio ; sys_platform == 'darwin'"]
+        foo = ["urllib3 ; sys_platform == 'darwin'"]
         bar = ["iniconfig"]
         dev = ["sniffio"]
         "#,
@@ -7614,7 +7449,7 @@ fn cyclonedx_export_group() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7661,7 +7496,7 @@ fn cyclonedx_export_group() -> Result<()> {
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7694,77 +7529,57 @@ fn cyclonedx_export_group() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@4.3.0",
-          "name": "anyio",
-          "version": "4.3.0",
-          "purl": "pkg:pypi/anyio@4.3.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'darwin'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'darwin'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-4@1.3.1",
+          "bom-ref": "sniffio-2@1.3.1",
           "name": "sniffio",
           "version": "1.3.1",
           "purl": "pkg:pypi/sniffio@1.3.1"
         },
         {
           "type": "library",
-          "bom-ref": "typing-extensions-5@4.10.0",
+          "bom-ref": "typing-extensions-3@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@4.3.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-4@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@4.3.0",
-            "sniffio-4@1.3.1",
-            "typing-extensions-5@4.10.0"
+            "sniffio-2@1.3.1",
+            "typing-extensions-3@4.10.0",
+            "urllib3-4@2.2.1"
           ]
         },
         {
-          "ref": "sniffio-4@1.3.1",
+          "ref": "sniffio-2@1.3.1",
           "dependsOn": []
         },
         {
-          "ref": "typing-extensions-5@4.10.0",
+          "ref": "typing-extensions-3@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-4@2.2.1",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7782,7 +7597,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
         members = []
 
         [dependency-groups]
-        async = ["anyio"]
+        url = ["urllib3"]
         "#,
     )?;
 
@@ -7813,12 +7628,12 @@ fn cyclonedx_export_non_project() -> Result<()> {
     }
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
-    Resolved 3 packages in [TIME]
+    Resolved 1 package in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
     // Export with group specified
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("async"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("url"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7840,47 +7655,22 @@ fn cyclonedx_export_non_project() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-1@4.3.0",
-          "name": "anyio",
-          "version": "4.3.0",
-          "purl": "pkg:pypi/anyio@4.3.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-2@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-3@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-1@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-1@4.3.0",
-          "dependsOn": [
-            "idna-2@3.6",
-            "sniffio-3@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-2@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "sniffio-3@1.3.1",
+          "ref": "urllib3-1@2.2.1",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
-    Resolved 3 packages in [TIME]
+    Resolved 1 package in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7898,7 +7688,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "child"]
+        dependencies = ["urllib3==2.2.0", "child"]
 
         [tool.uv.workspace]
         members = ["child"]
@@ -7929,8 +7719,8 @@ fn cyclonedx_export_no_emit() -> Result<()> {
 
     context.lock().assert().success();
 
-    // Exclude `anyio`.
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("anyio"), @r#"
+    // Exclude `urllib3`.
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("urllib3"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7970,39 +7760,21 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-4@2.0.0",
+          "bom-ref": "iniconfig-3@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-5@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
         }
       ],
       "dependencies": [
         {
           "ref": "child-2@0.1.0",
           "dependsOn": [
-            "iniconfig-4@2.0.0"
+            "iniconfig-3@2.0.0"
           ]
         },
         {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-4@2.0.0",
+          "ref": "iniconfig-3@2.0.0",
           "dependsOn": []
         },
         {
@@ -8010,15 +7782,11 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           "dependsOn": [
             "child-2@0.1.0"
           ]
-        },
-        {
-          "ref": "sniffio-5@1.3.1",
-          "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -8051,14 +7819,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@3.7.0",
-          "name": "anyio",
-          "version": "3.7.0",
-          "purl": "pkg:pypi/anyio@3.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "child-3@0.1.0",
+          "bom-ref": "child-2@0.1.0",
           "name": "child",
           "version": "0.1.0",
           "properties": [
@@ -8070,56 +7831,38 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "idna-4@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "iniconfig-5@2.0.0",
+          "bom-ref": "iniconfig-3@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
           "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "sniffio-6@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@3.7.0",
+          "ref": "child-2@0.1.0",
           "dependsOn": [
-            "idna-4@3.6",
-            "sniffio-6@1.3.1"
+            "iniconfig-3@2.0.0"
           ]
         },
         {
-          "ref": "child-3@0.1.0",
-          "dependsOn": [
-            "iniconfig-5@2.0.0"
-          ]
-        },
-        {
-          "ref": "idna-4@3.6",
+          "ref": "iniconfig-3@2.0.0",
           "dependsOn": []
         },
         {
-          "ref": "iniconfig-5@2.0.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "sniffio-6@1.3.1",
+          "ref": "urllib3-4@2.2.0",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -8440,7 +8183,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
         dependencies = ["typing-extensions"]
 
         [tool.uv]
-        dev-dependencies = ["anyio"]
+        dev-dependencies = ["urllib3"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -8479,65 +8222,40 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@4.3.0",
-          "name": "anyio",
-          "version": "4.3.0",
-          "purl": "pkg:pypi/anyio@4.3.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-4@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
-        },
-        {
-          "type": "library",
-          "bom-ref": "typing-extensions-5@4.10.0",
+          "bom-ref": "typing-extensions-2@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-3@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@4.3.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-4@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "anyio-2@4.3.0",
-            "typing-extensions-5@4.10.0"
+            "typing-extensions-2@4.10.0",
+            "urllib3-3@2.2.1"
           ]
         },
         {
-          "ref": "sniffio-4@1.3.1",
+          "ref": "typing-extensions-2@4.10.0",
           "dependsOn": []
         },
         {
-          "ref": "typing-extensions-5@4.10.0",
+          "ref": "urllib3-3@2.2.1",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    Resolved 5 packages in [TIME]
+    Resolved 3 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -8591,7 +8309,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     }
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    Resolved 5 packages in [TIME]
+    Resolved 3 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -8624,47 +8342,22 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "anyio-2@4.3.0",
-          "name": "anyio",
-          "version": "4.3.0",
-          "purl": "pkg:pypi/anyio@4.3.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-3@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-4@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1"
+          "bom-ref": "urllib3-2@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
         }
       ],
       "dependencies": [
         {
-          "ref": "anyio-2@4.3.0",
-          "dependsOn": [
-            "idna-3@3.6",
-            "sniffio-4@1.3.1"
-          ]
-        },
-        {
-          "ref": "idna-3@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "sniffio-4@1.3.1",
+          "ref": "urllib3-2@2.2.1",
           "dependsOn": []
         }
       ]
     }
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    Resolved 5 packages in [TIME]
+    Resolved 3 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
