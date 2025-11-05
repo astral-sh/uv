@@ -4,21 +4,21 @@ uv persists data in several locations on your system.
 
 ## Directory Strategies
 
-uv follows platform conventions (like
-[XDG](https://specifications.freedesktop.org/basedir-spec/latest/) on Unix) for determining where to
-store different types of data. Generally, it's best to configure these rather than each uv-specific
-storage location.
+For determining where to store different types of data, uv follows the
+[XDG](https://specifications.freedesktop.org/basedir-spec/latest/) conventions on Linux and macOS
+and the platform defaults on Windows, with XDG paths where Windows does not have defaults.
+Generally, it's best to configure these rather than each uv-specific storage location.
 
 Here's a summary of the locations uv uses on each platform:
 
-| Purpose                    | Unix Default                                                               | Windows Default                                         |
-| -------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Temporary files and caches | `$XDG_CACHE_HOME/uv` or `~/.cache/uv` as a fallback                        | `%LOCALAPPDATA%\uv\cache`                               |
-| Persistent data            | `$XDG_DATA_HOME/uv` or `~/.local/share/uv` as a fallback                   | `%APPDATA%\uv\data` if exists, otherwise `%APPDATA%\uv` |
-| User configuration files   | `$XDG_CONFIG_HOME/uv` or `~/.config/uv` as a fallback                      | `%APPDATA%\uv`                                          |
-| System configuration files | `$XDG_CONFIG_DIRS/uv` or `/etc/uv` as a fallback                           | `%PROGRAMDATA%\uv`                                      |
-| Executables                | `$XDG_BIN_HOME` or `$XDG_DATA_HOME/../bin` or `~/.local/bin` as a fallback | same as on Unix                                         |
-| Environment                | `.venv` in the project or workspace directory                              | same as on Unix                                         |
+| Purpose                    | Unix Default                                                                                                                                      | Windows Default                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Temporary files and caches | `$XDG_CACHE_HOME/uv` or `~/.cache/uv` if `XDG_CACHE_HOME` is not set                                                                              | `%LOCALAPPDATA%\uv\cache`                                                                                                                       |
+| Persistent data            | `$XDG_DATA_HOME/uv`, or `~/.local/share/uv` if `XDG_DATA_HOME` is not set, or `.uv` in the current directory if the home directory is unavailable | `%APPDATA%\uv`, unless the legacy `%APPDATA%\uv\data` exists; if the home directory is unavailable, then `.uv` in the current directory is used |
+| User configuration files   | `$XDG_CONFIG_HOME/uv` or `~/.config/uv` if `XDG_CONFIG_HOME` is not set                                                                           | `%APPDATA%\uv`                                                                                                                                  |
+| System configuration files | `$XDG_CONFIG_DIRS/uv` or `/etc/uv` if `XDG_CONFIG_DIRS` is not set                                                                                | `%PROGRAMDATA%\uv`                                                                                                                              |
+| Executables                | `$XDG_BIN_HOME`, or `$XDG_DATA_HOME/../bin` if the former is not set, or `~/.local/bin` if `XDG_DATA_HOME` is also not set                        | same as on Unix                                                                                                                                 |
+| Environment                | `.venv` in the project or workspace directory                                                                                                     | same as on Unix                                                                                                                                 |
 
 ## Caching
 
@@ -31,7 +31,7 @@ overridden via command line arguments, environment variables, or settings as det
 Use `uv cache dir` to show the current cache directory path.
 
 It is important for performance for the cache directory to be on the same filesystem as the
-[virtualenvs](#project-environments) uv operates on.
+[virtual environments](#project-environments) uv operates on.
 
 ## Python versions
 
