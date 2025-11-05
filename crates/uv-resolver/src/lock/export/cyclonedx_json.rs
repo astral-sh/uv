@@ -25,7 +25,7 @@ use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -320,20 +320,20 @@ pub fn from_lock<'lock>(
                     | Source::Editable(path)
                     | Source::Virtual(path) => path,
                     Source::Registry(_) | Source::Git(_, _) | Source::Direct(_, _) => {
-                        // Workspace packages are always local dependencies
-                        unreachable!(
-                            "Workspace member {:?} has non-local source {:?}",
-                            node.package.id.name, node.package.id.source,
-                        )
+                        // Workspace packages should always be local dependencies
+                        return Err(LockErrorKind::NonLocalWorkspaceMember {
+                            id: node.package.id.clone(),
+                        }
+                        .into());
                     }
                 };
                 PackageType::Workspace(path)
             } else {
                 PackageType::Dependency
             };
-            component_builder.create_component(node.package, package_type, Some(&node.marker))
+            Ok(component_builder.create_component(node.package, package_type, Some(&node.marker)))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, LockError>>()?;
 
     let mut dependencies = create_dependencies(&nodes, &component_builder);
 

@@ -5963,6 +5963,12 @@ enum LockErrorKind {
         #[source]
         err: toml::de::Error,
     },
+    /// An error that occurs when a workspace member has a non-local source.
+    #[error("Workspace member `{id}` has non-local source", id = id.cyan())]
+    NonLocalWorkspaceMember {
+        /// The ID of the workspace member with an invalid source.
+        id: PackageId,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
