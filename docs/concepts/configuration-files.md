@@ -54,7 +54,7 @@ uv will also discover user-level and system-level configuration files:
     - User-level: `%APPDATA%\uv\uv.toml`
     - System-level: `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`
 
-User- and system-level configuration must use the `uv.toml` format, rather than the `pyproject.toml`
+User-level and system-level configuration must use the `uv.toml` format, rather than the `pyproject.toml`
 format, as a `pyproject.toml` is intended to define a Python _project_.
 
 If project-, user-, and system-level configuration files are found, the settings will be merged,
