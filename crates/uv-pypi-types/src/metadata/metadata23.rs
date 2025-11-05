@@ -8,12 +8,12 @@ use std::str::FromStr;
 use crate::MetadataError;
 use crate::metadata::Headers;
 
-/// Code Metadata 2.3 as specified in
+/// Core Metadata 2.x as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Metadata23 {
-    /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3` and
-    /// `2.4`.
+    /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3`,
+    /// `2.4`, and `2.5`.
     pub metadata_version: String,
     /// The name of the distribution.
     pub name: String,
@@ -100,6 +100,14 @@ pub struct Metadata23 {
     /// May be used to make a dependency conditional on whether the optional feature has been
     /// requested.
     pub provides_extra: Vec<String>,
+    /// Import names exclusively provided by the project.
+    ///
+    /// Introduced by PEP 794, requires metadata version 2.5.
+    pub import_names: Option<Vec<String>>,
+    /// Import namespaces provided by the project.
+    ///
+    /// Introduced by PEP 794, requires metadata version 2.5.
+    pub import_namespaces: Option<Vec<String>>,
     /// A string containing the name of another core metadata field.
     pub dynamic: Vec<String>,
 }
@@ -146,6 +154,19 @@ impl Metadata23 {
         let requires_external = headers.get_all_values("Requires-External").collect();
         let project_urls = headers.get_all_values("Project-URL").collect();
         let provides_extra = headers.get_all_values("Provides-Extra").collect();
+        let import_names_values: Vec<String> = headers.get_all_values("Import-Name").collect();
+        let import_names = if import_names_values.is_empty() {
+            None
+        } else {
+            Some(import_names_values)
+        };
+        let import_namespaces_values: Vec<String> =
+            headers.get_all_values("Import-Namespace").collect();
+        let import_namespaces = if import_namespaces_values.is_empty() {
+            None
+        } else {
+            Some(import_namespaces_values)
+        };
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();
         Ok(Self {
@@ -175,6 +196,8 @@ impl Metadata23 {
             requires_external,
             project_urls,
             provides_extra,
+            import_names,
+            import_namespaces,
             dynamic,
         })
     }
@@ -265,6 +288,12 @@ impl Metadata23 {
         write_all(&mut writer, "Requires-External", &self.requires_external);
         write_all(&mut writer, "Project-URL", &self.project_urls);
         write_all(&mut writer, "Provides-Extra", &self.provides_extra);
+        if let Some(import_names) = &self.import_names {
+            write_all(&mut writer, "Import-Name", import_names);
+        }
+        if let Some(import_namespaces) = &self.import_namespaces {
+            write_all(&mut writer, "Import-Namespace", import_namespaces);
+        }
         write_opt_str(
             &mut writer,
             "Description-Content-Type",
@@ -321,5 +350,33 @@ mod tests {
         let meta: Metadata23 = s.parse().unwrap();
         assert_eq!(meta.author.as_deref(), Some("中文"));
         assert_eq!(meta.description.as_deref(), Some("一个 Python 包"));
+    }
+
+    #[test]
+    fn import_name_round_trip() {
+        let mut metadata = Metadata23::default();
+        metadata.metadata_version = "2.5".to_string();
+        metadata.name = "pkg".to_string();
+        metadata.version = "1.0".to_string();
+        metadata.import_names = Some(vec!["spam".to_string(), "spam.eggs; private".to_string()]);
+        metadata.import_namespaces = Some(vec!["spam".to_string(), "spam.eggs".to_string()]);
+
+        let formatted = metadata.core_metadata_format();
+        assert_eq!(
+            formatted,
+            "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: spam\nImport-Name: spam.eggs; private\nImport-Namespace: spam\nImport-Namespace: spam.eggs\n"
+        );
+
+        let parsed: Metadata23 = formatted.parse().unwrap();
+        assert_eq!(parsed.import_names, metadata.import_names);
+        assert_eq!(parsed.import_namespaces, metadata.import_namespaces);
+    }
+
+    #[test]
+    fn import_name_empty_entry() {
+        let s = "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: \n";
+        let meta: Metadata23 = s.parse().unwrap();
+        assert_eq!(meta.import_names, Some(vec![String::new()]));
+        assert!(meta.import_namespaces.is_none());
     }
 }
