@@ -1965,7 +1965,7 @@ impl TreeSettings {
 pub(crate) struct ExportSettings {
     pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
-    pub(crate) package: Option<PackageName>,
+    pub(crate) package: Vec<PackageName>,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,

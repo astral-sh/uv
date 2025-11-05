@@ -57,7 +57,7 @@ pub(crate) async fn export(
     project_dir: &Path,
     format: Option<ExportFormat>,
     all_packages: bool,
-    package: Option<PackageName>,
+    package: Vec<PackageName>,
     prune: Vec<PackageName>,
     hashes: bool,
     install_options: InstallOptions,
@@ -98,16 +98,28 @@ pub(crate) async fn export(
                 &workspace_cache,
             )
             .await?
-        } else if let Some(package) = package.as_ref() {
+        } else if let [name] = package.as_slice() {
             VirtualProject::Project(
                 Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                    .with_current_project(name.clone())
+                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            let project = VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?;
+
+            for name in &package {
+                if !project.workspace().packages().contains_key(name) {
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                }
+            }
+
+            project
         };
         ExportTarget::Project(project)
     };
@@ -219,18 +231,24 @@ pub(crate) async fn export(
                     workspace: project.workspace(),
                     lock: &lock,
                 }
-            } else if let Some(package) = package.as_ref() {
-                InstallTarget::Project {
-                    workspace: project.workspace(),
-                    name: package,
-                    lock: &lock,
-                }
             } else {
-                // By default, install the root package.
-                InstallTarget::Project {
-                    workspace: project.workspace(),
-                    name: project.project_name(),
-                    lock: &lock,
+                match package.as_slice() {
+                    // By default, install the root project.
+                    [] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name: project.project_name(),
+                        lock: &lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name,
+                        lock: &lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace: project.workspace(),
+                        names,
+                        lock: &lock,
+                    },
                 }
             }
         }
@@ -240,17 +258,23 @@ pub(crate) async fn export(
                     workspace,
                     lock: &lock,
                 }
-            } else if let Some(package) = package.as_ref() {
-                InstallTarget::Project {
-                    workspace,
-                    name: package,
-                    lock: &lock,
-                }
             } else {
-                // By default, install the entire workspace.
-                InstallTarget::NonProjectWorkspace {
-                    workspace,
-                    lock: &lock,
+                match package.as_slice() {
+                    // By default, install the entire workspace.
+                    [] => InstallTarget::NonProjectWorkspace {
+                        workspace,
+                        lock: &lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace,
+                        name,
+                        lock: &lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace,
+                        names,
+                        lock: &lock,
+                    },
                 }
             }
         }
