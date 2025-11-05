@@ -354,12 +354,14 @@ mod tests {
 
     #[test]
     fn import_name_round_trip() {
-        let mut metadata = Metadata23::default();
-        metadata.metadata_version = "2.5".to_string();
-        metadata.name = "pkg".to_string();
-        metadata.version = "1.0".to_string();
-        metadata.import_names = Some(vec!["spam".to_string(), "spam.eggs; private".to_string()]);
-        metadata.import_namespaces = Some(vec!["spam".to_string(), "spam.eggs".to_string()]);
+        let metadata = Metadata23 {
+            metadata_version: "2.5".to_string(),
+            name: "pkg".to_string(),
+            version: "1.0".to_string(),
+            import_names: Some(vec!["spam".to_string(), "spam.eggs; private".to_string()]),
+            import_namespaces: Some(vec!["spam".to_string(), "spam.eggs".to_string()]),
+            ..Default::default()
+        };
 
         let formatted = metadata.core_metadata_format();
         assert_eq!(
