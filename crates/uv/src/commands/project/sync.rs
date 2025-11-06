@@ -63,7 +63,7 @@ pub(crate) async fn sync(
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
-    package: Option<PackageName>,
+    package: Vec<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -109,16 +109,28 @@ pub(crate) async fn sync(
                 &workspace_cache,
             )
             .await?
-        } else if let Some(package) = package.as_ref() {
+        } else if let [name] = package.as_slice() {
             VirtualProject::Project(
                 Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                    .with_current_project(name.clone())
+                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            let project = VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?;
+
+            for name in &package {
+                if !project.workspace().packages().contains_key(name) {
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                }
+            }
+
+            project
         };
 
         // TODO(lucab): improve warning content
@@ -379,8 +391,7 @@ pub(crate) async fn sync(
     }
 
     // Identify the installation target.
-    let sync_target =
-        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
+    let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
     let state = state.fork();
 
@@ -459,7 +470,7 @@ fn identify_installation_target<'a>(
     target: &'a SyncTarget,
     lock: &'a Lock,
     all_packages: bool,
-    package: Option<&'a PackageName>,
+    package: &'a [PackageName],
 ) -> InstallTarget<'a> {
     match &target {
         SyncTarget::Project(project) => {
@@ -470,33 +481,45 @@ fn identify_installation_target<'a>(
                             workspace: project.workspace(),
                             lock,
                         }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock,
+                        match package {
+                            // By default, install the root project.
+                            [] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock,
+                            },
+                            [name] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace: project.workspace(),
+                                names,
+                                lock,
+                            },
                         }
                     }
                 }
                 VirtualProject::NonProject(workspace) => {
                     if all_packages {
                         InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                        match package {
+                            // By default, install the entire workspace.
+                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                            [name] => InstallTarget::Project {
+                                workspace,
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace,
+                                names,
+                                lock,
+                            },
+                        }
                     }
                 }
             }
@@ -613,6 +636,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
         | InstallTarget::Project { workspace, .. }
+        | InstallTarget::Projects { workspace, .. }
         | InstallTarget::NonProjectWorkspace { workspace, .. } => {
             LoweredExtraBuildDependencies::from_workspace(
                 extra_build_dependencies.clone(),

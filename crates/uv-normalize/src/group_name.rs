@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -173,12 +175,36 @@ impl Display for PipGroupName {
 
 /// Either the literal "all" or a list of groups
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum DefaultGroups {
     /// All groups are defaulted
     All,
     /// A list of groups
     List(Vec<GroupName>),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for DefaultGroups {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("DefaultGroups")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Either the literal \"all\" or a list of groups",
+            "oneOf": [
+                {
+                    "description": "All groups are defaulted",
+                    "type": "string",
+                    "const": "all"
+                },
+                {
+                    "description": "A list of groups",
+                    "type": "array",
+                    "items": generator.subschema_for::<GroupName>()
+                }
+            ]
+        })
+    }
 }
 
 /// Serialize a [`DefaultGroups`] struct into a list of marker strings.

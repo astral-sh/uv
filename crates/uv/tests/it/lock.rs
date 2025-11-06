@@ -3260,6 +3260,16 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     error: Package `example` and package `subexample` are incompatible with the declared conflicts: {example, subexample}
     ");
 
+    // Attempt to install them together, i.e., with `--package`
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("example").arg("--package").arg("subexample"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `example` and package `subexample` are incompatible with the declared conflicts: {example, subexample}
+    ");
+
     Ok(())
 }
 

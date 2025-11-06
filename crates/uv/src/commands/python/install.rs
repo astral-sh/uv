@@ -859,7 +859,7 @@ fn create_bin_links(
                                         to.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
-                                        installation.key().variant().suffix()
+                                        installation.key().variant().display_suffix()
                                     );
                                 } else {
                                     errors.push((
