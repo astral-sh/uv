@@ -1897,7 +1897,7 @@ fn warn_if_prerelease_python_upgrade_available(
     );
 
     if has_stable_python_download(&request, &version.only_release(), python_downloads_json_url) {
-        let minor_version = format!("{major}.{minor}");
+        let minor_version = format!("{major}.{minor}{}", interpreter.variant().display_suffix());
 
         warn_user!(
             "You're using a pre-release version of Python ({version}) but a stable version is available. Use `uv python upgrade {minor_version}` to upgrade."
