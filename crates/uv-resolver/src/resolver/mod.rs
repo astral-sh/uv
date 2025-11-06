@@ -135,7 +135,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
     incomplete_packages: DashMap<PackageName, DashMap<Version, MetadataUnavailable>>,
-    /// Packages for which we've already logged exclude_newer messages.
+    /// Packages for which we've already logged `exclude_newer` messages.
     logged_exclude_newer: DashSet<PackageName>,
     /// The options that were used to configure this resolver.
     options: Options,
