@@ -24,6 +24,7 @@
 
 [data-md-color-scheme="astral-light"] {
   --md-default-bg-color--dark: var(--black);
+  --md-default-bg-color--light: var(--white);
   --md-default-fg-color--lightest: rgba(0, 0, 0, 0.14);
   --md-primary-fg-color: var(--galaxy);
   --md-typeset-a-color: var(--flare);
@@ -32,6 +33,7 @@
 
 [data-md-color-scheme="astral-dark"] {
   --md-default-bg-color: var(--galaxy);
+  --md-default-bg-color--light: var(--galaxy);
   --md-default-fg-color: var(--white);
   --md-default-fg-color--light: var(--white);
   --md-default-fg-color--lighter: var(--white);
@@ -125,7 +127,6 @@ See https://github.com/astral-sh/uv/issues/5130 */
   }
 }
 
-
 /* Always take the full screen for content, require scrolling to see the footer
 This stops the size of the nav from jumping around when you visit a page without
 a lot of content (i.e., an overview page). We don't apply this to sma screens
@@ -135,54 +136,6 @@ because the nav is in a hamburger menu anyway
   .md-main {
     min-height: 100vh;
   }
-}
-
-/* Tweak the formatting of the primary nav on a large screen */
-@media screen and (min-width: 76.25em) {
-  .md-nav--primary .md-nav {
-    font-size: 0.75rem;
-  }
-  /* Remove the bold from the section headings, use a larger font instead */
-  .md-nav__item--section > .md-nav__link {
-      font-weight: normal;
-      font-size: 0.85rem;
-  }
-  /* Reducing spacing between nav items to fit more content
-  First, disable `nav__link` spacing then use `nav__item` to enforce margins this reduces inconsistencies in the spacing. */
-  .md-nav--primary .md-nav__link {
-    margin: 0;
-  }
-  .md-nav--primary .md-nav__item {
-    margin-top: 0.35em;
-  }
-  /* Use larger spacing for the sections headings */
-  .md-nav--primary .md-nav__item--section {
-    margin-bottom: 0.75em;
-    margin-top: 1em;
-  }
-  /* Decrease the font size of items in a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list {
-    font-size: 0.725rem;
-  }
-  /* Increase top margin on the first item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:first-of-type {
-    margin-top: 0.5em;
-  }
-  /* Increase bottom margin on the last item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:last-of-type {
-    margin-bottom: 0.575em;
-  }
-  /* Increase the size of the first nav item to match the sections
-  It has no children, so it is not considered a section */
-  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
-    font-size: 0.85rem;
-    margin-bottom: 0.75em;
-  }
-}
-
-/* Bold the active nav link for accessibility */
-.md-nav__link--active {
-  font-weight: bold;
 }
 
 /* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
