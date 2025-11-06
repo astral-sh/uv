@@ -3581,18 +3581,18 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
+                // Try to compute a relative path from the project root. If that fails (e.g., paths
+                // on different drives), preserve the original relative path from the user's config
+                // via `url.given()` if available, since flat indices should remain relative.
+                // Otherwise, fall back to an absolute path.
                 let path = relative_to(&path, root)
                     .or_else(|_| {
-                        // If relative_to fails, check if the user originally provided a relative path
-                        // that we should preserve (for flat indices)
                         if let Some(given) = url.given() {
                             let given_path = Path::new(given);
                             if given_path.is_relative() {
-                                // Keep the original relative path for flat indices
                                 return Ok(uv_fs::normalize_path(given_path).into_owned());
                             }
                         }
-                        // Default fallback behavior
                         std::path::absolute(&path)
                     })
                     .map_err(LockErrorKind::IndexRelativePath)?
