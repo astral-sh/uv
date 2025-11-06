@@ -379,6 +379,8 @@ impl PythonInstallation {
             return;
         };
 
+        let download_request = download_request.with_prereleases(false);
+
         if download_request.has_stable_download_at_least(&release, python_downloads_json_url) {
             let minor_version = format!(
                 "{}.{}{}",
@@ -483,6 +485,10 @@ impl PythonInstallationKey {
 
     pub fn minor(&self) -> u8 {
         self.minor
+    }
+
+    pub fn prerelease(&self) -> Option<Prerelease> {
+        self.prerelease
     }
 
     pub fn platform(&self) -> &Platform {

@@ -264,7 +264,7 @@ impl PythonDownloadRequest {
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),
             Some(*key.libc()),
-            Some(false),
+            Some(key.prerelease().is_some()),
         ))
     }
 
