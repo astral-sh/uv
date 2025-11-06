@@ -11,7 +11,48 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
+from pathlib import Path
+from typing import Optional, Set
+
+
+def detect_externally_managed_marker() -> Optional[Path]:
+    """Return the path to an EXTERNALLY-MANAGED marker if one exists."""
+
+    candidates: Set[Path] = set()
+    stdlib = sysconfig.get_path("stdlib")
+    if stdlib:
+        stdlib_path = Path(stdlib)
+        candidates.add(stdlib_path)
+        candidates.add(stdlib_path.parent)
+        candidates.add(stdlib_path.parent.parent)
+
+    prefixes = {
+        sys.prefix,
+        sys.base_prefix,
+        sys.exec_prefix,
+        sys.base_exec_prefix,
+    }
+    for prefix in filter(None, prefixes):
+        path = Path(prefix)
+        candidates.add(path)
+        candidates.add(path.parent)
+
+    markers: Set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=False)
+        except OSError:
+            continue
+        marker = resolved / "EXTERNALLY-MANAGED"
+        if marker in markers:
+            continue
+        markers.add(marker)
+        if marker.is_file():
+            return marker
+
+    return None
 
 
 def install_package(*, uv: str, package: str):
@@ -55,9 +96,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     uv: str = os.path.abspath(args.uv) if args.uv else "uv"
-    allow_externally_managed = (
-        ["--break-system-packages"] if args.externally_managed else []
-    )
+    if args.externally_managed:
+        allow_externally_managed = ["--break-system-packages"]
+    else:
+        marker = detect_externally_managed_marker()
+        if marker:
+            logging.info(
+                "Detected `EXTERNALLY-MANAGED` marker at `%s`; adding `--break-system-packages`.",
+                marker,
+            )
+            allow_externally_managed = ["--break-system-packages"]
+        else:
+            allow_externally_managed = []
     python = ["--python", args.python] if args.python else []
 
     # Create a temporary directory.
