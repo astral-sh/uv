@@ -97,7 +97,7 @@ impl VerbatimUrl {
             let col_pos = given.find(':').unwrap();
             let at_pos = given.rfind('@').unwrap();
 
-            let redacted_path = format!("{}***{}", &given[0..col_pos + 1], &given[at_pos..]);
+            let redacted_path = format!("{}***{}", &given[0..=col_pos], &given[at_pos..]);
 
             return Err(VerbatimUrlError::AmbiguousAuthority(redacted_path));
         }
@@ -297,7 +297,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(s).map(|url| url.with_given(s))?)
+        Self::parse_url(s).map(|url| url.with_given(s))
     }
 }
 
