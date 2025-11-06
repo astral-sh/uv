@@ -1396,6 +1396,7 @@ fn python_find_prerelease_version_specifiers() {
     [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     ");
 
     // `>3.14rc2` should not match rc2
@@ -1406,6 +1407,7 @@ fn python_find_prerelease_version_specifiers() {
     [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     ");
 
     // `>3.14rc3` should not match rc3
@@ -1426,6 +1428,7 @@ fn python_find_prerelease_version_specifiers() {
     [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     ");
 
     // `<3.14.0rc3` should match rc2
@@ -1494,6 +1497,7 @@ fn python_find_prerelease_with_patch_request() {
     [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     ");
 
     // When `.0` is explicitly included, we will require a stable release
