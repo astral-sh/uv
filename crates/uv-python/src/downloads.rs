@@ -251,7 +251,7 @@ impl PythonDownloadRequest {
     pub fn try_from_key(key: &PythonInstallationKey) -> Result<Self, LenientImplementationName> {
         let implementation = match key.implementation().into_owned() {
             LenientImplementationName::Known(name) => name,
-            unknown => return Err(unknown),
+            unknown @ LenientImplementationName::Unknown(_) => return Err(unknown),
         };
 
         Ok(Self::new(
