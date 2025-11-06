@@ -28,13 +28,11 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_pep440::Version;
 use uv_preview::Preview;
-use uv_python::downloads::{ArchRequest, PythonDownloadRequest};
 use uv_python::{
-    EnvironmentPreference, ImplementationName, Interpreter, PyVenvConfiguration, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -940,11 +938,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         "Using Python {} interpreter at: {}",
         base_interpreter.python_version(),
         base_interpreter.sys_executable().display()
-    );
-
-    warn_if_prerelease_python_upgrade_available(
-        &base_interpreter,
-        install_mirrors.python_downloads_json_url.as_deref(),
     );
 
     // Read the requirements.
@@ -1858,77 +1851,6 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }
 
-/// Emit a hint when running against a managed pre-release interpreter that has a stable upgrade.
-fn warn_if_prerelease_python_upgrade_available(
-    interpreter: &Interpreter,
-    python_downloads_json_url: Option<&str>,
-) {
-    let version = interpreter.python_version();
-
-    if version.pre().is_none() {
-        return;
-    }
-
-    if !interpreter.is_managed() {
-        return;
-    }
-
-    if !interpreter
-        .implementation_name()
-        .eq_ignore_ascii_case("cpython")
-    {
-        return;
-    }
-
-    let major = interpreter.python_major();
-    let minor = interpreter.python_minor();
-
-    let request = PythonDownloadRequest::new(
-        Some(VersionRequest::MajorMinor(
-            major,
-            minor,
-            interpreter.variant(),
-        )),
-        Some(ImplementationName::CPython),
-        Some(ArchRequest::Explicit(interpreter.arch())),
-        Some(interpreter.os()),
-        Some(interpreter.libc()),
-        Some(false),
-    );
-
-    if has_stable_python_download(&request, &version.only_release(), python_downloads_json_url) {
-        let minor_version = format!("{major}.{minor}{}", interpreter.variant().display_suffix());
-
-        warn_user!(
-            "You're using a pre-release version of Python ({version}) but a stable version is available. Use `uv python upgrade {minor_version}` to upgrade."
-        );
-    }
-}
-
-fn has_stable_python_download(
-    request: &PythonDownloadRequest,
-    interpreter_release: &Version,
-    python_downloads_json_url: Option<&str>,
-) -> bool {
-    let Ok(downloads) = request.iter_downloads(python_downloads_json_url) else {
-        return false;
-    };
-
-    stable_download_available(
-        interpreter_release,
-        downloads.map(|download| download.key().version().version().clone()),
-    )
-}
-
-fn stable_download_available(
-    interpreter_release: &Version,
-    mut download_versions: impl Iterator<Item = Version>,
-) -> bool {
-    download_versions.any(|download_version| {
-        download_version.pre().is_none() && download_version.only_release() >= *interpreter_release
-    })
-}
-
 #[derive(Error, Debug)]
 enum CopyEntrypointError {
     #[error(transparent)]
@@ -2065,40 +1987,4 @@ fn copy_entrypoint(
     trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str::FromStr;
-
-    #[test]
-    fn stable_download_detected_when_available() {
-        let interpreter_release = Version::from_str("3.14.0").unwrap();
-
-        let downloads = vec![
-            Version::from_str("3.14.0a5").unwrap(),
-            Version::from_str("3.14.0").unwrap(),
-        ];
-
-        assert!(stable_download_available(
-            &interpreter_release,
-            downloads.into_iter()
-        ));
-    }
-
-    #[test]
-    fn no_stable_download_detected_for_prereleases_only() {
-        let interpreter_release = Version::from_str("3.14.0").unwrap();
-
-        let downloads = vec![
-            Version::from_str("3.14.0a4").unwrap(),
-            Version::from_str("3.14.0a5").unwrap(),
-        ];
-
-        assert!(!stable_download_available(
-            &interpreter_release,
-            downloads.into_iter()
-        ));
-    }
 }

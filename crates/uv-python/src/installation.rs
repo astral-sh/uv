@@ -6,6 +6,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use ref_cast::RefCast;
 use tracing::{debug, info};
+use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -63,6 +64,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_on_prerelease_python_upgrade_available(request, None);
         Ok(installation)
     }
 
@@ -75,13 +77,10 @@ impl PythonInstallation {
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        Ok(find_best_python_installation(
-            request,
-            environments,
-            preference,
-            cache,
-            preview,
-        )??)
+        let installation =
+            find_best_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_on_prerelease_python_upgrade_available(request, None);
+        Ok(installation)
     }
 
     /// Find or fetch a [`PythonInstallation`].
@@ -201,7 +200,7 @@ impl PythonInstallation {
             return Err(err);
         }
 
-        Self::fetch(
+        let installation = Self::fetch(
             download,
             client_builder,
             cache,
@@ -210,7 +209,10 @@ impl PythonInstallation {
             pypy_install_mirror,
             preview,
         )
-        .await
+        .await?;
+        installation
+            .warn_on_prerelease_python_upgrade_available(request, python_downloads_json_url);
+        Ok(installation)
     }
 
     /// Download and install the requested installation.
@@ -342,6 +344,55 @@ impl PythonInstallation {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
+    }
+
+    pub(crate) fn warn_on_prerelease_python_upgrade_available(
+        &self,
+        request: &PythonRequest,
+        python_downloads_json_url: Option<&str>,
+    ) {
+        if request.allows_prereleases() {
+            return;
+        }
+
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
+
+        if version.pre().is_none() {
+            return;
+        }
+
+        if !interpreter.is_managed() {
+            return;
+        }
+
+        if !interpreter
+            .implementation_name()
+            .eq_ignore_ascii_case("cpython")
+        {
+            return;
+        }
+
+        let release = version.only_release();
+
+        let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+            return;
+        };
+
+        if download_request.has_stable_download_at_least(&release, python_downloads_json_url) {
+            let minor_version = format!(
+                "{}.{}{}",
+                interpreter.python_major(),
+                interpreter.python_minor(),
+                interpreter.variant().display_suffix()
+            );
+
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
+                version,
+                minor_version
+            );
+        }
     }
 }
 

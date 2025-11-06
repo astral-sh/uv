@@ -26,6 +26,7 @@ use uv_client::{BaseClient, WrappedReqwestError, is_transient_network_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
+use uv_pep440::Version;
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
@@ -247,6 +248,26 @@ impl ArchRequest {
 }
 
 impl PythonDownloadRequest {
+    pub fn try_from_key(key: &PythonInstallationKey) -> Result<Self, LenientImplementationName> {
+        let implementation = match key.implementation().into_owned() {
+            LenientImplementationName::Known(name) => name,
+            unknown => return Err(unknown),
+        };
+
+        Ok(Self::new(
+            Some(VersionRequest::MajorMinor(
+                key.major(),
+                key.minor(),
+                *key.variant(),
+            )),
+            Some(implementation),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
+            Some(false),
+        ))
+    }
+
     pub fn new(
         version: Option<VersionRequest>,
         implementation: Option<ImplementationName>,
@@ -424,6 +445,24 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download)))
     }
 
+    /// Return true if a stable download is available at least as new as the given release.
+    pub fn has_stable_download_at_least(
+        &self,
+        interpreter_release: &Version,
+        python_downloads_json_url: Option<&str>,
+    ) -> bool {
+        let Ok(mut downloads) = self.iter_downloads(python_downloads_json_url) else {
+            return false;
+        };
+
+        downloads.any(|download| {
+            let download_version = download.key().version().into_version();
+
+            download_version.pre().is_none()
+                && download_version.only_release() >= *interpreter_release
+        })
+    }
+
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         // Check platform requirements
@@ -551,6 +590,14 @@ impl PythonDownloadRequest {
             arch: self.arch,
             libc: self.libc,
         }
+    }
+}
+
+impl TryFrom<&PythonInstallationKey> for PythonDownloadRequest {
+    type Error = LenientImplementationName;
+
+    fn try_from(key: &PythonInstallationKey) -> Result<Self, Self::Error> {
+        Self::try_from_key(key)
     }
 }
 

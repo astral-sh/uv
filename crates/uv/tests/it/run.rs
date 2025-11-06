@@ -4364,6 +4364,30 @@ fn run_warns_on_prerelease_python_when_stable_available() {
     context.python_install().arg("3.14.0rc2").assert().success();
 
     uv_snapshot!(context.filters(), context.run()
+        .arg("--")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.14.0rc2
+
+    ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc2) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
+    "###);
+}
+
+#[test]
+fn run_does_not_warn_on_requested_prerelease_python() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    context.python_install().arg("3.14.0rc2").assert().success();
+
+    uv_snapshot!(context.filters(), context.run()
         .arg("--python")
         .arg("3.14.0rc2")
         .arg("--")
@@ -4375,7 +4399,6 @@ fn run_warns_on_prerelease_python_when_stable_available() {
     Python 3.14.0rc2
 
     ----- stderr -----
-    warning: You're using a pre-release version of Python (3.14.0rc2) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     "###);
 }
 
