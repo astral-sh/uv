@@ -4354,7 +4354,7 @@ fn run_active_script_environment() -> Result<()> {
 }
 
 #[test]
-fn run_warns_on_prerelease_python_when_stable_available() -> Result<()> {
+fn run_warns_on_prerelease_python_when_stable_available() {
     let context = TestContext::new_with_versions(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
@@ -4377,8 +4377,6 @@ fn run_warns_on_prerelease_python_when_stable_available() -> Result<()> {
     ----- stderr -----
     warning: You're using a pre-release version of Python (3.14.0rc2) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     "###);
-
-    Ok(())
 }
 
 #[test]
