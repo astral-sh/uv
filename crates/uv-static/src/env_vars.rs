@@ -1,6 +1,8 @@
 //! Environment variables used or supported by uv.
 //! Used to generate `docs/reference/environment.md`.
-use uv_macros::{attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata};
+use uv_macros::{
+    attr_added_in, attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata,
+};
 
 /// Declares all environment variable used throughout `uv` and its crates.
 pub struct EnvVars;
@@ -318,6 +320,10 @@ impl EnvVars {
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     #[attr_added_in("0.4.10")]
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
+
+    /// The GitHub hostname. Defaults to `github.com`.
+    #[attr_added_in("next release")]
+    pub const GH_HOST: &'static str = "GH_HOST";
 
     /// Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
     /// `requirements.txt` files.

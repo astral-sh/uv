@@ -56,6 +56,70 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
+
+/// Check if a URL is a GitHub gist URL, supporting both github.com and enterprise
+fn is_gist_url(url: &DisplaySafeUrl) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+
+    // Standard GitHub: gist.github.com
+    if host == "gist.github.com" {
+        return true;
+    }
+
+    // Enterprise subdomain pattern: gist.hostname.com
+    if host.starts_with("gist.") {
+        return true;
+    }
+
+    // Enterprise path pattern: hostname.com/gist/
+    if url.path().starts_with("/gist/") {
+        // Accept if GH_HOST matches this host
+        if let Ok(gh_host) = std::env::var(EnvVars::GH_HOST) {
+            return host == gh_host;
+        }
+        // Accept common GitHub Enterprise patterns
+        return host.contains("github") || host.contains("git");
+    }
+
+    false
+}
+
+/// Extract gist ID from URL path segments
+fn gist_id_from_path(url: &DisplaySafeUrl) -> Option<&str> {
+    let segments = url.path_segments()?;
+    let segments: Vec<&str> = segments.filter(|s| !s.is_empty()).collect();
+    segments.last().copied()
+}
+
+/// Extract the GitHub hostname and gist ID from a gist URL
+fn parse_gist_url(url: &DisplaySafeUrl) -> Option<(String, String)> {
+    let host = url.host_str()?;
+
+    if host == "gist.github.com" {
+        // Standard GitHub: gist.github.com/[username/]gist_id
+        let gist_id = gist_id_from_path(url)?;
+        return Some(("github.com".to_string(), gist_id.to_string()));
+    }
+
+    if let Some(github_host) = host.strip_prefix("gist.") {
+        // Enterprise subdomain: gist.hostname.com/[username/]gist_id
+        let gist_id = gist_id_from_path(url)?;
+        return Some((github_host.to_string(), gist_id.to_string()));
+    }
+
+    if url.path().starts_with("/gist/") {
+        // Enterprise path: hostname.com/gist/gist_id
+        let mut segments = url.path_segments()?;
+        if segments.next() == Some("gist") {
+            let gist_id = segments.next()?;
+            return Some((host.to_string(), gist_id.to_string()));
+        }
+    }
+
+    None
+}
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -1646,14 +1710,17 @@ async fn resolve_gist_url(
     url: &DisplaySafeUrl,
     client_builder: &BaseClientBuilder<'_>,
 ) -> anyhow::Result<DisplaySafeUrl> {
-    // Extract the Gist ID from the URL.
-    let gist_id = url
-        .path_segments()
-        .and_then(|mut segments| segments.nth(1))
-        .ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
+    // Parse and validate the gist URL
+    let (github_host, gist_id) = parse_gist_url(url)
+        .ok_or_else(|| anyhow!("URL is not a valid GitHub gist URL: {}", url))?;
 
-    // Build the API URL.
-    let api_url = format!("https://api.github.com/gists/{gist_id}");
+    // Build the API URL using GitHub CLI-compatible patterns
+    let api_url = if github_host == "github.com" {
+        format!("https://api.github.com/gists/{gist_id}")
+    } else {
+        // GitHub Enterprise Server: use /api/v3/ path pattern (GitHub CLI standard)
+        format!("https://{github_host}/api/v3/gists/{gist_id}")
+    };
 
     let client = client_builder.build();
 
@@ -1743,16 +1810,8 @@ impl RunCommand {
                     .await?;
 
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if response.url().host_str() == Some("gist.github.com") {
-                    url =
-                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
-                            .await?;
-
-                    response = client
-                        .for_host(&url)
-                        .get(Url::from(url.clone()))
-                        .send()
-                        .await?;
+                if is_gist_url(&url) {
+                    url = resolve_gist_url(&url, &client_builder).await?;
                 }
 
                 let file_stem = url
