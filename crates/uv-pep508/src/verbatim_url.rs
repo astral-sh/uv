@@ -57,9 +57,55 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from a string.
-    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = DisplaySafeUrl::parse(given.as_ref())?;
-        Ok(Self { url, given: None })
+    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+        let given = given.as_ref();
+        let url = Url::parse(given)?;
+
+        // Reject some ambiguous cases, e.g.:
+        //
+        // https://user/name:password@domain/a/b/c
+        //
+        // In this case the user *probably* meant to have a username of
+        // "user/name", but both RFC 3986 and WHATWG URL expect the
+        // userinfo (RFC 3986) or authority (WHATWG) to not contain a
+        // non-percent-encoded slash or other special character.
+        //
+        // This ends up being moderately annoying to detect, since the
+        // above gets parsed into a "valid" WHATWG URL where the
+        // host is `used` and the pathname is `/name:password@domain/a/b/c`
+        // rather than causing a parse error.
+        //
+        // To detect it, we use a heuristic: if the password component
+        // is missing but the path or fragment contain a `:` and `@`
+        // in that order, then we assume the URL is ambiguous.
+        let path_or_fragment_is_fishy = {
+            let path = url.path();
+            let fragment = url.fragment().unwrap_or("");
+
+            path.contains(':') && path.contains('@')
+                || fragment.contains(':') && fragment.contains('@')
+        };
+
+        if url.password().is_none() && path_or_fragment_is_fishy {
+            // Our ambiguous URL probably has credentials in it,
+            // so we don't want to blast it out in the error message.
+            // We somewhat aggressively replace everything between
+            // the scheme's ':' and the lastmost `@` with `***`.
+            //
+            // These unwraps are safe, since we've checked for both
+            // characters above.
+            let col_pos = given.find(':').unwrap();
+            let at_pos = given.rfind('@').unwrap();
+
+            let redacted_path = format!("{}***{}", &given[0..col_pos + 1], &given[at_pos..]);
+
+            return Err(VerbatimUrlError::AmbiguousAuthority(redacted_path));
+        }
+
+        Ok(Self {
+            url: DisplaySafeUrl::from(url),
+            given: None,
+        })
     }
 
     /// Convert a [`VerbatimUrl`] from a path or a URL.
@@ -392,6 +438,11 @@ pub enum VerbatimUrlError {
     #[error(transparent)]
     Url(#[from] ParseError),
 
+    /// We parsed a URL, but couldn't disambiguate its authority
+    /// component.
+    #[error("ambiguous user/pass authority in URL (not percent-encoded?): {0}")]
+    AmbiguousAuthority(String),
+
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
     WorkingDirectory(PathBuf),
@@ -645,6 +696,8 @@ impl std::fmt::Display for Scheme {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_snapshot;
+
     use super::*;
 
     #[test]
@@ -748,5 +801,28 @@ mod tests {
 
         let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
+    }
+
+    #[test]
+    fn parse_url_ambiguous() {
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user\\name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user#name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user.com/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
     }
 }

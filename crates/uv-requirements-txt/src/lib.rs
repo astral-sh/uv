@@ -282,7 +282,7 @@ impl RequirementsTxt {
                             requirements_txt.join(
                                 Url::parse(filename.as_ref())
                                     .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: err,
+                                        source: err.into(),
                                         url: filename.to_string(),
                                         start,
                                         end,
@@ -356,7 +356,7 @@ impl RequirementsTxt {
                             requirements_txt.join(
                                 Url::parse(filename.as_ref())
                                     .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: err,
+                                        source: err.into(),
                                         url: filename.to_string(),
                                         start,
                                         end,
@@ -1041,7 +1041,7 @@ pub struct RequirementsTxtFileError {
 pub enum RequirementsTxtParserError {
     Io(io::Error),
     Url {
-        source: url::ParseError,
+        source: uv_pep508::VerbatimUrlError,
         url: String,
         start: usize,
         end: usize,
