@@ -5068,7 +5068,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_extras: bool,
 
-    /// Whether to display the Python version associated with run each tool.
+    /// Whether to display the Python version associated with each tool.
     #[arg(long)]
     pub show_python: bool,
 

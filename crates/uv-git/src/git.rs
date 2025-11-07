@@ -1,7 +1,6 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
@@ -9,18 +8,13 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use cargo_util::{ProcessBuilder, paths};
-use reqwest::StatusCode;
-use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, warn};
 use url::Url;
 
 use uv_fs::Simplified;
-use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_git_types::{GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
-use uv_version::version;
-
-use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -235,25 +229,17 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        client: &ClientWithMiddleware,
         disable_ssl: bool,
         offline: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
-        let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
+        let enable_lfs_fetch = std::env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(
-                &mut db.repo,
-                &self.url,
-                reference,
-                client,
-                disable_ssl,
-                offline,
-            )
-            .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
+            fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
+                .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -280,15 +266,8 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(
-            &mut repo,
-            &self.url,
-            reference,
-            client,
-            disable_ssl,
-            offline,
-        )
-        .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
+        fetch(&mut repo, &self.url, reference, disable_ssl, offline)
+            .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
@@ -461,18 +440,22 @@ fn fetch(
     repo: &mut GitRepository,
     remote_url: &Url,
     reference: ReferenceOrOid<'_>,
-    client: &ClientWithMiddleware,
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
-        Ok(FastPathRev::UpToDate) => return Ok(()),
-        Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
-        Ok(FastPathRev::Indeterminate) => None,
-        Err(e) => {
-            debug!("Failed to check GitHub {:?}", e);
-            None
+    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
+        let local_object = reference.resolve(repo).ok();
+        if let Some(local_object) = local_object {
+            if rev == local_object {
+                return Ok(());
+            }
         }
+
+        // If we know the reference is a full commit hash, we can just return it without
+        // querying GitHub.
+        Some(rev)
+    } else {
+        None
     };
 
     // Translate the reference desired here into an actual list of refspecs
@@ -703,139 +686,6 @@ fn fetch_lfs(
 
     cmd.exec_with_output()?;
     Ok(())
-}
-
-/// The result of GitHub fast path check. See [`github_fast_path`] for more.
-enum FastPathRev {
-    /// The local rev (determined by `reference.resolve(repo)`) is already up to
-    /// date with what this rev resolves to on GitHub's server.
-    UpToDate,
-    /// The following SHA must be fetched in order for the local rev to become
-    /// up-to-date.
-    NeedsFetch(GitOid),
-    /// Don't know whether local rev is up-to-date. We'll fetch _all_ branches
-    /// and tags from the server and see what happens.
-    Indeterminate,
-}
-
-/// Attempts GitHub's special fast path for testing if we've already got an
-/// up-to-date copy of the repository.
-///
-/// Updating the index is done pretty regularly so we want it to be as fast as
-/// possible. For registries hosted on GitHub (like the crates.io index) there's
-/// a fast path available to use[^1] to tell us that there's no updates to be
-/// made.
-///
-/// Note that this function should never cause an actual failure because it's
-/// just a fast path. As a result, a caller should ignore `Err` returned from
-/// this function and move forward on the normal path.
-///
-/// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
-fn github_fast_path(
-    git: &mut GitRepository,
-    url: &Url,
-    reference: ReferenceOrOid<'_>,
-    client: &ClientWithMiddleware,
-) -> Result<FastPathRev> {
-    let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url) else {
-        return Ok(FastPathRev::Indeterminate);
-    };
-
-    let local_object = reference.resolve(git).ok();
-
-    let github_branch_name = match reference {
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => "HEAD",
-        ReferenceOrOid::Reference(GitReference::Branch(branch)) => branch,
-        ReferenceOrOid::Reference(GitReference::Tag(tag)) => tag,
-        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => branch_or_tag,
-        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => rev,
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(rev)) => {
-            // `revparse_single` (used by `resolve`) is the only way to turn
-            // short hash -> long hash, but it also parses other things,
-            // like branch and tag names, which might coincidentally be
-            // valid hex.
-            //
-            // We only return early if `rev` is a prefix of the object found
-            // by `revparse_single`. Don't bother talking to GitHub in that
-            // case, since commit hashes are permanent. If a commit with the
-            // requested hash is already present in the local clone, its
-            // contents must be the same as what is on the server for that
-            // hash.
-            //
-            // If `rev` is not found locally by `revparse_single`, we'll
-            // need GitHub to resolve it and get a hash. If `rev` is found
-            // but is not a short hash of the found object, it's probably a
-            // branch and we also need to get a hash from GitHub, in case
-            // the branch has moved.
-            if let Some(ref local_object) = local_object {
-                if is_short_hash_of(rev, *local_object) {
-                    return Ok(FastPathRev::UpToDate);
-                }
-            }
-            rev
-        }
-        ReferenceOrOid::Oid(rev) => {
-            debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
-
-            if let Some(local_object) = local_object {
-                if rev == local_object {
-                    return Ok(FastPathRev::UpToDate);
-                }
-            }
-
-            // If we know the reference is a full commit hash, we can just return it without
-            // querying GitHub.
-            return Ok(FastPathRev::NeedsFetch(rev));
-        }
-    };
-
-    // Check if we're rate-limited by GitHub before determining the FastPathRev
-    if GITHUB_RATE_LIMIT_STATUS.is_active() {
-        debug!("Skipping GitHub fast path attempt for: {url} (rate-limited)");
-        return Ok(FastPathRev::Indeterminate);
-    }
-
-    let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
-        .unwrap_or("https://api.github.com/repos".to_owned());
-    let url = format!("{base_url}/{owner}/{repo}/commits/{github_branch_name}");
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    runtime.block_on(async move {
-        debug!("Attempting GitHub fast path for: {url}");
-        let mut request = client.get(&url);
-        request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header(
-            "User-Agent",
-            format!("uv/{} (+https://github.com/astral-sh/uv)", version()),
-        );
-        if let Some(local_object) = local_object {
-            request = request.header("If-None-Match", local_object.to_string());
-        }
-
-        let response = request.send().await?;
-
-        if is_github_rate_limited(&response) {
-            // Mark that we are being rate-limited by GitHub
-            GITHUB_RATE_LIMIT_STATUS.activate();
-        }
-
-        // GitHub returns a 404 if the repository does not exist, and a 422 if it exists but GitHub
-        // is unable to resolve the requested revision.
-        response.error_for_status_ref()?;
-
-        let response_code = response.status();
-        if response_code == StatusCode::NOT_MODIFIED {
-            Ok(FastPathRev::UpToDate)
-        } else if response_code == StatusCode::OK {
-            let oid_to_fetch = response.text().await?.parse()?;
-            Ok(FastPathRev::NeedsFetch(oid_to_fetch))
-        } else {
-            Ok(FastPathRev::Indeterminate)
-        }
-    })
 }
 
 /// Whether `rev` is a shorter hash of `oid`.

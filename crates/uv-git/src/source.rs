@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
@@ -21,8 +20,6 @@ use crate::git::{GitDatabase, GitRemote};
 pub struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
-    /// The HTTP client to use for fetching.
-    client: ClientWithMiddleware,
     /// Whether to disable SSL verification.
     disable_ssl: bool,
     /// Whether to operate without network connectivity.
@@ -35,17 +32,11 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub fn new(
-        git: GitUrl,
-        client: impl Into<ClientWithMiddleware>,
-        cache: impl Into<PathBuf>,
-        offline: bool,
-    ) -> Self {
+    pub fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
         Self {
             git,
             disable_ssl: false,
             offline,
-            client: client.into(),
             cache: cache.into(),
             reporter: None,
         }
@@ -132,7 +123,6 @@ impl GitSource {
                 maybe_db,
                 self.git.reference(),
                 self.git.precise(),
-                &self.client,
                 self.disable_ssl,
                 self.offline,
             )?;
