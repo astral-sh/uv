@@ -541,9 +541,7 @@ fn help_subsubcommand() {
               Distributions can be read from a local directory by using the `file://` URL scheme.
 
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations.
-              
-              This can be a local path or file://, http://, or https:// URL.
+              URL pointing to JSON of custom Python installations
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.

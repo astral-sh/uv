@@ -5750,8 +5750,6 @@ pub struct PythonListArgs {
     pub output_format: PythonListFormat,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -5848,8 +5846,6 @@ pub struct PythonInstallArgs {
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
@@ -5952,8 +5948,6 @@ pub struct PythonUpgradeArgs {
     pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6034,8 +6028,6 @@ pub struct PythonFindArgs {
     pub show_version: bool,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// This can be a local path or file://, http://, or https:// URL.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }

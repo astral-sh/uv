@@ -1933,8 +1933,6 @@ Whether to allow Python downloads.
 
 URL pointing to JSON of custom Python installations.
 
-This can be a local path or file://, http://, or https:// URL.
-
 **Default value**: `None`
 
 **Type**: `str`
