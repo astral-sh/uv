@@ -284,7 +284,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0
+              package-a>=2.0.0
           we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
@@ -387,7 +387,7 @@ fn dependency_excludes_range_of_compatible_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0
+              package-a>=2.0.0
           we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
@@ -2383,7 +2383,7 @@ fn package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -2872,7 +2872,7 @@ fn transitive_package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b<0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+      ╰─▶ Because only package-b<=0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -2996,7 +2996,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-c are available:
-              package-c<1.0.0
+              package-c<=1.0.0
               package-c>=2.0.0a5,<=2.0.0a7
               package-c==2.0.0b1
               package-c>=2.0.0b5
@@ -3980,7 +3980,7 @@ fn package_only_yanked_in_range() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-a are available:
-              package-a<0.1.0
+              package-a<=0.1.0
               package-a==1.0.0
           and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
           And because you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
@@ -4195,7 +4195,7 @@ fn transitive_package_only_yanked_in_range() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-b are available:
-              package-b<0.1
+              package-b<=0.1
               package-b==1.0.0
           and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
           And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
