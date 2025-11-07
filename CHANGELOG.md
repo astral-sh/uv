@@ -3,6 +3,48 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.8
+
+Released on 2025-11-07.
+
+### Enhancements
+
+- Accept multiple packages in `uv export` ([#16603](https://github.com/astral-sh/uv/pull/16603))
+- Accept multiple packages in `uv sync` ([#16543](https://github.com/astral-sh/uv/pull/16543))
+- Add a `uv cache size` command ([#16032](https://github.com/astral-sh/uv/pull/16032))
+- Add prerelease guidance for build-system resolution failures ([#16550](https://github.com/astral-sh/uv/pull/16550))
+- Allow Python requests to include `+gil` to require a GIL-enabled interpreter ([#16537](https://github.com/astral-sh/uv/pull/16537))
+- Avoid pluralizing 'retry' for single value ([#16535](https://github.com/astral-sh/uv/pull/16535))
+- Enable first-class dependency exclusions ([#16528](https://github.com/astral-sh/uv/pull/16528))
+- Fix inclusive constraints on available package versions in resolver errors ([#16629](https://github.com/astral-sh/uv/pull/16629))
+- Improve `uv init` error for invalid directory names ([#16554](https://github.com/astral-sh/uv/pull/16554))
+- Show help on `uv build -h` ([#16632](https://github.com/astral-sh/uv/pull/16632))
+- Include the Python variant suffix in "Using Python ..." messages ([#16536](https://github.com/astral-sh/uv/pull/16536))
+- Log most recently modified file for cache-keys ([#16338](https://github.com/astral-sh/uv/pull/16338))
+- Update Docker builds to use nightly Rust toolchain with musl v1.2.5 ([#16584](https://github.com/astral-sh/uv/pull/16584))
+
+### Configuration
+
+- Expose `UV_NO_GROUP` as an environment variable ([#16529](https://github.com/astral-sh/uv/pull/16529))
+- Add `UV_NO_SOURCES` as an environment variable ([#15883](https://github.com/astral-sh/uv/pull/15883))
+
+### Bug fixes
+
+- Allow `--check` and `--locked` to be used together in `uv lock` ([#16538](https://github.com/astral-sh/uv/pull/16538))
+- Allow for unnormalized names in the METADATA file (#16547) ([#16548](https://github.com/astral-sh/uv/pull/16548))
+- Fix missing value_type for `default-groups` in schema ([#16575](https://github.com/astral-sh/uv/pull/16575))
+- Respect multi-GPU outputs in `nvidia-smi` ([#15460](https://github.com/astral-sh/uv/pull/15460))
+- Fix DNS lookup errors in Docker containers ([#8450](https://github.com/astral-sh/uv/issues/8450))
+
+### Documentation
+
+- Fix typo in uv tool list doc ([#16625](https://github.com/astral-sh/uv/pull/16625))
+- Note `uv pip list` name normalization in docs ([#13210](https://github.com/astral-sh/uv/pull/13210))
+
+### Other changes
+
+- Update Rust toolchain to 1.91 and MSRV to 1.89 ([#16531](https://github.com/astral-sh/uv/pull/16531))
+
 ## 0.9.7
 
 Released on 2025-10-30.
