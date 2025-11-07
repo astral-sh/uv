@@ -1513,9 +1513,9 @@ uv sync [OPTIONS]
 <ul>
 <li><code>text</code>:  Display the result in a human-readable format</li>
 <li><code>json</code>:  Display the result in JSON format</li>
-</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
-<p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
-<p>If the workspace member does not exist, uv will exit with an error.</p>
+</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for specific packages in the workspace.</p>
+<p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member packages.</p>
+<p>If any workspace member does not exist, uv will exit with an error.</p>
 </dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
@@ -1784,7 +1784,7 @@ The project is re-locked before exporting unless the `--locked` or `--frozen` fl
 
 uv will search for a project in the current directory or any parent directory. If a project cannot be found, uv will exit with an error.
 
-If operating in a workspace, the root will be exported by default; however, a specific member can be selected using the `--package` option.
+If operating in a workspace, the root will be exported by default; however, specific members can be selected using the `--package` option.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1944,8 +1944,8 @@ uv export [OPTIONS]
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-export--output-file"><a href="#uv-export--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
-</dd><dt id="uv-export--package"><a href="#uv-export--package"><code>--package</code></a> <i>package</i></dt><dd><p>Export the dependencies for a specific package in the workspace.</p>
-<p>If the workspace member does not exist, uv will exit with an error.</p>
+</dd><dt id="uv-export--package"><a href="#uv-export--package"><code>--package</code></a> <i>package</i></dt><dd><p>Export the dependencies for specific packages in the workspace.</p>
+<p>If any workspace member does not exist, uv will exit with an error.</p>
 </dd><dt id="uv-export--prerelease"><a href="#uv-export--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
@@ -3049,7 +3049,7 @@ uv tool list [OPTIONS]
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-tool-list--show-extras"><a href="#uv-tool-list--show-extras"><code>--show-extras</code></a></dt><dd><p>Whether to display the extra requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
-</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python version associated with run each tool</p>
+</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python version associated with each tool</p>
 </dd><dt id="uv-tool-list--show-version-specifiers"><a href="#uv-tool-list--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 </dd><dt id="uv-tool-list--show-with"><a href="#uv-tool-list--show-with"><code>--show-with</code></a></dt><dd><p>Whether to display the additional requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>

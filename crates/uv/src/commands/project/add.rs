@@ -28,11 +28,9 @@ use uv_distribution_types::{
 };
 use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
-use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeatures};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -369,8 +367,7 @@ pub(crate) async fn add(
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
             .into_iter()
             .map(|spec| {
-                augment_requirement(
-                    spec.requirement,
+                spec.requirement.augment_requirement(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
@@ -1189,83 +1186,6 @@ async fn lock_and_sync(
     .await?;
 
     Ok(())
-}
-
-/// Augment a user-provided requirement by attaching any specification data that was provided
-/// separately from the requirement itself (e.g., `--branch main`).
-fn augment_requirement(
-    requirement: UnresolvedRequirement,
-    rev: Option<&str>,
-    tag: Option<&str>,
-    branch: Option<&str>,
-    marker: Option<MarkerTree>,
-) -> UnresolvedRequirement {
-    match requirement {
-        UnresolvedRequirement::Named(mut requirement) => {
-            UnresolvedRequirement::Named(Requirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                source: match requirement.source {
-                    RequirementSource::Git {
-                        git,
-                        subdirectory,
-                        url,
-                    } => {
-                        let git = if let Some(rev) = rev {
-                            git.with_reference(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            git.with_reference(GitReference::Tag(tag.to_string()))
-                        } else if let Some(branch) = branch {
-                            git.with_reference(GitReference::Branch(branch.to_string()))
-                        } else {
-                            git
-                        };
-                        RequirementSource::Git {
-                            git,
-                            subdirectory,
-                            url,
-                        }
-                    }
-                    _ => requirement.source,
-                },
-                ..requirement
-            })
-        }
-        UnresolvedRequirement::Unnamed(mut requirement) => {
-            UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
-                        let reference = if let Some(rev) = rev {
-                            Some(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            Some(GitReference::Tag(tag.to_string()))
-                        } else {
-                            branch.map(|branch| GitReference::Branch(branch.to_string()))
-                        };
-                        if let Some(reference) = reference {
-                            git.url = git.url.with_reference(reference);
-                        }
-                        VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
-                            verbatim: requirement.url.verbatim,
-                        }
-                    }
-                    _ => requirement.url,
-                },
-                ..requirement
-            })
-        }
-    }
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.

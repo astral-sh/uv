@@ -1035,8 +1035,8 @@ pub enum ProjectCommand {
     /// uv will search for a project in the current directory or any parent directory. If a project
     /// cannot be found, uv will exit with an error.
     ///
-    /// If operating in a workspace, the root will be exported by default; however, a specific
-    /// member can be selected using the `--package` option.
+    /// If operating in a workspace, the root will be exported by default; however, specific
+    /// members can be selected using the `--package` option.
     #[command(
         after_help = "Use `uv help export` for more details.",
         after_long_help = ""
@@ -3669,14 +3669,14 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "package")]
     pub all_packages: bool,
 
-    /// Sync for a specific package in the workspace.
+    /// Sync for specific packages in the workspace.
     ///
     /// The workspace's environment (`.venv`) is updated to reflect the subset of dependencies
-    /// declared by the specified workspace member package.
+    /// declared by the specified workspace member packages.
     ///
-    /// If the workspace member does not exist, uv will exit with an error.
+    /// If any workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages")]
-    pub package: Option<PackageName>,
+    pub package: Vec<PackageName>,
 
     /// Sync the environment for a Python script, rather than the current project.
     ///
@@ -4320,11 +4320,11 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with = "package")]
     pub all_packages: bool,
 
-    /// Export the dependencies for a specific package in the workspace.
+    /// Export the dependencies for specific packages in the workspace.
     ///
-    /// If the workspace member does not exist, uv will exit with an error.
+    /// If any workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages")]
-    pub package: Option<PackageName>,
+    pub package: Vec<PackageName>,
 
     /// Prune the given package from the dependency tree.
     ///
@@ -4969,7 +4969,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_extras: bool,
 
-    /// Whether to display the Python version associated with run each tool.
+    /// Whether to display the Python version associated with each tool.
     #[arg(long)]
     pub show_python: bool,
 

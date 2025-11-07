@@ -746,7 +746,7 @@ pub(crate) fn report_interpreter(
                     "Using {} {}{}",
                     implementation.pretty(),
                     interpreter.python_version(),
-                    interpreter.variant().suffix(),
+                    interpreter.variant().display_suffix(),
                 )
                 .dimmed()
             )?;
@@ -758,7 +758,7 @@ pub(crate) fn report_interpreter(
                     "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
-                    interpreter.variant().suffix(),
+                    interpreter.variant().display_suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -771,7 +771,7 @@ pub(crate) fn report_interpreter(
                 "Using {} {}{}",
                 implementation.pretty(),
                 interpreter.python_version().cyan(),
-                interpreter.variant().suffix().cyan()
+                interpreter.variant().display_suffix().cyan()
             )?;
         } else {
             writeln!(
@@ -779,7 +779,7 @@ pub(crate) fn report_interpreter(
                 "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
-                interpreter.variant().suffix(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
