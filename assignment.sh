@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -x
 
@@ -10,6 +9,7 @@ set -x
 # project name and a brief description of the project.
 # Then it unzips the raw data provided by the client.
 
+# 1. Remove existing newproject folder if exists
 if [ -d newproject ]; then
   echo "Recreating the newproject directory"
   rm -rf newproject
@@ -17,34 +17,38 @@ fi
 mkdir newproject
 cd newproject
 
-mkdir analysis output
+# 2. Create analysis and output folders
+mkdir -p analysis output
 touch README.md
-touch Maryam.md
 touch analysis/main.py
 
-# download client data
+# 3. Download client data and unzip
 curl -Lo rawdata.zip https://github.com/UofT-DSI/shell/raw/refs/heads/main/02_activities/assignments/rawdata.zip
 unzip -q rawdata.zip
 
 ###########################################
-# Complete assignment here
+# 4. Create data/raw and move rawdata there
+mkdir -p data/raw
+mv rawdata data/raw/
 
-# 1. Create a directory named data
+###########################################
+# 5. Copy server logs to processed folder
+mkdir -p data/processed/server_logs
+cp data/raw/rawdata/*server*.log data/processed/server_logs/
 
-# 2. Move the ./rawdata directory to ./data/raw
+# 6. Copy user and event logs to processed folder
+mkdir -p data/processed/user_logs
+cp data/raw/rawdata/*user*.log data/processed/user_logs/
 
-# 3. List the contents of the ./data/raw directory
+mkdir -p data/processed/event_logs
+cp data/raw/rawdata/*event*.log data/processed/event_logs/
 
-# 4. In ./data/processed, create the following directories: server_logs, user_logs, and event_logs
+# 7. Remove files containing "ipaddr"
+rm -f data/raw/rawdata/*ipaddr*
+rm -f data/processed/user_logs/*ipaddr*
 
-# 5. Copy all server log files (files with "server" in the name AND a .log extension) from ./data/raw to ./data/processed/server_logs
-
-# 6. Repeat the above step for user logs and event logs
-
-# 7. For user privacy, remove all files containing IP addresses (files with "ipaddr" in the filename) from ./data/raw and ./data/processed/user_logs
-
-# 8. Create a file named ./data/inventory.txt that lists all the files in the subfolders of ./data/processed
-
+# 8. Create inventory.txt listing all processed files
+find data/processed -type f > data/inventory.txt
 
 ###########################################
 
