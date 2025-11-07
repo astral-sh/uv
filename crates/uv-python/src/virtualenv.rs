@@ -86,6 +86,8 @@ impl CondaEnvironmentKind {
     /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
     /// active environment name, not a constant base environment name.
     fn from_prefix_path(path: &Path) -> Self {
+        // Pixi never creates true "base" envs and names project envs "default", confusing our
+        // heuristics, so treat Pixi prefixes as child envs outright.
         if is_pixi_environment(path) {
             return Self::Child;
         }
