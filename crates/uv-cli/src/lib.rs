@@ -712,11 +712,12 @@ impl std::str::FromStr for VersionBumpSpec {
     type Err = String;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let (name, value) = input
-            .split_once('=')
-            .map_or((input, None), |(name, value)| (name, Some(value)));
+        let (name, value) = match input.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (input, None),
+        };
 
-        let bump = match name.to_ascii_lowercase().as_str() {
+        let bump = match name {
             "major" => VersionBump::Major,
             "minor" => VersionBump::Minor,
             "patch" => VersionBump::Patch,

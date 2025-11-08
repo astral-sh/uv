@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
-use uv_pep440::{BumpCommand, Prerelease, PrereleaseKind, Version};
+use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
@@ -314,72 +314,33 @@ pub(crate) async fn project_version(
 
 fn apply_bump_spec(version: &mut Version, spec: &VersionBumpSpec) {
     match spec.bump {
-        VersionBump::Major => apply_release(version, 0, spec.value),
-        VersionBump::Minor => apply_release(version, 1, spec.value),
-        VersionBump::Patch => apply_release(version, 2, spec.value),
+        VersionBump::Major => version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: spec.value,
+        }),
+        VersionBump::Minor => version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: spec.value,
+        }),
+        VersionBump::Patch => version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: spec.value,
+        }),
         VersionBump::Stable => version.bump(BumpCommand::MakeStable),
-        VersionBump::Alpha => apply_prerelease(version, PrereleaseKind::Alpha, spec.value),
-        VersionBump::Beta => apply_prerelease(version, PrereleaseKind::Beta, spec.value),
-        VersionBump::Rc => apply_prerelease(version, PrereleaseKind::Rc, spec.value),
-        VersionBump::Post => apply_post(version, spec.value),
-        VersionBump::Dev => apply_dev(version, spec.value),
-    }
-}
-
-fn apply_release(version: &mut Version, index: usize, value: Option<u64>) {
-    if let Some(value) = value {
-        let mut release = version.release().to_vec();
-
-        let len = release.len().max(index + 1);
-
-        release.resize(len, 0);
-        release[index] = value;
-
-        for slot in release.iter_mut().skip(index + 1) {
-            *slot = 0;
-        }
-
-        *version = version
-            .clone()
-            .with_release(release)
-            .with_pre(None)
-            .with_post(None)
-            .with_dev(None);
-    } else {
-        version.bump(BumpCommand::BumpRelease { index });
-    }
-}
-
-fn apply_prerelease(version: &mut Version, kind: PrereleaseKind, value: Option<u64>) {
-    if let Some(value) = value {
-        let prerelease = Prerelease {
-            kind,
-            number: value,
-        };
-
-        *version = version
-            .clone()
-            .with_pre(Some(prerelease))
-            .with_post(None)
-            .with_dev(None);
-    } else {
-        version.bump(BumpCommand::BumpPrerelease { kind });
-    }
-}
-
-fn apply_post(version: &mut Version, value: Option<u64>) {
-    if let Some(value) = value {
-        *version = version.clone().with_post(Some(value)).with_dev(None);
-    } else {
-        version.bump(BumpCommand::BumpPost);
-    }
-}
-
-fn apply_dev(version: &mut Version, value: Option<u64>) {
-    if let Some(value) = value {
-        *version = version.clone().with_dev(Some(value));
-    } else {
-        version.bump(BumpCommand::BumpDev);
+        VersionBump::Alpha => version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+            value: spec.value,
+        }),
+        VersionBump::Beta => version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+            value: spec.value,
+        }),
+        VersionBump::Rc => version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+            value: spec.value,
+        }),
+        VersionBump::Post => version.bump(BumpCommand::BumpPost { value: spec.value }),
+        VersionBump::Dev => version.bump(BumpCommand::BumpDev { value: spec.value }),
     }
 }
 
