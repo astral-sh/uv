@@ -229,7 +229,7 @@ pub(crate) async fn tree(
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: lock.exclude_newer(),
+                exclude_newer: &lock.exclude_newer(),
                 requires_python: lock.requires_python(),
                 tags: None,
             };

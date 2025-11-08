@@ -59,8 +59,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
-    ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
+    PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -342,23 +342,12 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
-        let (exclude_newer, exclude_newer_package) = {
-            let exclude_newer = &resolution.options.exclude_newer;
-            let global_exclude_newer = exclude_newer.global;
-            let package_exclude_newer = if exclude_newer.package.is_empty() {
-                None
-            } else {
-                Some(exclude_newer.package.clone().into_inner())
-            };
-            (global_exclude_newer, package_exclude_newer)
-        };
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer,
-            exclude_newer_package,
+            exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
         let lock = Self::new(
             VERSION,
@@ -818,7 +807,9 @@ impl Lock {
 
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> ExcludeNewer {
-        self.options.exclude_newer()
+        // TODO(zanieb): It'd be nice not to hide this clone here, but I am hesitant to introduce
+        // a whole new `ExcludeNewerRef` type just for this
+        self.options.exclude_newer.clone().into()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -1065,7 +1056,7 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            let exclude_newer = &self.options.exclude_newer();
+            let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = exclude_newer.global {
@@ -2131,24 +2122,34 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The global [`ExcludeNewer`] timestamp.
-    exclude_newer: Option<ExcludeNewerTimestamp>,
-    /// Package-specific [`ExcludeNewer`] timestamps.
-    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    /// The [`ExcludeNewer`] setting used to generate this lock.
+    #[serde(flatten)]
+    exclude_newer: ExcludeNewerWire,
 }
 
-impl ResolverOptions {
-    /// Get the combined exclude-newer configuration.
-    fn exclude_newer(&self) -> ExcludeNewer {
-        ExcludeNewer::from_args(
-            self.exclude_newer,
-            self.exclude_newer_package
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-        )
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct ExcludeNewerWire {
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
+    exclude_newer_package: ExcludeNewerPackage,
+}
+
+impl From<ExcludeNewerWire> for ExcludeNewer {
+    fn from(wire: ExcludeNewerWire) -> Self {
+        Self {
+            global: wire.exclude_newer,
+            package: wire.exclude_newer_package,
+        }
+    }
+}
+
+impl From<ExcludeNewer> for ExcludeNewerWire {
+    fn from(exclude_newer: ExcludeNewer) -> Self {
+        Self {
+            exclude_newer: exclude_newer.global,
+            exclude_newer_package: exclude_newer.package,
+        }
     }
 }
 
