@@ -694,6 +694,42 @@ pub enum VersionBump {
     Dev,
 }
 
+impl Display for VersionBump {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            Self::Major => "major",
+            Self::Minor => "minor",
+            Self::Patch => "patch",
+            Self::Stable => "stable",
+            Self::Alpha => "alpha",
+            Self::Beta => "beta",
+            Self::Rc => "rc",
+            Self::Post => "post",
+            Self::Dev => "dev",
+        };
+        string.fmt(f)
+    }
+}
+
+impl TryFrom<&str> for VersionBump {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "major" => Ok(Self::Major),
+            "minor" => Ok(Self::Minor),
+            "patch" => Ok(Self::Patch),
+            "stable" => Ok(Self::Stable),
+            "alpha" => Ok(Self::Alpha),
+            "beta" => Ok(Self::Beta),
+            "rc" => Ok(Self::Rc),
+            "post" => Ok(Self::Post),
+            "dev" => Ok(Self::Dev),
+            _ => Err(format!("invalid bump component `{value}`")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VersionBumpSpec {
     pub bump: VersionBump,
@@ -776,42 +812,6 @@ impl ValueParserFactory for VersionBumpSpec {
 
     fn value_parser() -> Self::Parser {
         VersionBumpSpecValueParser
-    }
-}
-
-impl TryFrom<&str> for VersionBump {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "major" => Ok(Self::Major),
-            "minor" => Ok(Self::Minor),
-            "patch" => Ok(Self::Patch),
-            "stable" => Ok(Self::Stable),
-            "alpha" => Ok(Self::Alpha),
-            "beta" => Ok(Self::Beta),
-            "rc" => Ok(Self::Rc),
-            "post" => Ok(Self::Post),
-            "dev" => Ok(Self::Dev),
-            _ => Err(format!("invalid bump component `{value}`")),
-        }
-    }
-}
-
-impl Display for VersionBump {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let string = match self {
-            Self::Major => "major",
-            Self::Minor => "minor",
-            Self::Patch => "patch",
-            Self::Stable => "stable",
-            Self::Alpha => "alpha",
-            Self::Beta => "beta",
-            Self::Rc => "rc",
-            Self::Post => "post",
-            Self::Dev => "dev",
-        };
-        string.fmt(f)
     }
 }
 
