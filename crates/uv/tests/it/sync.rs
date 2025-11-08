@@ -4425,6 +4425,174 @@ fn sync_default_groups_gibberish() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-groups = ["foo"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
+    uv_snapshot!(context.filters(), context.sync().env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    ");
+
+    // Using `UV_NO_DEFAULT_GROUPS` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-groups = "all"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
+    uv_snapshot!(context.filters(), context.sync().env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    Ok(())
+}
+
 /// Sync with `--only-group`, where the group includes a workspace member.
 #[test]
 fn sync_group_member() -> Result<()> {
