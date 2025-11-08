@@ -711,10 +711,10 @@ impl Display for VersionBump {
     }
 }
 
-impl TryFrom<&str> for VersionBump {
-    type Error = String;
+impl FromStr for VersionBump {
+    type Err = String;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "major" => Ok(Self::Major),
             "minor" => Ok(Self::Minor),
@@ -754,7 +754,7 @@ impl FromStr for VersionBumpSpec {
             None => (input, None),
         };
 
-        let bump = VersionBump::try_from(name)?;
+        let bump = name.parse::<VersionBump>()?;
 
         if bump == VersionBump::Stable && value.is_some() {
             return Err("`--bump stable` does not accept a value".to_string());
@@ -772,6 +772,14 @@ impl FromStr for VersionBumpSpec {
         };
 
         Ok(Self { bump, value })
+    }
+}
+
+impl ValueParserFactory for VersionBumpSpec {
+    type Parser = VersionBumpSpecValueParser;
+
+    fn value_parser() -> Self::Parser {
+        VersionBumpSpecValueParser
     }
 }
 
@@ -804,14 +812,6 @@ impl TypedValueParser for VersionBumpSpecValueParser {
                 .iter()
                 .filter_map(ValueEnum::to_possible_value),
         ))
-    }
-}
-
-impl ValueParserFactory for VersionBumpSpec {
-    type Parser = VersionBumpSpecValueParser;
-
-    fn value_parser() -> Self::Parser {
-        VersionBumpSpecValueParser
     }
 }
 
