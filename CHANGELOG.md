@@ -22,6 +22,7 @@ Released on 2025-11-07.
 - Include the Python variant suffix in "Using Python ..." messages ([#16536](https://github.com/astral-sh/uv/pull/16536))
 - Log most recently modified file for cache-keys ([#16338](https://github.com/astral-sh/uv/pull/16338))
 - Update Docker builds to use nightly Rust toolchain with musl v1.2.5 ([#16584](https://github.com/astral-sh/uv/pull/16584))
+- Add GitHub attestations for uv release artifacts ([#11357](https://github.com/astral-sh/uv/pull/11357))
 
 ### Configuration
 
@@ -53,7 +54,6 @@ Released on 2025-10-30.
 
 - Add Windows x86-32 emulation support to interpreter architecture checks ([#13475](https://github.com/astral-sh/uv/pull/13475))
 - Improve readability of progress bars ([#16509](https://github.com/astral-sh/uv/pull/16509))
-- Add GitHub attestations for uv release artifacts ([#11357](https://github.com/astral-sh/uv/pull/11357))
 
 ### Bug fixes
 
