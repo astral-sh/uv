@@ -254,7 +254,35 @@ pub(crate) async fn project_version(
         let mut new_version = old_version.clone();
 
         for spec in &bump {
-            apply_bump_spec(&mut new_version, spec);
+            match spec.bump {
+                VersionBump::Major => new_version.bump(BumpCommand::BumpRelease {
+                    index: 0,
+                    value: spec.value,
+                }),
+                VersionBump::Minor => new_version.bump(BumpCommand::BumpRelease {
+                    index: 1,
+                    value: spec.value,
+                }),
+                VersionBump::Patch => new_version.bump(BumpCommand::BumpRelease {
+                    index: 2,
+                    value: spec.value,
+                }),
+                VersionBump::Stable => new_version.bump(BumpCommand::MakeStable),
+                VersionBump::Alpha => new_version.bump(BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Alpha,
+                    value: spec.value,
+                }),
+                VersionBump::Beta => new_version.bump(BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Beta,
+                    value: spec.value,
+                }),
+                VersionBump::Rc => new_version.bump(BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Rc,
+                    value: spec.value,
+                }),
+                VersionBump::Post => new_version.bump(BumpCommand::BumpPost { value: spec.value }),
+                VersionBump::Dev => new_version.bump(BumpCommand::BumpDev { value: spec.value }),
+            }
         }
 
         if new_version <= old_version {
@@ -310,38 +338,6 @@ pub(crate) async fn project_version(
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
-}
-
-fn apply_bump_spec(version: &mut Version, spec: &VersionBumpSpec) {
-    match spec.bump {
-        VersionBump::Major => version.bump(BumpCommand::BumpRelease {
-            index: 0,
-            value: spec.value,
-        }),
-        VersionBump::Minor => version.bump(BumpCommand::BumpRelease {
-            index: 1,
-            value: spec.value,
-        }),
-        VersionBump::Patch => version.bump(BumpCommand::BumpRelease {
-            index: 2,
-            value: spec.value,
-        }),
-        VersionBump::Stable => version.bump(BumpCommand::MakeStable),
-        VersionBump::Alpha => version.bump(BumpCommand::BumpPrerelease {
-            kind: PrereleaseKind::Alpha,
-            value: spec.value,
-        }),
-        VersionBump::Beta => version.bump(BumpCommand::BumpPrerelease {
-            kind: PrereleaseKind::Beta,
-            value: spec.value,
-        }),
-        VersionBump::Rc => version.bump(BumpCommand::BumpPrerelease {
-            kind: PrereleaseKind::Rc,
-            value: spec.value,
-        }),
-        VersionBump::Post => version.bump(BumpCommand::BumpPost { value: spec.value }),
-        VersionBump::Dev => version.bump(BumpCommand::BumpDev { value: spec.value }),
-    }
 }
 
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml

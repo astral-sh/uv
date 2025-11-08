@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -699,8 +700,8 @@ pub struct VersionBumpSpec {
     pub value: Option<u64>,
 }
 
-impl std::fmt::Display for VersionBumpSpec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for VersionBumpSpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.value {
             Some(value) => write!(f, "{}={value}", self.bump),
             None => self.bump.fmt(f),
@@ -708,7 +709,7 @@ impl std::fmt::Display for VersionBumpSpec {
     }
 }
 
-impl std::str::FromStr for VersionBumpSpec {
+impl FromStr for VersionBumpSpec {
     type Err = String;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
@@ -789,8 +790,8 @@ impl ValueParserFactory for VersionBumpSpec {
     }
 }
 
-impl std::fmt::Display for VersionBump {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for VersionBump {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let string = match self {
             Self::Major => "major",
             Self::Minor => "minor",
