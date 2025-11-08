@@ -718,18 +718,7 @@ impl FromStr for VersionBumpSpec {
             None => (input, None),
         };
 
-        let bump = match name {
-            "major" => VersionBump::Major,
-            "minor" => VersionBump::Minor,
-            "patch" => VersionBump::Patch,
-            "stable" => VersionBump::Stable,
-            "alpha" => VersionBump::Alpha,
-            "beta" => VersionBump::Beta,
-            "rc" => VersionBump::Rc,
-            "post" => VersionBump::Post,
-            "dev" => VersionBump::Dev,
-            _ => return Err(format!("invalid bump component `{name}`")),
-        };
+        let bump = VersionBump::try_from(name)?;
 
         if bump == VersionBump::Stable && value.is_some() {
             return Err("`--bump stable` does not accept a value".to_string());
@@ -787,6 +776,25 @@ impl ValueParserFactory for VersionBumpSpec {
 
     fn value_parser() -> Self::Parser {
         VersionBumpSpecValueParser
+    }
+}
+
+impl TryFrom<&str> for VersionBump {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "major" => Ok(Self::Major),
+            "minor" => Ok(Self::Minor),
+            "patch" => Ok(Self::Patch),
+            "stable" => Ok(Self::Stable),
+            "alpha" => Ok(Self::Alpha),
+            "beta" => Ok(Self::Beta),
+            "rc" => Ok(Self::Rc),
+            "post" => Ok(Self::Post),
+            "dev" => Ok(Self::Dev),
+            _ => Err(format!("invalid bump component `{value}`")),
+        }
     }
 }
 
