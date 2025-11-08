@@ -735,7 +735,7 @@ impl std::str::FromStr for VersionBumpSpec {
         }
 
         let value = match value {
-            Some(raw) if raw.is_empty() => {
+            Some("") => {
                 return Err("`--bump` values cannot be empty".to_string());
             }
             Some(raw) => Some(
