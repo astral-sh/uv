@@ -734,18 +734,16 @@ impl std::str::FromStr for VersionBumpSpec {
             return Err("`--bump stable` does not accept a value".to_string());
         }
 
-        let value =
-            match value {
-                Some(raw) => {
-                    if raw.is_empty() {
-                        return Err("`--bump` values cannot be empty".to_string());
-                    }
-                    Some(raw.parse::<u64>().map_err(|_| {
-                        format!("invalid numeric value `{raw}` for `--bump {name}`")
-                    })?)
-                }
-                None => None,
-            };
+        let value = match value {
+            Some(raw) if raw.is_empty() => {
+                return Err("`--bump` values cannot be empty".to_string());
+            }
+            Some(raw) => Some(
+                raw.parse::<u64>()
+                    .map_err(|_| format!("invalid numeric value `{raw}` for `--bump {name}`"))?,
+            ),
+            None => None,
+        };
 
         Ok(Self { bump, value })
     }
