@@ -36,6 +36,5 @@ assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
-p12 = { workspace = true }
 rcgen = { workspace = true }
 which = { workspace = true }

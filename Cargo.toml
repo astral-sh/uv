@@ -215,9 +215,8 @@ hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.8", features = ["tokio"] }
 ignore = { version = "0.4.23" }
 insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
-p12 = { version = "0.6.3" }
 predicates = { version = "3.1.2" }
-rcgen = { version = "0.14.3" }
+rcgen = { version = "0.14.5", features = ["crypto", "pem", "ring"], default-features = false }
 similar = { version = "2.6.0" }
 temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }

@@ -598,43 +598,45 @@ if __name__ == "__main__":
     }
 
     /// Creates a self-signed certificate and returns its path.
-    fn create_temp_certificate(temp_dir: &tempfile::TempDir) -> Result<PathBuf> {
-        use p12::PFX;
-        use rcgen::{CertificateParams, KeyPair};
+    fn create_temp_certificate(temp_dir: &tempfile::TempDir) -> Result<(PathBuf, PathBuf)> {
+        use rcgen::{
+            CertificateParams, DnType, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose, SanType,
+        };
 
-        let signing_key = KeyPair::generate()?;
-        let mut cert_params = CertificateParams::new(vec!["UvTrampolineTest".to_string()])?;
-        cert_params.insert_extended_key_usage(rcgen::ExtendedKeyUsagePurpose::CodeSigning);
-        let cert = cert_params.self_signed(&signing_key)?;
+        let mut params = CertificateParams::default();
+        params.key_usages.push(KeyUsagePurpose::DigitalSignature);
+        params
+            .extended_key_usages
+            .push(ExtendedKeyUsagePurpose::CodeSigning);
+        params
+            .distinguished_name
+            .push(DnType::OrganizationName, "Astral Software Inc.");
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "uv-test-signer");
+        params
+            .subject_alt_names
+            .push(SanType::DnsName("uv-test-signer".try_into()?));
 
-        // Create PKCS#12 archive
-        let pfx = PFX::new(
-            cert.der(),
-            &signing_key.serialize_der(),
-            None,
-            "",
-            "UvTrampolineTest",
-        )
-        .expect("Failed to create PFX archive");
+        let private_key = KeyPair::generate()?;
+        let public_cert = params.self_signed(&private_key)?;
 
-        // Create temp file
-        let temp_pfx = temp_dir.path().join("uv-trampoline-test.pfx");
-        fs_err::write(&temp_pfx, pfx.to_der())?;
+        let public_cert_path = temp_dir.path().join("uv-trampoline-test.crt");
+        let private_key_path = temp_dir.path().join("uv-trampoline-test.key");
+        fs_err::write(public_cert_path.as_path(), public_cert.pem())?;
+        fs_err::write(private_key_path.as_path(), private_key.serialize_pem())?;
 
-        println!(
-            "Wrote testing code-signing certificate in {}",
-            temp_pfx.display()
-        );
-        Ok(temp_pfx)
+        Ok((public_cert_path, private_key_path))
     }
 
     /// Signs the given binary using `PowerShell`'s `Set-AuthenticodeSignature` with a temporary certificate.
     fn sign_authenticode(bin_path: impl AsRef<Path>) {
         let temp_dir = tempfile::TempDir::new().expect("Failed to create temporary directory");
-        let temp_pfx =
+        let (public_cert, private_key) =
             create_temp_certificate(&temp_dir).expect("Failed to create self-signed certificate");
 
-        Command::new("powershell")
+        // Instead of powershell, we rely on pwsh which supports CreateFromPemFile.
+        Command::new("pwsh")
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -643,10 +645,11 @@ if __name__ == "__main__":
                     r"
                     $ErrorActionPreference = 'Stop'
                     Import-Module Microsoft.PowerShell.Security
-                    $pfx = Get-PfxCertificate -FilePath '{}';
-                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $pfx;
+                    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile('{}', '{}')
+                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert;
                     ",
-                    temp_pfx.display().to_string().replace('\'', "''"),
+                    public_cert.display().to_string().replace('\'', "''"),
+                    private_key.display().to_string().replace('\'', "''"),
                     bin_path.as_ref().display().to_string().replace('\'', "''"),
                 ),
             ])
