@@ -4,22 +4,23 @@ use jiff::Timestamp;
 use tl::HTMLTag;
 use tracing::{debug, instrument, warn};
 use url::Url;
-
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
-pub(crate) struct SimpleHtml {
+pub(crate) struct SimpleDetailHTML {
     /// The [`BaseUrl`] to which all relative URLs should be resolved.
     pub(crate) base: BaseUrl,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     pub(crate) files: Vec<PypiFile>,
 }
 
-impl SimpleHtml {
+impl SimpleDetailHTML {
     /// Parse the list of [`PypiFile`]s from the simple HTML page returned by the given URL.
     #[instrument(skip_all, fields(url = % url))]
     pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
@@ -78,7 +79,7 @@ impl SimpleHtml {
 
     /// Parse a [`PypiFile`] from an `<a>` tag.
     ///
-    /// Returns `None` if the `<a>` don't doesn't have an `href` attribute.
+    /// Returns `None` if the `<a>` doesn't have an `href` attribute.
     fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
         let Some(href) = link
@@ -225,6 +226,57 @@ impl SimpleHtml {
     }
 }
 
+/// A parsed structure from PyPI "HTML" index format listing all available packages.
+#[derive(Debug, Clone)]
+pub(crate) struct SimpleIndexHtml {
+    /// The list of project names available in the index.
+    pub(crate) projects: Vec<PackageName>,
+}
+
+impl SimpleIndexHtml {
+    /// Parse the list of project names from the Simple API index HTML page.
+    pub(crate) fn parse(text: &str) -> Result<Self, Error> {
+        let dom = tl::parse(text, tl::ParserOptions::default())?;
+
+        // Parse each `<a>` tag to extract the project name.
+        let parser = dom.parser();
+        let mut projects = dom
+            .nodes()
+            .iter()
+            .filter_map(|node| node.as_tag())
+            .filter(|link| link.name().as_bytes() == b"a")
+            .filter_map(|link| Self::parse_anchor_project_name(link, parser))
+            .filter_map(|name| PackageName::from_str(&name).ok())
+            .collect::<Vec<_>>();
+
+        // Sort for deterministic ordering.
+        projects.sort_unstable();
+
+        Ok(Self { projects })
+    }
+
+    /// Parse a project name from an `<a>` tag.
+    ///
+    /// Returns `None` if the `<a>` doesn't have an `href` attribute or text content.
+    fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<SmallString> {
+        // Extract the href.
+        link.attributes()
+            .get("href")
+            .flatten()
+            .filter(|bytes| !bytes.as_bytes().is_empty())?;
+
+        // Extract the text content, which should be the project name.
+        let inner_text = link.inner_text(parser);
+        let project_name = inner_text.trim();
+
+        if project_name.is_empty() {
+            return None;
+        }
+
+        Some(SmallString::from(project_name))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -275,7 +327,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -332,7 +384,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -392,7 +444,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -449,7 +501,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -506,7 +558,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -563,7 +615,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -618,7 +670,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -673,7 +725,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -711,7 +763,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -749,7 +801,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -804,7 +856,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -859,7 +911,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base);
+        let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleHtml {
@@ -916,7 +968,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base);
+        let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleHtml {
@@ -973,7 +1025,7 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap_err();
         insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
 
@@ -991,7 +1043,7 @@ mod tests {
     "#;
         let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
             .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -1073,7 +1125,7 @@ mod tests {
     "#;
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -1176,7 +1228,7 @@ mod tests {
 </html>
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -1249,7 +1301,7 @@ mod tests {
     "#;
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
@@ -1370,6 +1422,156 @@ mod tests {
                     url: "/whl/Jinja2-3.1.6-py3-none-any.whl",
                     yanked: None,
                 },
+            ],
+        }
+        "#);
+    }
+
+    /// Test parsing Simple API index (root) HTML.
+    #[test]
+    fn parse_simple_index() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Index</title>
+</head>
+<body>
+    <h1>Simple Index</h1>
+    <a href="/simple/flask/">flask</a><br/>
+    <a href="/simple/jinja2/">jinja2</a><br/>
+    <a href="/simple/requests/">requests</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "flask",
+                "jinja2",
+                "requests",
+            ],
+        }
+        "#);
+    }
+
+    /// Test that project names are sorted.
+    #[test]
+    fn parse_simple_index_sorted() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/zebra/">zebra</a><br/>
+    <a href="/simple/apple/">apple</a><br/>
+    <a href="/simple/monkey/">monkey</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "apple",
+                "monkey",
+                "zebra",
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links without `href`attributes are ignored.
+    #[test]
+    fn parse_simple_index_missing_href() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Simple Index</h1>
+    <a href="/simple/flask/">flask</a><br/>
+    <a>no-href-project</a><br/>
+    <a href="/simple/requests/">requests</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "flask",
+                "requests",
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links with empty `href` attributes are ignored.
+    #[test]
+    fn parse_simple_index_empty_href() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="">empty-href</a><br/>
+    <a href="/simple/flask/">flask</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "flask",
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links with empty text content are ignored.
+    #[test]
+    fn parse_simple_index_empty_text() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/empty/"></a><br/>
+    <a href="/simple/flask/">flask</a><br/>
+    <a href="/simple/whitespace/">   </a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "flask",
+            ],
+        }
+        "#);
+    }
+
+    /// Test parsing with case variations and normalization.
+    #[test]
+    fn parse_simple_index_case_variations() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/Flask/">Flask</a><br/>
+    <a href="/simple/django/">django</a><br/>
+    <a href="/simple/PyYAML/">PyYAML</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        // Note: We preserve the case as returned by the server
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                "Flask",
+                "PyYAML",
+                "django",
             ],
         }
         "#);

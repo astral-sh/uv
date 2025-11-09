@@ -29,7 +29,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail, ResolutionMetadata};
+use uv_pypi_types::{
+    PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
@@ -37,7 +39,7 @@ use uv_torch::TorchStrategy;
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
-use crate::html::SimpleHtml;
+use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
@@ -304,7 +306,7 @@ impl RegistryClient {
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the PyPI JSON API implements.
     #[instrument(skip_all, fields(package = % package_name))]
-    pub async fn package_metadata<'index>(
+    pub async fn simple_detail<'index>(
         &'index self,
         package_name: &PackageName,
         index: Option<IndexMetadataRef<'index>>,
@@ -335,7 +337,7 @@ impl RegistryClient {
                             let status_code_strategy =
                                 self.index_urls.status_code_strategy_for(index.url);
                             match self
-                                .simple_single_index(
+                                .simple_detail_single_index(
                                     package_name,
                                     index.url,
                                     capabilities,
@@ -381,7 +383,7 @@ impl RegistryClient {
                                 let status_code_strategy =
                                     IndexStatusCodeStrategy::ignore_authentication_error_codes();
                                 let metadata = match self
-                                    .simple_single_index(
+                                    .simple_detail_single_index(
                                         package_name,
                                         index.url,
                                         capabilities,
@@ -468,7 +470,7 @@ impl RegistryClient {
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
-    async fn simple_single_index(
+    async fn simple_detail_single_index(
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
@@ -515,9 +517,9 @@ impl RegistryClient {
         };
 
         let result = if matches!(index, IndexUrl::Path(_)) {
-            self.fetch_local_index(package_name, &url).await
+            self.fetch_local_simple_detail(package_name, &url).await
         } else {
-            self.fetch_remote_index(package_name, &url, index, &cache_entry, cache_control)
+            self.fetch_remote_simple_detail(package_name, &url, index, &cache_entry, cache_control)
                 .await
         };
 
@@ -554,7 +556,7 @@ impl RegistryClient {
     }
 
     /// Fetch the [`SimpleMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
-    async fn fetch_remote_index(
+    async fn fetch_remote_simple_detail(
         &self,
         package_name: &PackageName,
         url: &DisplaySafeUrl,
@@ -671,7 +673,7 @@ impl RegistryClient {
 
     /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
     /// structure.
-    async fn fetch_local_index(
+    async fn fetch_local_simple_detail(
         &self,
         package_name: &PackageName,
         url: &DisplaySafeUrl,
@@ -692,6 +694,150 @@ impl RegistryClient {
             }
         };
         let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
+        OwnedArchive::from_unarchived(&metadata)
+    }
+
+    /// Fetch the list of projects from a Simple API index at a remote URL.
+    ///
+    /// This fetches the root of a Simple API index (e.g., `https://pypi.org/simple/`)
+    /// which returns a list of all available projects.
+    pub async fn fetch_simple_index(
+        &self,
+        index_url: &IndexUrl,
+    ) -> Result<SimpleIndexMetadata, Error> {
+        // Format the URL for PyPI.
+        let mut url = index_url.url().clone();
+        url.path_segments_mut()
+            .map_err(|()| ErrorKind::CannotBeABase(index_url.url().clone()))?
+            .pop_if_empty()
+            // The URL *must* end in a trailing slash for proper relative path behavior
+            // ref https://github.com/servo/rust-url/issues/333
+            .push("");
+
+        if url.scheme() == "file" {
+            let archived = self.fetch_local_simple_index(&url).await?;
+            Ok(OwnedArchive::deserialize(&archived))
+        } else {
+            let archived = self.fetch_remote_simple_index(&url, index_url).await?;
+            Ok(OwnedArchive::deserialize(&archived))
+        }
+    }
+
+    /// Fetch the list of projects from a remote Simple API index.
+    async fn fetch_remote_simple_index(
+        &self,
+        url: &DisplaySafeUrl,
+        index: &IndexUrl,
+    ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
+        // In theory, we should be able to pass `MediaType::all()` to all registries, and as
+        // unsupported media types should be ignored by the server. For now, we implement this
+        // defensively to avoid issues with misconfigured servers.
+        let accept = if self
+            .pyx_token_store
+            .as_ref()
+            .is_some_and(|token_store| token_store.is_known_url(index.url()))
+        {
+            MediaType::all()
+        } else {
+            MediaType::pypi()
+        };
+
+        let simple_request = self
+            .uncached_client(url)
+            .get(Url::from(url.clone()))
+            .header("Accept-Encoding", "gzip, deflate, zstd")
+            .header("Accept", accept)
+            .build()
+            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+
+        let response = self
+            .uncached_client(url)
+            .execute(simple_request)
+            .await
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+
+        // Use the response URL for error messages.
+        let response_url = DisplaySafeUrl::from(response.url().clone());
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .ok_or_else(|| Error::from(ErrorKind::MissingContentType(response_url.clone())))?;
+        let content_type = content_type.to_str().map_err(|err| {
+            Error::from(ErrorKind::InvalidContentTypeHeader(
+                response_url.clone(),
+                err,
+            ))
+        })?;
+        let media_type = content_type.split(';').next().unwrap_or(content_type);
+        let media_type = MediaType::from_str(media_type).ok_or_else(|| {
+            Error::from(ErrorKind::UnsupportedMediaType(
+                response_url.clone(),
+                media_type.to_string(),
+            ))
+        })?;
+
+        let metadata = match media_type {
+            MediaType::PyxV1Msgpack => {
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
+                let data: PyxSimpleIndex = rmp_serde::from_slice(bytes.as_ref())
+                    .map_err(|err| Error::from_msgpack_err(err, response_url.clone()))?;
+                SimpleIndexMetadata::from_pyx_index(data)
+            }
+            MediaType::PyxV1Json => {
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
+                let data: PyxSimpleIndex = serde_json::from_slice(bytes.as_ref())
+                    .map_err(|err| Error::from_json_err(err, response_url.clone()))?;
+                SimpleIndexMetadata::from_pyx_index(data)
+            }
+            MediaType::PypiV1Json => {
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
+                let data: PypiSimpleIndex = serde_json::from_slice(bytes.as_ref())
+                    .map_err(|err| Error::from_json_err(err, response_url.clone()))?;
+                SimpleIndexMetadata::from_pypi_index(data)
+            }
+            MediaType::PypiV1Html | MediaType::TextHtml => {
+                let text = response
+                    .text()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
+                SimpleIndexMetadata::from_html(&text, &response_url)?
+            }
+        };
+
+        OwnedArchive::from_unarchived(&metadata)
+    }
+
+    /// Fetch the list of projects from a local Simple API index.
+    async fn fetch_local_simple_index(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
+        let path = url
+            .to_file_path()
+            .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?
+            .join("index.html");
+        let text = match fs_err::tokio::read_to_string(&path).await {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::from(ErrorKind::FileNotFound(
+                    "index.html".to_string(),
+                )));
+            }
+            Err(err) => {
+                return Err(Error::from(ErrorKind::Io(err)));
+            }
+        };
+        let metadata = SimpleIndexMetadata::from_html(&text, url)?;
         OwnedArchive::from_unarchived(&metadata)
     }
 
@@ -1129,6 +1275,48 @@ pub struct VersionSourceDist {
     pub file: File,
 }
 
+/// The list of projects available in a Simple API index.
+#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct SimpleIndexMetadata {
+    /// The list of project names available in the index.
+    projects: Vec<PackageName>,
+}
+
+impl SimpleIndexMetadata {
+    /// Iterate over the projects in the index.
+    pub fn iter(&self) -> impl Iterator<Item = &PackageName> {
+        self.projects.iter()
+    }
+
+    /// Create a [`SimpleIndexMetadata`] from a [`PypiSimpleIndex`].
+    fn from_pypi_index(index: PypiSimpleIndex) -> Self {
+        Self {
+            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+        }
+    }
+
+    /// Create a [`SimpleIndexMetadata`] from a [`PyxSimpleIndex`].
+    fn from_pyx_index(index: PyxSimpleIndex) -> Self {
+        Self {
+            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+        }
+    }
+
+    /// Create a [`SimpleIndexMetadata`] from HTML content.
+    fn from_html(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
+        let html = crate::html::SimpleIndexHtml::parse(text).map_err(|err| {
+            Error::from(ErrorKind::BadHtml {
+                source: err,
+                url: url.clone(),
+            })
+        })?;
+        Ok(Self {
+            projects: html.projects,
+        })
+    }
+}
+
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleMetadata(Vec<SimpleMetadatum>);
@@ -1264,8 +1452,8 @@ impl SimpleMetadata {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
     ) -> Result<Self, Error> {
-        let SimpleHtml { base, files } =
-            SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
+        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, url)
+            .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
         Ok(Self::from_pypi_files(files, package_name, base.as_url()))
     }
@@ -1368,7 +1556,7 @@ mod tests {
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
+    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleDetailHTML};
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
@@ -1624,7 +1812,7 @@ mod tests {
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
-        let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, &base).unwrap();
         let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls

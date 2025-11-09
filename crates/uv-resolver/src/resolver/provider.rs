@@ -159,7 +159,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.package_metadata(
+                client.simple_detail(
                     package_name,
                     index.map(IndexMetadataRef::from),
                     self.capabilities,

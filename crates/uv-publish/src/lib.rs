@@ -532,7 +532,7 @@ pub async fn check_url(
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
-        .package_metadata(
+        .simple_detail(
             filename.name(),
             Some(index_url.into()),
             index_capabilities,

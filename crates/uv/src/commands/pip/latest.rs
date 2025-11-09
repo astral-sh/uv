@@ -35,7 +35,7 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .package_metadata(
+            .simple_detail(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
