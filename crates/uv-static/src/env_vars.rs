@@ -244,7 +244,7 @@ impl EnvVars {
 
     /// Equivalent to the `--no-default-groups` command-line argument. If set, uv will
     /// not select the default dependency groups defined in `tool.uv.default-groups`.
-    #[attr_added_in("0.9.9")]
+    #[attr_added_in("next release")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install

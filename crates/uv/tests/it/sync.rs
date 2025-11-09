@@ -4471,7 +4471,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
     ");
 
     // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
-    uv_snapshot!(context.filters(), context.sync().env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4512,7 +4512,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("foo")
         .arg("--group").arg("bar")
-        .env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+        .env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4572,7 +4572,7 @@ fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
     ");
 
     // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
-    uv_snapshot!(context.filters(), context.sync().env("UV_NO_DEFAULT_GROUPS", "true"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
