@@ -37,7 +37,7 @@
   --md-default-fg-color: var(--white);
   --md-default-fg-color--light: var(--white);
   --md-default-fg-color--lighter: var(--white);
-  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.5);
+  --md-default-fg-color--lightest: var(--black);
   --md-primary-fg-color: var(--space);
   --md-primary-bg-color: var(--white);
   --md-accent-fg-color: var(--cosmic);
@@ -400,7 +400,7 @@ modifications */
 
 /* Dark mode GitHub button */
 [data-md-color-scheme="astral-dark"] .md-header__nav-link--github {
-  background-color: var(--cosmic);
+  background-color: var(--flare);
 }
 
 [data-md-color-scheme="astral-dark"] .md-header__nav-link--github:hover {
