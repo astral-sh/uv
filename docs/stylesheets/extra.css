@@ -25,7 +25,7 @@
 [data-md-color-scheme="astral-light"] {
   --md-default-bg-color--dark: var(--black);
   --md-default-bg-color--light: var(--white);
-  --md-default-fg-color--lightest: rgba(0, 0, 0, 0.14);
+  --md-default-fg-color--lightest: var(--white);
   --md-primary-fg-color: var(--galaxy);
   --md-typeset-a-color: var(--flare);
   --md-accent-fg-color: var(--cosmic);
@@ -143,6 +143,17 @@ This is a consequence of the reduced nav spacing below. */
   }
 }
 
+/* Fix border color for footer */
+.md-footer {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+/* Add a border to separate the meta footer from the other
+We do this because the background color is the same but the theme expects it to differ */
+.md-footer-meta {
+  border-top: .05rem solid rgba(0, 0, 0, 0.08);
+}
+
+
 /* Omits the nav title "uv" entirely unless on a small screen, in which case
 the nav title is needed for backwards navigation in the collapsible
 nav variant.
@@ -204,6 +215,17 @@ h3 + p:has(> small.added-in) {
   color: var(--md-accent-fg-color) !important;
 }
 
+/* Remove underlines from heading links */
+.md-typeset h1 a,
+.md-typeset h2 a,
+.md-typeset h3 a,
+.md-typeset h4 a,
+.md-typeset h5 a,
+.md-typeset h6 a {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
 /* Omit the first breadcrumb item, which is the "Introduction" */
 .md-path__list > .md-path__item:first-of-type {
   display: none;
@@ -224,6 +246,26 @@ modifications */
   align-items: center;
   gap: 0.5rem; /* Reduced space between buttons */
   flex-shrink: 0;
+}
+
+/* Tweak the formatting of the primary nav on a large screen */
+@media screen and (min-width: 76.25em) {
+  /* Increase the font size of the section headings */
+  .md-nav__item--section > .md-nav__link {
+      font-size: 0.85rem;
+  }
+  /* Increase the size of the first nav item to match the sections
+  It has no children, so it is not considered a section */
+  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
+    font-size: 0.85rem;
+    margin-bottom: 0.75em;
+    font-weight: bold;
+  }
+}
+
+/* Bold the active nav link for accessibility */
+.md-nav--primary .md-nav__item .md-nav__link--active {
+  font-weight: bold;
 }
 
 /* Discord icon-only button */
