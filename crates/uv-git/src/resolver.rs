@@ -142,6 +142,44 @@ impl GitResolver {
         Ok(Some(precise))
     }
 
+    /// Resolve a Git URL to a specific commit via `git ls-remote`.
+    ///
+    /// Returns a [`GitOid`] if the URL has already been resolved (i.e., is available in the cache),
+    /// or if it can be fetched via `git ls-remote`. Otherwise, returns `None`.
+    pub async fn ls_remote(
+        &self,
+        url: &GitUrl,
+        disable_ssl: bool,
+        offline: bool,
+        cache: PathBuf,
+    ) -> Result<Option<GitOid>, GitResolverError> {
+        // If the URL is already precise or we know the precise commit, return it.
+        if let Some(precise) = self.get_precise(url) {
+            return Ok(Some(precise));
+        }
+
+        let source = GitSource::new(url.clone(), cache, offline);
+
+        // If necessary, disable SSL.
+        let source = if disable_ssl {
+            source.dangerous()
+        } else {
+            source
+        };
+
+        let precise = tokio::task::spawn_blocking(move || source.ls_remote())
+            .await?
+            .map_err(GitResolverError::Git)?;
+
+        // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
+        // resolve to the same precise commit.
+        if let Some(precise) = precise {
+            self.insert(RepositoryReference::from(url), precise);
+        }
+
+        Ok(precise)
+    }
+
     /// Fetch a remote Git repository.
     pub async fn fetch(
         &self,
