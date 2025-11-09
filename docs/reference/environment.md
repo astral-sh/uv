@@ -330,7 +330,7 @@ any configuration files from the current directory, parent directories, or user 
 directories.
 
 ### `UV_NO_DEFAULT_GROUPS`
-<small class="added-in">added in `0.9.9`</small>
+<small class="added-in">added in `next release`</small>
 
 Equivalent to the `--no-default-groups` command-line argument. If set, uv will
 not select the default dependency groups defined in `tool.uv.default-groups`.
