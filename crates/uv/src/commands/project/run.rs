@@ -1982,7 +1982,7 @@ fn copy_entrypoint(
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file)?;
+    launcher.write_to_file(&mut file, is_gui)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 
