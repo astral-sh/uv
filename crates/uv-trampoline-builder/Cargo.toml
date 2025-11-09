@@ -23,14 +23,18 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
-
 fs-err = {workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+rcgen = { workspace = true }
 which = { workspace = true }

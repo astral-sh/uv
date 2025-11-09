@@ -111,7 +111,7 @@ pub(crate) async fn pip_list(
             client: &client,
             capabilities: &capabilities,
             prerelease,
-            exclude_newer,
+            exclude_newer: &exclude_newer,
             tags: Some(tags),
             requires_python: &requires_python,
         };

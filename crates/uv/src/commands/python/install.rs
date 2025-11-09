@@ -1060,20 +1060,22 @@ fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
 ) -> Option<&'a ManagedPythonInstallation> {
-    let target = if cfg!(unix) {
+    if cfg!(unix) {
         if !path.is_symlink() {
             return None;
         }
-        fs_err::canonicalize(path).ok()?
+        let target = fs_err::canonicalize(path).ok()?;
+
+        installations.find(|installation| installation.executable(false) == target)
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
-        dunce::canonicalize(launcher.python_path).ok()?
-    } else {
-        unreachable!("Only Windows and Unix are supported")
-    };
+        let target = dunce::canonicalize(launcher.python_path).ok()?;
 
-    installations.find(|installation| installation.executable(false) == target)
+        installations.find(|installation| installation.executable(false) == target)
+    } else {
+        unreachable!("Only Unix and Windows are supported")
+    }
 }
