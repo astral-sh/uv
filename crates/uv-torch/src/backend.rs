@@ -306,8 +306,6 @@ impl TorchStrategy {
                 matches!(
                     package_name.as_str(),
                     "torch"
-                        | "torch-model-archiver"
-                        | "torch-tb-profiler"
                         | "torcharrow"
                         | "torchaudio"
                         | "torchcsprng"
@@ -337,8 +335,6 @@ impl TorchStrategy {
                         | "torch-spline-conv"
                         | "vllm"
                         | "torch"
-                        | "torch-model-archiver"
-                        | "torch-tb-profiler"
                         | "torcharrow"
                         | "torchaudio"
                         | "torchcsprng"
