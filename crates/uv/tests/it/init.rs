@@ -2659,8 +2659,30 @@ fn init_hidden() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    error: The target directory (`.foo`) is not a valid package name. Please provide a package name with `--name`.
     "###);
+}
+
+#[test]
+fn init_non_ascii_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let directory = context.temp_dir.child("püthon");
+    directory.create_dir_all()?;
+
+    let mut command = context.init();
+    command.current_dir(directory.path());
+
+    uv_snapshot!(context.filters(), command, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The current directory (`püthon`) is not a valid package name. Please provide a package name with `--name`.
+    "###);
+
+    Ok(())
 }
 
 /// Run `uv init` with an invalid `pyproject.toml` in a parent directory.
@@ -3366,18 +3388,17 @@ fn init_app_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3392,7 +3413,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3402,7 +3423,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3623,18 +3644,17 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             lib_core_contents, @r###"
         use pyo3::prelude::*;
 
-        #[pyfunction]
-        fn hello_from_bin() -> String {
-            "Hello from foo!".to_string()
-        }
-
-        /// A Python module implemented in Rust. The name of this function must match
+        /// A Python module implemented in Rust. The name of this module must match
         /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
         /// import the module.
         #[pymodule]
-        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-            Ok(())
+        mod _core {
+            use pyo3::prelude::*;
+
+            #[pyfunction]
+            fn hello_from_bin() -> String {
+                "Hello from foo!".to_string()
+            }
         }
         "###
         );
@@ -3649,7 +3669,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [package]
         name = "foo"
         version = "0.1.0"
-        edition = "2021"
+        edition = "2024"
 
         [lib]
         name = "_core"
@@ -3659,7 +3679,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3948,7 +3968,7 @@ fn init_without_description() -> Result<()> {
 
 /// Run `uv init --python 3.13t` to create a pin to a freethreaded Python.
 #[test]
-fn init_python_variant() -> Result<()> {
+fn init_python_variant() {
     let context = TestContext::new("3.13");
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--python").arg("3.13t"), @r###"
     success: true
@@ -3959,10 +3979,8 @@ fn init_python_variant() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join("foo/.python-version"))?;
-    assert_eq!(python_version, "3.13t\n");
-
-    Ok(())
+    let contents = context.read("foo/.python-version");
+    assert_snapshot!(contents, @"3.13+freethreaded");
 }
 
 /// Check how `uv init` reacts to working and broken git with different `--vcs` options.

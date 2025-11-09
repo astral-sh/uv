@@ -50,18 +50,20 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{
+    InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
-    package: Option<PackageName>,
+    package: Vec<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -107,16 +109,28 @@ pub(crate) async fn sync(
                 &workspace_cache,
             )
             .await?
-        } else if let Some(package) = package.as_ref() {
+        } else if let [name] = package.as_slice() {
             VirtualProject::Project(
                 Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                    .with_current_project(name.clone())
+                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            let project = VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?;
+
+            for name in &package {
+                if !project.workspace().packages().contains_key(name) {
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                }
+            }
+
+            project
         };
 
         // TODO(lucab): improve warning content
@@ -217,9 +231,9 @@ pub(crate) async fn sync(
                 ));
             }
 
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
-                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
@@ -304,8 +318,8 @@ pub(crate) async fn sync(
     // Determine the lock mode.
     let mode = if frozen {
         LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(environment.interpreter())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
@@ -338,16 +352,18 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) => {
+        Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
-                Outcome::LockMismatch(prev, cur)
+                Outcome::LockMismatch(prev, cur, lock_source)
             } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
-                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                    ProjectError::LockMismatch(prev, cur, lock_source)
+                        .to_string()
+                        .bold()
                 )?;
                 return Ok(ExitStatus::Failure);
             }
@@ -375,8 +391,7 @@ pub(crate) async fn sync(
     }
 
     // Identify the installation target.
-    let sync_target =
-        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
+    let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
     let state = state.fork();
 
@@ -415,11 +430,13 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur) => {
+        Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
                 printer.stderr(),
                 "{}",
-                ProjectError::LockMismatch(prev, cur).to_string().bold()
+                ProjectError::LockMismatch(prev, cur, lock_source)
+                    .to_string()
+                    .bold()
             )?;
             Ok(ExitStatus::Failure)
         }
@@ -433,7 +450,7 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 }
 
 impl Outcome {
@@ -444,7 +461,7 @@ impl Outcome {
                 LockResult::Changed(_, lock) => lock,
                 LockResult::Unchanged(lock) => lock,
             },
-            Self::LockMismatch(_prev, cur) => cur,
+            Self::LockMismatch(_prev, cur, _lock_source) => cur,
         }
     }
 }
@@ -453,7 +470,7 @@ fn identify_installation_target<'a>(
     target: &'a SyncTarget,
     lock: &'a Lock,
     all_packages: bool,
-    package: Option<&'a PackageName>,
+    package: &'a [PackageName],
 ) -> InstallTarget<'a> {
     match &target {
         SyncTarget::Project(project) => {
@@ -464,33 +481,45 @@ fn identify_installation_target<'a>(
                             workspace: project.workspace(),
                             lock,
                         }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock,
+                        match package {
+                            // By default, install the root project.
+                            [] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock,
+                            },
+                            [name] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace: project.workspace(),
+                                names,
+                                lock,
+                            },
                         }
                     }
                 }
                 VirtualProject::NonProject(workspace) => {
                     if all_packages {
                         InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                        match package {
+                            // By default, install the entire workspace.
+                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                            [name] => InstallTarget::Project {
+                                workspace,
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace,
+                                names,
+                                lock,
+                            },
+                        }
                     }
                 }
             }
@@ -607,6 +636,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
         | InstallTarget::Project { workspace, .. }
+        | InstallTarget::Projects { workspace, .. }
         | InstallTarget::NonProjectWorkspace { workspace, .. } => {
             LoweredExtraBuildDependencies::from_workspace(
                 extra_build_dependencies.clone(),
@@ -1272,7 +1302,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                         LockResult::Unchanged(..) => match mode {
                             // When `--frozen` is used, we don't check the lockfile
                             LockMode::Frozen => LockAction::Use,
-                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                            LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }
                         },

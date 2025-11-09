@@ -391,7 +391,7 @@ impl ManagedPythonInstallation {
         let variant = if self.implementation() == ImplementationName::GraalPy {
             ""
         } else if cfg!(unix) {
-            self.key.variant.suffix()
+            self.key.variant.executable_suffix()
         } else if cfg!(windows) && windowed {
             // Use windowed Python that doesn't open a terminal.
             "w"
@@ -625,7 +625,7 @@ impl ManagedPythonInstallation {
                         "{}python{}{}{}",
                         std::env::consts::DLL_PREFIX,
                         self.key.version().python_version(),
-                        self.key.variant().suffix(),
+                        self.key.variant().executable_suffix(),
                         std::env::consts::DLL_SUFFIX
                     ));
                     macos_dylib::patch_dylib_install_name(dylib_path)?;

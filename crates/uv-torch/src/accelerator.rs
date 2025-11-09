@@ -6,6 +6,11 @@ use tracing::debug;
 use uv_pep440::Version;
 use uv_static::EnvVars;
 
+#[cfg(windows)]
+use serde::Deserialize;
+#[cfg(windows)]
+use wmi::{COMLibrary, WMIConnection};
+
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
     #[error(transparent)]
@@ -60,6 +65,7 @@ impl Accelerator {
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
+    /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
@@ -126,9 +132,12 @@ impl Accelerator {
             .output()
         {
             if output.status.success() {
-                let driver_version = Version::from_str(&String::from_utf8(output.stdout)?)?;
-                debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
-                return Ok(Some(Self::Cuda { driver_version }));
+                let stdout = String::from_utf8(output.stdout)?;
+                if let Some(first_line) = stdout.lines().next() {
+                    let driver_version = Version::from_str(first_line.trim())?;
+                    debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
+                    return Ok(Some(Self::Cuda { driver_version }));
+                }
             }
 
             debug!(
@@ -185,6 +194,50 @@ impl Accelerator {
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
+        }
+
+        // Detect Intel GPU via WMI on Windows
+        #[cfg(windows)]
+        {
+            #[derive(Deserialize, Debug)]
+            #[serde(rename = "Win32_VideoController")]
+            #[serde(rename_all = "PascalCase")]
+            struct VideoController {
+                #[serde(rename = "PNPDeviceID")]
+                pnp_device_id: Option<String>,
+                name: Option<String>,
+            }
+
+            match COMLibrary::new() {
+                Ok(com_library) => match WMIConnection::new(com_library) {
+                    Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
+                        Ok(gpu_controllers) => {
+                            for gpu_controller in gpu_controllers {
+                                if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
+                                    if pnp_device_id
+                                        .contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
+                                    {
+                                        debug!(
+                                            "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
+                                            pnp_device_id, gpu_controller.name
+                                        );
+                                        return Ok(Some(Self::Xpu));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to query WMI for video controllers: {e}");
+                        }
+                    },
+                    Err(e) => {
+                        debug!("Failed to create WMI connection: {e}");
+                    }
+                },
+                Err(e) => {
+                    debug!("Failed to initialize COM library: {e}");
+                }
+            }
         }
 
         debug!("Failed to detect GPU driver version");
@@ -303,5 +356,21 @@ mod tests {
         let content = "NVRM version: NVIDIA UNIX x86_64 Kernel Module  375.74  Wed Jun 14 01:39:39 PDT 2017\nGCC version:  gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.4)";
         let result = parse_proc_driver_nvidia_version(content).unwrap();
         assert_eq!(result, Some(Version::from_str("375.74").unwrap()));
+    }
+
+    #[test]
+    fn nvidia_smi_multi_gpu() {
+        // Test that we can parse nvidia-smi output with multiple GPUs (multiple lines)
+        let single_gpu = "572.60\n";
+        if let Some(first_line) = single_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
+
+        let multi_gpu = "572.60\n572.60\n";
+        if let Some(first_line) = multi_gpu.lines().next() {
+            let version = Version::from_str(first_line.trim()).unwrap();
+            assert_eq!(version, Version::from_str("572.60").unwrap());
+        }
     }
 }

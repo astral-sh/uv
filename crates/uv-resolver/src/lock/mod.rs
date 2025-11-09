@@ -59,8 +59,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
-    ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
+    PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -342,23 +342,12 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
-        let (exclude_newer, exclude_newer_package) = {
-            let exclude_newer = &resolution.options.exclude_newer;
-            let global_exclude_newer = exclude_newer.global;
-            let package_exclude_newer = if exclude_newer.package.is_empty() {
-                None
-            } else {
-                Some(exclude_newer.package.clone().into_inner())
-            };
-            (global_exclude_newer, package_exclude_newer)
-        };
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer,
-            exclude_newer_package,
+            exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
         let lock = Self::new(
             VERSION,
@@ -818,7 +807,9 @@ impl Lock {
 
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> ExcludeNewer {
-        self.options.exclude_newer()
+        // TODO(zanieb): It'd be nice not to hide this clone here, but I am hesitant to introduce
+        // a whole new `ExcludeNewerRef` type just for this
+        self.options.exclude_newer.clone().into()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -1065,7 +1056,7 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            let exclude_newer = &self.options.exclude_newer();
+            let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = exclude_newer.global {
@@ -1161,6 +1152,23 @@ impl Lock {
                     overrides => each_element_on_its_line_array(overrides.iter()),
                 };
                 manifest_table.insert("overrides", value(overrides));
+            }
+
+            if !self.manifest.excludes.is_empty() {
+                let excludes = self
+                    .manifest
+                    .excludes
+                    .iter()
+                    .map(|name| {
+                        serde::Serialize::serialize(&name, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let excludes = match excludes.as_slice() {
+                    [] => Array::new(),
+                    [name] => Array::from_iter([name]),
+                    excludes => each_element_on_its_line_array(excludes.iter()),
+                };
+                manifest_table.insert("excludes", value(excludes));
             }
 
             if !self.manifest.build_constraints.is_empty() {
@@ -1269,7 +1277,7 @@ impl Lock {
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
+    pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
         for dist in &self.packages {
             if &dist.id.name == name {
@@ -1447,11 +1455,13 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        excludes: &[PackageName],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         tags: &Tags,
+        markers: &MarkerEnvironment,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -1559,6 +1569,15 @@ impl Lock {
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same excludes.
+        {
+            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
+            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
             }
         }
 
@@ -1724,8 +1743,12 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist =
-                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
+                let dist = package.to_dist(
+                    root,
+                    TagPolicy::Preferred(tags),
+                    &BuildOptions::default(),
+                    markers,
+                )?;
 
                 let metadata = {
                     let id = dist.version_id();
@@ -1875,6 +1898,7 @@ impl Lock {
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
+                        markers,
                     )?;
 
                     let metadata = {
@@ -2043,6 +2067,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of excludes.
+    MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
@@ -2096,24 +2122,34 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The global [`ExcludeNewer`] timestamp.
-    exclude_newer: Option<ExcludeNewerTimestamp>,
-    /// Package-specific [`ExcludeNewer`] timestamps.
-    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    /// The [`ExcludeNewer`] setting used to generate this lock.
+    #[serde(flatten)]
+    exclude_newer: ExcludeNewerWire,
 }
 
-impl ResolverOptions {
-    /// Get the combined exclude-newer configuration.
-    fn exclude_newer(&self) -> ExcludeNewer {
-        ExcludeNewer::from_args(
-            self.exclude_newer,
-            self.exclude_newer_package
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-        )
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct ExcludeNewerWire {
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
+    exclude_newer_package: ExcludeNewerPackage,
+}
+
+impl From<ExcludeNewerWire> for ExcludeNewer {
+    fn from(wire: ExcludeNewerWire) -> Self {
+        Self {
+            global: wire.exclude_newer,
+            package: wire.exclude_newer_package,
+        }
+    }
+}
+
+impl From<ExcludeNewer> for ExcludeNewerWire {
+    fn from(exclude_newer: ExcludeNewer) -> Self {
+        Self {
+            exclude_newer: exclude_newer.global,
+            exclude_newer_package: exclude_newer.package,
+        }
     }
 }
 
@@ -2142,6 +2178,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The excludes provided to the resolver.
+    #[serde(default)]
+    excludes: BTreeSet<PackageName>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<Requirement>,
@@ -2158,6 +2197,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        excludes: impl IntoIterator<Item = PackageName>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
@@ -2167,6 +2207,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
@@ -2195,6 +2236,7 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
+            excludes: self.excludes,
             build_constraints: self
                 .build_constraints
                 .into_iter()
@@ -2511,6 +2553,7 @@ impl Package {
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
+        markers: &MarkerEnvironment,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -2613,19 +2656,23 @@ impl Package {
                 kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
             (false, false) => Err(LockError {
                 kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
                     id: self.id.clone(),
                 }),
-                hint: self.tag_hint(tag_policy),
+                hint: self.tag_hint(tag_policy, markers),
             }),
         }
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<WheelTagHint> {
+    fn tag_hint(
+        &self,
+        tag_policy: TagPolicy<'_>,
+        markers: &MarkerEnvironment,
+    ) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -2636,6 +2683,7 @@ impl Package {
             self.id.version.as_ref(),
             &filenames,
             tag_policy.tags(),
+            markers,
         )
     }
 
@@ -3770,19 +3818,15 @@ impl TryFrom<SourceWire> for Source {
             Git { git } => {
                 let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
-                        given: git.to_string(),
+                        given: git.clone(),
                         err,
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
                 let git_source = GitSource::from_url(&url)
                     .map_err(|err| match err {
-                        GitSourceError::InvalidSha => SourceParseError::InvalidSha {
-                            given: git.to_string(),
-                        },
-                        GitSourceError::MissingSha => SourceParseError::MissingSha {
-                            given: git.to_string(),
-                        },
+                        GitSourceError::InvalidSha => SourceParseError::InvalidSha { given: git },
+                        GitSourceError::MissingSha => SourceParseError::MissingSha { given: git },
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
@@ -4267,11 +4311,11 @@ impl From<SourceDistWire> for SourceDist {
 impl From<GitReference> for GitSourceKind {
     fn from(value: GitReference) -> Self {
         match value {
-            GitReference::Branch(branch) => Self::Branch(branch.to_string()),
-            GitReference::Tag(tag) => Self::Tag(tag.to_string()),
-            GitReference::BranchOrTag(rev) => Self::Rev(rev.to_string()),
-            GitReference::BranchOrTagOrCommit(rev) => Self::Rev(rev.to_string()),
-            GitReference::NamedRef(rev) => Self::Rev(rev.to_string()),
+            GitReference::Branch(branch) => Self::Branch(branch),
+            GitReference::Tag(tag) => Self::Tag(tag),
+            GitReference::BranchOrTag(rev) => Self::Rev(rev),
+            GitReference::BranchOrTagOrCommit(rev) => Self::Rev(rev),
+            GitReference::NamedRef(rev) => Self::Rev(rev),
             GitReference::DefaultBranch => Self::DefaultBranch,
         }
     }
@@ -5260,6 +5304,7 @@ enum WheelTagHint {
         version: Option<Version>,
         tags: BTreeSet<PlatformTag>,
         best: Option<PlatformTag>,
+        markers: MarkerEnvironment,
     },
 }
 
@@ -5270,6 +5315,7 @@ impl WheelTagHint {
         version: Option<&Version>,
         filenames: &[&WheelFilename],
         tags: &Tags,
+        markers: &MarkerEnvironment,
     ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
@@ -5322,17 +5368,18 @@ impl WheelTagHint {
             }
             TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
                 let best = tags.platform_tag().cloned();
-                let tags = Self::platform_tags(filenames.iter().copied(), tags)
+                let incompatible_tags = Self::platform_tags(filenames.iter().copied(), tags)
                     .cloned()
                     .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
+                if incompatible_tags.is_empty() {
                     None
                 } else {
                     Some(Self::PlatformTags {
                         package: name.clone(),
                         version: version.cloned(),
-                        tags,
+                        tags: incompatible_tags,
                         best,
+                        markers: markers.clone(),
                     })
                 }
             }
@@ -5372,6 +5419,18 @@ impl WheelTagHint {
                 [].iter()
             }
         })
+    }
+
+    fn suggest_environment_marker(markers: &MarkerEnvironment) -> String {
+        let sys_platform = markers.sys_platform();
+        let platform_machine = markers.platform_machine();
+
+        // Generate the marker string based on actual environment values
+        if platform_machine.is_empty() {
+            format!("sys_platform == '{sys_platform}'")
+        } else {
+            format!("sys_platform == '{sys_platform}' and platform_machine == '{platform_machine}'")
+        }
     }
 }
 
@@ -5517,9 +5576,11 @@ impl std::fmt::Display for WheelTagHint {
                 version,
                 tags,
                 best,
+                markers,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
                 if let Some(best) = best {
+                    let example_marker = Self::suggest_environment_marker(markers);
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
                     } else {
@@ -5530,9 +5591,9 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", package.cyan())
                     };
-                    writeln!(
+                    write!(
                         f,
-                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
+                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
                         "hint".bold().cyan(),
                         ":".bold(),
                         best,
@@ -5540,6 +5601,7 @@ impl std::fmt::Display for WheelTagHint {
                         tags.iter()
                             .map(|tag| format!("`{}`", tag.cyan()))
                             .join(", "),
+                        format!("\"{example_marker}\"").cyan(),
                         "tool.uv.required-environments".green()
                     )
                 } else {

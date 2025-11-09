@@ -169,6 +169,20 @@ impl TestContext {
         self
     }
 
+    /// Add extra filtering for cache size output
+    #[must_use]
+    pub fn with_filtered_cache_size(mut self) -> Self {
+        // Filter raw byte counts (numbers on their own line)
+        self.filters
+            .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
+        // Filter human-readable sizes (e.g., "384.2 KiB")
+        self.filters.push((
+            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
+            "[SIZE]\n".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Windows-compatible missing file errors.
     pub fn with_filtered_missing_file_error(mut self) -> Self {
         // The exact message string depends on the system language, so we remove it.
@@ -225,6 +239,10 @@ impl TestContext {
         ));
         self.filters.push((
             "managed installations, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "search path or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
@@ -649,7 +667,7 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern, format!("[PYTHON-{version}]"))),
             );
 
             // And for the symlink we created in the test the Python path
@@ -1261,6 +1279,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv cache size` command.
+    pub fn cache_size(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("cache").arg("size");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv build_backend` command.
     ///
     /// Note that this command is hidden and only invoking it through a build frontend is supported.
@@ -1832,19 +1858,18 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Test package for direct URLs in branches"
         requires-python = ">=3.11,<3.13"
         {body}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
         "#
     };
     fs_err::create_dir_all(dir)?;
     fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
-    fs_err::create_dir(dir.join(name))?;
-    fs_err::write(dir.join(name).join("__init__.py"), "")?;
+    fs_err::create_dir_all(dir.join("src").join(name))?;
+    fs_err::write(dir.join("src").join(name).join("__init__.py"), "")?;
     Ok(())
 }
 

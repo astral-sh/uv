@@ -57,7 +57,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{
+    InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+};
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -76,14 +78,19 @@ pub(crate) mod version;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `{2}` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
     )]
     MissingLockfile,
+
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -154,7 +161,7 @@ pub(crate) enum ProjectError {
     MissingGroupProject(GroupName),
 
     #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupWorkspace(GroupName),
+    MissingGroupProjects(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
@@ -168,7 +175,7 @@ pub(crate) enum ProjectError {
     MissingExtraProject(ExtraName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraWorkspace(ExtraName),
+    MissingExtraProjects(ExtraName),
 
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
@@ -1001,16 +1008,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().display_suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1871,6 +1880,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
@@ -1990,6 +2000,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2227,6 +2238,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2359,6 +2371,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

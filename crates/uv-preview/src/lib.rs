@@ -20,6 +20,7 @@ bitflags::bitflags! {
         const FORMAT = 1 << 8;
         const NATIVE_AUTH = 1 << 9;
         const S3_ENDPOINT = 1 << 10;
+        const CACHE_SIZE = 1 << 11;
     }
 }
 
@@ -40,6 +41,7 @@ impl PreviewFeatures {
             Self::FORMAT => "format",
             Self::NATIVE_AUTH => "native-auth",
             Self::S3_ENDPOINT => "s3-endpoint",
+            Self::CACHE_SIZE => "cache-size",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -88,6 +90,7 @@ impl FromStr for PreviewFeatures {
                 "format" => Self::FORMAT,
                 "native-auth" => Self::NATIVE_AUTH,
                 "s3-endpoint" => Self::S3_ENDPOINT,
+                "cache-size" => Self::CACHE_SIZE,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;

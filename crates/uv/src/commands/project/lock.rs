@@ -49,7 +49,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use crate::settings::{LockCheck, LockCheckSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ impl LockResult {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     dry_run: DryRun,
     refresh: Refresh,
@@ -177,8 +177,8 @@ pub(crate) async fn lock(
             .into_interpreter(),
         };
 
-        if locked {
-            LockMode::Locked(&interpreter)
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(&interpreter, lock_check)
         } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {
@@ -257,7 +257,7 @@ pub(super) enum LockMode<'env> {
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
-    Locked(&'env Interpreter),
+    Locked(&'env Interpreter, LockCheckSource),
     /// Use the existing lockfile without performing a resolution.
     Frozen,
 }
@@ -334,9 +334,20 @@ impl<'env> LockOperation<'env> {
                     .read()
                     .await?
                     .ok_or_else(|| ProjectError::MissingLockfile)?;
+                // Check if the discovered workspace members match the locked workspace members.
+                if let LockTarget::Workspace(workspace) = target {
+                    for package_name in workspace.packages().keys() {
+                        existing
+                            .find_by_name(package_name)
+                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
+                            .ok_or_else(|| {
+                                ProjectError::LockWorkspaceMismatch(package_name.clone())
+                            })?;
+                    }
+                }
                 Ok(LockResult::Unchanged(existing))
             }
-            LockMode::Locked(interpreter) => {
+            LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
                 let existing = target
                     .read()
@@ -367,6 +378,7 @@ impl<'env> LockOperation<'env> {
                     return Err(ProjectError::LockMismatch(
                         prev.map(Box::new),
                         Box::new(cur),
+                        lock_source,
                     ));
                 }
 
@@ -473,6 +485,7 @@ async fn do_lock(
     let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
+    let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
     let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
@@ -752,6 +765,7 @@ async fn do_lock(
             &dependency_groups,
             &constraints,
             &overrides,
+            &excludes,
             &build_constraints,
             &conflicts,
             environments,
@@ -875,6 +889,7 @@ async fn do_lock(
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
+                excludes.clone(),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
@@ -913,6 +928,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
+                excludes.clone(),
                 build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
@@ -971,6 +987,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
+        excludes: &[PackageName],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
@@ -1201,11 +1218,13 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                excludes,
                 build_constraints,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
                 interpreter.tags()?,
+                interpreter.markers(),
                 hasher,
                 index,
                 database,
@@ -1288,6 +1307,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedExcludes(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched excludes:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

@@ -268,6 +268,115 @@ fn package() -> Result<()> {
     Ok(())
 }
 
+/// Sync multiple packages within a workspace.
+#[test]
+fn multiple_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo", "bar", "baz"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
+        baz = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("baz")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+        )?;
+
+    // Sync `foo` and `bar`.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + bar==0.1.0 (from file://[TEMP_DIR]/packages/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/packages/foo)
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Sync `foo`, `bar`, and `baz`.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar")
+        .arg("--package").arg("baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + baz==0.1.0 (from file://[TEMP_DIR]/packages/baz)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Test json output
 #[test]
 fn sync_json() -> Result<()> {
@@ -3409,6 +3518,84 @@ fn sync_exclude_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_exclude_group_with_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        baz = ["certifi"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test single group exclusion via environment variable
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .env("UV_NO_GROUP", "bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Test multiple group exclusion via environment variable (space-separated)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .env("UV_NO_GROUP", "bar baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 4 packages in [TIME]
+    ");
+
+    // Test that CLI flag takes precedence over environment variable
+    // When --no-group is used on CLI, it overrides UV_NO_GROUP env var
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("baz")
+        .arg("--no-group").arg("bar")
+        .env("UV_NO_GROUP", "baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + certifi==2024.2.2
     ");
 
     Ok(())
@@ -12077,8 +12264,12 @@ fn sync_required_environment_hint() -> Result<()> {
         r"You're on [^ ]+ \(`.*`\)",
         "You're on [PLATFORM] (`[TAG]`)",
     ));
+    filters.push((
+        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+    ));
 
-    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12087,8 +12278,8 @@ fn sync_required_environment_hint() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
 
-    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
-    ");
+    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'" to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    "#);
 
     Ok(())
 }

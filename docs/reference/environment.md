@@ -15,7 +15,7 @@ Python can lead to unexpected behavior.
 ### `UV_BUILD_CONSTRAINT`
 <small class="added-in">added in `0.2.34`</small>
 
-Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
+Equivalent to the `--build-constraints` command-line argument. If set, uv will use this file
 as constraints for any source distribution builds. Uses space-separated list of files.
 
 ### `UV_CACHE_DIR`
@@ -62,7 +62,7 @@ local `uv.toml` file to use as the configuration file.
 ### `UV_CONSTRAINT`
 <small class="added-in">added in `0.1.36`</small>
 
-Equivalent to the `--constraint` command-line argument. If set, uv will use this
+Equivalent to the `--constraints` command-line argument. If set, uv will use this
 file as the constraints file. Uses space-separated list of files.
 
 ### `UV_CREDENTIALS_DIR`
@@ -102,6 +102,12 @@ compatibility.
 <small class="added-in">added in `0.4.30`</small>
 
 `.env` files from which to load environment variables when executing `uv run` commands.
+
+### `UV_EXCLUDE`
+<small class="added-in">added in `0.9.8`</small>
+
+Equivalent to the `--excludes` command-line argument. If set, uv will use this
+as the excludes file. Uses space-separated list of files.
 
 ### `UV_EXCLUDE_NEWER`
 <small class="added-in">added in `0.2.12`</small>
@@ -346,6 +352,12 @@ Ignore `.env` files when executing `uv run` commands.
 
 Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
 
+### `UV_NO_GROUP`
+<small class="added-in">added in `0.9.8`</small>
+
+Equivalent to the `--no-group` command-line argument. If set, uv will disable
+the specified dependency groups for the given space-delimited list of packages.
+
 ### `UV_NO_HF_TOKEN`
 <small class="added-in">added in `0.8.1`</small>
 
@@ -374,6 +386,12 @@ alias, for backwards compatibility.
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
 
+### `UV_NO_SOURCES`
+<small class="added-in">added in `0.9.8`</small>
+
+Equivalent to the `--no-sources` command-line argument. If set, uv will ignore
+`[tool.uv.sources]` annotations when resolving dependencies.
+
 ### `UV_NO_SYNC`
 <small class="added-in">added in `0.4.18`</small>
 
@@ -399,7 +417,7 @@ Equivalent to the `--offline` command-line argument. If set, uv will disable net
 ### `UV_OVERRIDE`
 <small class="added-in">added in `0.2.22`</small>
 
-Equivalent to the `--override` command-line argument. If set, uv will use this file
+Equivalent to the `--overrides` command-line argument. If set, uv will use this file
 as the overrides file. Uses space-separated list of files.
 
 ### `UV_PRERELEASE`

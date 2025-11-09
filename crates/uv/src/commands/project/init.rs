@@ -116,15 +116,27 @@ pub(crate) async fn init(
             let name = match name {
                 Some(name) => name,
                 None => {
-                    let name = path
+                    let directory_name = path
                         .file_name()
                         .and_then(|path| path.to_str())
                         .context("Missing directory name")?;
 
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
-                    let name = name.trim().replace(' ', "-");
-                    PackageName::from_owned(name)?
+                    let candidate = directory_name.trim().replace(' ', "-");
+                    match PackageName::from_owned(candidate) {
+                        Ok(name) => name,
+                        Err(_) => {
+                            let directory_description = if explicit_path.is_some() {
+                                "target directory"
+                            } else {
+                                "current directory"
+                            };
+                            anyhow::bail!(
+                                "The {directory_description} (`{directory_name}`) is not a valid package name. Please provide a package name with `--name`."
+                            );
+                        }
+                    }
                 }
             };
 
@@ -985,8 +997,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 requires = ["uv_build>={min_version},<{max_version}"]
                 build-backend = "uv_build"
             "#}
-        }
-        .to_string(),
+        },
         // Pure-python backends
         ProjectBuildBackend::Hatch => indoc::indoc! {r#"
                 [build-system]
@@ -1075,7 +1086,7 @@ fn pyproject_build_backend_prerequisites(
                     [package]
                     name = "{module_name}"
                     version = "0.1.0"
-                    edition = "2021"
+                    edition = "2024"
 
                     [lib]
                     name = "_core"
@@ -1085,7 +1096,7 @@ fn pyproject_build_backend_prerequisites(
                     [dependencies]
                     # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
                     # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-                    pyo3 = {{ version = "0.22.4", features = ["extension-module", "abi3-py39"] }}
+                    pyo3 = {{ version = "0.27.1", features = ["extension-module", "abi3-py39"] }}
                 "#},
                 )?;
             }
@@ -1174,18 +1185,17 @@ fn generate_package_scripts(
                     indoc::formatdoc! {r#"
                     use pyo3::prelude::*;
 
-                    #[pyfunction]
-                    fn hello_from_bin() -> String {{
-                        "Hello from {package}!".to_string()
-                    }}
-
-                    /// A Python module implemented in Rust. The name of this function must match
+                    /// A Python module implemented in Rust. The name of this module must match
                     /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
                     /// import the module.
                     #[pymodule]
-                    fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {{
-                        m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-                        Ok(())
+                    mod _core {{
+                        use pyo3::prelude::*;
+
+                        #[pyfunction]
+                        fn hello_from_bin() -> String {{
+                            "Hello from {package}!".to_string()
+                        }}
                     }}
                 "#},
                 )?;

@@ -489,3 +489,25 @@ the file. For example, a wheel named `foo-1.0.0-py3-none-any.whl` that contains 
 the version is `1.0.1` will be rejected by uv, but accepted by pip.
 
 To force uv to accept such wheels, set `UV_SKIP_WHEEL_FILENAME_CHECK=1` in the environment.
+
+## Package name normalization
+
+By default, uv normalizes package names to match their
+[PEP 503-compliant forms](https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization)
+and uses those normalized names in all output contexts. This differs from pip, which tends to
+preserve the verbatim package name as published on the registry.
+
+For example, `uv pip list` displays normalized packages names (e.g., `docstring-parser`), while
+`pip list` displays non-normalized package names (e.g., `docstring_parser`):
+
+```shell
+(venv) $ diff --side-by-side  <(pip list) <(uv pip list)
+Package          Version					Package          Version
+---------------- -------					---------------- -------
+docstring_parser 0.16					      |	docstring-parser 0.16
+jaraco.classes   3.4.0					      |	jaraco-classes   3.4.0
+more-itertools   10.7.0				    		more-itertools   10.7.0
+pip              25.1					    	pip              25.1
+PyMuPDFb         1.24.10				      |	pymupdfb         1.24.10
+PyPDF2           3.0.1					      |	pypdf2           3.0.1
+```
