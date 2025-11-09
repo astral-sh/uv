@@ -304,6 +304,20 @@ impl GitRemote {
             lfs_ready: None,
         })
     }
+
+    /// Resolve the OID of a reference or a revision from this remote.
+    pub(crate) fn ls(
+        &self,
+        reference: &GitReference,
+        locked_rev: Option<GitOid>,
+        disable_ssl: bool,
+        offline: bool,
+    ) -> Result<Option<GitOid>> {
+        if let Some(commit) = locked_rev.or_else(|| reference.as_commit()) {
+            return Ok(Some(commit));
+        }
+        ls_remote(&self.url, reference, disable_ssl, offline)
+    }
 }
 
 impl GitDatabase {
@@ -600,6 +614,51 @@ fn remote_url_root(mut url: SafeUrl) -> SafeUrl {
     url.set_query(None);
     url.set_fragment(None);
     url
+}
+
+/// Perform a `git ls-remote` operation to resolve a reference or revision to an OID.
+fn ls_remote(
+    remote_url: &SafeUrl,
+    reference: &GitReference,
+    disable_ssl: bool,
+    offline: bool,
+) -> Result<Option<GitOid>> {
+    debug!("Performing a Git ls-remote for: {remote_url}");
+    let mut cmd = GIT.as_ref().cloned()?;
+    cmd.arg("ls-remote");
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git ls-remote via `GIT_SSL_NO_VERIFY`");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git ls-remote via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
+    }
+    let refs = match reference {
+        GitReference::Branch(name) => vec![format!("refs/heads/{name}")],
+        GitReference::Tag(name) => vec![format!("refs/tags/{name}^{{}}"), format!("refs/tags/{name}")],
+        GitReference::BranchOrTag(name) | GitReference::BranchOrTagOrCommit(name) => vec![
+            format!("refs/heads/{name}"),
+            format!("refs/tags/{name}^{{}}"),
+            format!("refs/tags/{name}"),
+        ],
+        GitReference::NamedRef(name) => vec![format!("{name}^{{}}"), name.clone()],
+        GitReference::DefaultBranch => vec![String::from("HEAD")],
+        GitReference::Commit(commit) => return Ok(Some(*commit)),
+    };
+    cmd.arg("--").arg(remote_url.as_str()).args(&refs);
+    let output = cmd.exec_with_output()?;
+    let stdout = str::from_utf8(&output.stdout)?;
+    // Prefer branches over tags and peeled commits over annotated tag objects.
+    for name in refs {
+        if let Some(oid) = stdout.lines().filter_map(|line| line.split_once('\t'))
+            .find_map(|(oid, reference)| (reference == name).then_some(oid))
+        {
+            return Ok(Some(oid.parse()?));
+        }
+    }
+
+    Ok(None)
 }
 
 /// Attempts to fetch the given git `reference` for a Git repository.
