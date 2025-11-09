@@ -50,6 +50,12 @@ function setCopyText() {
 // https://squidfunk.github.io/mkdocs-material/customization/?h=javascript#additional-javascript
 document$.subscribe(function () {
   setCopyText();
+
+  // Fix the branding text to make "uv" bold
+  const brandingText = document.querySelector('.md-header__branding-text');
+  if (brandingText && brandingText.textContent === 'uv Documentation') {
+    brandingText.innerHTML = '<span class="md-header__branding-name">uv</span> Documentation';
+  }
 });
 
 // Use client-side redirects for anchors that have moved.
