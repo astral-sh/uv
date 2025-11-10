@@ -61,44 +61,39 @@ impl VerbatimUrl {
         let given = given.as_ref();
         let url = Url::parse(given)?;
 
-        // Reject some ambiguous cases, e.g.:
+        // Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
         //
-        // https://user/name:password@domain/a/b/c
-        //
-        // In this case the user *probably* meant to have a username of
-        // "user/name", but both RFC 3986 and WHATWG URL expect the
-        // userinfo (RFC 3986) or authority (WHATWG) to not contain a
+        // In this case the user *probably* meant to have a username of "user/name", but both RFC
+        // 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
         // non-percent-encoded slash or other special character.
         //
-        // This ends up being moderately annoying to detect, since the
-        // above gets parsed into a "valid" WHATWG URL where the
-        // host is `used` and the pathname is `/name:password@domain/a/b/c`
-        // rather than causing a parse error.
+        // This ends up being moderately annoying to detect, since the above gets parsed into a
+        // "valid" WHATWG URL where the host is `used` and the pathname is
+        // `/name:password@domain/a/b/c` rather than causing a parse error.
         //
-        // To detect it, we use a heuristic: if the password component
-        // is missing but the path or fragment contain a `:` and `@`
-        // in that order, then we assume the URL is ambiguous.
-        let path_or_fragment_is_fishy = {
-            let path = url.path();
-            let fragment = url.fragment().unwrap_or("");
-
-            path.contains(':') && path.contains('@')
-                || fragment.contains(':') && fragment.contains('@')
-        };
-
-        if url.password().is_none() && path_or_fragment_is_fishy {
-            // Our ambiguous URL probably has credentials in it,
-            // so we don't want to blast it out in the error message.
-            // We somewhat aggressively replace everything between
-            // the scheme's ':' and the lastmost `@` with `***`.
-            //
-            // These unwraps are safe, since we've checked for both
-            // characters above.
-            let col_pos = given.find(':').unwrap();
-            let at_pos = given.rfind('@').unwrap();
-
+        // To detect it, we use a heuristic: if the password component is missing but the path or
+        // fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
+        if url.password().is_none()
+            && (url
+                .path()
+                .find(':')
+                .is_some_and(|pos| url.path()[pos..].contains('@'))
+                || url
+                    .fragment()
+                    .map(|fragment| {
+                        fragment
+                            .find(':')
+                            .is_some_and(|pos| fragment[pos..].contains('@'))
+                    })
+                    .unwrap_or(false))
+            // If the above is true, we should always expect to find these in the given URL
+            && let Some(col_pos) = given.find(':')
+            && let Some(at_pos) = given.rfind('@')
+        {
+            // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
+            // the error message. We somewhat aggressively replace everything between the scheme's
+            // ':' and the lastmost `@` with `***`.
             let redacted_path = format!("{}***{}", &given[0..=col_pos], &given[at_pos..]);
-
             return Err(VerbatimUrlError::AmbiguousAuthority(redacted_path));
         }
 
