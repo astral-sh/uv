@@ -258,7 +258,7 @@ modifications */
   It has no children, so it is not considered a section */
   .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
     font-size: 0.85rem;
-    margin-bottom: 0.75em;
+    margin-bottom: 0.25em;
     font-weight: bold;
   }
 }
@@ -366,10 +366,6 @@ modifications */
   margin-left: auto;
 }
 
-/* Enhanced search bar styling for better prominence */
-.md-search {
-  order: 2;
-}
 
 /* Make search field more prominent and centered */
 @media screen and (min-width: 60em) {
@@ -554,7 +550,6 @@ modifications */
   box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.025);
 }
 
-/* Refine header layout for centered search */
 @media screen and (min-width: 76.25em) {
 
   /* Hide the search modal's button that appears in the header */
@@ -646,5 +641,55 @@ modifications */
     order: 11;
     margin-left: 0.5rem;
     flex-shrink: 0;
+  }
+
+  /* Show and style mobile search button */
+  .md-header__button.md-icon[for="__search"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.75rem;
+    padding: 0;
+    background-color: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0.5rem;
+    order: 9;
+    margin-left: 0.5rem;
+    margin-right: 0.75rem; /* Extra spacing from Discord/GitHub */
+    transition: all 0.15s ease;
+  }
+
+  .md-header__button.md-icon[for="__search"]:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+
+  .md-header__button.md-icon[for="__search"] svg {
+    width: 16px;
+    height: 16px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .md-header__button.md-icon[for="__search"]:hover svg {
+    color: rgba(0, 0, 0, 0.85);
+  }
+
+  /* Dark mode mobile search button */
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"] {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"]:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"] svg {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"]:hover svg {
+    color: rgba(255, 255, 255, 0.85);
   }
 }

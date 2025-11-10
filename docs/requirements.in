@@ -1,5 +1,5 @@
 black>=23.10.0
-zensical
+zensical>=0.0.5
 mdformat>=0.7.17
 mdformat-mkdocs>=2.0.4
 mdformat-admon>=2.0.2
