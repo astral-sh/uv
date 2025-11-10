@@ -520,7 +520,8 @@ pub enum Commands {
     /// Manage workspaces.
     #[command(
         after_help = "Use `uv help workspace` for more details.",
-        after_long_help = ""
+        after_long_help = "",
+        hide = true
     )]
     Workspace(WorkspaceNamespace),
     /// The implementation of the build backend.
@@ -6850,6 +6851,7 @@ pub struct WorkspaceNamespace {
 #[derive(Subcommand)]
 pub enum WorkspaceCommand {
     /// Display package metadata.
+    #[command(hide = true)]
     Metadata(MetadataArgs),
 }
 

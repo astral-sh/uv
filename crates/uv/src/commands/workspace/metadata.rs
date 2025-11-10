@@ -49,7 +49,7 @@ struct MetadataReport {
     members: Vec<WorkspaceMemberReport>,
 }
 
-/// Display package metadata.
+/// Display metadata about the workspace.
 pub(crate) async fn metadata(
     project_dir: &Path,
     preview: Preview,
