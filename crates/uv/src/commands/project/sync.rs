@@ -19,8 +19,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, InstalledMetadata, LocalDist, Name, Requirement,
-    Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
+    ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -286,14 +286,16 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(EnvironmentUpdate { changelog, .. }) => {
-                    sync_report.packages = PackageChangeReport::from_changelog(&changelog);
                     // Generate a report for the script without a lockfile
                     let report = Report {
                         schema: SchemaReport::default(),
                         target: TargetName::from(&target),
                         project: None,
                         script: Some(ScriptReport::from(script)),
-                        sync: sync_report,
+                        sync: SyncReport {
+                            packages: PackageChangeReport::from_changelog(&changelog),
+                            ..sync_report
+                        },
                         lock: None,
                         dry_run: dry_run.enabled(),
                     };
@@ -419,14 +421,15 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    sync_report.packages = PackageChangeReport::from_changelog(&changelog);
-
     let report = Report {
         schema: SchemaReport::default(),
         target: TargetName::from(&target),
         project: target.project().map(ProjectReport::from),
         script: target.script().map(ScriptReport::from),
-        sync: sync_report,
+        sync: SyncReport {
+            packages: PackageChangeReport::from_changelog(&changelog),
+            ..sync_report
+        },
         lock: Some(lock_report),
         dry_run: dry_run.enabled(),
     };
