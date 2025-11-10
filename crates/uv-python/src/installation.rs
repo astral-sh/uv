@@ -399,18 +399,23 @@ impl PythonInstallation {
         });
 
         if has_stable_download {
-            let minor_version = format!(
-                "{}.{}{}",
-                interpreter.python_major(),
-                interpreter.python_minor(),
-                interpreter.variant().display_suffix()
-            );
-
-            warn_user!(
-                "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
-                version,
-                minor_version
-            );
+            if let Some(upgrade_request) = download_request
+                .clone()
+                .unset_defaults()
+                .without_patch()
+                .simplified_display()
+            {
+                warn_user!(
+                    "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
+                    version,
+                    upgrade_request
+                );
+            } else {
+                warn_user!(
+                    "You're using a pre-release version of Python ({}) but a stable version is available. Run `uv python upgrade` to update your managed interpreters.",
+                    version,
+                );
+            }
         }
     }
 }

@@ -415,6 +415,72 @@ impl PythonDownloadRequest {
         self.version.take()
     }
 
+    /// Remove default implementation and platform details so the request only contains
+    /// explicitly user-specified segments.
+    #[must_use]
+    pub fn unset_defaults(self) -> Self {
+        self.unset_defaults_with_host(Platform::from_env().ok().as_ref())
+    }
+
+    pub(crate) fn unset_defaults_with_host(mut self, host: Option<&Platform>) -> Self {
+        self.implementation = self
+            .implementation
+            .filter(|implementation_name| *implementation_name != ImplementationName::CPython);
+
+        self.arch = self
+            .arch
+            .filter(|arch| !matches!(arch, ArchRequest::Environment(_)));
+
+        if let Some(host) = host {
+            self.os = self.os.filter(|os| *os != host.os);
+
+            self.libc = self.libc.filter(|libc| *libc != host.libc);
+
+            self.arch = self
+                .arch
+                .filter(|arch| !matches!(arch, ArchRequest::Explicit(explicit_arch) if *explicit_arch == host.arch));
+        }
+
+        self
+    }
+
+    /// Drop patch and prerelease information so the request can be re-used for upgrades.
+    #[must_use]
+    pub fn without_patch(mut self) -> Self {
+        self.version = self.version.take().map(VersionRequest::only_minor);
+        self.prereleases = None;
+        self.build = None;
+        self
+    }
+
+    /// Return a compact string representation suitable for user-facing display.
+    ///
+    /// The resulting string only includes explicitly-set pieces of the request.
+    pub fn simplified_display(self) -> Option<String> {
+        let parts = [
+            self.implementation
+                .map(|implementation| implementation.to_string()),
+            self.version.and_then(|version| {
+                (!matches!(version, VersionRequest::Any | VersionRequest::Default))
+                    .then_some(version.to_string())
+            }),
+            self.os.map(|os| os.to_string()),
+            self.arch.and_then(|arch| match arch {
+                ArchRequest::Explicit(arch) => Some(arch.to_string()),
+                ArchRequest::Environment(_) => None,
+            }),
+            self.libc.map(|libc| libc.to_string()),
+        ];
+
+        let joined = parts.into_iter().flatten().collect::<Vec<_>>().join("-");
+
+        if joined.is_empty() {
+            None
+        } else {
+            Some(joined)
+        }
+    }
+
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads<'a>(
         &'a self,
@@ -1626,6 +1692,7 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use crate::PythonVariant;
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
     use uv_platform::{Arch, Libc, Os, Platform};
@@ -1882,6 +1949,174 @@ mod tests {
             .collect();
 
         assert_eq!(downloads.len(), 0);
+    }
+
+    #[test]
+    fn upgrade_request_native_defaults() {
+        let request = PythonDownloadRequest::default()
+            .with_implementation(ImplementationName::CPython)
+            .with_version(VersionRequest::MajorMinorPatch(
+                3,
+                13,
+                1,
+                PythonVariant::Default,
+            ))
+            .with_os(Os::from_str("linux").unwrap())
+            .with_arch(Arch::from_str("x86_64").unwrap())
+            .with_libc(Libc::from_str("gnu").unwrap())
+            .with_prereleases(false);
+
+        let host = Platform::new(
+            Os::from_str("linux").unwrap(),
+            Arch::from_str("x86_64").unwrap(),
+            Libc::from_str("gnu").unwrap(),
+        );
+
+        assert_eq!(
+            request
+                .clone()
+                .unset_defaults_with_host(Some(&host))
+                .without_patch()
+                .simplified_display()
+                .as_deref(),
+            Some("3.13")
+        );
+    }
+
+    #[test]
+    fn upgrade_request_preserves_variant() {
+        let request = PythonDownloadRequest::default()
+            .with_implementation(ImplementationName::CPython)
+            .with_version(VersionRequest::MajorMinorPatch(
+                3,
+                13,
+                0,
+                PythonVariant::Freethreaded,
+            ))
+            .with_os(Os::from_str("linux").unwrap())
+            .with_arch(Arch::from_str("x86_64").unwrap())
+            .with_libc(Libc::from_str("gnu").unwrap())
+            .with_prereleases(false);
+
+        let host = Platform::new(
+            Os::from_str("linux").unwrap(),
+            Arch::from_str("x86_64").unwrap(),
+            Libc::from_str("gnu").unwrap(),
+        );
+
+        assert_eq!(
+            request
+                .clone()
+                .unset_defaults_with_host(Some(&host))
+                .without_patch()
+                .simplified_display()
+                .as_deref(),
+            Some("3.13+freethreaded")
+        );
+    }
+
+    #[test]
+    fn upgrade_request_preserves_non_default_platform() {
+        let request = PythonDownloadRequest::default()
+            .with_implementation(ImplementationName::CPython)
+            .with_version(VersionRequest::MajorMinorPatch(
+                3,
+                12,
+                4,
+                PythonVariant::Default,
+            ))
+            .with_os(Os::from_str("linux").unwrap())
+            .with_arch(Arch::from_str("aarch64").unwrap())
+            .with_libc(Libc::from_str("gnu").unwrap())
+            .with_prereleases(false);
+
+        let host = Platform::new(
+            Os::from_str("linux").unwrap(),
+            Arch::from_str("x86_64").unwrap(),
+            Libc::from_str("gnu").unwrap(),
+        );
+
+        assert_eq!(
+            request
+                .clone()
+                .unset_defaults_with_host(Some(&host))
+                .without_patch()
+                .simplified_display()
+                .as_deref(),
+            Some("3.12-aarch64")
+        );
+    }
+
+    #[test]
+    fn upgrade_request_preserves_custom_implementation() {
+        let request = PythonDownloadRequest::default()
+            .with_implementation(ImplementationName::PyPy)
+            .with_version(VersionRequest::MajorMinorPatch(
+                3,
+                10,
+                5,
+                PythonVariant::Default,
+            ))
+            .with_os(Os::from_str("linux").unwrap())
+            .with_arch(Arch::from_str("x86_64").unwrap())
+            .with_libc(Libc::from_str("gnu").unwrap())
+            .with_prereleases(false);
+
+        let host = Platform::new(
+            Os::from_str("linux").unwrap(),
+            Arch::from_str("x86_64").unwrap(),
+            Libc::from_str("gnu").unwrap(),
+        );
+
+        assert_eq!(
+            request
+                .clone()
+                .unset_defaults_with_host(Some(&host))
+                .without_patch()
+                .simplified_display()
+                .as_deref(),
+            Some("pypy-3.10")
+        );
+    }
+
+    #[test]
+    fn simplified_display_returns_none_when_empty() {
+        let request = PythonDownloadRequest::default()
+            .fill_platform()
+            .expect("should populate defaults");
+
+        let host = Platform::from_env().expect("host platform");
+
+        assert_eq!(
+            request
+                .unset_defaults_with_host(Some(&host))
+                .simplified_display(),
+            None
+        );
+    }
+
+    #[test]
+    fn simplified_display_omits_environment_arch() {
+        let mut request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::MajorMinor(3, 12, PythonVariant::Default))
+            .with_os(Os::from_str("linux").unwrap())
+            .with_libc(Libc::from_str("gnu").unwrap());
+
+        request.arch = Some(ArchRequest::Environment(Arch::from_str("x86_64").unwrap()));
+
+        let host = Platform::new(
+            Os::from_str("linux").unwrap(),
+            Arch::from_str("aarch64").unwrap(),
+            Libc::from_str("gnu").unwrap(),
+        );
+
+        assert_eq!(
+            request
+                .unset_defaults_with_host(Some(&host))
+                .simplified_display()
+                .as_deref(),
+            Some("3.12")
+        );
     }
 
     /// Test build display
