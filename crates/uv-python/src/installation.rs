@@ -211,8 +211,7 @@ impl PythonInstallation {
         )
         .await?;
 
-        installation
-            .warn_if_outdated_prerelease(request, python_downloads_json_url);
+        installation.warn_if_outdated_prerelease(request, python_downloads_json_url);
 
         Ok(installation)
     }
@@ -370,6 +369,10 @@ impl PythonInstallation {
             return;
         }
 
+        // Transparent upgrades only exist for CPython, so skip the warning for other
+        // managed implementations.
+        //
+        // See: https://github.com/astral-sh/uv/issues/16675
         if !interpreter
             .implementation_name()
             .eq_ignore_ascii_case("cpython")
