@@ -207,7 +207,7 @@ pub(crate) async fn sync(
         })
         .ok();
 
-    let mut sync_report = SyncReport {
+    let sync_report = SyncReport {
         dry_run: dry_run.enabled(),
         environment: EnvironmentReport::from(&environment),
         action: SyncAction::from(&environment),
