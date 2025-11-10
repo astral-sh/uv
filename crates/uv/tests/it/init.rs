@@ -4043,3 +4043,113 @@ fn git_states() {
     ");
     assert!(!context.temp_dir.child("broken-git/.git").is_dir());
 }
+
+/// Using `uv init` with `--project` isn't allowed
+#[test]
+fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    // Positional `path` provided
+    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("init-project-flag").arg("--project").arg("foo").arg("bar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` instead.
+    "###);
+
+    // No positional `path` provided
+    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("init-project-flag").arg("--project").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` or a positional path instead.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn init_project_flag_is_ignored_with_explicit_path() {
+    let context = TestContext::new("3.12");
+
+    // with explicit path
+    uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead.
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+}
+
+#[test]
+fn init_project_flag_is_warned_without_path() {
+    let context = TestContext::new("3.12");
+
+    // with explicit path
+    uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Consider using `uv init <PATH>` instead.
+    Initialized project `bar`
+    "###);
+
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .assert(predicate::path::is_file());
+}
+
+/// The `--directory` flag is used as the base for path
+#[test]
+fn init_working_directory_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("bar");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().arg("--directory").arg("bar").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/bar/foo`
+    "###);
+
+    context
+        .temp_dir
+        .child("bar/foo/pyproject.toml")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}

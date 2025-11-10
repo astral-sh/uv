@@ -35,6 +35,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -1804,6 +1805,32 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            if explicit_project {
+                if globals
+                    .preview
+                    .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
+                {
+                    bail!(
+                        "The `--project` option cannot be used in `uv init`. {}",
+                        if args.path.is_some() {
+                            "Use `--directory` instead."
+                        } else {
+                            "Use `--directory` or a positional path instead."
+                        }
+                    )
+                }
+
+                warn_user!(
+                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                    if args.path.is_some() {
+                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                    } else {
+                        "Consider using `uv init <PATH>` instead."
+                    }
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?;
