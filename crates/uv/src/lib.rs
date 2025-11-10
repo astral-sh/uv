@@ -35,6 +35,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -127,20 +128,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         false
     };
 
-    // The `--project` arg is being deprecated for `init` with a warning now and an error in preview
-    if let Some(_) = cli.top_level.global_args.project {
-        match &*cli.command {
-            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                // figure out if we're in preview
-                warn_user!(
-                    "The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead."
-                );
-            }
-            _ => {
-                ()
-            }
-        }
-    }
 
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
@@ -1819,6 +1806,19 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview
+            if explicit_project {
+                if globals.preview.is_enabled(PreviewFeatures::DEPRECATE_PROJECT_FOR_INIT) {
+                    bail!(
+                        "The argument '--project' cannot be used for 'init'. Consider using `--directory` instead."
+                    );
+                } else {
+                    warn_user!(
+                        "The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead."
+                    );
+                }
+            }
 
             // Initialize the cache.
             let cache = cache.init()?;

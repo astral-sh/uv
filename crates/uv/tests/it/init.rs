@@ -4046,21 +4046,30 @@ fn git_states() {
 
 /// Using `uv init` with `--project` isn't allowed
 #[test]
-fn init_project_flag_is_not_allowed() -> Result<()> {
+fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.init().arg("--project").arg("foo").arg("bar"), @r###"
+    // general `--preview` flag
+    uv_snapshot!(context.filters(), context.init().arg("--preview").arg("--project").arg("foo").arg("bar"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
+    error: The argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
+    "###);
 
-    For more information, try '--help'.
+    // feature-specific preview
+    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("deprecate-project-for-init").arg("--project").arg("foo").arg("bar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
     "###);
 
     Ok(())
