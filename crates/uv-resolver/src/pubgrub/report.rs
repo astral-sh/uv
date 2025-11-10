@@ -1895,6 +1895,23 @@ fn update_availability_range(
     range: &Range<Version>,
     available_versions: &BTreeSet<Version>,
 ) -> Range<Version> {
+    /// Whether a (normalized) version is contained in a set of versions.
+    ///
+    /// Unfortunately, we need to normalize the version because when we extract it from the range it
+    /// may have `min` or `max` set but the values in `available_versions` will never have `min` or
+    /// `max`.
+    fn version_contained_in(version: &Version, versions: &BTreeSet<Version>) -> bool {
+        if versions.contains(version) {
+            return true;
+        }
+
+        // It's a little unfortunate we perform a clone here and throw away the value, but the
+        // performance implications during an error report seem negligible and it makes the
+        // calling code simpler.
+        let version = version.clone().with_min(None).with_max(None);
+        versions.contains(&version)
+    }
+
     let mut new_range = Range::empty();
 
     // Construct an available range to help guide simplification. Note this is not strictly correct,
@@ -1957,13 +1974,13 @@ fn update_availability_range(
         // bound to avoid confusion, e.g., if the segment is `foo<=10` and the available versions
         // do not include `foo 10`, we should instead say `foo<10`.
         let lower = match lower {
-            Bound::Included(version) if !available_versions.contains(version) => {
+            Bound::Included(version) if !version_contained_in(version, available_versions) => {
                 Bound::Excluded(version.clone())
             }
             _ => (*lower).clone(),
         };
         let upper = match upper {
-            Bound::Included(version) if !available_versions.contains(version) => {
+            Bound::Included(version) if !version_contained_in(version, available_versions) => {
                 Bound::Excluded(version.clone())
             }
             _ => (*upper).clone(),

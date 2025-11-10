@@ -450,19 +450,21 @@ async fn print_frozen_version(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        LockMode::Frozen,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            LockMode::Frozen,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -590,19 +592,21 @@ async fn lock_and_sync(
     let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        mode,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &workspace_cache,
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            mode,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &workspace_cache,
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

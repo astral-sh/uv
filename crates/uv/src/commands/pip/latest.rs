@@ -18,7 +18,7 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) exclude_newer: ExcludeNewer,
+    pub(crate) exclude_newer: &'env ExcludeNewer,
     pub(crate) tags: Option<&'env Tags>,
     pub(crate) requires_python: &'env RequiresPython,
 }

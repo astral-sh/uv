@@ -1542,10 +1542,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1746,10 +1742,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1958,23 +1950,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<GitOid>, Error> {
         let git = match source {
             BuildableSource::Dist(SourceDist::Git(source)) => &*source.git,
             BuildableSource::Url(SourceUrl::Git(source)) => source.git,
             _ => {
-                return Ok(());
+                return Ok(None);
             }
         };
 
         // If the URL is already precise, return it.
-        if self.build_context.git().get_precise(git).is_some() {
+        if let Some(precise) = self.build_context.git().get_precise(git) {
             debug!("Precise commit already known: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        if self
+        if let Some(precise) = self
             .build_context
             .git()
             .github_fast_path(
@@ -1985,18 +1977,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .raw_client(),
             )
             .await?
-            .is_some()
         {
             debug!("Resolved to precise commit via GitHub fast path: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // Otherwise, fetch the Git repository.
-        self.build_context
+        let fetch = self
+            .build_context
             .git()
             .fetch(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
                 client.unmanaged.disable_ssl(git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -2006,7 +1997,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
-        Ok(())
+        Ok(fetch.git().precise())
     }
 
     /// Fetch static [`ResolutionMetadata`] from a GitHub repository, if possible.

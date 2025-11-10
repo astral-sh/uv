@@ -10,7 +10,6 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use itertools::Itertools;
-use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_preview::{Preview, PreviewFeatures};
@@ -22,7 +21,7 @@ use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, windows_python_launcher};
+use uv_trampoline_builder::{Launcher, LauncherKind};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
@@ -649,12 +648,12 @@ impl ManagedPythonInstallation {
     /// [`create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
-            is_same_file(path, self.executable(false)).unwrap_or_default()
+            same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
             };
-            if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
+            if !matches!(launcher.kind, LauncherKind::Python) {
                 return false;
             }
             // We canonicalize the target path of the launcher in case it includes a minor version
@@ -922,6 +921,8 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             }),
         }
     } else if cfg!(windows) {
+        use uv_trampoline_builder::windows_python_launcher;
+
         // TODO(zanieb): Install GUI launchers as well
         let launcher = windows_python_launcher(executable, false)?;
 
@@ -938,7 +939,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
                 })
         }
     } else {
-        unimplemented!("Only Windows and Unix systems are supported.")
+        unimplemented!("Only Windows and Unix are supported.")
     }
 }
 
