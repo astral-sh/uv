@@ -420,7 +420,14 @@ fn sync_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "check"
+        "action": "check",
+        "packages": [
+          {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "action": "added"
+          }
+        ]
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -464,7 +471,8 @@ fn sync_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "check"
+        "action": "check",
+        "packages": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -503,7 +511,8 @@ fn sync_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "check"
+        "action": "check",
+        "packages": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -569,7 +578,8 @@ fn sync_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "check"
+        "action": "check",
+        "packages": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -629,7 +639,8 @@ fn sync_dry_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "create"
+        "action": "create",
+        "packages": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -6688,7 +6699,24 @@ fn sync_active_script_environment_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "create"
+        "action": "create",
+        "packages": [
+          {
+            "name": "anyio",
+            "version": "4.3.0",
+            "action": "added"
+          },
+          {
+            "name": "idna",
+            "version": "3.6",
+            "action": "added"
+          },
+          {
+            "name": "sniffio",
+            "version": "1.3.1",
+            "action": "added"
+          }
+        ]
       },
       "lock": null,
       "dry_run": false
@@ -6734,7 +6762,24 @@ fn sync_active_script_environment_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "create"
+        "action": "create",
+        "packages": [
+          {
+            "name": "anyio",
+            "version": "4.3.0",
+            "action": "added"
+          },
+          {
+            "name": "idna",
+            "version": "3.6",
+            "action": "added"
+          },
+          {
+            "name": "sniffio",
+            "version": "1.3.1",
+            "action": "added"
+          }
+        ]
       },
       "lock": null,
       "dry_run": false
@@ -6793,7 +6838,24 @@ fn sync_active_script_environment_json() -> Result<()> {
             "implementation": "cpython"
           }
         },
-        "action": "update"
+        "action": "update",
+        "packages": [
+          {
+            "name": "anyio",
+            "version": "4.3.0",
+            "action": "added"
+          },
+          {
+            "name": "idna",
+            "version": "3.6",
+            "action": "added"
+          },
+          {
+            "name": "sniffio",
+            "version": "1.3.1",
+            "action": "added"
+          }
+        ]
       },
       "lock": null,
       "dry_run": false
