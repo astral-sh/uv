@@ -4052,31 +4052,31 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    // general `--preview` flag
-    uv_snapshot!(context.filters(), context.init().arg("--preview").arg("--project").arg("foo").arg("bar"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead.
-    "###);
-
-    // feature-specific preview
+    // Positional `path` provided
     uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("init-project-flag").arg("--project").arg("foo").arg("bar"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead.
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` instead.
+    "###);
+
+    // No positional `path` provided
+    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("init-project-flag").arg("--project").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` or a positional path instead.
     "###);
 
     Ok(())
 }
 
 #[test]
-fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
+fn init_project_flag_is_ignored_with_explicit_path() {
     let context = TestContext::new("3.12");
 
     // with explicit path
@@ -4086,8 +4086,7 @@ fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Since a positional path was provided, the `--project` option has no effect.
-    Consider using `--directory` instead.
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead.
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -4107,12 +4106,10 @@ fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
         "###
         );
     });
-
-    Ok(())
 }
 
 #[test]
-fn init_project_flag_is_warned_without_path() -> Result<()> {
+fn init_project_flag_is_warned_without_path() {
     let context = TestContext::new("3.12");
 
     // with explicit path
@@ -4122,8 +4119,7 @@ fn init_project_flag_is_warned_without_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release.
-    Consider using `uv init <PATH>` instead.
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Consider using `uv init <PATH>` instead.
     Initialized project `bar`
     "###);
 
@@ -4131,8 +4127,6 @@ fn init_project_flag_is_warned_without_path() -> Result<()> {
         .temp_dir
         .child("bar/pyproject.toml")
         .assert(predicate::path::is_file());
-
-    Ok(())
 }
 
 /// The `--directory` flag is used as the base for path

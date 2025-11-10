@@ -1813,20 +1813,22 @@ async fn run_project(
                     .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
                 {
                     bail!(
-                        "The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead."
+                        "The `--project` option cannot be used in `uv init`. {}",
+                        if args.path.is_some() {
+                            "Use `--directory` instead."
+                        } else {
+                            "Use `--directory` or a positional path instead."
+                        }
                     )
                 }
-                let message = {
-                    match args.path {
-                        Some(_) => {
-                            " Since a positional path was provided, the `--project` option has no effect.\nConsider using `--directory` instead."
-                        }
-                        None => "\nConsider using `uv init <PATH>` instead.",
-                    }
-                };
+
                 warn_user!(
-                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release.{}",
-                    message
+                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                    if args.path.is_some() {
+                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                    } else {
+                        "Consider using `uv init <PATH>` instead."
+                    }
                 );
             }
 
