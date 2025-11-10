@@ -248,26 +248,6 @@ impl ArchRequest {
 }
 
 impl PythonDownloadRequest {
-    pub fn try_from_key(key: &PythonInstallationKey) -> Result<Self, LenientImplementationName> {
-        let implementation = match key.implementation().into_owned() {
-            LenientImplementationName::Known(name) => name,
-            unknown @ LenientImplementationName::Unknown(_) => return Err(unknown),
-        };
-
-        Ok(Self::new(
-            Some(VersionRequest::MajorMinor(
-                key.major(),
-                key.minor(),
-                *key.variant(),
-            )),
-            Some(implementation),
-            Some(ArchRequest::Explicit(*key.arch())),
-            Some(*key.os()),
-            Some(*key.libc()),
-            Some(key.prerelease().is_some()),
-        ))
-    }
-
     pub fn new(
         version: Option<VersionRequest>,
         implementation: Option<ImplementationName>,
@@ -597,7 +577,23 @@ impl TryFrom<&PythonInstallationKey> for PythonDownloadRequest {
     type Error = LenientImplementationName;
 
     fn try_from(key: &PythonInstallationKey) -> Result<Self, Self::Error> {
-        Self::try_from_key(key)
+        let implementation = match key.implementation().into_owned() {
+            LenientImplementationName::Known(name) => name,
+            unknown @ LenientImplementationName::Unknown(_) => return Err(unknown),
+        };
+
+        Ok(Self::new(
+            Some(VersionRequest::MajorMinor(
+                key.major(),
+                key.minor(),
+                *key.variant(),
+            )),
+            Some(implementation),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
+            Some(key.prerelease().is_some()),
+        ))
     }
 }
 
