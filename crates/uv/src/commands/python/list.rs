@@ -61,6 +61,8 @@ pub(crate) async fn list(
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -117,7 +119,10 @@ pub(crate) async fn list(
             output.insert((
                 download.key().clone(),
                 Kind::Download,
-                Either::Right(download.url()),
+                Either::Right(download.download_url(
+                    python_install_mirror.as_deref(),
+                    pypy_install_mirror.as_deref(),
+                )?),
             ));
         }
     }
