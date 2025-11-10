@@ -425,24 +425,6 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download)))
     }
 
-    /// Return true if a stable download is available at least as new as the given release.
-    pub fn has_stable_download_at_least(
-        &self,
-        interpreter_release: &Version,
-        python_downloads_json_url: Option<&str>,
-    ) -> bool {
-        let Ok(mut downloads) = self.iter_downloads(python_downloads_json_url) else {
-            return false;
-        };
-
-        downloads.any(|download| {
-            let download_version = download.key().version().into_version();
-
-            download_version.pre().is_none()
-                && download_version.only_release() >= *interpreter_release
-        })
-    }
-
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         // Check platform requirements

@@ -388,7 +388,18 @@ impl PythonInstallation {
 
         let download_request = download_request.with_prereleases(false);
 
-        if download_request.has_stable_download_at_least(&release, python_downloads_json_url) {
+        let Ok(mut downloads) = download_request.iter_downloads(python_downloads_json_url) else {
+            return;
+        };
+
+        let has_stable_download = downloads.any(|download| {
+            let download_version = download.key().version().into_version();
+
+            download_version.pre().is_none()
+                && download_version.only_release() >= release
+        });
+
+        if has_stable_download {
             let minor_version = format!(
                 "{}.{}{}",
                 interpreter.python_major(),
