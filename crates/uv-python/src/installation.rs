@@ -395,8 +395,7 @@ impl PythonInstallation {
         let has_stable_download = downloads.any(|download| {
             let download_version = download.key().version().into_version();
 
-            download_version.pre().is_none()
-                && download_version.only_release() >= release
+            download_version.pre().is_none() && download_version.only_release() >= release
         });
 
         if has_stable_download {
