@@ -9,6 +9,7 @@ use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
@@ -64,6 +65,18 @@ pub enum PublishError {
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
     MixedCredentials(String),
+    #[error(
+        "Failed to query check URL due to a lack of valid authentication credentials ({}): {}.\n\n\
+        {}{} Check URL credentials must be configured separately from publish URL credentials",
+        status_code_detail.red(),
+        url.to_string().cyan(),
+        "hint".bold().cyan(),
+        ":".bold(),
+    )]
+    CheckUrlAuthentication {
+        url: DisplaySafeUrl,
+        status_code_detail: String,
+    },
     #[error("Failed to query check URL")]
     CheckUrlIndex(#[source] uv_client::Error),
     #[error(
@@ -544,11 +557,31 @@ pub async fn check_url(
         Err(err) => {
             return match err.kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
-                    // The package doesn't exist, so we can't have uploaded it.
+                    // The package doesn't exist, it's the first upload of the package.
                     warn!(
                         "Package not found in the registry; skipping upload check for {filename}"
                     );
                     Ok(false)
+                }
+                uv_client::ErrorKind::StatusCodeError(_, status_code_error) => {
+                    // TODO(konsti): We currently can't track that this must be exactly one status
+                    // error with check URL.
+                    debug_assert!(
+                        status_code_error.len() == 1,
+                        "Check URL must only check a single URL"
+                    );
+                    let status_code = status_code_error.iter().next();
+                    // The package may or may not exist, there was an authentication failure.
+                    let status_code_detail = status_code
+                        .map(ToString::to_string)
+                        .unwrap_or("Status code error".to_string());
+                    warn!(
+                        "Package not found in the registry; skipping upload check for {filename}"
+                    );
+                    return Err(PublishError::CheckUrlAuthentication {
+                        url: index_url.url().clone(),
+                        status_code_detail: status_code_detail.to_string(),
+                    });
                 }
                 _ => Err(PublishError::CheckUrlIndex(err)),
             };

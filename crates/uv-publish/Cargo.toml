@@ -35,6 +35,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
+owo-colors = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
