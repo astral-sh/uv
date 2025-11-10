@@ -14,7 +14,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
-use crate::html::SimpleHtml;
+use crate::html::SimpleDetailHTML;
 use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
@@ -195,7 +195,7 @@ impl<'a> FlatIndexClient<'a> {
                     .text()
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
+                let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
                 // Convert to a reference-counted string.

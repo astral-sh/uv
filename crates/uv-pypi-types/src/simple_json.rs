@@ -5,7 +5,7 @@ use jiff::Timestamp;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::Requirement;
 use uv_small_str::SmallString;
@@ -826,4 +826,43 @@ mod tests {
 
         Ok(())
     }
+}
+
+/// Response from the Simple API root endpoint (index) listing all available projects,
+/// as served by the `vnd.pypi.simple.v1` media type.
+///
+/// <https://peps.python.org/pep-0691/#specification>
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PypiSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Response from the Pyx Simple API root endpoint listing all available projects,
+/// as served by the `vnd.pyx.simple.v1` media types.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PyxSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Metadata about a Simple API index response.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SimpleIndexMeta {
+    /// The API version.
+    pub api_version: SmallString,
+}
+
+/// A single project entry in the Simple API index.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProjectEntry {
+    /// The name of the project.
+    pub name: PackageName,
 }

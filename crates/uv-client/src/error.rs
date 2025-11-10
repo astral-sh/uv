@@ -1,9 +1,9 @@
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use serde::Deserialize;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::path::PathBuf;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
@@ -272,11 +272,15 @@ pub enum ErrorKind {
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
     #[error("Package `{0}` was not found in the registry")]
-    PackageNotFound(String),
+    RemotePackageNotFound(PackageName),
 
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]
-    FileNotFound(String),
+    LocalPackageNotFound(PackageName),
+
+    /// The root was not found in the local (file-based) index.
+    #[error("Local index not found at: `{}`", _0.display())]
+    LocalIndexNotFound(PathBuf),
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
@@ -285,10 +289,6 @@ pub enum ErrorKind {
         String,
         #[source] Box<uv_pypi_types::MetadataError>,
     ),
-
-    /// The metadata file was not found in the wheel.
-    #[error("Metadata file `{0}` was not found in {1}")]
-    MetadataNotFound(WheelFilename, String),
 
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
