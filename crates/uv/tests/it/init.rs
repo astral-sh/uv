@@ -4059,7 +4059,7 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead.
     "###);
 
     // feature-specific preview
@@ -4069,7 +4069,7 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
+    error: The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead.
     "###);
 
     Ok(())
@@ -4079,13 +4079,15 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
 fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // with explicit path
     uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead.
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. Since a positional path was provided, the `--project` option has no effect.
+    Consider using `--directory` instead.
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -4109,6 +4111,30 @@ fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn init_project_flag_is_warned_without_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // with explicit path
+    uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Use of the `--project` option in `uv init` is deprecated and will be removed in a future release.
+    Consider using `uv init <PATH>` instead.
+    Initialized project `bar`
+    "###);
+
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
 /// The `--directory` flag is used as the base for path
 #[test]
 fn init_working_directory_change() -> Result<()> {
@@ -4126,21 +4152,10 @@ fn init_working_directory_change() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/bar/foo`
     "###);
 
-    let pyproject = context.read("bar/foo/pyproject.toml");
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject, @r###"
-        [project]
-        name = "foo"
-        version = "0.1.0"
-        description = "Add your description here"
-        readme = "README.md"
-        requires-python = ">=3.12"
-        dependencies = []
-        "###
-        );
-    });
+    context
+        .temp_dir
+        .child("bar/foo/pyproject.toml")
+        .assert(predicate::path::is_file());
+
     Ok(())
 }

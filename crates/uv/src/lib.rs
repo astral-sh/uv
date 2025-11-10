@@ -1807,16 +1807,22 @@ async fn run_project(
             let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
-            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview
+            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
             if explicit_project {
                 if globals.preview.is_enabled(PreviewFeatures::INIT_PROJECT_FLAG) {
-                    bail!(
-                        "The argument '--project' cannot be used for 'init'. Consider using `--directory` instead."
-                    );
+                    bail!("The `--project` option cannot be used in `uv init`. Use `--directory` or `PATH` instead.")
                 } else {
-                    warn_user!(
-                        "The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead."
-                    );
+                    let message = {
+                        match args.path {
+                            Some(_) => {
+                                " Since a positional path was provided, the `--project` option has no effect.\nConsider using `--directory` instead."
+                            },
+                            None => {
+                                "\nConsider using `uv init <PATH>` instead."
+                            }
+                        }
+                    };
+                    warn_user!("Use of the `--project` option in `uv init` is deprecated and will be removed in a future release.{}", message);
                 }
             }
 
