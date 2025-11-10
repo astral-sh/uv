@@ -64,7 +64,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_on_prerelease_python_upgrade_available(request, None);
+        installation.warn_if_outdated_prerelease(request, None);
         Ok(installation)
     }
 
@@ -79,7 +79,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installation =
             find_best_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_on_prerelease_python_upgrade_available(request, None);
+        installation.warn_if_outdated_prerelease(request, None);
         Ok(installation)
     }
 
@@ -210,8 +210,10 @@ impl PythonInstallation {
             preview,
         )
         .await?;
+
         installation
-            .warn_on_prerelease_python_upgrade_available(request, python_downloads_json_url);
+            .warn_if_outdated_prerelease(request, python_downloads_json_url);
+
         Ok(installation)
     }
 
@@ -346,7 +348,9 @@ impl PythonInstallation {
         self.interpreter
     }
 
-    pub(crate) fn warn_on_prerelease_python_upgrade_available(
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    pub(crate) fn warn_if_outdated_prerelease(
         &self,
         request: &PythonRequest,
         python_downloads_json_url: Option<&str>,
