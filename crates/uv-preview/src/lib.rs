@@ -21,7 +21,7 @@ bitflags::bitflags! {
         const NATIVE_AUTH = 1 << 9;
         const S3_ENDPOINT = 1 << 10;
         const CACHE_SIZE = 1 << 11;
-        const DEPRECATE_PROJECT_FOR_INIT = 1 << 12;
+        const INIT_PROJECT_FLAG = 1 << 12;
     }
 }
 
@@ -43,7 +43,7 @@ impl PreviewFeatures {
             Self::NATIVE_AUTH => "native-auth",
             Self::S3_ENDPOINT => "s3-endpoint",
             Self::CACHE_SIZE => "cache-size",
-            Self::DEPRECATE_PROJECT_FOR_INIT => "deprecate-project-for-init",
+            Self::INIT_PROJECT_FLAG => "init-project-flag",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -93,7 +93,7 @@ impl FromStr for PreviewFeatures {
                 "native-auth" => Self::NATIVE_AUTH,
                 "s3-endpoint" => Self::S3_ENDPOINT,
                 "cache-size" => Self::CACHE_SIZE,
-                "deprecate-project-for-init" => Self::DEPRECATE_PROJECT_FOR_INIT,
+                "init-project-flag" => Self::INIT_PROJECT_FLAG,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;

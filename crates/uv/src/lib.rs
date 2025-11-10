@@ -1809,7 +1809,7 @@ async fn run_project(
 
             // The `--project` arg is being deprecated for `init` with a warning now and an error in preview
             if explicit_project {
-                if globals.preview.is_enabled(PreviewFeatures::DEPRECATE_PROJECT_FOR_INIT) {
+                if globals.preview.is_enabled(PreviewFeatures::INIT_PROJECT_FLAG) {
                     bail!(
                         "The argument '--project' cannot be used for 'init'. Consider using `--directory` instead."
                     );

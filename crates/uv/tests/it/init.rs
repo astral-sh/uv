@@ -4063,7 +4063,7 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
     "###);
 
     // feature-specific preview
-    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("deprecate-project-for-init").arg("--project").arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.init().arg("--preview-features").arg("init-project-flag").arg("--project").arg("foo").arg("bar"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
