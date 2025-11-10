@@ -4,12 +4,12 @@ use jiff::Timestamp;
 use tl::HTMLTag;
 use tracing::{debug, instrument, warn};
 use url::Url;
+
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
-use uv_small_str::SmallString;
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -246,7 +246,6 @@ impl SimpleIndexHtml {
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
             .filter_map(|link| Self::parse_anchor_project_name(link, parser))
-            .filter_map(|name| PackageName::from_str(&name).ok())
             .collect::<Vec<_>>();
 
         // Sort for deterministic ordering.
@@ -258,7 +257,7 @@ impl SimpleIndexHtml {
     /// Parse a project name from an `<a>` tag.
     ///
     /// Returns `None` if the `<a>` doesn't have an `href` attribute or text content.
-    fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<SmallString> {
+    fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<PackageName> {
         // Extract the href.
         link.attributes()
             .get("href")
@@ -273,7 +272,7 @@ impl SimpleIndexHtml {
             return None;
         }
 
-        Some(SmallString::from(project_name))
+        PackageName::from_str(project_name).ok()
     }
 }
 
@@ -329,7 +328,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -386,7 +385,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -446,7 +445,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -503,7 +502,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -560,7 +559,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -617,7 +616,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -672,7 +671,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -727,7 +726,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -765,7 +764,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -803,7 +802,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -858,7 +857,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -914,7 +913,7 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            SimpleHtml {
+            SimpleDetailHTML {
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -971,7 +970,7 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            SimpleHtml {
+            SimpleDetailHTML {
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -1045,7 +1044,7 @@ mod tests {
             .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1127,7 +1126,7 @@ mod tests {
             .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1230,7 +1229,7 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1303,7 +1302,7 @@ mod tests {
             .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1448,9 +1447,15 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "flask",
-                "jinja2",
-                "requests",
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "jinja2",
+                ),
+                PackageName(
+                    "requests",
+                ),
             ],
         }
         "#);
@@ -1473,15 +1478,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "apple",
-                "monkey",
-                "zebra",
+                PackageName(
+                    "apple",
+                ),
+                PackageName(
+                    "monkey",
+                ),
+                PackageName(
+                    "zebra",
+                ),
             ],
         }
         "#);
     }
 
-    /// Test that links without `href`attributes are ignored.
+    /// Test that links without `href` attributes are ignored.
     #[test]
     fn parse_simple_index_missing_href() {
         let text = r#"
@@ -1499,8 +1510,12 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "flask",
-                "requests",
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "requests",
+                ),
             ],
         }
         "#);
@@ -1522,7 +1537,9 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "flask",
+                PackageName(
+                    "flask",
+                ),
             ],
         }
         "#);
@@ -1545,7 +1562,9 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "flask",
+                PackageName(
+                    "flask",
+                ),
             ],
         }
         "#);
@@ -1569,9 +1588,15 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleIndexHtml {
             projects: [
-                "Flask",
-                "PyYAML",
-                "django",
+                PackageName(
+                    "django",
+                ),
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "pyyaml",
+                ),
             ],
         }
         "#);

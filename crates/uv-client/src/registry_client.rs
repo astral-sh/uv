@@ -238,7 +238,7 @@ pub struct RegistryClient {
 #[derive(Debug)]
 pub enum MetadataFormat {
     /// The metadata adheres to the Simple Repository API format.
-    Simple(OwnedArchive<SimpleMetadata>),
+    Simple(OwnedArchive<SimpleDetailMetadata>),
     /// The metadata consists of a list of distributions from a "flat" index.
     Flat(Vec<FlatIndexEntry>),
 }
@@ -417,7 +417,7 @@ impl RegistryClient {
         if results.is_empty() {
             return match self.connectivity {
                 Connectivity::Online => {
-                    Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+                    Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
                 }
                 Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
             };
@@ -466,7 +466,7 @@ impl RegistryClient {
         Ok(package_entries)
     }
 
-    /// Fetch the [`SimpleMetadata`] from a single index for a given package.
+    /// Fetch the [`SimpleDetailMetadata`] from a single index for a given package.
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
@@ -548,14 +548,14 @@ impl RegistryClient {
                 ErrorKind::Offline(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 // The package could not be found in the local index.
-                ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
+                ErrorKind::LocalPackageNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 _ => Err(err),
             },
         }
     }
 
-    /// Fetch the [`SimpleMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
+    /// Fetch the [`SimpleDetailMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
     async fn fetch_remote_simple_detail(
         &self,
         package_name: &PackageName,
@@ -563,7 +563,7 @@ impl RegistryClient {
         index: &IndexUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl<'_>,
-    ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         // In theory, we should be able to pass `MediaType::all()` to all registries, and as
         // unsupported media types should be ignored by the server. For now, we implement this
         // defensively to avoid issues with misconfigured servers.
@@ -613,7 +613,7 @@ impl RegistryClient {
                         let data: PyxSimpleDetail = rmp_serde::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_msgpack_err(err, url.clone()))?;
 
-                        SimpleMetadata::from_pyx_files(
+                        SimpleDetailMetadata::from_pyx_files(
                             data.files,
                             data.core_metadata,
                             package_name,
@@ -628,7 +628,7 @@ impl RegistryClient {
                         let data: PyxSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
-                        SimpleMetadata::from_pyx_files(
+                        SimpleDetailMetadata::from_pyx_files(
                             data.files,
                             data.core_metadata,
                             package_name,
@@ -644,14 +644,14 @@ impl RegistryClient {
                         let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
-                        SimpleMetadata::from_pypi_files(data.files, package_name, &url)
+                        SimpleDetailMetadata::from_pypi_files(data.files, package_name, &url)
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response
                             .text()
                             .await
                             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                        SimpleMetadata::from_html(&text, package_name, &url)?
+                        SimpleDetailMetadata::from_html(&text, package_name, &url)?
                     }
                 };
                 OwnedArchive::from_unarchived(&unarchived)
@@ -671,13 +671,13 @@ impl RegistryClient {
         Ok(simple)
     }
 
-    /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
+    /// Fetch the [`SimpleDetailMetadata`] from a local file, using a PEP 503-compatible directory
     /// structure.
     async fn fetch_local_simple_detail(
         &self,
         package_name: &PackageName,
         url: &DisplaySafeUrl,
-    ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         let path = url
             .to_file_path()
             .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?
@@ -685,15 +685,15 @@ impl RegistryClient {
         let text = match fs_err::tokio::read_to_string(&path).await {
             Ok(text) => text,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::from(ErrorKind::FileNotFound(
-                    package_name.to_string(),
+                return Err(Error::from(ErrorKind::LocalPackageNotFound(
+                    package_name.clone(),
                 )));
             }
             Err(err) => {
                 return Err(Error::from(ErrorKind::Io(err)));
             }
         };
-        let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
+        let metadata = SimpleDetailMetadata::from_html(&text, package_name, url)?;
         OwnedArchive::from_unarchived(&metadata)
     }
 
@@ -742,6 +742,88 @@ impl RegistryClient {
             MediaType::pypi()
         };
 
+        let cache_entry = self.cache.entry(
+            CacheBucket::Simple,
+            WheelCache::Index(index).root(),
+            "index.html.rkyv",
+        );
+        let cache_control = match self.connectivity {
+            Connectivity::Online => {
+                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, None, None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        let parse_simple_response = |response: Response| {
+            async {
+                // Use the response URL, rather than the request URL, as the base for relative URLs.
+                // This ensures that we handle redirects and other URL transformations correctly.
+                let url = DisplaySafeUrl::from(response.url().clone());
+
+                let content_type = response
+                    .headers()
+                    .get("content-type")
+                    .ok_or_else(|| Error::from(ErrorKind::MissingContentType(url.clone())))?;
+                let content_type = content_type.to_str().map_err(|err| {
+                    Error::from(ErrorKind::InvalidContentTypeHeader(url.clone(), err))
+                })?;
+                let media_type = content_type.split(';').next().unwrap_or(content_type);
+                let media_type = MediaType::from_str(media_type).ok_or_else(|| {
+                    Error::from(ErrorKind::UnsupportedMediaType(
+                        url.clone(),
+                        media_type.to_string(),
+                    ))
+                })?;
+
+                let metadata = match media_type {
+                    MediaType::PyxV1Msgpack => {
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        let data: PyxSimpleIndex = rmp_serde::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_msgpack_err(err, url.clone()))?;
+                        SimpleIndexMetadata::from_pyx_index(data)
+                    }
+                    MediaType::PyxV1Json => {
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        let data: PyxSimpleIndex = serde_json::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                        SimpleIndexMetadata::from_pyx_index(data)
+                    }
+                    MediaType::PypiV1Json => {
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        let data: PypiSimpleIndex = serde_json::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                        SimpleIndexMetadata::from_pypi_index(data)
+                    }
+                    MediaType::PypiV1Html | MediaType::TextHtml => {
+                        let text = response
+                            .text()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+                        SimpleIndexMetadata::from_html(&text, &url)?
+                    }
+                };
+
+                OwnedArchive::from_unarchived(&metadata)
+            }
+        };
+
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
@@ -750,71 +832,17 @@ impl RegistryClient {
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
-        let response = self
-            .uncached_client(url)
-            .execute(simple_request)
-            .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+        let index = self
+            .cached_client()
+            .get_cacheable_with_retry(
+                simple_request,
+                &cache_entry,
+                cache_control,
+                parse_simple_response,
+            )
+            .await?;
 
-        // Use the response URL for error messages.
-        let response_url = DisplaySafeUrl::from(response.url().clone());
-
-        let content_type = response
-            .headers()
-            .get("content-type")
-            .ok_or_else(|| Error::from(ErrorKind::MissingContentType(response_url.clone())))?;
-        let content_type = content_type.to_str().map_err(|err| {
-            Error::from(ErrorKind::InvalidContentTypeHeader(
-                response_url.clone(),
-                err,
-            ))
-        })?;
-        let media_type = content_type.split(';').next().unwrap_or(content_type);
-        let media_type = MediaType::from_str(media_type).ok_or_else(|| {
-            Error::from(ErrorKind::UnsupportedMediaType(
-                response_url.clone(),
-                media_type.to_string(),
-            ))
-        })?;
-
-        let metadata = match media_type {
-            MediaType::PyxV1Msgpack => {
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
-                let data: PyxSimpleIndex = rmp_serde::from_slice(bytes.as_ref())
-                    .map_err(|err| Error::from_msgpack_err(err, response_url.clone()))?;
-                SimpleIndexMetadata::from_pyx_index(data)
-            }
-            MediaType::PyxV1Json => {
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
-                let data: PyxSimpleIndex = serde_json::from_slice(bytes.as_ref())
-                    .map_err(|err| Error::from_json_err(err, response_url.clone()))?;
-                SimpleIndexMetadata::from_pyx_index(data)
-            }
-            MediaType::PypiV1Json => {
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
-                let data: PypiSimpleIndex = serde_json::from_slice(bytes.as_ref())
-                    .map_err(|err| Error::from_json_err(err, response_url.clone()))?;
-                SimpleIndexMetadata::from_pypi_index(data)
-            }
-            MediaType::PypiV1Html | MediaType::TextHtml => {
-                let text = response
-                    .text()
-                    .await
-                    .map_err(|err| ErrorKind::from_reqwest(response_url.clone(), err))?;
-                SimpleIndexMetadata::from_html(&text, &response_url)?
-            }
-        };
-
-        OwnedArchive::from_unarchived(&metadata)
+        Ok(index)
     }
 
     /// Fetch the list of projects from a local Simple API index.
@@ -829,9 +857,7 @@ impl RegistryClient {
         let text = match fs_err::tokio::read_to_string(&path).await {
             Ok(text) => text,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::from(ErrorKind::FileNotFound(
-                    "index.html".to_string(),
-                )));
+                return Err(Error::from(ErrorKind::LocalIndexNotFound(path)));
             }
             Err(err) => {
                 return Err(Error::from(ErrorKind::Io(err)));
@@ -1194,7 +1220,7 @@ impl RegistryClient {
 #[derive(Debug)]
 pub(crate) enum SimpleMetadataSearchOutcome {
     /// Simple metadata was found
-    Found(OwnedArchive<SimpleMetadata>),
+    Found(OwnedArchive<SimpleDetailMetadata>),
     /// Simple metadata was not found
     NotFound,
     /// A status code failure was encountered when searching for
@@ -1319,18 +1345,18 @@ impl SimpleIndexMetadata {
 
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct SimpleMetadata(Vec<SimpleMetadatum>);
+pub struct SimpleDetailMetadata(Vec<SimpleDetailMetadatum>);
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct SimpleMetadatum {
+pub struct SimpleDetailMetadatum {
     pub version: Version,
     pub files: VersionFiles,
     pub metadata: Option<ResolutionMetadata>,
 }
 
-impl SimpleMetadata {
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleMetadatum> {
+impl SimpleDetailMetadata {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleDetailMetadatum> {
         self.0.iter()
     }
 
@@ -1374,7 +1400,7 @@ impl SimpleMetadata {
         Self(
             version_map
                 .into_iter()
-                .map(|(version, files)| SimpleMetadatum {
+                .map(|(version, files)| SimpleDetailMetadatum {
                     version,
                     files,
                     metadata: None,
@@ -1436,7 +1462,7 @@ impl SimpleMetadata {
                                 provides_extra: metadata.provides_extra,
                                 dynamic: false,
                             });
-                    SimpleMetadatum {
+                    SimpleDetailMetadatum {
                         version,
                         files,
                         metadata,
@@ -1446,7 +1472,7 @@ impl SimpleMetadata {
         )
     }
 
-    /// Read the [`SimpleMetadata`] from an HTML index.
+    /// Read the [`SimpleDetailMetadata`] from an HTML index.
     fn from_html(
         text: &str,
         package_name: &PackageName,
@@ -1459,21 +1485,21 @@ impl SimpleMetadata {
     }
 }
 
-impl IntoIterator for SimpleMetadata {
-    type Item = SimpleMetadatum;
-    type IntoIter = std::vec::IntoIter<SimpleMetadatum>;
+impl IntoIterator for SimpleDetailMetadata {
+    type Item = SimpleDetailMetadatum;
+    type IntoIter = std::vec::IntoIter<SimpleDetailMetadatum>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl ArchivedSimpleMetadata {
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleMetadatum>> {
+impl ArchivedSimpleDetailMetadata {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleDetailMetadatum>> {
         self.0.iter()
     }
 
-    pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleMetadatum>> {
+    pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleDetailMetadatum>> {
         self.0.get(i)
     }
 }
@@ -1556,7 +1582,9 @@ mod tests {
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{BaseClientBuilder, SimpleMetadata, SimpleMetadatum, html::SimpleDetailHTML};
+    use crate::{
+        BaseClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+    };
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
@@ -1774,14 +1802,14 @@ mod tests {
     "#;
         let data: PypiSimpleDetail = serde_json::from_str(response).unwrap();
         let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
-        let simple_metadata = SimpleMetadata::from_pypi_files(
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
             &base,
         );
         let versions: Vec<String> = simple_metadata
             .iter()
-            .map(|SimpleMetadatum { version, .. }| version.to_string())
+            .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
     }

@@ -543,7 +543,7 @@ pub async fn check_url(
         Ok(response) => response,
         Err(err) => {
             return match err.kind() {
-                uv_client::ErrorKind::PackageNotFound(_) => {
+                uv_client::ErrorKind::RemotePackageNotFound(_) => {
                     // The package doesn't exist, so we can't have uploaded it.
                     warn!(
                         "Package not found in the registry; skipping upload check for {filename}"
