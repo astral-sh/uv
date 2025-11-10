@@ -29,6 +29,9 @@
 </script>
 {% endblock %}
 
+<!-- 
+Replace the mkdocs header entirely to look more like Mintlify's theme
+-->
 {% block header %}
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
@@ -45,8 +48,10 @@
     <!-- Branding text -->
     <div class="md-header__branding">
       <a href="/">
-        <span class="md-header__branding-text"><span class="md-header__branding-name">uv</span>
-        Documentation</span>
+        <span class="md-header__branding-text">
+          <span class="md-header__branding-name">uv</span>
+          Documentation
+        </span>
       </a>
     </div>
 

@@ -268,6 +268,8 @@ modifications */
   font-weight: bold;
 }
 
+/* Styling for the custom header */
+
 /* Discord icon-only button */
 .md-header__nav-link--icon {
   display: inline-flex;
@@ -510,11 +512,6 @@ modifications */
   position: fixed;
 }
 
-/* Hide the search modal's button that appears in the header */
-.md-search__button {
-  display: none;
-}
-
 /* Dark mode search bar */
 [data-md-color-scheme="astral-dark"] .md-header__search-input {
   background-color: var(--md-code-bg-color);
@@ -559,6 +556,12 @@ modifications */
 
 /* Refine header layout for centered search */
 @media screen and (min-width: 76.25em) {
+
+  /* Hide the search modal's button that appears in the header */
+  .md-search__button {
+    display: none;
+  }
+
   .md-header__inner {
     gap: 0.5rem;
     padding: 0 1.5rem;
@@ -626,7 +629,22 @@ modifications */
     display: none;
   }
 
+  /* Remove gaps, we'll space these manually next */
+  .md-header__inner {
+    gap: 0rem;
+  }  
+
+  /* Nav links aligned to the right */
   .md-header__nav-links {
-    order: 5;
+    margin-left: auto;
+    order: 10;
+    flex-shrink: 0;
+  }
+
+  /* Position color palette toggle */
+  .md-header__option {
+    order: 11;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
   }
 }
