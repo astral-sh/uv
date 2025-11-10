@@ -4043,3 +4043,95 @@ fn git_states() {
     ");
     assert!(!context.temp_dir.child("broken-git/.git").is_dir());
 }
+
+/// Using `uv init` with `--project` isn't allowed
+#[test]
+fn init_project_flag_is_not_allowed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().arg("--project").arg("foo").arg("bar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--project' cannot be used for 'init'. Consider using `--directory` instead.
+
+    For more information, try '--help'.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn init_project_flag_is_ignored_with_explicit_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead.
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// The `--directory` flag is used as the base for path
+#[test]
+fn init_working_directory_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("bar");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().arg("--directory").arg("bar").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/bar/foo`
+    "###);
+
+    let pyproject = context.read("bar/foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+    Ok(())
+}

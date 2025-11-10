@@ -127,6 +127,21 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         false
     };
 
+    // The `--project` arg is being deprecated for `init` with a warning now and an error in preview
+    if let Some(_) = cli.top_level.global_args.project {
+        match &*cli.command {
+            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
+                // figure out if we're in preview
+                warn_user!(
+                    "The `--project` flag is deprecated for `uv init` and ignored in some cases. Consider using `--directory` to change the working directory instead."
+                );
+            }
+            _ => {
+                ()
+            }
+        }
+    }
+
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
     // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
