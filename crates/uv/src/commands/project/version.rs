@@ -680,7 +680,7 @@ async fn lock_and_sync(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
