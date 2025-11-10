@@ -329,6 +329,12 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_DEFAULT_GROUPS`
+<small class="added-in">added in `next release`</small>
+
+Equivalent to the `--no-default-groups` command-line argument. If set, uv will
+not select the default dependency groups defined in `tool.uv.default-groups`.
+
 ### `UV_NO_DEV`
 <small class="added-in">added in `0.8.7`</small>
 
