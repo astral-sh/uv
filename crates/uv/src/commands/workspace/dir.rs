@@ -31,11 +31,11 @@ pub(crate) async fn dir(
     let workspace =
         Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
 
-    let dir: &Path = match package_name {
-        None => workspace.install_path().as_path(),
+    let dir = match package_name {
+        None => workspace.install_path(),
         Some(package) => {
             if let Some(p) = workspace.packages().get(&package) {
-                p.root().as_path()
+                p.root()
             } else {
                 bail!("Package `{package}` not found in workspace.")
             }
