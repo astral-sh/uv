@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::PypiFile`] to [`distribution_type::File`].
@@ -272,7 +272,7 @@ pub enum ToUrlError {
         base: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
     /// An error that occurs when the base URL could not be joined with
     /// the relative path in a [`FileLocation::Relative`].
@@ -284,7 +284,7 @@ pub enum ToUrlError {
         path: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
     /// An error that occurs when the absolute URL in [`FileLocation::Absolute`]
     /// could not be parsed as a valid URL.
@@ -294,7 +294,7 @@ pub enum ToUrlError {
         absolute: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
 }
 

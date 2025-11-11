@@ -9,12 +9,12 @@ use std::sync::LazyLock;
 use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::Pep508Url;
 
@@ -59,48 +59,9 @@ impl VerbatimUrl {
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         let given = given.as_ref();
-        let url = Url::parse(given)?;
+        let url = DisplaySafeUrl::parse(given)?;
 
-        // Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
-        //
-        // In this case the user *probably* meant to have a username of "user/name", but both RFC
-        // 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
-        // non-percent-encoded slash or other special character.
-        //
-        // This ends up being moderately annoying to detect, since the above gets parsed into a
-        // "valid" WHATWG URL where the host is `used` and the pathname is
-        // `/name:password@domain/a/b/c` rather than causing a parse error.
-        //
-        // To detect it, we use a heuristic: if the password component is missing but the path or
-        // fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
-        if url.password().is_none()
-            && (url
-                .path()
-                .find(':')
-                .is_some_and(|pos| url.path()[pos..].contains('@'))
-                || url
-                    .fragment()
-                    .map(|fragment| {
-                        fragment
-                            .find(':')
-                            .is_some_and(|pos| fragment[pos..].contains('@'))
-                    })
-                    .unwrap_or(false))
-            // If the above is true, we should always expect to find these in the given URL
-            && let Some(col_pos) = given.find(':')
-            && let Some(at_pos) = given.rfind('@')
-        {
-            // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
-            // the error message. We somewhat aggressively replace everything between the scheme's
-            // ':' and the lastmost `@` with `***`.
-            let redacted_path = format!("{}***{}", &given[0..=col_pos], &given[at_pos..]);
-            return Err(VerbatimUrlError::AmbiguousAuthority(redacted_path));
-        }
-
-        Ok(Self {
-            url: DisplaySafeUrl::from(url),
-            given: None,
-        })
+        Ok(Self { url, given: None })
     }
 
     /// Convert a [`VerbatimUrl`] from a path or a URL.
@@ -431,12 +392,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] ParseError),
-
-    /// We parsed a URL, but couldn't disambiguate its authority
-    /// component.
-    #[error("ambiguous user/pass authority in URL (not percent-encoded?): {0}")]
-    AmbiguousAuthority(String),
+    Url(#[from] DisplaySafeUrlError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
