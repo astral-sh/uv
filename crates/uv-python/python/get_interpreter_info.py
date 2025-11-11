@@ -513,7 +513,7 @@ def get_operating_system_and_architecture():
             "minor": int(version[1]),
         }
     elif operating_system == "ios":
-        version = platform.ios_ver().version.split(".")
+        version = platform.ios_ver().release.split(".")
         operating_system = {
             "name": "ios",
             "major": int(version[0]),
@@ -665,7 +665,7 @@ def main() -> None:
         "debug_enabled": bool(sysconfig.get_config_var("Py_DEBUG")),
         # Determine if the interpreter is 32-bit or 64-bit.
         # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
-        "pointer_size": "64" if sys.maxsize > 2**32 else "32",
+        "pointer_size": "64" if sys.maxsize > 2 ** 32 else "32",
     }
     print(json.dumps(interpreter_info))
 
