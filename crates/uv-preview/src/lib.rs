@@ -23,6 +23,7 @@ bitflags::bitflags! {
         const CACHE_SIZE = 1 << 11;
         const INIT_PROJECT_FLAG = 1 << 12;
         const WORKSPACE_METADATA = 1 << 13;
+        const WORKSPACE_DIR = 1 << 14;
     }
 }
 
@@ -46,6 +47,7 @@ impl PreviewFeatures {
             Self::CACHE_SIZE => "cache-size",
             Self::INIT_PROJECT_FLAG => "init-project-flag",
             Self::WORKSPACE_METADATA => "workspace-metadata",
+            Self::WORKSPACE_DIR => "workspace-dir",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -97,6 +99,7 @@ impl FromStr for PreviewFeatures {
                 "cache-size" => Self::CACHE_SIZE,
                 "init-project-flag" => Self::INIT_PROJECT_FLAG,
                 "workspace-metadata" => Self::WORKSPACE_METADATA,
+                "workspace-dir" => Self::WORKSPACE_DIR,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;

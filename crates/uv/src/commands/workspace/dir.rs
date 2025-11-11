@@ -18,10 +18,10 @@ pub(crate) async fn dir(
     project_dir: &Path,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::WORKSPACE_METADATA) {
+    if preview.is_enabled(PreviewFeatures::WORKSPACE_DIR) {
         warn_user!(
             "The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::WORKSPACE_METADATA
+            PreviewFeatures::WORKSPACE_DIR
         );
     }
 
