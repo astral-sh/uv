@@ -67,6 +67,7 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use workspace::metadata::metadata;
 
 use crate::printer::Printer;
 
@@ -88,6 +89,7 @@ pub(crate) mod reporters;
 mod self_update;
 mod tool;
 mod venv;
+mod workspace;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

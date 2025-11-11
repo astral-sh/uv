@@ -517,6 +517,12 @@ pub enum Commands {
     Build(BuildArgs),
     /// Upload distributions to an index.
     Publish(PublishArgs),
+    /// Manage workspaces.
+    #[command(
+        after_help = "Use `uv help workspace` for more details.",
+        after_long_help = ""
+    )]
+    Workspace(WorkspaceNamespace),
     /// The implementation of the build backend.
     ///
     /// These commands are not directly exposed to the user, instead users invoke their build
@@ -6834,6 +6840,21 @@ pub struct PublishArgs {
     #[arg(long)]
     pub dry_run: bool,
 }
+
+#[derive(Args)]
+pub struct WorkspaceNamespace {
+    #[command(subcommand)]
+    pub command: WorkspaceCommand,
+}
+
+#[derive(Subcommand)]
+pub enum WorkspaceCommand {
+    /// Display package metadata.
+    Metadata(MetadataArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct MetadataArgs;
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
