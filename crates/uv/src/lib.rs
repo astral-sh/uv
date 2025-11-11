@@ -26,7 +26,8 @@ use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
+    compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -1733,6 +1734,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Workspace(WorkspaceNamespace { command }) => match command {
+            WorkspaceCommand::Metadata(_args) => {
+                commands::metadata(&project_dir, globals.preview, printer).await
+            }
+        },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
                 commands::build_backend::build_sdist(&sdist_directory)

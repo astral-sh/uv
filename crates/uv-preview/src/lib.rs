@@ -22,6 +22,7 @@ bitflags::bitflags! {
         const S3_ENDPOINT = 1 << 10;
         const CACHE_SIZE = 1 << 11;
         const INIT_PROJECT_FLAG = 1 << 12;
+        const WORKSPACE_METADATA = 1 << 13;
     }
 }
 
@@ -44,6 +45,7 @@ impl PreviewFeatures {
             Self::S3_ENDPOINT => "s3-endpoint",
             Self::CACHE_SIZE => "cache-size",
             Self::INIT_PROJECT_FLAG => "init-project-flag",
+            Self::WORKSPACE_METADATA => "workspace-metadata",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -94,12 +96,12 @@ impl FromStr for PreviewFeatures {
                 "s3-endpoint" => Self::S3_ENDPOINT,
                 "cache-size" => Self::CACHE_SIZE,
                 "init-project-flag" => Self::INIT_PROJECT_FLAG,
+                "workspace-metadata" => Self::WORKSPACE_METADATA,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
                 }
             };
-
             flags |= flag;
         }
 
