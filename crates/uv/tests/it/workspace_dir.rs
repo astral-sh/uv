@@ -27,7 +27,7 @@ fn workspace_dir_simple() {
     );
 }
 
-// Workspace dir output when run with `--package`
+/// Workspace dir output when run with `--package`.
 #[test]
 fn workspace_dir_specific_package() {
     let context = TestContext::new("3.12");

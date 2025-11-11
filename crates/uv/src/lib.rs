@@ -531,7 +531,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Dir(args),
         }) => {
-            commands::auth_dir(args.service.as_ref())?;
+            commands::auth_dir(args.service.as_ref(), printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Help(args) => commands::help(
@@ -1056,10 +1056,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => {
-            commands::cache_dir(&cache);
-            Ok(ExitStatus::Success)
-        }
+        }) => commands::cache_dir(&cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
         }) => commands::cache_size(&cache, args.human, printer, globals.preview),
@@ -1504,7 +1501,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::ToolDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_dir(args.bin, globals.preview)?;
+            commands::tool_dir(args.bin, globals.preview, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
@@ -1680,7 +1677,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_dir(args.bin)?;
+            commands::python_dir(args.bin, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
