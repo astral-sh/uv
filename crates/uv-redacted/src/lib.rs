@@ -60,7 +60,7 @@ impl DisplaySafeUrl {
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
     pub fn join(&self, input: &str) -> Result<Self, url::ParseError> {
-        self.0.join(input).map(Self::from)
+        self.0.join(input).map(Self)
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
@@ -78,7 +78,7 @@ impl DisplaySafeUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        Url::deserialize_internal(deserializer).map(Self::from)
+        Url::deserialize_internal(deserializer).map(Self)
     }
 
     #[allow(clippy::result_unit_err)]
@@ -250,8 +250,8 @@ mod tests {
     #[test]
     fn from_url_no_credentials() {
         let url_str = "https://pypi-proxy.fly.dev/basic-auth/simple";
-        let url = Url::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrl::from(url);
+        let url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = url;
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_none());
         assert_eq!(log_safe_url.to_string(), url_str);
@@ -260,8 +260,8 @@ mod tests {
     #[test]
     fn from_url_username_and_password() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = Url::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrl::from(url);
+        let url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = url;
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -273,8 +273,8 @@ mod tests {
     #[test]
     fn from_url_just_password() {
         let url_str = "https://:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = Url::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrl::from(url);
+        let url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = url;
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -286,8 +286,8 @@ mod tests {
     #[test]
     fn from_url_just_username() {
         let url_str = "https://user@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = Url::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrl::from(url);
+        let url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = url;
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_none());
         assert_eq!(
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn log_safe_url_ref() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = Url::parse(url_str).unwrap();
+        let url = DisplaySafeUrl::parse(url_str).unwrap();
         let log_safe_url = DisplaySafeUrl::ref_cast(&url);
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));

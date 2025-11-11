@@ -185,14 +185,14 @@ impl InstalledDist {
             let build_info = Self::read_build_info(path)?;
 
             return if let Some(direct_url) = Self::read_direct_url(path)? {
-                match Url::try_from(&direct_url) {
+                match DisplaySafeUrl::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::from(InstalledDistKind::Url(
                         InstalledDirectUrlDist {
                             name,
                             version,
                             editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                             direct_url: Box::new(direct_url),
-                            url: DisplaySafeUrl::from(url),
+                            url,
                             path: path.to_path_buf().into_boxed_path(),
                             cache_info,
                             build_info,
@@ -323,7 +323,7 @@ impl InstalledDist {
 
             // Normalisation comes from `pkg_resources.to_filename`.
             let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
-            let url = Url::from_file_path(&target)
+            let url = DisplaySafeUrl::from_file_path(&target)
                 .map_err(|()| InstalledDistError::InvalidEggLinkTarget(path.to_path_buf()))?;
 
             // Mildly unfortunate that we must read metadata to get the version.
@@ -337,7 +337,7 @@ impl InstalledDist {
                     version: Version::from_str(&egg_metadata.version)?,
                     egg_link: path.to_path_buf().into_boxed_path(),
                     target: target.into_boxed_path(),
-                    target_url: DisplaySafeUrl::from(url),
+                    target_url: url,
                     egg_info: egg_info.into_boxed_path(),
                 },
             ))));

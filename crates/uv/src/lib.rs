@@ -26,7 +26,8 @@ use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
+    compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -35,6 +36,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -529,7 +531,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Dir(args),
         }) => {
-            commands::auth_dir(args.service.as_ref())?;
+            commands::auth_dir(args.service.as_ref(), printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Help(args) => commands::help(
@@ -1054,10 +1056,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => {
-            commands::cache_dir(&cache);
-            Ok(ExitStatus::Success)
-        }
+        }) => commands::cache_dir(&cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
         }) => commands::cache_size(&cache, args.human, printer, globals.preview),
@@ -1502,7 +1501,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::ToolDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_dir(args.bin, globals.preview)?;
+            commands::tool_dir(args.bin, globals.preview, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
@@ -1678,7 +1677,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_dir(args.bin)?;
+            commands::python_dir(args.bin, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
@@ -1732,6 +1731,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Workspace(WorkspaceNamespace { command }) => match command {
+            WorkspaceCommand::Metadata(_args) => {
+                commands::metadata(&project_dir, globals.preview, printer).await
+            }
+            WorkspaceCommand::Dir(args) => {
+                commands::dir(args.package, &project_dir, globals.preview, printer).await
+            }
+        },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
                 commands::build_backend::build_sdist(&sdist_directory)
@@ -1804,6 +1811,32 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            if explicit_project {
+                if globals
+                    .preview
+                    .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
+                {
+                    bail!(
+                        "The `--project` option cannot be used in `uv init`. {}",
+                        if args.path.is_some() {
+                            "Use `--directory` instead."
+                        } else {
+                            "Use `--directory` or a positional path instead."
+                        }
+                    )
+                }
+
+                warn_user!(
+                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                    if args.path.is_some() {
+                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                    } else {
+                        "Consider using `uv init <PATH>` instead."
+                    }
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?;

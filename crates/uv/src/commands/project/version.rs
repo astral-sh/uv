@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
-use uv_cli::{VersionBump, VersionFormat};
+use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -56,7 +56,7 @@ pub(crate) fn self_version(
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBump>,
+    mut bump: Vec<VersionBumpSpec>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
@@ -164,29 +164,29 @@ pub(crate) async fn project_version(
         // because that makes perfect sense and is reasonable to do.
         let release_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Major | VersionBump::Minor | VersionBump::Patch
                 )
             })
             .collect();
         let prerelease_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
                 )
             })
             .collect();
         let post_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Post)
+            .filter(|spec| spec.bump == VersionBump::Post)
             .count();
         let stable_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Stable)
+            .filter(|spec| spec.bump == VersionBump::Stable)
             .count();
 
         // Very little reason to do "bump to stable" and then do other things,
@@ -252,25 +252,37 @@ pub(crate) async fn project_version(
 
         // Apply all the bumps
         let mut new_version = old_version.clone();
-        for bump in &bump {
-            let command = match *bump {
-                VersionBump::Major => BumpCommand::BumpRelease { index: 0 },
-                VersionBump::Minor => BumpCommand::BumpRelease { index: 1 },
-                VersionBump::Patch => BumpCommand::BumpRelease { index: 2 },
-                VersionBump::Alpha => BumpCommand::BumpPrerelease {
+
+        for spec in &bump {
+            match spec.bump {
+                VersionBump::Major => new_version.bump(BumpCommand::BumpRelease {
+                    index: 0,
+                    value: spec.value,
+                }),
+                VersionBump::Minor => new_version.bump(BumpCommand::BumpRelease {
+                    index: 1,
+                    value: spec.value,
+                }),
+                VersionBump::Patch => new_version.bump(BumpCommand::BumpRelease {
+                    index: 2,
+                    value: spec.value,
+                }),
+                VersionBump::Stable => new_version.bump(BumpCommand::MakeStable),
+                VersionBump::Alpha => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Alpha,
-                },
-                VersionBump::Beta => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Beta => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Beta,
-                },
-                VersionBump::Rc => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Rc => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Rc,
-                },
-                VersionBump::Post => BumpCommand::BumpPost,
-                VersionBump::Dev => BumpCommand::BumpDev,
-                VersionBump::Stable => BumpCommand::MakeStable,
-            };
-            new_version.bump(command);
+                    value: spec.value,
+                }),
+                VersionBump::Post => new_version.bump(BumpCommand::BumpPost { value: spec.value }),
+                VersionBump::Dev => new_version.bump(BumpCommand::BumpDev { value: spec.value }),
+            }
         }
 
         if new_version <= old_version {
