@@ -441,6 +441,7 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[cfg(test)]
     pub(crate) fn unset_defaults_for_host(self, host: &Platform) -> Self {
         self.unset_non_platform_defaults()
             .unset_platform_defaults(host)
