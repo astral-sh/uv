@@ -259,3 +259,101 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_user_agent_installer_name_override() -> Result<()> {
+    // Set up the TCP listener on a random available port
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+
+    // Spawn the server loop in a background task
+    let server_task = tokio::spawn(async move {
+        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
+            // Get User Agent Header and send it back in the response
+            let user_agent = req
+                .headers()
+                .get(USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(ToString::to_string)
+                .unwrap_or_default(); // Empty Default
+            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
+        });
+        // Start Server (not wrapped in loop {} since we want a single response server)
+        // If you want server to accept multiple connections, wrap it in loop {}
+        let (socket, _) = listener.accept().await.unwrap();
+        let socket = TokioIo::new(socket);
+        tokio::task::spawn(async move {
+            http1::Builder::new()
+                .serve_connection(socket, svc)
+                .with_upgrades()
+                .await
+                .expect("Server Started");
+        });
+    });
+
+    // Add some representative markers for an Ubuntu CI runner
+    let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.12.2",
+        os_name: "posix",
+        platform_machine: "x86_64",
+        platform_python_implementation: "CPython",
+        platform_release: "6.5.0-1016-azure",
+        platform_system: "Linux",
+        platform_version: "#16~22.04.1-Ubuntu SMP Fri Feb 16 15:42:02 UTC 2024",
+        python_full_version: "3.12.2",
+        python_version: "3.12",
+        sys_platform: "linux",
+    })
+    .unwrap();
+
+    // Initialize uv-client with custom installer name
+    let cache = Cache::temp()?.init()?;
+    let base_client = BaseClientBuilder::default()
+        .markers(&markers)
+        .installer_name("uv-pip");
+    let client = RegistryClientBuilder::new(base_client, cache).build();
+
+    // Send request to our dummy server
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await?;
+
+    // Check the HTTP status
+    assert!(res.status().is_success());
+
+    // Check User Agent
+    let body = res.text().await?;
+
+    // Wait for the server task to complete, to be a good citizen.
+    server_task.await?;
+
+    let (prefix, linehaul_json) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header");
+
+    let linehaul: LineHaul =
+        serde_json::from_str(linehaul_json).expect("Failed to deserialize linehaul");
+    let installer = linehaul
+        .installer
+        .expect("linehaul installer field is missing");
+    insta::with_settings!({
+        filters => vec![(version(), "<VERSION>")]
+    }, {
+        // make sure the installer name in the prefix is kept as `uv`
+        assert_snapshot!(prefix, @r#"uv/<VERSION> "#);
+        assert_json_snapshot!(installer, @r#"
+        {
+          "name": "uv-pip",
+          "version": "<VERSION>"
+        }
+        "#);
+    });
+
+    Ok(())
+}

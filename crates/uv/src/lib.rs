@@ -462,6 +462,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.retries,
     );
 
+    // Set the installer name to "uv-pip" for pip commands.
+    let client_builder = if matches!(*cli.command, Commands::Pip(_)) {
+        client_builder.installer_name("uv-pip")
+    } else {
+        client_builder
+    };
+
     match *cli.command {
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Login(args),

@@ -61,9 +61,14 @@ pub struct LineHaul {
 /// <https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L109>.
 /// This metadata is added to the user agent to enrich PyPI statistics.
 impl LineHaul {
-    /// Initializes Linehaul information based on PEP 508 markers.
+    /// Initializes Linehaul information based on PEP 508 markers. The installer name
+    /// defaults to `uv` if not provided.
     #[instrument(name = "linehaul", skip_all)]
-    pub fn new(markers: &MarkerEnvironment, platform: Option<&Platform>) -> Self {
+    pub fn new(
+        markers: &MarkerEnvironment,
+        platform: Option<&Platform>,
+        installer_name: Option<&str>,
+    ) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = [
             EnvVars::BUILD_BUILDID,
@@ -121,7 +126,7 @@ impl LineHaul {
 
         Self {
             installer: Option::from(Installer {
-                name: Some("uv".to_string()),
+                name: Some(installer_name.unwrap_or("uv").to_string()),
                 version: Some(version().to_string()),
             }),
             python: Some(markers.python_full_version().version.to_string()),

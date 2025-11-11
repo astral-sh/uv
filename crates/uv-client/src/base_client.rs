@@ -88,6 +88,8 @@ pub struct BaseClientBuilder<'a> {
     cross_origin_credential_policy: CrossOriginCredentialsPolicy,
     /// Optional custom reqwest client to use instead of creating a new one.
     custom_client: Option<Client>,
+    /// Optional installer name to use in linehaul metadata.
+    installer_name: Option<String>,
 }
 
 /// The policy for handling HTTP redirects.
@@ -142,6 +144,7 @@ impl Default for BaseClientBuilder<'_> {
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
+            installer_name: None,
         }
     }
 }
@@ -162,6 +165,7 @@ impl BaseClientBuilder<'_> {
             retries,
             connectivity,
             timeout,
+            installer_name: None,
             ..Self::default()
         }
     }
@@ -248,6 +252,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
         self.extra_middleware = Some(middleware);
+        self
+    }
+
+    #[must_use]
+    pub fn installer_name(mut self, name: impl Into<String>) -> Self {
+        self.installer_name = Some(name.into());
         self
     }
 
@@ -358,7 +368,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Add linehaul metadata.
         if let Some(markers) = self.markers {
-            let linehaul = LineHaul::new(markers, self.platform);
+            let linehaul = LineHaul::new(markers, self.platform, self.installer_name.as_deref());
             if let Ok(output) = serde_json::to_string(&linehaul) {
                 let _ = write!(user_agent_string, " {output}");
             }
