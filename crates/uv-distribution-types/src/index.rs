@@ -461,6 +461,35 @@ impl From<IndexUrl> for Index {
     }
 }
 
+/// A potentially unresolved index
+#[derive(Debug, Clone)]
+pub enum IndexArg {
+    Resolved(Index),
+    Unresolved(UnresolvedIndex),
+}
+
+/// An unresolved index passed by the user by its name
+#[derive(Debug, Clone)]
+pub struct UnresolvedIndex {
+    pub name: IndexName,
+    pub default: bool,
+}
+
+/// The index argument was unresolved
+#[derive(Error, Debug)]
+#[error("cannot convert an unresolved index to a resolved index")]
+pub struct IntoResolvedError;
+
+impl TryFrom<IndexArg> for Index {
+    type Error = IntoResolvedError;
+    fn try_from(index_arg: IndexArg) -> Result<Self, Self::Error> {
+        match index_arg {
+            IndexArg::Resolved(index) => Ok(index),
+            IndexArg::Unresolved(_) => Err(IntoResolvedError),
+        }
+    }
+}
+
 /// An [`IndexUrl`] along with the metadata necessary to query the index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct IndexMetadata {
