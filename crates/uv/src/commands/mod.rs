@@ -67,8 +67,8 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
-pub(crate) use workspace::metadata::metadata;
 pub(crate) use workspace::dir::dir;
+pub(crate) use workspace::metadata::metadata;
 
 use crate::printer::Printer;
 

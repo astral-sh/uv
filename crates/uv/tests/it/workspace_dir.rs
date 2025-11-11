@@ -46,7 +46,7 @@ fn workspace_dir_specific_package() {
     context.init().arg("foo").assert().success();
     context.init().arg("foo/bar").assert().success();
     let workspace = context.temp_dir.child("foo");
-    
+
     // root workspace
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r###"
     success: true
@@ -69,7 +69,6 @@ fn workspace_dir_specific_package() {
     "###
     );
 }
-
 
 /// Test output when run from a workspace member directory.
 #[test]
@@ -118,7 +117,7 @@ fn workspace_dir_package_doesnt_exist() {
     );
 }
 
-/// Test workspace dir error ouptut when not in a project.
+/// Test workspace dir error output when not in a project.
 #[test]
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");

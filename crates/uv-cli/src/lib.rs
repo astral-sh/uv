@@ -6855,7 +6855,7 @@ pub enum WorkspaceCommand {
     Metadata(MetadataArgs),
     /// Display path to workspace root or member packages.
     #[command(hide = true)]
-    Dir(WorkspaceDirArgs)
+    Dir(WorkspaceDirArgs),
 }
 
 #[derive(Args, Debug)]
@@ -6864,7 +6864,7 @@ pub struct MetadataArgs;
 #[derive(Args, Debug)]
 pub struct WorkspaceDirArgs {
     #[arg(long)]
-    pub package: Option<PackageName>
+    pub package: Option<PackageName>,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

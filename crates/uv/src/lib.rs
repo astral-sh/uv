@@ -1737,7 +1737,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(_args) => {
                 commands::metadata(&project_dir, globals.preview, printer).await
-            },
+            }
             WorkspaceCommand::Dir(args) => {
                 commands::dir(&args, &project_dir, globals.preview, printer).await
             }

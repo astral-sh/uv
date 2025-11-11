@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 
 use uv_cli::WorkspaceDirArgs;
-use uv_fs::{PortablePathBuf};
+use uv_fs::PortablePathBuf;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -31,9 +31,7 @@ pub(crate) async fn dir(
         Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
 
     let dir = match &args.package {
-        None => {
-            PortablePathBuf::from(workspace.install_path().as_path()).to_string()
-        },
+        None => PortablePathBuf::from(workspace.install_path().as_path()).to_string(),
         Some(package) => {
             if let Some(p) = workspace.packages().get(package) {
                 PortablePathBuf::from(p.root().as_path()).to_string()
@@ -43,10 +41,7 @@ pub(crate) async fn dir(
         }
     };
 
-    writeln!(
-        printer.stdout(),
-        "{dir}"
-    )?;
+    writeln!(printer.stdout(), "{dir}")?;
 
     Ok(ExitStatus::Success)
 }
