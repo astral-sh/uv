@@ -11,7 +11,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
@@ -1104,8 +1103,7 @@ async fn lock_and_sync(
 
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
-                let url = Url::from_file_path(project.project_root())
-                    .map(DisplaySafeUrl::from)
+                let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
                 let existing = lock_state.index().distributions().remove(&version_id);

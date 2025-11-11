@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_is_known_url() {
-        let api_url = DisplaySafeUrl::from(Url::parse("https://api.pyx.dev").unwrap());
+        let api_url = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
         let cdn_domain = "astralhosted.com";
 
         // Same realm as API.
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn test_is_known_domain() {
-        let api_url = DisplaySafeUrl::from(Url::parse("https://api.pyx.dev").unwrap());
+        let api_url = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
         let cdn_domain = "astralhosted.com";
 
         // Same realm as API.

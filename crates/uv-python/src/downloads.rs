@@ -77,7 +77,7 @@ pub enum Error {
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Invalid download URL: {0}")]
-    InvalidUrlFormat(Url),
+    InvalidUrlFormat(DisplaySafeUrl),
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to create download directory")]
@@ -109,7 +109,7 @@ pub enum Error {
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
-        url: Box<Url>,
+        url: Box<DisplaySafeUrl>,
         python_builds_dir: PathBuf,
     },
     #[error(transparent)]
@@ -1198,7 +1198,7 @@ impl ManagedPythonDownload {
     /// Download the managed Python archive into the cache directory.
     async fn download_archive(
         &self,
-        url: &Url,
+        url: &DisplaySafeUrl,
         client: &BaseClient,
         reporter: Option<&dyn Reporter>,
         python_builds_dir: &Path,
@@ -1300,7 +1300,7 @@ impl ManagedPythonDownload {
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-    ) -> Result<Url, Error> {
+    ) -> Result<DisplaySafeUrl, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = python_install_mirror {
@@ -1312,7 +1312,7 @@ impl ManagedPythonDownload {
                             self.url.to_string(),
                         ));
                     };
-                    return Ok(Url::parse(
+                    return Ok(DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?);
                 }
@@ -1327,7 +1327,7 @@ impl ManagedPythonDownload {
                             self.url.to_string(),
                         ));
                     };
-                    return Ok(Url::parse(
+                    return Ok(DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?);
                 }
@@ -1336,7 +1336,7 @@ impl ManagedPythonDownload {
             _ => {}
         }
 
-        Ok(Url::parse(&self.url)?)
+        Ok(DisplaySafeUrl::parse(&self.url)?)
     }
 }
 
@@ -1558,10 +1558,9 @@ where
 
 /// Convert a [`Url`] into an [`AsyncRead`] stream.
 async fn read_url(
-    url: &Url,
+    url: &DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
-    let url = DisplaySafeUrl::from(url.clone());
     if url.scheme() == "file" {
         // Loads downloaded distribution from the given `file://` URL.
         let path = url
@@ -1574,7 +1573,7 @@ async fn read_url(
         Ok((Either::Left(reader), Some(size)))
     } else {
         let response = client
-            .for_host(&url)
+            .for_host(url)
             .get(Url::from(url.clone()))
             .send()
             .await
@@ -1588,7 +1587,7 @@ async fn read_url(
         // Check the status code.
         let response = response
             .error_for_status()
-            .map_err(|err| Error::from_reqwest(url, err, retry_count))?;
+            .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
 
         let size = response.content_length();
         let stream = response

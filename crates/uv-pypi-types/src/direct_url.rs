@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use url::Url;
+use uv_redacted::DisplaySafeUrl;
 
 /// Metadata for a distribution that was installed via a direct URL.
 ///
@@ -92,7 +92,7 @@ impl std::fmt::Display for VcsKind {
     }
 }
 
-impl TryFrom<&DirectUrl> for Url {
+impl TryFrom<&DirectUrl> for DisplaySafeUrl {
     type Error = url::ParseError;
 
     fn try_from(value: &DirectUrl) -> Result<Self, Self::Error> {
@@ -126,9 +126,11 @@ impl TryFrom<&DirectUrl> for Url {
             } => {
                 let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
                 if let Some(commit_id) = &vcs_info.commit_id {
-                    url.set_path(&format!("{}@{commit_id}", url.path()));
+                    let path = format!("{}@{commit_id}", url.path());
+                    url.set_path(&path);
                 } else if let Some(requested_revision) = &vcs_info.requested_revision {
-                    url.set_path(&format!("{}@{requested_revision}", url.path()));
+                    let path = format!("{}@{requested_revision}", url.path());
+                    url.set_path(&path);
                 }
                 if let Some(subdirectory) = subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
