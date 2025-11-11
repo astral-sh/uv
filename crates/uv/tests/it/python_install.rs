@@ -2694,13 +2694,19 @@ fn python_install_no_cache() {
     ");
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn python_install_emulated_macos() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
         .with_python_download_cache();
+
+    if !Path::new("/Library/Apple/usr/libexec/oah/libRosettaRuntime").exists() {
+        // skip this test if Rosetta is not available to run the x86_64 interpreter
+        debug!("Skipping test because Rosetta is not available");
+        return;
+    }
 
     // Before installation, `uv python list` should not show the x86_64 download
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
