@@ -2103,9 +2103,7 @@ mod tests {
         let host = Platform::from_env().expect("host platform");
 
         assert_eq!(
-            request
-                .unset_defaults_for_host(&host)
-                .simplified_display(),
+            request.unset_defaults_for_host(&host).simplified_display(),
             None
         );
     }
