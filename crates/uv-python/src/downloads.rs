@@ -425,7 +425,7 @@ impl PythonDownloadRequest {
     pub(crate) fn unset_defaults_with_host(mut self, host: Option<&Platform>) -> Self {
         self.implementation = self
             .implementation
-            .filter(|implementation_name| *implementation_name != ImplementationName::CPython);
+            .filter(|implementation_name| *implementation_name != ImplementationName::default());
 
         self.arch = self
             .arch
