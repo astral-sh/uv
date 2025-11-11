@@ -6853,10 +6853,17 @@ pub enum WorkspaceCommand {
     /// Display package metadata.
     #[command(hide = true)]
     Metadata(MetadataArgs),
+    #[command(hide = true)]
+    Dir(DirArgs)
 }
 
 #[derive(Args, Debug)]
 pub struct MetadataArgs;
+
+#[derive(Args, Debug)]
+pub struct DirArgs {
+    pub package: Option<PackageName>
+}
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
