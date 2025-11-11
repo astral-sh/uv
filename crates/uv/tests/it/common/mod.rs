@@ -769,12 +769,12 @@ impl TestContext {
 
         // Make virtual environment activation cross-platform and shell-agnostic
         filters.push((
-            r"Activate with: (.*)\\Scripts\\activate".to_string(),
-            "Activate with: source $1/[BIN]/activate".to_string(),
+            r"Activate with: (.*\\|)Scripts\\activate".to_string(),
+            "Activate with: source $1[BIN]/activate".to_string(),
         ));
         filters.push((
-            r"Activate with: source (.*)/bin/activate(?:\.\w+)?".to_string(),
-            "Activate with: source $1/[BIN]/activate".to_string(),
+            r"Activate with: source (.*/|)bin/activate(?:\.\w+)?".to_string(),
+            "Activate with: source $1[BIN]/activate".to_string(),
         ));
 
         // Filter non-deterministic temporary directory names

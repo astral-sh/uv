@@ -1714,7 +1714,7 @@ fn create_venv_current_working_directory() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
-    Activate with: source bin/activate
+    Activate with: source [BIN]/activate
     "
     );
 
