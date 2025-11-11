@@ -6161,3 +6161,58 @@ fn incompatible_platform_direct_url() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
+#[test]
+fn sync_missing_python_no_target() -> Result<()> {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11");
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--python").arg("3.12")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+    Ok(())
+}
+
+#[test]
+fn sync_with_target_installs_missing_python() -> Result<()> {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11");
+
+    let target_dir = context.temp_dir.child("target-dir");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    // Request Python 3.12 which is not installed in this context. Remove the `UV_PYTHON_DOWNLOADS` value that's set in the default
+    // test context to allow the new version to be installed.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python").arg("3.12")
+        .arg("--target").arg(target_dir.path())
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Using CPython 3.12.12
+        Resolved 1 package in [TIME]
+        Prepared 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + anyio==4.3.0
+        "###
+    );
+    Ok(())
+}
