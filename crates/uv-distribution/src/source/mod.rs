@@ -555,7 +555,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -637,7 +637,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    DisplaySafeUrl::from(url.clone()),
+                    url.clone(),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -738,7 +738,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
@@ -786,7 +786,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = Self::request(DisplaySafeUrl::from(url.clone()), client.unmanaged)?;
+        let req = Self::request(url.clone(), client.unmanaged)?;
         let revision = client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -811,7 +811,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
-                            Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                            Self::request(url.clone(), client)?,
                             &cache_entry,
                             cache_control,
                             download,
@@ -2146,7 +2146,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -2208,7 +2208,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
-                        Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                        Self::request(url.clone(), client)?,
                         &cache_entry,
                         cache_control,
                         download,
