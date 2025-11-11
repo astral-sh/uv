@@ -427,6 +427,7 @@ impl PythonDownloadRequest {
             .implementation
             .filter(|implementation_name| *implementation_name != ImplementationName::default());
 
+        // Drop implicit architecture derived from environment so only user overrides remain.
         self.arch = self
             .arch
             .filter(|arch| !matches!(arch, ArchRequest::Environment(_)));
@@ -455,7 +456,8 @@ impl PythonDownloadRequest {
 
     /// Return a compact string representation suitable for user-facing display.
     ///
-    /// The resulting string only includes explicitly-set pieces of the request.
+    /// The resulting string only includes explicitly-set pieces of the request and returns
+    /// [`None`] when no segments are explicitly set.
     pub fn simplified_display(self) -> Option<String> {
         let parts = [
             self.implementation
