@@ -6968,6 +6968,9 @@ pub enum WorkspaceCommand {
     /// If used outside of a workspace, i.e., if a `pyproject.toml` cannot be found, uv will exit with an error.
     #[command(hide = true)]
     Dir(WorkspaceDirArgs),
+    /// List the members of a workspace.
+    #[command(hide = true)]
+    List(WorkspaceListArgs),
 }
 
 #[derive(Args, Debug)]
@@ -6979,6 +6982,9 @@ pub struct WorkspaceDirArgs {
     #[arg(long)]
     pub package: Option<PackageName>,
 }
+
+#[derive(Args, Debug)]
+pub struct WorkspaceListArgs;
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
