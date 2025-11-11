@@ -6960,10 +6960,25 @@ pub enum WorkspaceCommand {
     /// Display package metadata.
     #[command(hide = true)]
     Metadata(MetadataArgs),
+    /// Display the path of a workspace member.
+    ///
+    /// By default, the path to the workspace root directory is displayed.
+    /// The `--package` option can be used to display the path to a workspace member instead.
+    ///
+    /// If used outside of a workspace, i.e., if a `pyproject.toml` cannot be found, uv will exit with an error.
+    #[command(hide = true)]
+    Dir(WorkspaceDirArgs),
 }
 
 #[derive(Args, Debug)]
 pub struct MetadataArgs;
+
+#[derive(Args, Debug)]
+pub struct WorkspaceDirArgs {
+    /// Display the path to a specific package in the workspace.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+}
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
