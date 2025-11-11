@@ -3599,8 +3599,15 @@ pub struct SyncArgs {
     /// of its dependencies are still installed. This is particularly useful in situations like
     /// building Docker images where installing the project separately from its dependencies allows
     /// optimal layer caching.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "only_install_project")]
     pub no_install_project: bool,
+
+    /// Only install the current project.
+    ///
+    /// The `--only-install-project` option allows installation of only the project itself while
+    /// excluding all other dependencies.
+    #[arg(long, conflicts_with = "no_install_project")]
+    pub only_install_project: bool,
 
     /// Do not install any workspace members, including the root project.
     ///
@@ -3609,24 +3616,46 @@ pub struct SyncArgs {
     /// members while retaining their dependencies. This is particularly useful in situations like
     /// building Docker images where installing the workspace separately from its dependencies
     /// allows optimal layer caching.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "only_install_workspace")]
     pub no_install_workspace: bool,
+
+    /// Only install workspace members, including the root project.
+    ///
+    /// The `--only-install-workspace` option allows installation of only the workspace members
+    /// while excluding all other dependencies.
+    #[arg(long, conflicts_with = "no_install_workspace")]
+    pub only_install_workspace: bool,
 
     /// Do not install local path dependencies
     ///
     /// Skips the current project, workspace members, and any other local (path or editable)
     /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
     /// heavy third-party dependencies first and layer local packages separately.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "only_install_local")]
     pub no_install_local: bool,
+
+    /// Only install local path dependencies
+    ///
+    /// The `--only-install-local` option allows installation of only local (path or editable)
+    /// packages while excluding all remote/indexed dependencies.
+    #[arg(long, conflicts_with = "no_install_local")]
+    pub only_install_local: bool,
 
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
     /// `--no-install-package` option allows exclusion of specific packages. Note this can result
     /// in a broken environment, and should be used with caution.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "only_install_package")]
     pub no_install_package: Vec<PackageName>,
+
+    /// Only install the given package(s).
+    ///
+    /// The `--only-install-package` option allows installation of only the specified packages
+    /// while excluding all others. Note this can result in a broken environment, and should be
+    /// used with caution.
+    #[arg(long, conflicts_with = "no_install_package")]
+    pub only_install_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -4044,8 +4073,15 @@ pub struct AddArgs {
     /// its dependencies are still installed. This is particularly useful in situations like building
     /// Docker images where installing the project separately from its dependencies allows optimal
     /// layer caching.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "only_install_project")]
     pub no_install_project: bool,
+
+    /// Only install the current project.
+    ///
+    /// The `--only-install-project` option allows installation of only the project itself while
+    /// excluding all other dependencies.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "no_install_project")]
+    pub only_install_project: bool,
 
     /// Do not install any workspace members, including the current project.
     ///
@@ -4054,16 +4090,46 @@ pub struct AddArgs {
     /// members while retaining their dependencies. This is particularly useful in situations like
     /// building Docker images where installing the workspace separately from its dependencies
     /// allows optimal layer caching.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "only_install_workspace")]
     pub no_install_workspace: bool,
+
+    /// Only install workspace members, including the current project.
+    ///
+    /// The `--only-install-workspace` option allows installation of only the workspace members
+    /// while excluding all other dependencies.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "no_install_workspace")]
+    pub only_install_workspace: bool,
 
     /// Do not install local path dependencies
     ///
     /// Skips the current project, workspace members, and any other local (path or editable)
     /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
     /// heavy third-party dependencies first and layer local packages separately.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "only_install_local")]
     pub no_install_local: bool,
+
+    /// Only install local path dependencies
+    ///
+    /// The `--only-install-local` option allows installation of only local (path or editable)
+    /// packages while excluding all remote/indexed dependencies.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "no_install_local")]
+    pub only_install_local: bool,
+
+    /// Do not install the given package(s).
+    ///
+    /// By default, all of the project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "only_install_package")]
+    pub no_install_package: Vec<PackageName>,
+
+    /// Only install the given package(s).
+    ///
+    /// The `--only-install-package` option allows installation of only the specified packages
+    /// while excluding all others. Note this can result in a broken environment, and should be
+    /// used with caution.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync", conflicts_with = "no_install_package")]
+    pub only_install_package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -4450,31 +4516,59 @@ pub struct ExportArgs {
     /// By default, the current project is included in the exported requirements file with all of
     /// its dependencies. The `--no-emit-project` option allows the project to be excluded, but all
     /// of its dependencies to remain included.
-    #[arg(long, alias = "no-install-project")]
+    #[arg(long, alias = "no-install-project", conflicts_with = "only_emit_project")]
     pub no_emit_project: bool,
+
+    /// Only emit the current project.
+    ///
+    /// The `--only-emit-project` option allows inclusion of only the project itself while
+    /// excluding all other dependencies.
+    #[arg(long, alias = "only-install-project", conflicts_with = "no_emit_project")]
+    pub only_emit_project: bool,
 
     /// Do not emit any workspace members, including the root project.
     ///
     /// By default, all workspace members and their dependencies are included in the exported
     /// requirements file, with all of their dependencies. The `--no-emit-workspace` option allows
     /// exclusion of all the workspace members while retaining their dependencies.
-    #[arg(long, alias = "no-install-workspace")]
+    #[arg(long, alias = "no-install-workspace", conflicts_with = "only_emit_workspace")]
     pub no_emit_workspace: bool,
+
+    /// Only emit workspace members, including the root project.
+    ///
+    /// The `--only-emit-workspace` option allows inclusion of only the workspace members while
+    /// excluding all other dependencies.
+    #[arg(long, alias = "only-install-workspace", conflicts_with = "no_emit_workspace")]
+    pub only_emit_workspace: bool,
 
     /// Do not include local path dependencies in the exported requirements.
     ///
     /// Omits the current project, workspace members, and any other local (path or editable)
     /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
     /// and CI flows that want to export and cache third-party dependencies first.
-    #[arg(long, alias = "no-install-local")]
+    #[arg(long, alias = "no-install-local", conflicts_with = "only_emit_local")]
     pub no_emit_local: bool,
+
+    /// Only include local path dependencies in the exported requirements.
+    ///
+    /// The `--only-emit-local` option allows inclusion of only local (path or editable) packages
+    /// while excluding all remote/indexed dependencies.
+    #[arg(long, alias = "only-install-local", conflicts_with = "no_emit_local")]
+    pub only_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
     /// By default, all of the project's dependencies are included in the exported requirements
     /// file. The `--no-emit-package` option allows exclusion of specific packages.
-    #[arg(long, alias = "no-install-package")]
+    #[arg(long, alias = "no-install-package", conflicts_with = "only_emit_package")]
     pub no_emit_package: Vec<PackageName>,
+
+    /// Only emit the given package(s).
+    ///
+    /// The `--only-emit-package` option allows inclusion of only the specified packages while
+    /// excluding all others.
+    #[arg(long, alias = "only-install-package", conflicts_with = "no_emit_package")]
+    pub only_emit_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
