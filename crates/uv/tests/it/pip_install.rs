@@ -13147,10 +13147,13 @@ fn install_with_system_interpreter() {
 }
 
 /// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
+#[cfg(feature = "python-managed")]
 #[test]
 fn install_missing_python_no_target() {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
 
     // Request Python 3.12; which should fail
     uv_snapshot!(context.filters(), context.pip_install()
@@ -13166,10 +13169,13 @@ fn install_missing_python_no_target() {
     );
 }
 
+#[cfg(feature = "python-managed")]
 #[test]
 fn install_missing_python_with_target() {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13178,8 +13184,7 @@ fn install_missing_python_with_target() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--python").arg("3.12")
-        .arg("--target").arg(target_dir.path())
-        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r###"
+        .arg("--target").arg(target_dir.path()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----

@@ -6163,10 +6163,13 @@ fn incompatible_platform_direct_url() -> Result<()> {
 }
 
 /// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
+#[cfg(feature = "python-managed")]
 #[test]
 fn sync_missing_python_no_target() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
 
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
@@ -6186,10 +6189,13 @@ fn sync_missing_python_no_target() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-managed")]
 #[test]
 fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
 
     let target_dir = context.temp_dir.child("target-dir");
     let requirements = context.temp_dir.child("requirements.txt");
@@ -6200,8 +6206,7 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--python").arg("3.12")
-        .arg("--target").arg(target_dir.path())
-        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r###"
+        .arg("--target").arg(target_dir.path()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
