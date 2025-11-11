@@ -18,8 +18,8 @@ use uv_configuration::{
     TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexArg, IndexUrl, Origin,
+    PipExtraIndex, PipFindLinks, PipIndex, UnresolvedIndex,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
@@ -1252,18 +1252,24 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
 /// This function splits the input on all whitespace characters rather than a single delimiter,
 /// which is necessary to parse environment variables like `PIP_EXTRA_INDEX_URL`.
 /// The standard `clap::Args` `value_delimiter` only supports single-character delimiters.
-fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
+fn parse_indices(input: &str) -> Result<Vec<Maybe<IndexArg>>, String> {
     if input.trim().is_empty() {
         return Ok(Vec::new());
     }
     let mut indices = Vec::new();
     for token in input.split_whitespace() {
-        match Index::from_str(token) {
-            Ok(index) => indices.push(Maybe::Some(Index {
+        match IndexArg::from_str(token) {
+            Ok(IndexArg::Resolved(index)) => indices.push(Maybe::Some(IndexArg::Resolved(Index {
                 default: false,
                 origin: Some(Origin::Cli),
                 ..index
-            })),
+            }))),
+            Ok(IndexArg::Unresolved(index)) => {
+                indices.push(Maybe::Some(IndexArg::Unresolved(UnresolvedIndex {
+                    default: false,
+                    ..index
+                })));
+            }
             Err(e) => return Err(e.to_string()),
         }
     }
@@ -1271,17 +1277,23 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
 }
 
 /// Parse a `--default-index` argument into an [`Index`], mapping the empty string to `None`.
-fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
+fn parse_default_index(input: &str) -> Result<Maybe<IndexArg>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match Index::from_str(input) {
-            Ok(index) => Ok(Maybe::Some(Index {
+        match IndexArg::from_str(input) {
+            Ok(IndexArg::Resolved(index)) => Ok(Maybe::Some(IndexArg::Resolved(Index {
                 default: true,
                 origin: Some(Origin::Cli),
                 ..index
-            })),
-            Err(err) => Err(err.to_string()),
+            }))),
+            Ok(IndexArg::Unresolved(index)) => {
+                Ok(Maybe::Some(IndexArg::Unresolved(UnresolvedIndex {
+                    default: true,
+                    ..index
+                })))
+            }
+            Err(e) => return Err(e.to_string()),
         }
     }
 }
@@ -6013,11 +6025,11 @@ pub struct IndexArgs {
     /// Index names are not supported as values. Relative paths must be disambiguated from index
     /// names with `./` or `../` on Unix or `.\\`, `..\\`, `./` or `../` on Windows.
     //
-    // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
+    // The nested Vec structure (`Vec<Vec<Maybe<IndexArg>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
     // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
     #[arg(long, env = EnvVars::UV_INDEX, value_parser = parse_indices, help_heading = "Index options")]
-    pub index: Option<Vec<Vec<Maybe<Index>>>>,
+    pub index: Option<Vec<Vec<Maybe<IndexArg>>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
     ///
@@ -6027,7 +6039,7 @@ pub struct IndexArgs {
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--index` flag.
     #[arg(long, env = EnvVars::UV_DEFAULT_INDEX, value_parser = parse_default_index, help_heading = "Index options")]
-    pub default_index: Option<Maybe<Index>>,
+    pub default_index: Option<Maybe<IndexArg>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
     /// <https://pypi.org/simple>).

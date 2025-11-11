@@ -355,7 +355,7 @@ pub struct InstallerOptions {
 /// Settings relevant to all resolver operations.
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct ResolverOptions {
-    pub index: Option<Vec<Index>>,
+    pub index: Option<Vec<IndexArgs>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
@@ -1107,7 +1107,7 @@ pub struct PipOptions {
     pub prefix: Option<PathBuf>,
     #[serde(skip)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub index: Option<Vec<Index>>,
+    pub index: Option<Vec<IndexArg>>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)

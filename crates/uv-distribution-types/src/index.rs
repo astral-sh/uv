@@ -461,6 +461,51 @@ impl FromStr for Index {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum IndexArg {
+    Resolved(Index),
+    Unresolved(UnresolvedIndex),
+}
+
+#[derive(Debug, Clone)]
+pub struct UnresolvedIndex {
+    pub value: String,
+    pub default: bool,
+}
+
+impl FromStr for IndexArg {
+    type Err = IndexSourceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Determine whether the index argument is unambiguous
+        // e.g., when source is prefixed with a name, as in `name=https://pypi.org/simple`.
+        if let Some((name, url)) = s.split_once('=') {
+            if !name.chars().any(|c| c == ':') {
+                let name = IndexName::from_str(name)?;
+                let url = IndexUrl::from_str(url)?;
+                return Ok(Self::Resolved(Index {
+                    name: Some(name),
+                    url,
+                    explicit: false,
+                    default: false,
+                    origin: None,
+                    format: IndexFormat::Simple,
+                    publish_url: None,
+                    authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
+                    cache_control: None,
+                }));
+            }
+        }
+
+        // Otherwise, we will resolve it later
+        Ok(Self::Unresolved(UnresolvedIndex {
+            value: s.to_string(),
+            default: false,
+        }))
+    }
+}
+
 /// An [`IndexUrl`] along with the metadata necessary to query the index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct IndexMetadata {
