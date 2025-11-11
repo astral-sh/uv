@@ -433,6 +433,10 @@ impl PythonDownloadRequest {
             .implementation
             .filter(|implementation_name| *implementation_name != ImplementationName::default());
 
+        self.version = self
+            .version
+            .filter(|version| !matches!(version, VersionRequest::Any | VersionRequest::Default));
+
         // Drop implicit architecture derived from environment so only user overrides remain.
         self.arch = self
             .arch
@@ -476,15 +480,9 @@ impl PythonDownloadRequest {
         let parts = [
             self.implementation
                 .map(|implementation| implementation.to_string()),
-            self.version.and_then(|version| {
-                (!matches!(version, VersionRequest::Any | VersionRequest::Default))
-                    .then_some(version.to_string())
-            }),
+            self.version.map(|version| version.to_string()),
             self.os.map(|os| os.to_string()),
-            self.arch.and_then(|arch| match arch {
-                ArchRequest::Explicit(arch) => Some(arch.to_string()),
-                ArchRequest::Environment(_) => None,
-            }),
+            self.arch.map(|arch| arch.to_string()),
             self.libc.map(|libc| libc.to_string()),
         ];
 
