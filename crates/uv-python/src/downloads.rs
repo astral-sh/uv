@@ -419,10 +419,16 @@ impl PythonDownloadRequest {
     /// explicitly user-specified segments.
     #[must_use]
     pub fn unset_defaults(self) -> Self {
-        self.unset_defaults_with_host(Platform::from_env().ok().as_ref())
+        let request = self.unset_non_platform_defaults();
+
+        if let Ok(host) = Platform::from_env() {
+            request.unset_platform_defaults(&host)
+        } else {
+            request
+        }
     }
 
-    pub(crate) fn unset_defaults_with_host(mut self, host: Option<&Platform>) -> Self {
+    fn unset_non_platform_defaults(mut self) -> Self {
         self.implementation = self
             .implementation
             .filter(|implementation_name| *implementation_name != ImplementationName::default());
@@ -432,15 +438,22 @@ impl PythonDownloadRequest {
             .arch
             .filter(|arch| !matches!(arch, ArchRequest::Environment(_)));
 
-        if let Some(host) = host {
-            self.os = self.os.filter(|os| *os != host.os);
+        self
+    }
 
-            self.libc = self.libc.filter(|libc| *libc != host.libc);
+    pub(crate) fn unset_defaults_for_host(self, host: &Platform) -> Self {
+        self.unset_non_platform_defaults()
+            .unset_platform_defaults(host)
+    }
 
-            self.arch = self
-                .arch
-                .filter(|arch| !matches!(arch, ArchRequest::Explicit(explicit_arch) if *explicit_arch == host.arch));
-        }
+    pub(crate) fn unset_platform_defaults(mut self, host: &Platform) -> Self {
+        self.os = self.os.filter(|os| *os != host.os);
+
+        self.libc = self.libc.filter(|libc| *libc != host.libc);
+
+        self.arch = self
+            .arch
+            .filter(|arch| !matches!(arch, ArchRequest::Explicit(explicit_arch) if *explicit_arch == host.arch));
 
         self
     }
@@ -1977,7 +1990,7 @@ mod tests {
         assert_eq!(
             request
                 .clone()
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .without_patch()
                 .simplified_display()
                 .as_deref(),
@@ -2009,7 +2022,7 @@ mod tests {
         assert_eq!(
             request
                 .clone()
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .without_patch()
                 .simplified_display()
                 .as_deref(),
@@ -2041,7 +2054,7 @@ mod tests {
         assert_eq!(
             request
                 .clone()
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .without_patch()
                 .simplified_display()
                 .as_deref(),
@@ -2073,7 +2086,7 @@ mod tests {
         assert_eq!(
             request
                 .clone()
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .without_patch()
                 .simplified_display()
                 .as_deref(),
@@ -2091,7 +2104,7 @@ mod tests {
 
         assert_eq!(
             request
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .simplified_display(),
             None
         );
@@ -2114,7 +2127,7 @@ mod tests {
 
         assert_eq!(
             request
-                .unset_defaults_with_host(Some(&host))
+                .unset_defaults_for_host(&host)
                 .simplified_display()
                 .as_deref(),
             Some("3.12")
