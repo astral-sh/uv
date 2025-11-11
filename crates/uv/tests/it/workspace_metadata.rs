@@ -1,22 +1,8 @@
-use std::env;
-use std::path::PathBuf;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 
 use crate::common::{TestContext, copy_dir_ignore, uv_snapshot};
-
-fn workspaces_dir() -> PathBuf {
-    env::current_dir()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("scripts")
-        .join("workspaces")
-}
 
 /// Test basic metadata output for a simple workspace with one member.
 #[test]
@@ -57,7 +43,9 @@ fn workspace_metadata_root_workspace() -> Result<()> {
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
-        workspaces_dir().join("albatross-root-workspace"),
+        context
+            .workspace_root
+            .join("scripts/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
@@ -100,7 +88,9 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
-        workspaces_dir().join("albatross-virtual-workspace"),
+        context
+            .workspace_root
+            .join("scripts/workspaces/albatross-virtual-workspace"),
         &workspace,
     )?;
 
@@ -143,7 +133,9 @@ fn workspace_metadata_from_member() -> Result<()> {
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
-        workspaces_dir().join("albatross-root-workspace"),
+        context
+            .workspace_root
+            .join("scripts/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
@@ -274,7 +266,9 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
-        workspaces_dir().join("albatross-project-in-excluded"),
+        context
+            .workspace_root
+            .join("scripts/workspaces/albatross-project-in-excluded"),
         &workspace,
     )?;
 
