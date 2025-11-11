@@ -388,21 +388,23 @@ impl PythonInstallation {
 
         let download_request = download_request.with_prereleases(false);
 
-        let Ok(mut downloads) = download_request.iter_downloads(python_downloads_json_url) else {
-            return;
-        };
+        let has_stable_download = {
+            let Ok(mut downloads) = download_request.iter_downloads(python_downloads_json_url)
+            else {
+                return;
+            };
 
-        let has_stable_download = downloads.any(|download| {
-            let download_version = download.key().version().into_version();
-            download_version.pre().is_none() && download_version.only_release() >= release
-        });
+            downloads.any(|download| {
+                let download_version = download.key().version().into_version();
+                download_version.pre().is_none() && download_version.only_release() >= release
+            })
+        };
 
         if !has_stable_download {
             return;
         }
 
         if let Some(upgrade_request) = download_request
-            .clone()
             .unset_defaults()
             .without_patch()
             .simplified_display()
