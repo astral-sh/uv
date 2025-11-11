@@ -1875,6 +1875,7 @@ impl AddSettings {
             .default_index
             .clone()
             .and_then(Maybe::into_option)
+            .map(|index| index.try_into().unwrap())
             .into_iter()
             .chain(
                 installer
@@ -1884,9 +1885,10 @@ impl AddSettings {
                     .into_iter()
                     .flat_map(|v| v.clone())
                     .flatten()
-                    .filter_map(Maybe::into_option),
+                    .filter_map(Maybe::into_option)
+                    .map(|index| index.try_into().unwrap()),
             )
-            .collect::<Vec<_>>();
+            .collect::<Vec<Index>>();
 
         // Warn user if an ambiguous relative path was passed as a value for
         // `--index` or `--default-index`.

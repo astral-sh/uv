@@ -393,12 +393,13 @@ impl From<IndexArgs> for PipOptions {
         Self {
             index: default_index
                 .and_then(Maybe::into_option)
-                .map(|default_index| vec![default_index])
+                .map(|default_index| vec![default_index.try_into().unwrap()])
                 .combine(index.map(|index| {
                     index
                         .iter()
                         .flat_map(std::clone::Clone::clone)
                         .filter_map(Maybe::into_option)
+                        .map(|index| index.try_into().unwrap())
                         .collect()
                 })),
             index_url: index_url.and_then(Maybe::into_option),
@@ -461,12 +462,13 @@ pub fn resolver_options(
         index: index_args
             .default_index
             .and_then(Maybe::into_option)
-            .map(|default_index| vec![default_index])
+            .map(|default_index| vec![default_index.try_into().unwrap()])
             .combine(index_args.index.map(|index| {
                 index
                     .into_iter()
                     .flat_map(|v| v.clone())
                     .filter_map(Maybe::into_option)
+                    .map(|index| index.try_into().unwrap())
                     .collect()
             })),
         index_url: index_args.index_url.and_then(Maybe::into_option),
@@ -574,12 +576,13 @@ pub fn resolver_installer_options(
     let default_index = index_args
         .default_index
         .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
+        .map(|default_index| vec![default_index.try_into().unwrap()]);
     let index = index_args.index.map(|index| {
         index
             .into_iter()
             .flat_map(|v| v.clone())
             .filter_map(Maybe::into_option)
+            .map(|index| index.try_into().unwrap())
             .collect()
     });
 
