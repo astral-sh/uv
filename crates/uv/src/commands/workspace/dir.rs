@@ -1,23 +1,21 @@
-use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use uv_cli::WorkspaceDirArgs;
-use uv_fs::PortablePathBuf;
+use owo_colors::OwoColorize;
+use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Print the path to the workspace dir
 pub(crate) async fn dir(
-    args: &WorkspaceDirArgs,
+    package_name: Option<PackageName>,
     project_dir: &Path,
     preview: Preview,
-    printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeatures::WORKSPACE_METADATA) {
         warn_user!(
@@ -30,18 +28,18 @@ pub(crate) async fn dir(
     let workspace =
         Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
 
-    let dir = match &args.package {
-        None => PortablePathBuf::from(workspace.install_path().as_path()).to_string(),
+    let dir: &Path = match package_name {
+        None => workspace.install_path().as_path(),
         Some(package) => {
-            if let Some(p) = workspace.packages().get(package) {
-                PortablePathBuf::from(p.root().as_path()).to_string()
+            if let Some(p) = workspace.packages().get(&package) {
+                p.root().as_path()
             } else {
                 bail!("Package `{package}` not found in workspace.")
             }
         }
     };
 
-    writeln!(printer.stdout(), "{dir}")?;
+    println!("{}", dir.simplified_display().cyan());
 
     Ok(ExitStatus::Success)
 }

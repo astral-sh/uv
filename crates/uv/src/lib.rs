@@ -1739,7 +1739,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::metadata(&project_dir, globals.preview, printer).await
             }
             WorkspaceCommand::Dir(args) => {
-                commands::dir(&args, &project_dir, globals.preview, printer).await
+                commands::dir(args.package, &project_dir, globals.preview).await
             }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {

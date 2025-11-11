@@ -6868,6 +6868,7 @@ pub struct MetadataArgs;
 
 #[derive(Args, Debug)]
 pub struct WorkspaceDirArgs {
+    /// Display the path to a specific package in the workspace.
     #[arg(long)]
     pub package: Option<PackageName>,
 }

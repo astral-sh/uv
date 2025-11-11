@@ -1,22 +1,10 @@
 use std::env;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 
 use crate::common::{TestContext, copy_dir_ignore, uv_snapshot};
-
-fn workspaces_dir() -> PathBuf {
-    env::current_dir()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("scripts")
-        .join("workspaces")
-}
 
 /// Test basic output for a simple workspace with one member.
 #[test]
@@ -76,10 +64,11 @@ fn workspace_metadata_from_member() -> Result<()> {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    copy_dir_ignore(
-        workspaces_dir().join("albatross-root-workspace"),
-        &workspace,
-    )?;
+    let albatross_workspace = context
+        .workspace_root
+        .join("scripts/workspaces/albatross-root-workspace");
+
+    copy_dir_ignore(albatross_workspace, &workspace)?;
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
