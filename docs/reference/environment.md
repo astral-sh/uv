@@ -537,7 +537,7 @@ Equivalent to the
 
 Managed Python installations information is hardcoded in the `uv` binary.
 
-This variable can be set to a local path or file://, http://, or / https:// URL pointing to
+This variable can be set to a local path or URL pointing to
 a JSON list of Python installations to override the hardcoded list.
 
 This allows customizing the URLs for downloads or using slightly older or newer versions

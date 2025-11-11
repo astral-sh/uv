@@ -108,7 +108,7 @@ impl PythonInstallation {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Python downloads are performing their own retries to catch stream errors, disable the
-        // default retries to avoid the middleware from performing uncontrolled retries.
+        // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build();
         let download_list =
