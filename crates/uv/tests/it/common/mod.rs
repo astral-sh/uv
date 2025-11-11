@@ -1072,6 +1072,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv workspace dir` command with options shared across scenarios.
+    pub fn workspace_dir(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("workspace").arg("dir");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv export` command with options shared across scenarios.
     pub fn export(&self) -> Command {
         let mut command = Self::new_command();

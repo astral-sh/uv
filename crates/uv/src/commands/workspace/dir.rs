@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use uv_cli::DirArgs;
+use uv_cli::WorkspaceDirArgs;
 use uv_fs::{PortablePathBuf};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
@@ -14,7 +14,7 @@ use crate::printer::Printer;
 
 /// Print the path to the workspace dir
 pub(crate) async fn dir(
-    args: &DirArgs,
+    args: &WorkspaceDirArgs,
     project_dir: &Path,
     preview: Preview,
     printer: Printer,
@@ -35,18 +35,17 @@ pub(crate) async fn dir(
             PortablePathBuf::from(workspace.install_path().as_path()).to_string()
         },
         Some(package) => {
-            if let Some(p) = workspace.packages().get(&package) {
+            if let Some(p) = workspace.packages().get(package) {
                 PortablePathBuf::from(p.root().as_path()).to_string()
             } else {
-                bail!("Package {} does not exist.", package)
+                bail!("Package `{package}` not found in workspace.")
             }
         }
     };
 
     writeln!(
         printer.stdout(),
-        "{}",
-        dir
+        "{dir}"
     )?;
 
     Ok(ExitStatus::Success)

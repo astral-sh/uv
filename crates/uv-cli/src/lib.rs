@@ -6853,15 +6853,17 @@ pub enum WorkspaceCommand {
     /// Display package metadata.
     #[command(hide = true)]
     Metadata(MetadataArgs),
+    /// Display path to workspace root or member packages.
     #[command(hide = true)]
-    Dir(DirArgs)
+    Dir(WorkspaceDirArgs)
 }
 
 #[derive(Args, Debug)]
 pub struct MetadataArgs;
 
 #[derive(Args, Debug)]
-pub struct DirArgs {
+pub struct WorkspaceDirArgs {
+    #[arg(long)]
     pub package: Option<PackageName>
 }
 
