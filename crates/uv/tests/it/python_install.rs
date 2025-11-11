@@ -2702,9 +2702,13 @@ fn python_install_emulated_macos() {
         .with_managed_python_dirs()
         .with_python_download_cache();
 
-    if !Path::new("/Library/Apple/usr/libexec/oah/libRosettaRuntime").exists() {
+    let arch_status = Command::new("/usr/bin/arch")
+        .arg("-x86_64")
+        .arg("true")
+        .status();
+    if !arch_status.is_ok_and(|x| x.success()) {
         // skip this test if Rosetta is not available to run the x86_64 interpreter
-        debug!("Skipping test because Rosetta is not available");
+        debug!("Skipping test because x86_64 emulation is not available");
         return;
     }
 
