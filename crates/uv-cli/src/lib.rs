@@ -520,7 +520,7 @@ pub enum Commands {
     Build(BuildArgs),
     /// Upload distributions to an index.
     Publish(PublishArgs),
-    /// Manage workspaces.
+    /// Inspect uv workspaces.
     #[command(
         after_help = "Use `uv help workspace` for more details.",
         after_long_help = "",
@@ -6957,8 +6957,9 @@ pub struct WorkspaceNamespace {
 
 #[derive(Subcommand)]
 pub enum WorkspaceCommand {
-    /// Display package metadata.
-    #[command(hide = true)]
+    /// View metadata about the current workspace.
+    ///
+    /// The output of this command is not yet stable.
     Metadata(MetadataArgs),
     /// Display the path of a workspace member.
     ///
@@ -6966,7 +6967,6 @@ pub enum WorkspaceCommand {
     /// The `--package` option can be used to display the path to a workspace member instead.
     ///
     /// If used outside of a workspace, i.e., if a `pyproject.toml` cannot be found, uv will exit with an error.
-    #[command(hide = true)]
     Dir(WorkspaceDirArgs),
 }
 
