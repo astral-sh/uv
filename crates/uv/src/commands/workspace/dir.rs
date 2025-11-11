@@ -1,4 +1,4 @@
-use anstream::println;
+use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Result, bail};
@@ -11,12 +11,14 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
 /// Print the path to the workspace dir
 pub(crate) async fn dir(
     package_name: Option<PackageName>,
     project_dir: &Path,
     preview: Preview,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeatures::WORKSPACE_DIR) {
         warn_user!(
@@ -40,7 +42,7 @@ pub(crate) async fn dir(
         }
     };
 
-    println!("{}", dir.simplified_display().cyan());
+    writeln!(printer.stdout(), "{}", dir.simplified_display().cyan())?;
 
     Ok(ExitStatus::Success)
 }
