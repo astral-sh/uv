@@ -38,6 +38,7 @@ uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+astral-tl = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true }
@@ -60,7 +61,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
 thiserror = { workspace = true }
-tl = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
