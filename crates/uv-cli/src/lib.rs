@@ -1858,6 +1858,9 @@ pub struct PipSyncArgs {
 
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
+    ///
+    /// If a specific interpreter version is requested (e.g. `--python 3.14`) and not available,
+    /// it will be downloaded. To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
 
@@ -1868,6 +1871,9 @@ pub struct PipSyncArgs {
     /// scripts and other artifacts installed via `--prefix` will reference the installing
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
+    ///
+    /// If a specific interpreter version is requested (e.g. `--python 3.14`) and not available,
+    /// it will be downloaded. To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
@@ -2187,6 +2193,9 @@ pub struct PipInstallArgs {
 
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
+    ///
+    /// If a specific interpreter version is requested (e.g. `--python 3.14`) and not available,
+    /// it will be downloaded. To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
 
@@ -2197,6 +2206,9 @@ pub struct PipInstallArgs {
     /// scripts and other artifacts installed via `--prefix` will reference the installing
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
+    ///
+    /// If a specific interpreter version is requested (e.g. `--python 3.14`) and not available,
+    /// it will be downloaded. To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
