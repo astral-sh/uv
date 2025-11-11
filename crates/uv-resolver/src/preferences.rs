@@ -163,7 +163,11 @@ impl PreferenceIndex {
         match self {
             Self::Any => true,
             Self::Implicit => false,
-            Self::Explicit(preference) => preference == index,
+            Self::Explicit(preference) => {
+                // Preferences are stored without credentials (from lockfile), so compare
+                // against the index URL with credentials stripped.
+                *preference.url() == *index.without_credentials()
+            }
         }
     }
 }
@@ -379,5 +383,32 @@ impl From<Version> for Pin {
             version,
             hashes: HashDigests::empty(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_preference_index_matches_ignores_credentials() {
+        // Test that PreferenceIndex::matches correctly ignores credentials when comparing URLs.
+        // This is relevant for matching lockfile preferences (stored without credentials)
+        // against index URLs from pyproject.toml (which may include usernames for auth).
+
+        // URL without credentials (as stored in lockfile)
+        let index_without_creds = IndexUrl::from_str("https:/pypi_index.com/simple").unwrap();
+
+        // URL with username (as specified in pyproject.toml)
+        let index_with_username =
+            IndexUrl::from_str("https://username@pypi_index.com/simple").unwrap();
+
+        let preference = PreferenceIndex::Explicit(index_without_creds.clone());
+
+        assert!(
+            preference.matches(&index_with_username),
+            "PreferenceIndex should match URLs that differ only in username"
+        );
     }
 }
