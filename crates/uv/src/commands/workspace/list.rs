@@ -17,7 +17,7 @@ pub(crate) async fn list(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::WORKSPACE_LIST) {
+    if !preview.is_enabled(PreviewFeatures::WORKSPACE_LIST) {
         warn_user!(
             "The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeatures::WORKSPACE_LIST
