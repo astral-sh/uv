@@ -7,7 +7,7 @@ def main():
         "Use `uv build` or another build frontend instead.",
         file=sys.stderr,
     )
-    if "--help" in sys.argv:
+    if "--help" in sys.argv or "-h" in sys.argv:
         sys.exit(0)
     else:
         sys.exit(1)

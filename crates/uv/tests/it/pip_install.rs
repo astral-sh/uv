@@ -19,7 +19,7 @@ use wiremock::{
 use crate::common::{self, decode_token};
 use crate::common::{
     DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    uv_snapshot, venv_bin_path,
+    packse_index_url, uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -3683,6 +3683,50 @@ fn install_git_source_respects_offline_mode() {
       ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     "
     );
+}
+
+/// Build requirements should explain how to opt into prereleases when they are the only solution.
+#[test]
+fn build_prerelease_hint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["transitive-package-only-prereleases-in-range-a"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let mut command = context.pip_install();
+    command.arg("--index-url").arg(packse_index_url()).arg(".");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+
+    uv_snapshot!(
+        context.filters(),
+        command,
+        @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
+      ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
+          And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    "
+    );
+
+    Ok(())
 }
 
 /// Test that constraint markers are respected when validating the current environment (i.e., we
@@ -9019,7 +9063,7 @@ fn missing_top_level() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
@@ -10484,10 +10528,12 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
-/// Regression test that we don't discover workspaces with `--no-sources`.
+/// Regression test that we don't discover workspaces with `--no-sources` or the `UV_NO_SOURCES`
+/// environment variable.
 ///
 /// We have a workspace dependency shadowing a PyPI package and using this package's version to
-/// check that by default we respect workspace package, but with `--no-sources`, we ignore them.
+/// check that by default we respect workspace package, but with `--no-sources` or `UV_NO_SOURCES=true`,
+/// we ignore them.
 #[test]
 fn no_sources_workspace_discovery() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -10587,6 +10633,67 @@ fn no_sources_workspace_discovery() -> Result<()> {
      + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "###
+    );
+
+    // Test with UV_NO_SOURCES=true environment variable (should behave same as flag)
+    uv_snapshot!(context.filters(), context.pip_install()
+    .arg("--upgrade")
+    .arg(".")
+    .env("UV_NO_SOURCES", "true"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test UV_NO_SOURCES=false doesn't activate no-sources
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg(".")
+        .env("UV_NO_SOURCES", "false"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test that CLI flag overrides env var
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg("--no-sources")
+        .arg(".")
+        .env("UV_NO_SOURCES", "False"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "
     );
 
     Ok(())
@@ -11664,7 +11771,7 @@ requires_python = "==3.13.*"
     "
     );
 
-    // `--group pylock.toml:test` should be rejeceted.
+    // `--group pylock.toml:test` should be rejected.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -12187,6 +12294,25 @@ fn config_settings_package() -> Result<()> {
     assert!(finder.exists());
 
     Ok(())
+}
+
+#[test]
+fn reject_invalid_archive_member_names() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheeldiff2==0.0.1`
+      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    "
+    );
 }
 
 #[test]
@@ -12989,4 +13115,33 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_with_system_interpreter() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
+
+    // We use a managed Python version here to ensure consistent output across systems
+    context.python_install().arg("3.12").assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--system")
+        .arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+
+      This Python installation is managed by uv and should not be modified.
+
+    hint: Virtual environments were not considered due to the `--system` flag
+    "
+    );
 }

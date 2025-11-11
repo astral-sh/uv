@@ -49,6 +49,7 @@ impl GitResolver {
         self.0.get(reference)
     }
 
+    /// Return the [`GitOid`] for the given [`GitUrl`], if it is already known.
     pub fn get_precise(&self, url: &GitUrl) -> Option<GitOid> {
         // If the URL is already precise, return it.
         if let Some(precise) = url.precise() {
@@ -143,7 +144,6 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        client: impl Into<ClientWithMiddleware>,
         disable_ssl: bool,
         offline: bool,
         cache: PathBuf,
@@ -175,9 +175,9 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), client, cache, offline).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), cache, offline).with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), client, cache, offline)
+            GitSource::new(url.as_ref().clone(), cache, offline)
         };
 
         // If necessary, disable SSL.

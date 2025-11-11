@@ -116,6 +116,9 @@ pub struct Options {
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
@@ -2110,6 +2113,7 @@ pub struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
@@ -2180,6 +2184,7 @@ impl From<OptionsWire> for Options {
             pip,
             cache_keys,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,
@@ -2254,6 +2259,7 @@ impl From<OptionsWire> for Options {
             cache_keys,
             build_backend,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,

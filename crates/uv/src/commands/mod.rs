@@ -17,6 +17,7 @@ pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
+pub(crate) use cache_size::cache_size;
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
@@ -66,6 +67,8 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use workspace::dir::dir;
+pub(crate) use workspace::metadata::metadata;
 
 use crate::printer::Printer;
 
@@ -75,6 +78,7 @@ mod build_frontend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
+mod cache_size;
 mod diagnostics;
 mod help;
 pub(crate) mod pip;
@@ -86,6 +90,7 @@ pub(crate) mod reporters;
 mod self_update;
 mod tool;
 mod venv;
+mod workspace;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

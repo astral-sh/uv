@@ -9,8 +9,10 @@ flag can be used to create a project for a library instead.
 ## Target directory
 
 uv will create a project in the working directory, or, in a target directory by providing a name,
-e.g., `uv init foo`. If there's already a project in the target directory, i.e., if there's a
-`pyproject.toml`, uv will exit with an error.
+e.g., `uv init foo`. The working directory can be modified with the `--directory` option, which will
+cause the target directory path will be interpreted relative to the specified working directory. If
+there's already a project in the target directory, i.e., if there's a `pyproject.toml`, uv will exit
+with an error.
 
 ## Applications
 
@@ -111,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.3,<0.10.0"]
+requires = ["uv_build>=0.9.8,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -134,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.3,<0.10.0"]
+requires = ["uv_build>=0.9.8,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -195,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.9.3,<0.10.0"]
+requires = ["uv_build>=0.9.8,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -269,15 +271,14 @@ The Rust library defines a simple function:
 ```rust title="src/lib.rs"
 use pyo3::prelude::*;
 
-#[pyfunction]
-fn hello_from_bin() -> String {
-    "Hello from example-ext!".to_string()
-}
-
 #[pymodule]
-fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-    Ok(())
+mod _core {
+    use pyo3::prelude::*;
+
+    #[pyfunction]
+    fn hello_from_bin() -> String {
+        "Hello from example-ext!".to_string()
+    }
 }
 ```
 

@@ -885,8 +885,6 @@ fn seed_older_python_version() {
 #[test]
 fn create_venv_with_invalid_http_timeout() {
     let context = TestContext::new_with_versions(&["3.12"]).with_http_timeout("not_a_number");
-
-    // Create a virtual environment at `.venv`.
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
@@ -896,15 +894,13 @@ fn create_venv_with_invalid_http_timeout() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: expected an integer
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: invalid digit found in string
     "###);
 }
 
 #[test]
 fn create_venv_with_invalid_concurrent_installs() {
     let context = TestContext::new_with_versions(&["3.12"]).with_concurrent_installs("0");
-
-    // Create a virtual environment at `.venv`.
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
@@ -914,7 +910,7 @@ fn create_venv_with_invalid_concurrent_installs() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: expected a non-zero positive integer
+    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: number would be zero for non-zero type
     "###);
 }
 

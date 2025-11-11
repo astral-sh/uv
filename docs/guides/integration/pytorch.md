@@ -460,12 +460,4 @@ $ # With an environment variable.
 $ UV_TORCH_BACKEND=cu126 uv pip install torch torchvision
 ```
 
-On Windows, Intel GPU (XPU) is not automatically selected with `--torch-backend=auto`, but you can
-manually specify it using `--torch-backend=xpu`:
-
-```shell
-$ # Manual selection for Intel GPU.
-$ uv pip install torch torchvision --torch-backend=xpu
-```
-
 At present, `--torch-backend` is only available in the `uv pip` interface.

@@ -19,6 +19,9 @@ mod cache_clean;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod cache_prune;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod cache_size;
+
 #[cfg(all(feature = "python", feature = "pypi", feature = "test-ecosystem"))]
 mod ecosystem;
 
@@ -138,3 +141,5 @@ mod workflow;
 
 mod extract;
 mod workspace;
+mod workspace_dir;
+mod workspace_metadata;

@@ -58,11 +58,8 @@ impl VerbatimUrl {
 
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = Url::parse(given.as_ref())?;
-        Ok(Self {
-            url: DisplaySafeUrl::from(url),
-            given: None,
-        })
+        let url = DisplaySafeUrl::parse(given.as_ref())?;
+        Ok(Self { url, given: None })
     }
 
     /// Convert a [`VerbatimUrl`] from a path or a URL.
@@ -189,10 +186,8 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(path);
 
         // Convert to a URL.
-        let mut url = DisplaySafeUrl::from(
-            Url::from_file_path(path.clone())
-                .unwrap_or_else(|()| panic!("path is absolute: {}", path.display())),
-        );
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
+            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {

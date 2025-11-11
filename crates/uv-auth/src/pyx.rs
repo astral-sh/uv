@@ -284,7 +284,6 @@ impl PyxTokenStore {
 
     /// Read the tokens from the store.
     pub async fn read(&self) -> Result<Option<PyxTokens>, TokenStoreError> {
-        // Retrieve the API URL from the environment variable, or error if unset.
         if let Some(api_key) = read_pyx_api_key() {
             // Read the API key tokens from a file based on the API key.
             let digest = uv_cache_key::cache_digest(&api_key);
@@ -592,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_is_known_url() {
-        let api_url = DisplaySafeUrl::from(Url::parse("https://api.pyx.dev").unwrap());
+        let api_url = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
         let cdn_domain = "astralhosted.com";
 
         // Same realm as API.
@@ -647,7 +646,7 @@ mod tests {
 
     #[test]
     fn test_is_known_domain() {
-        let api_url = DisplaySafeUrl::from(Url::parse("https://api.pyx.dev").unwrap());
+        let api_url = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
         let cdn_domain = "astralhosted.com";
 
         // Same realm as API.

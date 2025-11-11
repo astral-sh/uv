@@ -62,9 +62,11 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
@@ -202,6 +204,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -216,6 +219,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         Some(&groups),
         &client_builder,
     )
@@ -246,6 +250,11 @@ pub(crate) async fn pip_compile(
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<PackageName> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -532,6 +541,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

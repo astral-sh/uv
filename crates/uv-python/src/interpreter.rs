@@ -173,7 +173,7 @@ impl Interpreter {
             base_executable,
             self.python_major(),
             self.python_minor(),
-            self.variant().suffix(),
+            self.variant().executable_suffix(),
         ) {
             Ok(path) => path,
             Err(err) => {

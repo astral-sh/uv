@@ -394,6 +394,15 @@ impl VersionSpecifier {
         }
     }
 
+    /// Remove all parts of the version beyond the minor segment of the release.
+    #[must_use]
+    pub fn only_minor_release(&self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_minor_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {

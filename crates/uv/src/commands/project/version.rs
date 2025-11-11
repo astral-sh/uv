@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
-use uv_cli::{VersionBump, VersionFormat};
+use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -38,7 +38,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -56,14 +56,14 @@ pub(crate) fn self_version(
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBump>,
+    mut bump: Vec<VersionBumpSpec>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -164,29 +164,29 @@ pub(crate) async fn project_version(
         // because that makes perfect sense and is reasonable to do.
         let release_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Major | VersionBump::Minor | VersionBump::Patch
                 )
             })
             .collect();
         let prerelease_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
                 )
             })
             .collect();
         let post_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Post)
+            .filter(|spec| spec.bump == VersionBump::Post)
             .count();
         let stable_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Stable)
+            .filter(|spec| spec.bump == VersionBump::Stable)
             .count();
 
         // Very little reason to do "bump to stable" and then do other things,
@@ -252,25 +252,37 @@ pub(crate) async fn project_version(
 
         // Apply all the bumps
         let mut new_version = old_version.clone();
-        for bump in &bump {
-            let command = match *bump {
-                VersionBump::Major => BumpCommand::BumpRelease { index: 0 },
-                VersionBump::Minor => BumpCommand::BumpRelease { index: 1 },
-                VersionBump::Patch => BumpCommand::BumpRelease { index: 2 },
-                VersionBump::Alpha => BumpCommand::BumpPrerelease {
+
+        for spec in &bump {
+            match spec.bump {
+                VersionBump::Major => new_version.bump(BumpCommand::BumpRelease {
+                    index: 0,
+                    value: spec.value,
+                }),
+                VersionBump::Minor => new_version.bump(BumpCommand::BumpRelease {
+                    index: 1,
+                    value: spec.value,
+                }),
+                VersionBump::Patch => new_version.bump(BumpCommand::BumpRelease {
+                    index: 2,
+                    value: spec.value,
+                }),
+                VersionBump::Stable => new_version.bump(BumpCommand::MakeStable),
+                VersionBump::Alpha => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Alpha,
-                },
-                VersionBump::Beta => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Beta => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Beta,
-                },
-                VersionBump::Rc => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Rc => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Rc,
-                },
-                VersionBump::Post => BumpCommand::BumpPost,
-                VersionBump::Dev => BumpCommand::BumpDev,
-                VersionBump::Stable => BumpCommand::MakeStable,
-            };
-            new_version.bump(command);
+                    value: spec.value,
+                }),
+                VersionBump::Post => new_version.bump(BumpCommand::BumpPost { value: spec.value }),
+                VersionBump::Dev => new_version.bump(BumpCommand::BumpDev { value: spec.value }),
+            }
         }
 
         if new_version <= old_version {
@@ -297,7 +309,7 @@ pub(crate) async fn project_version(
         Box::pin(lock_and_sync(
             project,
             project_dir,
-            locked,
+            lock_check,
             frozen,
             active,
             no_sync,
@@ -450,19 +462,21 @@ async fn print_frozen_version(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        LockMode::Frozen,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            LockMode::Frozen,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -502,7 +516,7 @@ async fn print_frozen_version(
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -579,8 +593,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };
@@ -590,19 +604,21 @@ async fn lock_and_sync(
     let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        mode,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &workspace_cache,
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            mode,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &workspace_cache,
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

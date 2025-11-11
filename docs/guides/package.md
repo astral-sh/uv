@@ -88,6 +88,14 @@ The `--bump` option supports the following common version components: `major`, `
 `stable`, `alpha`, `beta`, `rc`, `post`, and `dev`. When provided more than once, the components
 will be applied in order, from largest (`major`) to smallest (`dev`).
 
+You can optionally provide a numeric value with `--bump <component>=<value>` to set the resulting
+component explicitly:
+
+```console
+$ uv version --bump patch --bump dev=66463664
+hello-world 0.0.1 => 0.0.2.dev66463664
+```
+
 To move from a stable to pre-release version, bump one of the major, minor, or patch components in
 addition to the pre-release component:
 

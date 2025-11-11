@@ -362,40 +362,58 @@ impl<'env> TreeDisplay<'env> {
 
         // Compute the list of roots.
         let roots = {
-            let mut edges = vec![];
+            // If specific packages were requested, use them as roots.
+            if !packages.is_empty() {
+                let mut roots = graph
+                    .node_indices()
+                    .filter(|index| {
+                        let Node::Package(package_id) = graph[*index] else {
+                            return false;
+                        };
+                        packages.contains(&package_id.name)
+                    })
+                    .collect::<Vec<_>>();
 
-            // Remove any cycles.
-            let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
-                .map(|e| e.id())
-                .collect();
-            for edge_id in feedback_set {
-                if let Some((source, target)) = graph.edge_endpoints(edge_id) {
-                    if let Some(weight) = graph.remove_edge(edge_id) {
-                        edges.push((source, target, weight));
+                // Sort the roots.
+                roots.sort_by_key(|index| &graph[*index]);
+
+                roots
+            } else {
+                let mut edges = vec![];
+
+                // Remove any cycles.
+                let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
+                    .map(|e| e.id())
+                    .collect();
+                for edge_id in feedback_set {
+                    if let Some((source, target)) = graph.edge_endpoints(edge_id) {
+                        if let Some(weight) = graph.remove_edge(edge_id) {
+                            edges.push((source, target, weight));
+                        }
                     }
                 }
+
+                // Find the root nodes: nodes with no incoming edges, or only an edge from the proxy.
+                let mut roots = graph
+                    .node_indices()
+                    .filter(|index| {
+                        graph
+                            .edges_directed(*index, Direction::Incoming)
+                            .next()
+                            .is_none()
+                    })
+                    .collect::<Vec<_>>();
+
+                // Sort the roots.
+                roots.sort_by_key(|index| &graph[*index]);
+
+                // Re-add the removed edges.
+                for (source, target, weight) in edges {
+                    graph.add_edge(source, target, weight);
+                }
+
+                roots
             }
-
-            // Find the root nodes: nodes with no incoming edges, or only an edge from the proxy.
-            let mut roots = graph
-                .node_indices()
-                .filter(|index| {
-                    graph
-                        .edges_directed(*index, Direction::Incoming)
-                        .next()
-                        .is_none()
-                })
-                .collect::<Vec<_>>();
-
-            // Sort the roots.
-            roots.sort_by_key(|index| &graph[*index]);
-
-            // Re-add the removed edges.
-            for (source, target, weight) in edges {
-                graph.add_edge(source, target, weight);
-            }
-
-            roots
         };
 
         Self {

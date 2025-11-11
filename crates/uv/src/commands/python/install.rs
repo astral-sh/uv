@@ -11,11 +11,10 @@ use futures::stream::FuturesUnordered;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
-use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_client::{BaseClientBuilder, retries_from_env};
+use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeatures};
@@ -211,15 +210,19 @@ pub(crate) async fn install(
     let requests: Vec<_> = if targets.is_empty() {
         if upgrade {
             is_unspecified_upgrade = true;
+            // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
-                let request = VersionRequest::major_minor_request_from_key(installation.key());
-                if let Ok(request) = InstallRequest::new(
-                    PythonRequest::Version(request),
+                let mut request = PythonDownloadRequest::from(installation);
+                // We should always have a version in the request from an existing installation
+                let version = request.take_version().unwrap();
+                // Drop the patch and prerelease parts from the request
+                request = request.with_version(version.only_minor());
+                let install_request = InstallRequest::new(
+                    PythonRequest::Key(request),
                     python_downloads_json_url.as_deref(),
-                ) {
-                    minor_version_requests.insert(request);
-                }
+                )?;
+                minor_version_requests.insert(install_request);
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
         } else {
@@ -285,13 +288,14 @@ pub(crate) async fn install(
         .collect::<IndexSet<_>>();
 
     if upgrade
-        && requests.iter().any(|request| {
+        && let Some(request) = requests.iter().find(|request| {
             request.request.includes_patch() || request.request.includes_prerelease()
         })
     {
         writeln!(
             printer.stderr(),
-            "error: `uv python upgrade` only accepts minor versions"
+            "error: `uv python upgrade` only accepts minor versions, got: {}",
+            request.request.to_canonical_string()
         )?;
         return Ok(ExitStatus::Failure);
     }
@@ -398,12 +402,12 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
+    let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     let client = client_builder.retries(0).build();
 
-    let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
+    let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
     let mut tasks = FuturesUnordered::new();
 
     for download in &downloads {
@@ -855,7 +859,7 @@ fn create_bin_links(
                                         to.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
-                                        installation.key().variant().suffix()
+                                        installation.key().variant().display_suffix()
                                     );
                                 } else {
                                     errors.push((
@@ -1056,20 +1060,22 @@ fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
 ) -> Option<&'a ManagedPythonInstallation> {
-    let target = if cfg!(unix) {
+    if cfg!(unix) {
         if !path.is_symlink() {
             return None;
         }
-        fs_err::canonicalize(path).ok()?
+        let target = fs_err::canonicalize(path).ok()?;
+
+        installations.find(|installation| installation.executable(false) == target)
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
-        dunce::canonicalize(launcher.python_path).ok()?
-    } else {
-        unreachable!("Only Windows and Unix are supported")
-    };
+        let target = dunce::canonicalize(launcher.python_path).ok()?;
 
-    installations.find(|installation| installation.executable(false) == target)
+        installations.find(|installation| installation.executable(false) == target)
+    } else {
+        unreachable!("Only Unix and Windows are supported")
+    }
 }

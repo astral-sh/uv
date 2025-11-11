@@ -555,7 +555,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -637,7 +637,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    DisplaySafeUrl::from(url.clone()),
+                    url.clone(),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -738,7 +738,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
@@ -786,7 +786,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = Self::request(DisplaySafeUrl::from(url.clone()), client.unmanaged)?;
+        let req = Self::request(url.clone(), client.unmanaged)?;
         let revision = client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -811,7 +811,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
-                            Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                            Self::request(url.clone(), client)?,
                             &cache_entry,
                             cache_control,
                             download,
@@ -1542,10 +1542,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1746,10 +1742,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1958,23 +1950,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<GitOid>, Error> {
         let git = match source {
             BuildableSource::Dist(SourceDist::Git(source)) => &*source.git,
             BuildableSource::Url(SourceUrl::Git(source)) => source.git,
             _ => {
-                return Ok(());
+                return Ok(None);
             }
         };
 
         // If the URL is already precise, return it.
-        if self.build_context.git().get_precise(git).is_some() {
+        if let Some(precise) = self.build_context.git().get_precise(git) {
             debug!("Precise commit already known: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        if self
+        if let Some(precise) = self
             .build_context
             .git()
             .github_fast_path(
@@ -1985,18 +1977,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .raw_client(),
             )
             .await?
-            .is_some()
         {
             debug!("Resolved to precise commit via GitHub fast path: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // Otherwise, fetch the Git repository.
-        self.build_context
+        let fetch = self
+            .build_context
             .git()
             .fetch(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
                 client.unmanaged.disable_ssl(git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -2006,7 +1997,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
-        Ok(())
+        Ok(fetch.git().precise())
     }
 
     /// Fetch static [`ResolutionMetadata`] from a GitHub repository, if possible.
@@ -2155,7 +2146,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -2217,7 +2208,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
-                        Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                        Self::request(url.clone(), client)?,
                         &cache_entry,
                         cache_control,
                         download,

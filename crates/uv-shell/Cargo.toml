@@ -22,7 +22,6 @@ uv-static = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
-home = { workspace = true }
 same-file = { workspace = true }
 tracing = { workspace = true }
 

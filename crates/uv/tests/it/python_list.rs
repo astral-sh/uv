@@ -280,7 +280,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.12+freethreaded was requested.
     ");
 }
 

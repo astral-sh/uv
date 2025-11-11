@@ -1104,7 +1104,7 @@ impl NodeId {
     // The terminal node representing `true`, or a trivially `true` node.
     pub(crate) const TRUE: Self = Self(0);
 
-    // The terminal node representing `false`, or an unsatisifable node.
+    // The terminal node representing `false`, or an unsatisfiable node.
     pub(crate) const FALSE: Self = Self(1);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.

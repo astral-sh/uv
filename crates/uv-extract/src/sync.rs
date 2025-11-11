@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-use crate::Error;
 use crate::vendor::{CloneableSeekableReader, HasLength};
+use crate::{Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
@@ -18,6 +18,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     let reader = std::io::BufReader::new(reader);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
+    let skip_validation = insecure_no_validate();
     // Initialize the threadpool with the user settings.
     LazyLock::force(&RAYON_INITIALIZE);
     (0..archive.len())
@@ -25,6 +26,12 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
         .map(|file_number| {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
+
+            if let Err(e) = validate_archive_member_name(file.name()) {
+                if !skip_validation {
+                    return Err(e);
+                }
+            }
 
             // Determine the path of the file within the wheel.
             let Some(enclosed_name) = file.enclosed_name() else {

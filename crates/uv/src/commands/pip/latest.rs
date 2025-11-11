@@ -18,7 +18,7 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) exclude_newer: ExcludeNewer,
+    pub(crate) exclude_newer: &'env ExcludeNewer,
     pub(crate) tags: Option<&'env Tags>,
     pub(crate) requires_python: &'env RequiresPython,
 }
@@ -35,7 +35,7 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .package_metadata(
+            .simple_detail(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
@@ -46,7 +46,7 @@ impl LatestClient<'_> {
             Ok(archives) => archives,
             Err(err) => {
                 return match err.kind() {
-                    uv_client::ErrorKind::PackageNotFound(_) => Ok(None),
+                    uv_client::ErrorKind::RemotePackageNotFound(_) => Ok(None),
                     uv_client::ErrorKind::NoIndex(_) => Ok(None),
                     uv_client::ErrorKind::Offline(_) => Ok(None),
                     _ => Err(err),

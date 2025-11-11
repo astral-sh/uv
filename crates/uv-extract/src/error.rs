@@ -89,6 +89,10 @@ pub enum Error {
     ExtensibleData,
     #[error("ZIP file end-of-central-directory record contains multiple entries with the same path, but conflicting modes: {}", path.display())]
     DuplicateExecutableFileHeader { path: PathBuf },
+    #[error("Archive contains a file with an empty filename")]
+    EmptyFilename,
+    #[error("Archive contains unacceptable filename: {filename}")]
+    UnacceptableFilename { filename: String },
 }
 
 impl Error {

@@ -186,7 +186,7 @@ pub fn find_flat_dist_info(
         .starts_with(filename.name.as_str())
     {
         return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
+            dist_info_prefix,
             filename.name.to_string(),
         ));
     }

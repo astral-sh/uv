@@ -72,6 +72,8 @@ The following preview features are available:
 - `format`: Allows using `uv format`.
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
+- `workspace-metadata`: Allows using `uv workspace metadata`.
+- `workspace-dir`: Allows using `uv workspace dir`.
 
 ## Disabling preview features
 

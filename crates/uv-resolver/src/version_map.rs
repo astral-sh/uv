@@ -7,7 +7,7 @@ use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -44,7 +44,7 @@ impl VersionMap {
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
     pub(crate) fn from_simple_metadata(
-        simple_metadata: OwnedArchive<SimpleMetadata>,
+        simple_metadata: OwnedArchive<SimpleDetailMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
@@ -379,7 +379,7 @@ struct VersionMapLazy {
     core_metadata: FxHashMap<Version, ResolutionMetadata>,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
-    simple_metadata: OwnedArchive<SimpleMetadata>,
+    simple_metadata: OwnedArchive<SimpleDetailMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.

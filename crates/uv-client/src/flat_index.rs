@@ -14,7 +14,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
-use crate::html::SimpleHtml;
+use crate::html::SimpleDetailHTML;
 use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
@@ -195,7 +195,7 @@ impl<'a> FlatIndexClient<'a> {
                     .text()
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
+                let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
                 // Convert to a reference-counted string.
@@ -321,6 +321,63 @@ impl<'a> FlatIndexClient<'a> {
                 index: flat_index.clone(),
             });
         }
+
+        dists.sort_by(|a, b| {
+            a.filename
+                .cmp(&b.filename)
+                .then_with(|| a.index.cmp(&b.index))
+        });
+
         Ok(FlatIndexEntries::from_entries(dists))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fs_err::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn read_from_directory_sorts_distributions() {
+        let dir = tempdir().unwrap();
+
+        let filenames = [
+            "beta-2.0.0-py3-none-any.whl",
+            "alpha-1.0.0.tar.gz",
+            "alpha-1.0.0-py3-none-any.whl",
+        ];
+
+        for name in &filenames {
+            let mut file = File::create(dir.path().join(name)).unwrap();
+            file.write_all(b"").unwrap();
+        }
+
+        let entries = FlatIndexClient::read_from_directory(
+            dir.path(),
+            &IndexUrl::parse(&dir.path().to_string_lossy(), None).unwrap(),
+        )
+        .unwrap();
+
+        let actual = entries
+            .entries
+            .iter()
+            .map(|entry| entry.filename.to_string())
+            .collect::<Vec<_>>();
+
+        let mut expected = filenames
+            .iter()
+            .map(|name| DistFilename::try_from_normalized_filename(name).unwrap())
+            .collect::<Vec<_>>();
+
+        expected.sort();
+
+        let expected = expected
+            .into_iter()
+            .map(|filename| filename.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
     }
 }

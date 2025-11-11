@@ -204,7 +204,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     }
                     Ok(cached.clone())
                 }
-                Err(err) => Err(Error::Thread(err.to_string())),
+                Err(err) => Err(Error::Thread(err.to_owned())),
             }
         }
     }

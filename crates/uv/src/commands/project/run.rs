@@ -73,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -83,7 +83,7 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: bool,
+    lock_check: LockCheck,
     frozen: bool,
     active: Option<bool>,
     no_sync: bool,
@@ -264,30 +264,32 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(environment.interpreter(), lock_check)
             } else {
                 LockMode::Write(environment.interpreter())
             };
 
             // Generate a lockfile.
-            let lock = match project::lock::LockOperation::new(
-                mode,
-                &settings.resolver,
-                &client_builder,
-                &lock_state,
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                concurrency,
-                &cache,
-                &workspace_cache,
-                printer,
-                preview,
+            let lock = match Box::pin(
+                project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    concurrency,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                    preview,
+                )
+                .execute(target),
             )
-            .execute(target)
             .await
             {
                 Ok(result) => result.into_lock(),
@@ -356,9 +358,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
@@ -588,8 +590,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used alongside `--no-project`");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
@@ -605,8 +607,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used outside of a project");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project",);
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
@@ -740,31 +742,33 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
-                } else if locked {
-                    LockMode::Locked(venv.interpreter())
+                } else if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
                     LockMode::DryRun(venv.interpreter())
                 } else {
                     LockMode::Write(venv.interpreter())
                 };
 
-                let result = match project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &client_builder,
-                    &lock_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    concurrency,
-                    &cache,
-                    &workspace_cache,
-                    printer,
-                    preview,
+                let result = match Box::pin(
+                    project::lock::LockOperation::new(
+                        mode,
+                        &settings.resolver,
+                        &client_builder,
+                        &lock_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        concurrency,
+                        &cache,
+                        &workspace_cache,
+                        printer,
+                        preview,
+                    )
+                    .execute(project.workspace().into()),
                 )
-                .execute(project.workspace().into())
                 .await
                 {
                     Ok(result) => result,
@@ -1735,9 +1739,24 @@ impl RunCommand {
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
                 let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
 
+                let client = client_builder.build();
+                let mut response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
+
                 // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if url.host_str() == Some("gist.github.com") {
-                    url = resolve_gist_url(&url, &client_builder).await?;
+                if response.url().host_str() == Some("gist.github.com") {
+                    url =
+                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
+                            .await?;
+
+                    response = client
+                        .for_host(&url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await?;
                 }
 
                 let file_stem = url
@@ -1749,13 +1768,6 @@ impl RunCommand {
                     .prefix(file_stem)
                     .suffix(".py")
                     .tempfile()?;
-
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();
@@ -1974,7 +1986,7 @@ fn copy_entrypoint(
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file)?;
+    launcher.write_to_file(&mut file, is_gui)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 

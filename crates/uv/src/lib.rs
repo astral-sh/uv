@@ -26,7 +26,8 @@ use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
+    compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -35,6 +36,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
+use uv_preview::PreviewFeatures;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -183,9 +185,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
-                environment.http_timeout,
-            )
-            .retries_from_env()?;
+                settings.network_settings.timeout,
+                settings.network_settings.retries,
+            );
             Some(
                 RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
                     .await?,
@@ -456,9 +458,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
-        environment.http_timeout,
-    )
-    .retries_from_env()?;
+        globals.network_settings.timeout,
+        globals.network_settings.retries,
+    );
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
@@ -568,6 +570,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -582,9 +589,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
@@ -751,6 +760,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -814,9 +828,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
                 &groups,
@@ -1044,6 +1060,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::cache_dir(&cache);
             Ok(ExitStatus::Success)
         }
+        Commands::Cache(CacheNamespace {
+            command: CacheCommand::Size(args),
+        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::BuildSettings::resolve(args, filesystem, environment);
@@ -1072,7 +1091,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.wheel,
                 args.list,
                 args.build_logs,
+                args.gitignore,
                 args.force_pep517,
+                args.clear,
                 build_constraints,
                 args.hash_checking,
                 args.python,
@@ -1374,6 +1395,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let excludes = args
+                .excludes
+                .into_iter()
+                .map(RequirementsSource::from_requirements_txt)
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -1387,6 +1413,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &build_constraints,
                 &entrypoints,
                 args.python,
@@ -1707,6 +1734,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Workspace(WorkspaceNamespace { command }) => match command {
+            WorkspaceCommand::Metadata(_args) => {
+                commands::metadata(&project_dir, globals.preview, printer).await
+            }
+            WorkspaceCommand::Dir(args) => {
+                commands::dir(args.package, &project_dir, globals.preview, printer).await
+            }
+        },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
                 commands::build_backend::build_sdist(&sdist_directory)
@@ -1780,6 +1815,32 @@ async fn run_project(
             let args = settings::InitSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            if explicit_project {
+                if globals
+                    .preview
+                    .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
+                {
+                    bail!(
+                        "The `--project` option cannot be used in `uv init`. {}",
+                        if args.path.is_some() {
+                            "Use `--directory` instead."
+                        } else {
+                            "Use `--directory` or a positional path instead."
+                        }
+                    )
+                }
+
+                warn_user!(
+                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                    if args.path.is_some() {
+                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                    } else {
+                        "Consider using `uv init <PATH>` instead."
+                    }
+                );
+            }
+
             // Initialize the cache.
             let cache = cache.init()?;
 
@@ -1844,7 +1905,7 @@ async fn run_project(
                 command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -1895,7 +1956,7 @@ async fn run_project(
 
             Box::pin(commands::sync(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.active,
@@ -1951,7 +2012,7 @@ async fn run_project(
 
             Box::pin(commands::lock(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.dry_run,
                 args.refresh,
@@ -2056,7 +2117,7 @@ async fn run_project(
 
             Box::pin(commands::add(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2114,7 +2175,7 @@ async fn run_project(
 
             Box::pin(commands::remove(
                 project_dir,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2158,7 +2219,7 @@ async fn run_project(
                 args.package,
                 explicit_project,
                 args.dry_run,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.active,
                 args.no_sync,
@@ -2195,7 +2256,7 @@ async fn run_project(
             Box::pin(commands::tree(
                 project_dir,
                 args.groups,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.universal,
                 args.depth,
@@ -2249,7 +2310,7 @@ async fn run_project(
                 args.extras,
                 args.groups,
                 args.editable,
-                args.locked,
+                args.lock_check,
                 args.frozen,
                 args.include_annotations,
                 args.include_header,

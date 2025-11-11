@@ -5,7 +5,6 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use url::Url;
 use uv_fs::{LockedFile, with_added_extension};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
@@ -310,13 +309,17 @@ impl TextCredentialStore {
     /// Get credentials for a given URL and username.
     ///
     /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
-    pub fn get_credentials(&self, url: &Url, username: Option<&str>) -> Option<&Credentials> {
+    pub fn get_credentials(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Option<&Credentials> {
         let request_realm = Realm::from(url);
 
         // Perform an exact lookup first
         // TODO(zanieb): Consider adding `DisplaySafeUrlRef` so we can avoid this clone
         // TODO(zanieb): We could also return early here if we can't normalize to a `Service`
-        if let Ok(url_service) = Service::try_from(DisplaySafeUrl::from(url.clone())) {
+        if let Ok(url_service) = Service::try_from(url.clone()) {
             if let Some(credential) = self.credentials.get(&(
                 url_service.clone(),
                 Username::from(username.map(str::to_string)),
@@ -430,10 +433,10 @@ mod tests {
 
         let service = Service::from_str("https://example.com").unwrap();
         store.insert(service.clone(), credentials.clone());
-        let url = Url::parse("https://example.com/").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
         assert!(store.get_credentials(&url, None).is_some());
 
-        let url = Url::parse("https://example.com/path").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/path").unwrap();
         let retrieved = store.get_credentials(&url, None).unwrap();
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
@@ -443,7 +446,7 @@ mod tests {
                 .remove(&service, Username::from(Some("user".to_string())))
                 .is_some()
         );
-        let url = Url::parse("https://example.com/").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
         assert!(store.get_credentials(&url, None).is_none());
     }
 
@@ -469,12 +472,12 @@ password = "pass2"
 
         let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
 
-        let url = Url::parse("https://example.com/").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
         assert!(store.get_credentials(&url, None).is_some());
-        let url = Url::parse("https://test.org/").unwrap();
+        let url = DisplaySafeUrl::parse("https://test.org/").unwrap();
         assert!(store.get_credentials(&url, None).is_some());
 
-        let url = Url::parse("https://example.com").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com").unwrap();
         let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("testuser"));
         assert_eq!(cred.password(), Some("testpass"));
@@ -510,7 +513,7 @@ password = "pass2"
         ];
 
         for url_str in matching_urls {
-            let url = Url::parse(url_str).unwrap();
+            let url = DisplaySafeUrl::parse(url_str).unwrap();
             let cred = store.get_credentials(&url, None);
             assert!(cred.is_some(), "Failed to match URL with prefix: {url_str}");
         }
@@ -523,7 +526,7 @@ password = "pass2"
         ];
 
         for url_str in non_matching_urls {
-            let url = Url::parse(url_str).unwrap();
+            let url = DisplaySafeUrl::parse(url_str).unwrap();
             let cred = store.get_credentials(&url, None);
             assert!(cred.is_none(), "Should not match non-prefix URL: {url_str}");
         }
@@ -547,7 +550,7 @@ password = "pass2"
         ];
 
         for url_str in matching_urls {
-            let url = Url::parse(url_str).unwrap();
+            let url = DisplaySafeUrl::parse(url_str).unwrap();
             let cred = store.get_credentials(&url, None);
             assert!(
                 cred.is_some(),
@@ -563,7 +566,7 @@ password = "pass2"
         ];
 
         for url_str in non_matching_urls {
-            let url = Url::parse(url_str).unwrap();
+            let url = DisplaySafeUrl::parse(url_str).unwrap();
             let cred = store.get_credentials(&url, None);
             assert!(
                 cred.is_none(),
@@ -587,12 +590,12 @@ password = "pass2"
         store.insert(specific_service.clone(), specific_cred);
 
         // Should match the most specific prefix
-        let url = Url::parse("https://example.com/api/v1/users").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/api/v1/users").unwrap();
         let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("specific"));
 
         // Should match the general prefix for non-specific paths
-        let url = Url::parse("https://example.com/api/v2").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/api/v2").unwrap();
         let cred = store.get_credentials(&url, None).unwrap();
         assert_eq!(cred.username(), Some("general"));
     }
@@ -600,7 +603,7 @@ password = "pass2"
     #[test]
     fn test_username_exact_url_match() {
         let mut store = TextCredentialStore::default();
-        let url = Url::parse("https://example.com").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com").unwrap();
         let service = Service::from_str("https://example.com").unwrap();
         let user1_creds = Credentials::basic(Some("user1".to_string()), Some("pass1".to_string()));
         store.insert(service.clone(), user1_creds.clone());
@@ -641,7 +644,7 @@ password = "pass2"
         store.insert(general_service, general_creds);
         store.insert(specific_service, specific_creds);
 
-        let url = Url::parse("https://example.com/api/v1/users").unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/api/v1/users").unwrap();
 
         // Should match specific credentials when username matches
         let result = store.get_credentials(&url, Some("specific_user"));

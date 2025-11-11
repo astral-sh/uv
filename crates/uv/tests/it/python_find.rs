@@ -850,14 +850,14 @@ fn python_find_unsupported_version() {
     "###);
 
     // Request free-threaded Python on unsupported version
-    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
-    "###);
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.12+freethreaded was requested.
+    ");
 }
 
 #[test]
@@ -1331,6 +1331,44 @@ fn python_find_freethreaded_314() {
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.14+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.14+gil
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14+gil"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.14+gil in [PYTHON SOURCES]
+    ");
+
+    // Install the non-freethreaded version
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.14")
+        .assert()
+        .success();
+
+    // Request Python 3.14
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.14+gil
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14+gil"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

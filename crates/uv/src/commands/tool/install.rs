@@ -53,6 +53,7 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
     python: Option<String>,
@@ -251,6 +252,7 @@ pub(crate) async fn install(
         with,
         constraints,
         overrides,
+        excludes,
         None,
         &client_builder,
     )
