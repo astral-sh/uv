@@ -2274,7 +2274,8 @@ fn python_install_default_prerelease() {
         .arg("--preview-features")
         .arg("python-install-default")
         .arg("3.15")
-        .output() else {
+        .output()
+    else {
         return; // Skip test if command fails
     };
 
