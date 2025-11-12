@@ -774,10 +774,21 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let targets = if (default
+    let should_create_default_links = (default
         || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
-        && first_request.matches_installation(installation)
-    {
+        && if default {
+            // When --default is used, check if the installation satisfies the original user request.
+            // This allows pre-release versions (e.g., 3.15.0a1) to be set as default when the user
+            // explicitly requested that version (e.g., "3.15"), even though the download request
+            // may not allow pre-releases.
+            installation.satisfies(&first_request.request)
+        } else {
+            // For is_default_install, use the download request matching to ensure consistency
+            // with the download selection logic.
+            first_request.matches_installation(installation)
+        };
+
+    let targets = if should_create_default_links {
         vec![
             installation.key().executable_name_minor(),
             installation.key().executable_name_major(),
