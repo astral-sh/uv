@@ -1859,7 +1859,9 @@ pub struct PipSyncArgs {
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
     ///
-    /// If a suitable Python interpreter to use for resolution cannot be found, uv will install one.
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
@@ -1872,7 +1874,9 @@ pub struct PipSyncArgs {
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
     ///
-    /// If a suitable Python interpreter to use for resolution cannot be found, uv will install one.
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
@@ -2194,7 +2198,9 @@ pub struct PipInstallArgs {
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
     ///
-    /// If a suitable Python interpreter to use for resolution cannot be found, uv will install one.
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
@@ -2207,7 +2213,9 @@ pub struct PipInstallArgs {
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
     ///
-    /// If a suitable Python interpreter to use for resolution cannot be found, uv will install one.
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
