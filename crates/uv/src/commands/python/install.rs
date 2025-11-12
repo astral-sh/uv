@@ -264,7 +264,7 @@ pub(crate) async fn install(
             .collect::<Result<Vec<_>>>()?
     };
 
-    let Some(first_request) = requests.first() else {
+    if requests.is_empty() {
         if upgrade {
             writeln!(
                 printer.stderr(),
@@ -272,7 +272,7 @@ pub(crate) async fn install(
             )?;
         }
         return Ok(ExitStatus::Success);
-    };
+    }
 
     let requested_minor_versions = requests
         .iter()
@@ -500,7 +500,6 @@ pub(crate) async fn install(
                 upgradeable,
                 upgrade,
                 is_default_install,
-                first_request,
                 &existing_installations,
                 &installations,
                 &mut changelog,
@@ -764,7 +763,6 @@ fn create_bin_links(
     upgradeable: bool,
     upgrade: bool,
     is_default_install: bool,
-    first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
@@ -774,10 +772,10 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let targets = if (default
-        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
-        && first_request.matches_installation(installation)
-    {
+    let should_create_default_links = default
+        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT));
+
+    let targets = if should_create_default_links {
         vec![
             installation.key().executable_name_minor(),
             installation.key().executable_name_major(),

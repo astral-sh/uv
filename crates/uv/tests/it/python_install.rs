@@ -2255,6 +2255,45 @@ fn python_install_broken_link() {
     });
 }
 
+/// Test that --default works with pre-release versions (e.g., 3.15.0a1).
+/// This test verifies the fix for issue #16696 where --default didn't create
+/// python.exe and python3.exe links for pre-release versions.
+#[test]
+fn python_install_default_prerelease() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
+    context
+        .python_install()
+        .arg("--default")
+        .arg("--preview-features")
+        .arg("python-install-default")
+        .arg("3.15")
+        .assert()
+        .success();
+
+    let bin_python_minor_15 = context
+        .bin_dir
+        .child(format!("python3.15{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_major = context
+        .bin_dir
+        .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_default = context
+        .bin_dir
+        .child(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+    // Verify that all three executables are created when --default is used with a pre-release version
+    bin_python_minor_15.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::exists());
+    bin_python_default.assert(predicate::path::exists());
+}
+
 #[test]
 fn python_install_default_from_env() {
     let context: TestContext = TestContext::new_with_versions(&[])
