@@ -2255,11 +2255,11 @@ fn python_install_broken_link() {
     });
 }
 
+/// Test that --default works with pre-release versions (e.g., 3.15.0a1).
+/// This test verifies the fix for issue #16696 where --default didn't create
+/// python.exe and python3.exe links for pre-release versions.
 #[test]
 fn python_install_default_prerelease() {
-    // Test that --default works with pre-release versions (e.g., 3.15.0a1).
-    // This test verifies the fix for issue #16696 where --default didn't create
-    // python.exe and python3.exe links for pre-release versions.
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
