@@ -2268,16 +2268,14 @@ fn python_install_default_prerelease() {
 
     // Try to install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
     // If 3.15 is not available, this test will be skipped naturally.
-    let output = match context
+    let Ok(output) = context
         .python_install()
         .arg("--default")
         .arg("--preview-features")
         .arg("python-install-default")
         .arg("3.15")
-        .output()
-    {
-        Ok(output) => output,
-        Err(_) => return, // Skip test if command fails
+        .output() else {
+        return; // Skip test if command fails
     };
 
     // If 3.15 is not available, skip this test
