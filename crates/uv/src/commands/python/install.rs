@@ -264,7 +264,7 @@ pub(crate) async fn install(
             .collect::<Result<Vec<_>>>()?
     };
 
-    let Some(first_request) = requests.first() else {
+    if requests.is_empty() {
         if upgrade {
             writeln!(
                 printer.stderr(),
@@ -272,7 +272,7 @@ pub(crate) async fn install(
             )?;
         }
         return Ok(ExitStatus::Success);
-    };
+    }
 
     let requested_minor_versions = requests
         .iter()
