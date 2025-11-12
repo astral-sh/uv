@@ -3,11 +3,10 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::str::{self, FromStr};
 
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer};
-use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
