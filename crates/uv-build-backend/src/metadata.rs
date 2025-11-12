@@ -5,6 +5,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use globset::Glob;
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
@@ -372,7 +373,7 @@ impl PyProjectToml {
 
                 let license_glob_matchers = license_globs_parsed
                     .iter()
-                    .map(|glob| glob.compile_matcher())
+                    .map(Glob::compile_matcher)
                     .collect::<Vec<_>>();
 
                 let license_glob_filter = GlobDirFilter::from_globs(&license_globs_parsed)
