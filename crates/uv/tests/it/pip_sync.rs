@@ -6201,8 +6201,7 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
 
-    // Request Python 3.12 which is not installed in this context. Remove the `UV_PYTHON_DOWNLOADS` value that's set in the default
-    // test context to allow the new version to be installed.
+    // Request Python 3.12 which is not installed in this context.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--python").arg("3.12")

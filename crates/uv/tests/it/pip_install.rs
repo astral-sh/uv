@@ -13169,9 +13169,39 @@ fn install_missing_python_no_target() {
     );
 }
 
+// If there are no python interpreters available, `uv pip install` into a target should install one.
 #[cfg(feature = "python-managed")]
 #[test]
 fn install_missing_python_with_target() {
+    // Create a context with no installed python interpreters.
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let target_dir = context.temp_dir.child("target-dir");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--target").arg(target_dir.path()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Using CPython 3.14.0
+        Resolved 3 packages in [TIME]
+        Prepared 3 packages in [TIME]
+        Installed 3 packages in [TIME]
+         + anyio==4.3.0
+         + idna==3.6
+         + sniffio==1.3.1
+        "###
+    );
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
     let context = TestContext::new("3.11")
         .with_python_download_cache()
@@ -13179,8 +13209,7 @@ fn install_missing_python_with_target() {
 
     let target_dir = context.temp_dir.child("target-dir");
 
-    // Request Python 3.12 which is not installed in this context. Remove the `UV_PYTHON_DOWNLOADS` value that's set in the default
-    // test context to allow the new version to be installed.
+    // Request Python 3.12 which is not installed in this context.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--python").arg("3.12")
