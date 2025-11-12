@@ -17987,8 +17987,8 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG No workspace root found, using project root
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
-      Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
+      Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers(VersionSpecifiers([])), index: None, conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers(VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }])), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Adding direct dependency: project*

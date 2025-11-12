@@ -8,6 +8,7 @@ use thiserror::Error;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    VersionSpecifiersOrExact,
 };
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -659,17 +660,17 @@ fn registry_source(
 ) -> RequirementSource {
     match &requirement.version_or_url {
         None => RequirementSource::Registry {
-            specifier: VersionSpecifiers::empty(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(VersionSpecifiers::empty()),
             index: Some(index),
             conflict,
         },
         Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
-            specifier: version.clone(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(version.clone()),
             index: Some(index),
             conflict,
         },
         Some(VersionOrUrl::Url(_)) => RequirementSource::Registry {
-            specifier: VersionSpecifiers::empty(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(VersionSpecifiers::empty()),
             index: Some(index),
             conflict,
         },

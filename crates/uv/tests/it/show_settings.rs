@@ -8861,7 +8861,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
@@ -9575,7 +9577,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
@@ -9595,7 +9599,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
@@ -9869,7 +9875,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
@@ -10343,7 +10351,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
@@ -10363,7 +10373,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                             marker: true,
                             source: Registry {
                                 specifier: VersionSpecifiers(
-                                    [],
+                                    VersionSpecifiers(
+                                        [],
+                                    ),
                                 ),
                                 index: None,
                                 conflict: None,
