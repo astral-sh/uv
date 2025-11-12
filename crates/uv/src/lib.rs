@@ -1,3 +1,5 @@
+#![deny(clippy::print_stdout, clippy::print_stderr)]
+
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
