@@ -355,7 +355,6 @@ impl RequirementsTxt {
                             PathBuf::from(filename.as_ref())
                         } else if filename.starts_with("file://") {
                             requirements_txt.join(
-                                // TODO: Should this be DisplaySafeUrl::parse?
                                 Url::parse(filename.as_ref())
                                     .map_err(|err| RequirementsTxtParserError::Url {
                                         source: DisplaySafeUrlError::Url(err).into(),
