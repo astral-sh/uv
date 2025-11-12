@@ -63,10 +63,7 @@ pub struct LineHaul {
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
     #[instrument(name = "linehaul", skip_all)]
-    pub fn new(
-        markers: Option<&MarkerEnvironment>,
-        platform: Option<&Platform>,
-    ) -> Self {
+    pub fn new(markers: Option<&MarkerEnvironment>, platform: Option<&Platform>) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = [
             EnvVars::BUILD_BUILDID,
