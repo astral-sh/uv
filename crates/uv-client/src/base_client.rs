@@ -358,11 +358,9 @@ impl<'a> BaseClientBuilder<'a> {
         let mut user_agent_string = format!("uv/{}", version());
 
         // Add linehaul metadata.
-        if let Some(markers) = self.markers {
-            let linehaul = LineHaul::new(markers, self.platform);
-            if let Ok(output) = serde_json::to_string(&linehaul) {
-                let _ = write!(user_agent_string, " {output}");
-            }
+        let linehaul = LineHaul::new(self.markers, self.platform);
+        if let Ok(output) = serde_json::to_string(&linehaul) {
+            let _ = write!(user_agent_string, " {output}");
         }
 
         // Check for the presence of an `SSL_CERT_FILE`.
