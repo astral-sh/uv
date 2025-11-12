@@ -2266,23 +2266,15 @@ fn python_install_default_prerelease() {
         .with_managed_python_dirs()
         .with_python_download_cache();
 
-    // Try to install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
-    // If 3.15 is not available, this test will be skipped naturally.
-    let Ok(output) = context
+    // Install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
+    context
         .python_install()
         .arg("--default")
         .arg("--preview-features")
         .arg("python-install-default")
         .arg("3.15")
-        .output()
-    else {
-        return; // Skip test if command fails
-    };
-
-    // If 3.15 is not available, skip this test
-    if !output.status.success() {
-        return;
-    }
+        .assert()
+        .success();
 
     let bin_python_minor_15 = context
         .bin_dir
@@ -2300,9 +2292,6 @@ fn python_install_default_prerelease() {
     bin_python_minor_15.assert(predicate::path::exists());
     bin_python_major.assert(predicate::path::exists());
     bin_python_default.assert(predicate::path::exists());
-
-    // Clean up
-    let _ = context.python_uninstall().arg("--all").output();
 }
 
 #[test]
