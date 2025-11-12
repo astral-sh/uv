@@ -1229,8 +1229,8 @@ impl EnvVars {
     pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
 
     /// The pyx workspace in which to search for cached Git dependencies.
-    #[attr_added_in("0.9.8")]
-    pub const PYX_GIT_WORKSPACE: &'static str = "PYX_GIT_WORKSPACE";
+    #[attr_added_in("0.9.9")]
+    pub const PYX_GIT_CACHE: &'static str = "PYX_GIT_CACHE";
 
     /// The pyx API key, for backwards compatibility.
     #[attr_hidden]

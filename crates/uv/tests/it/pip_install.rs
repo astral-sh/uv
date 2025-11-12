@@ -3845,9 +3845,7 @@ fn install_git_source_respects_offline_mode() {
 
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://api.github.com/repos/astral-test/uv-public-pypackage/commits/HEAD`
     "
     );
 }

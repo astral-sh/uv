@@ -44,7 +44,7 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
             build_context,
             cache: Arc::default(),
             store: PyxTokenStore::from_settings().ok(),
-            workspace: std::env::var(EnvVars::PYX_GIT_WORKSPACE).ok(),
+            workspace: std::env::var(EnvVars::PYX_GIT_CACHE).ok(),
         }
     }
 
