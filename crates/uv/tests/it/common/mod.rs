@@ -896,6 +896,12 @@ impl TestContext {
         ))
         .unwrap();
 
+        // Ensure the tests aren't sensitive to the running user's shell without forcing
+        // `bash` on Windows
+        if cfg!(not(windows)) {
+            command.env(EnvVars::SHELL, "bash");
+        }
+
         command
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
@@ -906,8 +912,6 @@ impl TestContext {
             .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
-            // Ensure the tests aren't sensitive to the running user's shell
-            .env(EnvVars::SHELL, "bash")
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
             .env(
