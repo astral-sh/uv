@@ -10,6 +10,7 @@ use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use std::str::FromStr;
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 use url::Url;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
@@ -19,11 +20,13 @@ use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
-#[tokio::test]
-async fn test_user_agent_has_version() -> Result<()> {
+/// Spawns a dummy HTTP server that echoes back the User-Agent header.
+/// Returns the server URL and the server task handle.
+async fn spawn_user_agent_echo_server() -> Result<(DisplaySafeUrl, JoinHandle<()>)> {
     // Set up the TCP listener on a random available port
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
 
     // Spawn the server loop in a background task
     let server_task = tokio::spawn(async move {
@@ -50,12 +53,18 @@ async fn test_user_agent_has_version() -> Result<()> {
         });
     });
 
+    Ok((url, server_task))
+}
+
+#[tokio::test]
+async fn test_user_agent_has_version() -> Result<()> {
+    let (url, server_task) = spawn_user_agent_echo_server().await?;
+
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
@@ -81,34 +90,7 @@ async fn test_user_agent_has_version() -> Result<()> {
 
 #[tokio::test]
 async fn test_user_agent_has_linehaul() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    let (url, server_task) = spawn_user_agent_echo_server().await?;
 
     // Add some representative markers for an Ubuntu CI runner
     let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -153,7 +135,6 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let client = builder.build();
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
@@ -262,34 +243,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
 #[tokio::test]
 async fn test_user_agent_installer_name_override() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    let (url, server_task) = spawn_user_agent_echo_server().await?;
 
     // Add some representative markers for an Ubuntu CI runner
     let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -315,7 +269,6 @@ async fn test_user_agent_installer_name_override() -> Result<()> {
     let client = RegistryClientBuilder::new(base_client, cache).build();
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
