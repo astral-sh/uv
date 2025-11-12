@@ -84,13 +84,13 @@ fn apply_redirect(url: &VerbatimUrl, redirect: DisplaySafeUrl) -> VerbatimUrl {
 
 #[cfg(test)]
 mod tests {
-    use uv_pep508::VerbatimUrl;
+    use uv_pep508::{VerbatimUrl, VerbatimUrlError};
     use uv_redacted::DisplaySafeUrl;
 
     use crate::redirect::apply_redirect;
 
     #[test]
-    fn test_apply_redirect() -> Result<(), url::ParseError> {
+    fn test_apply_redirect() -> Result<(), VerbatimUrlError> {
         // If there's no `@` in the original representation, we can just append the precise suffix
         // to the given representation.
         let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git")?

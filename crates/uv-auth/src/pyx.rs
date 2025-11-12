@@ -10,7 +10,7 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::CanonicalUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
@@ -473,7 +473,7 @@ impl PyxTokenStore {
 #[derive(thiserror::Error, Debug)]
 pub enum TokenStoreError {
     #[error(transparent)]
-    Url(#[from] url::ParseError),
+    Url(#[from] DisplaySafeUrlError),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]

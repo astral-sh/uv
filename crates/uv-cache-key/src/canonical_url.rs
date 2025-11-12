@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
@@ -98,7 +98,7 @@ impl CanonicalUrl {
         Self(url)
     }
 
-    pub fn parse(url: &str) -> Result<Self, url::ParseError> {
+    pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
         Ok(Self::new(&DisplaySafeUrl::parse(url)?))
     }
 }
@@ -164,7 +164,7 @@ impl RepositoryUrl {
         Self(url)
     }
 
-    pub fn parse(url: &str) -> Result<Self, url::ParseError> {
+    pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
         Ok(Self::new(&DisplaySafeUrl::parse(url)?))
     }
 }
@@ -204,7 +204,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn user_credential_does_not_affect_cache_key() -> Result<(), url::ParseError> {
+    fn user_credential_does_not_affect_cache_key() -> Result<(), DisplaySafeUrlError> {
         let mut hasher = CacheKeyHasher::new();
         CanonicalUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
             .cache_key(&mut hasher);
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_url() -> Result<(), url::ParseError> {
+    fn canonical_url() -> Result<(), DisplaySafeUrlError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
@@ -335,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn repository_url() -> Result<(), url::ParseError> {
+    fn repository_url() -> Result<(), DisplaySafeUrlError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,

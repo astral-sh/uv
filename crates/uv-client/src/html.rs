@@ -8,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -285,7 +285,7 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
 
     #[error("Failed to parse URL: {0}")]
-    UrlParse(String, #[source] url::ParseError),
+    UrlParse(String, #[source] DisplaySafeUrlError),
 
     #[error(transparent)]
     HtmlParse(#[from] tl::ParseError),

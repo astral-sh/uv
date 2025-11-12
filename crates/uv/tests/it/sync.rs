@@ -14717,3 +14717,46 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_fails_ambiguous_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [[tool.uv.index]]
+        name = "bug"
+        url = "https://user/name:password@domain/a/b/c"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 10, column 15
+         |
+      10 |         url = "https://user/name:password@domain/a/b/c"
+         |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 10, column 15
+       |
+    10 |         url = "https://user/name:password@domain/a/b/c"
+       |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
+    "#);
+
+    Ok(())
+}

@@ -28,7 +28,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
 use crate::PythonVariant;
@@ -75,7 +75,7 @@ pub enum Error {
         actual: String,
     },
     #[error("Invalid download URL")]
-    InvalidUrl(#[from] url::ParseError),
+    InvalidUrl(#[from] DisplaySafeUrlError),
     #[error("Invalid download URL: {0}")]
     InvalidUrlFormat(DisplaySafeUrl),
     #[error("Invalid path in file URL: `{0}`")]
