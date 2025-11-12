@@ -3,10 +3,11 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::str::{self, FromStr};
+use std::str::FromStr;
 
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer};
+use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -411,9 +412,6 @@ impl PyProjectToml {
                 license_files.push(relative.portable_display().to_string());
             }
 
-            // The glob order may be unstable
-            license_files.sort();
-
             for license_file in &license_files {
                 let file_path = root.join(license_file);
                 let bytes = fs_err::read(&file_path)?;
@@ -421,6 +419,9 @@ impl PyProjectToml {
                     return Err(ValidationError::LicenseFileNotUtf8(license_file.clone()).into());
                 }
             }
+
+            // The glob order may be unstable
+            license_files.sort();
 
             (None, license_expression, license_files)
         } else {
