@@ -1,15 +1,13 @@
 # Versioning
 
-uv is widely used in production and is considered "stable" software.
+uv is widely used in production and is considered stable software.
 
 uv uses a custom versioning scheme in which the minor version number is bumped for breaking changes,
 and the patch version number is bumped for bug fixes, enhancements, and other non-breaking changes.
-However, we value the ability to iterate on new features quickly and gather changes that _could_ be
-breaking into clearly marked releases.
 
-uv may change this versioning scheme at a future date, e.g., by adopting [Semantic
-Versioning](https://semver.org/), but a significant change to the policy for breaking versions will
-be indicated by a bump of the major version number.
+The care we take in backwards-incompatible changes is proportional to the expected real-world
+impact, not a function of arbitrary version numbering policies. We value the ability to iterate on
+new features quickly and gather changes that _could_ be breaking into clearly marked releases.
 
 uv's changelog can be [viewed on GitHub](https://github.com/astral-sh/uv/blob/main/CHANGELOG.md).
 
