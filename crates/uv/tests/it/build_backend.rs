@@ -760,6 +760,47 @@ fn complex_namespace_packages() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn missing_license_files_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("missing-license");
+    context
+        .init()
+        .arg("--lib")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "missing-license"
+        version = "1.0.0"
+        license-files = ["abc"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid pyproject.toml
+      Caused by: `project.license-files` glob `abc` did not match any files
+    "###);
+
+    Ok(())
+}
+
 /// Test that a symlinked file (here: license) gets included.
 #[test]
 #[cfg(unix)]
