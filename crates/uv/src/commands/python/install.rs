@@ -500,7 +500,6 @@ pub(crate) async fn install(
                 upgradeable,
                 upgrade,
                 is_default_install,
-                first_request,
                 &existing_installations,
                 &installations,
                 &mut changelog,
@@ -764,7 +763,6 @@ fn create_bin_links(
     upgradeable: bool,
     upgrade: bool,
     is_default_install: bool,
-    first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
@@ -774,15 +772,8 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let should_create_default_links = if default {
-        // When --default is used, we only allow one request, so we can skip the check.
-        // Use satisfies() to allow pre-release versions (e.g., 3.15.0a1) to be set as default
-        // when the user explicitly requested that version (e.g., "3.15").
-        true
-    } else {
-        (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT))
-            && first_request.matches_installation(installation)
-    };
+    let should_create_default_links = default
+        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT));
 
     let targets = if should_create_default_links {
         vec![
