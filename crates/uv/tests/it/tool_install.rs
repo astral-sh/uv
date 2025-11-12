@@ -2848,7 +2848,7 @@ fn tool_install_warn_path() {
         .arg("black==24.1.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env_remove(EnvVars::PATH), @r###"
+        .env_remove(EnvVars::PATH), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2865,7 +2865,7 @@ fn tool_install_warn_path() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
-    "###);
+    "#);
 }
 
 /// Test installing and reinstalling with an invalid receipt.
