@@ -370,10 +370,10 @@ impl PyProjectToml {
 
                 let mut license_globs_matched = vec![false; license_glob_patterns.len()];
 
-                let license_glob_matchers: Vec<_> = license_globs_parsed
+                let license_glob_matchers = license_globs_parsed
                     .iter()
                     .map(|glob| glob.compile_matcher())
-                    .collect();
+                    .collect::<Vec<_>>();
 
                 let license_glob_filter = GlobDirFilter::from_globs(&license_globs_parsed)
                     .map_err(|err| Error::GlobSetTooLarge {
@@ -430,9 +430,9 @@ impl PyProjectToml {
                 }
 
                 if let Some((_, glob)) = license_globs_matched
-                    .iter()
+                    .into_iter()
                     .zip(license_glob_patterns.iter())
-                    .find(|(matched, _)| !*matched)
+                    .find(|(matched, _)| !matched)
                 {
                     return Err(ValidationError::LicenseGlobNoMatches {
                         field: "project.license-files".to_string(),
