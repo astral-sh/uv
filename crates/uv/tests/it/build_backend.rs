@@ -761,7 +761,7 @@ fn complex_namespace_packages() -> Result<()> {
 }
 
 #[test]
-fn missing_license_files_error() -> Result<()> {
+fn license_glob_without_matches_errors() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let project = context.temp_dir.child("missing-license");

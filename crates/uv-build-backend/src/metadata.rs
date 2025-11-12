@@ -398,17 +398,22 @@ impl PyProjectToml {
                         root: root.to_path_buf(),
                         err,
                     })?;
+
                     let relative = entry
                         .path()
                         .strip_prefix(root)
                         .expect("walkdir starts with root");
+
                     if !license_glob_filter.match_path(relative) {
                         trace!("Not a license files match: {}", relative.user_display());
                         continue;
                     }
-                    if !entry.file_type().is_file() {
+
+                    let file_type = entry.file_type();
+
+                    if !(file_type.is_file() || file_type.is_symlink()) {
                         trace!(
-                            "Not a file in license files match: {}",
+                            "Not a file or symlink in license files match: {}",
                             relative.user_display()
                         );
                         continue;
@@ -422,6 +427,10 @@ impl PyProjectToml {
                         .iter_mut()
                         .zip(license_glob_matchers.iter())
                     {
+                        if *matched {
+                            continue;
+                        }
+
                         if matcher.is_match(relative) {
                             *matched = true;
                         }
@@ -430,14 +439,14 @@ impl PyProjectToml {
                     license_files.push(relative.portable_display().to_string());
                 }
 
-                if let Some((_, glob)) = license_globs_matched
-                    .into_iter()
-                    .zip(license_glob_patterns.iter())
-                    .find(|(matched, _)| !matched)
+                if let Some(pattern) = license_glob_patterns
+                    .iter()
+                    .zip(license_globs_matched.iter())
+                    .find_map(|(pattern, matched)| (!matched).then_some(pattern))
                 {
                     return Err(ValidationError::LicenseGlobNoMatches {
                         field: "project.license-files".to_string(),
-                        glob: glob.clone(),
+                        glob: pattern.clone(),
                     }
                     .into());
                 }
