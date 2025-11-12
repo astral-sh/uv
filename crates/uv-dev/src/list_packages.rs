@@ -1,7 +1,7 @@
 use anstream::println;
 use anyhow::Result;
 use clap::Parser;
-
+use tokio::sync::Semaphore;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
@@ -27,9 +27,10 @@ pub(crate) async fn list_packages(
     .build();
 
     let index_url = IndexUrl::parse(&args.url, None)?;
-    let index = client.fetch_simple_index(&index_url).await?;
+    let concurrency = Semaphore::new(Semaphore::MAX_PERMITS);
+    let index = client.fetch_simple_index(&index_url, &concurrency).await?;
 
-    for package_name in index.iter() {
+    for package_name in &index.projects {
         println!("{}", package_name);
     }
 

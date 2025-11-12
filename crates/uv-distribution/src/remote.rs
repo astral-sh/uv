@@ -1,7 +1,5 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use std::path::Path;
 use std::sync::Arc;
 
 use blake2::Digest;
@@ -11,15 +9,15 @@ use tracing::{debug, instrument, warn};
 
 use uv_auth::PyxTokenStore;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{MetadataFormat, SimpleIndexMetadata, VersionFiles};
+use uv_client::{MetadataFormat, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel,
-    IndexFormat, IndexMetadata, IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDist, SourceDistCompatibility, SourceUrl, WheelCompatibility,
+    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexFormat,
+    IndexMetadata, IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
-use uv_git_types::{GitOid, GitUrl};
+use uv_git_types::GitOid;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::VerbatimUrl;
@@ -53,12 +51,12 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
     /// Return the cached Git index for the given distribution, if any.
     pub(crate) async fn get_cached_distribution(
         &self,
-        source: &BuildableSource<'_>,
+        dist: &SourceDist,
         tags: Option<&Tags>,
         client: &ManagedClient<'a>,
     ) -> Result<Option<GitIndex>, Error> {
         // Fetch the entries for the given distribution.
-        let entries = self.get_or_fetch_index(source, client).await?;
+        let entries = self.get_or_fetch_index(dist, client).await?;
         if entries.is_empty() {
             return Ok(None);
         }
@@ -76,79 +74,45 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
     /// Fetch the remote Git index for the given distribution.
     async fn get_or_fetch_index(
         &self,
-        source: &BuildableSource<'_>,
+        dist: &SourceDist,
         client: &ManagedClient<'a>,
     ) -> Result<Vec<GitIndexEntry>, Error> {
-        #[derive(Debug)]
-        struct BuildableGitSource<'a> {
-            git: &'a GitUrl,
-            subdirectory: Option<&'a Path>,
-            name: Option<&'a PackageName>,
-        }
-
         let Some(workspace) = &self.workspace else {
             return Ok(Vec::default());
         };
 
-        let source = match source {
-            BuildableSource::Dist(SourceDist::Git(dist)) => BuildableGitSource {
-                git: &dist.git,
-                subdirectory: dist.subdirectory.as_deref(),
-                name: Some(&dist.name),
-            },
-            BuildableSource::Url(SourceUrl::Git(url)) => BuildableGitSource {
-                git: url.git,
-                subdirectory: url.subdirectory,
-                name: None,
-            },
-            _ => {
-                return Ok(Vec::default());
-            }
+        let Some(store) = &self.store else {
+            return Ok(Vec::default());
         };
 
-        let Some(precise) = self.build_context.git().get_precise(source.git) else {
+        let SourceDist::Git(dist) = dist else {
+            return Ok(Vec::default());
+        };
+
+        let Some(precise) = self.build_context.git().get_precise(&dist.git) else {
             return Ok(Vec::default());
         };
 
         // Determine the cache key for the Git source.
         let cache_key = GitCacheKey {
-            repository: RepositoryUrl::new(source.git.repository()),
+            repository: RepositoryUrl::new(dist.git.repository()),
             precise,
-            subdirectory: source.subdirectory,
         };
         let digest = cache_key.digest();
-        let index = IndexUrl::from(
-            VerbatimUrl::parse_url(format!(
-                "http://localhost:8000/v1/git/{workspace}/{}/{}/{}",
+
+        // Add the cache key to the URL.
+        let url = {
+            let mut url = store.api().clone();
+            url.set_path(&format!(
+                "v1/cache/{workspace}/{}/{}/{}",
                 &digest[..2],
                 &digest[2..4],
                 &digest[4..],
-            ))
-            .unwrap(),
-        );
-        debug!("Using remote Git index URL: {}", index);
-
-        // Determine the package name.
-        let name = if let Some(name) = source.name {
-            Cow::Borrowed(name)
-        } else {
-            // Fetch the list of packages from the Simple API.
-            let SimpleIndexMetadata { projects } = client
-                .manual(|client, semaphore| client.fetch_simple_index(&index, semaphore))
-                .await?;
-
-            // Ensure that the index contains exactly one package.
-            let mut packages = projects.into_iter();
-            let Some(name) = packages.next() else {
-                debug!("Remote Git index at `{index}` contains no packages");
-                return Ok(Vec::default());
-            };
-            if packages.next().is_some() {
-                debug!("Remote Git index at `{index}` contains multiple packages");
-                return Ok(Vec::default());
-            }
-            Cow::Owned(name)
+            ));
+            url
         };
+        let index = IndexUrl::from(VerbatimUrl::from_url(url));
+        debug!("Using remote Git index URL: {index}");
 
         // Store the index entries in a cache, to avoid redundant fetches.
         {
@@ -166,7 +130,7 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
         let archives = client
             .manual(|client, semaphore| {
                 client.simple_detail(
-                    name.as_ref(),
+                    &dist.name,
                     Some(metadata.as_ref()),
                     self.build_context.capabilities(),
                     semaphore,
@@ -184,9 +148,10 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
                 let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
                     .expect("archived version files always deserializes");
                 for (filename, file) in files.all() {
-                    if *filename.name() != *name {
+                    if *filename.name() != dist.name {
                         warn!(
-                            "Skipping file `{filename}` from remote Git index at `{index}` due to name mismatch (expected: `{name}`)"
+                            "Skipping file `{filename}` from remote Git index at `{index}` due to name mismatch (expected: `{}`)",
+                            dist.name
                         );
                         continue;
                     }
@@ -249,11 +214,9 @@ impl GitIndex {
         Self(index)
     }
 
-    /// Returns an [`Iterator`] over the distributions.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &PrioritizedDist> {
-        self.0
-            .iter()
-            .flat_map(|(.., distributions)| distributions.0.iter().map(|(.., dist)| dist))
+    /// Return the [`GitIndexDistributions`] for the given package name, if any.
+    pub(crate) fn get(&self, name: &PackageName) -> Option<&GitIndexDistributions> {
+        self.0.get(name)
     }
 }
 
@@ -262,6 +225,11 @@ impl GitIndex {
 pub(crate) struct GitIndexDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl GitIndexDistributions {
+    /// Returns an [`Iterator`] over the distributions.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &PrioritizedDist> {
+        self.0.iter().map(|(.., dist)| dist)
+    }
+
     /// Add the given [`File`] to the [`GitIndexDistributions`] for the given package.
     fn add_file(
         &mut self,
@@ -421,36 +389,25 @@ impl GitIndexCache {
 
 /// A cache key for a Git repository at a precise commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct GitCacheKey<'a> {
+struct GitCacheKey {
     repository: RepositoryUrl,
     precise: GitOid,
-    subdirectory: Option<&'a Path>,
 }
 
-impl GitCacheKey<'_> {
+impl GitCacheKey {
     /// Compute the digest for the Git cache key.
     fn digest(&self) -> String {
         let mut hasher = blake2::Blake2b::<blake2::digest::consts::U32>::new();
         hasher.update(self.repository.as_str().as_bytes());
         hasher.update(b"/");
         hasher.update(self.precise.as_str().as_bytes());
-        if let Some(subdirectory) = self
-            .subdirectory
-            .and_then(|subdirectory| subdirectory.to_str())
-        {
-            hasher.update(b"?subdirectory=");
-            hasher.update(subdirectory.as_bytes());
-        }
         hex::encode(hasher.finalize())
     }
 }
 
-impl std::fmt::Display for GitCacheKey<'_> {
+impl std::fmt::Display for GitCacheKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.repository, self.precise.as_str())?;
-        if let Some(subdirectory) = &self.subdirectory {
-            write!(f, "?subdirectory={}", subdirectory.display())?;
-        }
         Ok(())
     }
 }
