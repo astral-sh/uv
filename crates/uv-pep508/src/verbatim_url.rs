@@ -273,7 +273,7 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        Self::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from_url(url))
     }
 }
 

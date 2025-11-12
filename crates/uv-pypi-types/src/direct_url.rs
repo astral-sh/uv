@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 /// Metadata for a distribution that was installed via a direct URL.
 ///
@@ -93,7 +93,7 @@ impl std::fmt::Display for VcsKind {
 }
 
 impl TryFrom<&DirectUrl> for DisplaySafeUrl {
-    type Error = url::ParseError;
+    type Error = DisplaySafeUrlError;
 
     fn try_from(value: &DirectUrl) -> Result<Self, Self::Error> {
         match value {

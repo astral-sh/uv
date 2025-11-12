@@ -578,7 +578,7 @@ impl BaseClient {
 
     /// Executes a request, applying redirect policy.
     pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
-        let client = self.for_host(&DisplaySafeUrl::from(req.url().clone()));
+        let client = self.for_host(&DisplaySafeUrl::from_url(req.url().clone()));
         client.execute(req).await
     }
 
@@ -708,7 +708,7 @@ fn request_into_redirect(
     res: &Response,
     cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
 ) -> reqwest_middleware::Result<Option<Request>> {
-    let original_req_url = DisplaySafeUrl::from(req.url().clone());
+    let original_req_url = DisplaySafeUrl::from_url(req.url().clone());
     let status = res.status();
     let should_redirect = match status {
         StatusCode::MOVED_PERMANENTLY

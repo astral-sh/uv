@@ -102,6 +102,15 @@ impl DisplaySafeUrl {
         Ok(Self(url))
     }
 
+    /// Create a new [`DisplaySafeUrl`] from a [`Url`].
+    ///
+    /// Unlike [`Self::parse`], this doesn't perform any ambiguity checks.
+    /// That means that it's primarily useful for contexts where a human can't easily accidentally
+    /// introduce an ambiguous URL, such as URLs being read from a request.
+    pub fn from_url(url: Url) -> Self {
+        Self(url)
+    }
+
     /// Cast a `&Url` to a `&DisplaySafeUrl` using ref-cast.
     #[inline]
     pub fn ref_cast(url: &Url) -> &Self {
@@ -223,13 +232,6 @@ impl Debug for DisplaySafeUrl {
             .field("query", &url.query())
             .field("fragment", &url.fragment())
             .finish()
-    }
-}
-
-impl From<Url> for DisplaySafeUrl {
-    fn from(url: Url) -> Self {
-        // NOTE: Assumption: `url` preserves `DisplaySafeUrl` invariants.
-        Self(url)
     }
 }
 

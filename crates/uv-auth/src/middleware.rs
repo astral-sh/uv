@@ -502,7 +502,7 @@ impl AuthMiddleware {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-        let url = DisplaySafeUrl::from(request.url().clone());
+        let url = DisplaySafeUrl::from_url(request.url().clone());
         if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
             return Err(Error::Middleware(format_err!("Missing password for {url}")));
         }
@@ -801,7 +801,7 @@ impl AuthMiddleware {
 }
 
 fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> DisplaySafeUrl {
-    let mut url = DisplaySafeUrl::from(request.url().clone());
+    let mut url = DisplaySafeUrl::from_url(request.url().clone());
     if let Some(Authentication::Credentials(creds)) = credentials {
         if let Some(username) = creds.username() {
             let _ = url.set_username(username);
@@ -1990,13 +1990,13 @@ mod tests {
         let base_url_2 = base_url.join("prefix_2")?;
         let indexes = Indexes::from_indexes(vec![
             Index {
-                url: DisplaySafeUrl::from(base_url_1.clone()),
-                root_url: DisplaySafeUrl::from(base_url_1.clone()),
+                url: DisplaySafeUrl::from_url(base_url_1.clone()),
+                root_url: DisplaySafeUrl::from_url(base_url_1.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
             Index {
-                url: DisplaySafeUrl::from(base_url_2.clone()),
-                root_url: DisplaySafeUrl::from(base_url_2.clone()),
+                url: DisplaySafeUrl::from_url(base_url_2.clone()),
+                root_url: DisplaySafeUrl::from_url(base_url_2.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
         ]);
@@ -2098,8 +2098,8 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let index_url = base_url.join("prefix_1")?;
         let indexes = Indexes::from_indexes(vec![Index {
-            url: DisplaySafeUrl::from(index_url.clone()),
-            root_url: DisplaySafeUrl::from(index_url.clone()),
+            url: DisplaySafeUrl::from_url(index_url.clone()),
+            root_url: DisplaySafeUrl::from_url(index_url.clone()),
             auth_policy: AuthPolicy::Auto,
         }]);
 
@@ -2153,7 +2153,7 @@ mod tests {
     }
 
     fn indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
-        let mut url = DisplaySafeUrl::from(url.clone());
+        let mut url = DisplaySafeUrl::from_url(url.clone());
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
