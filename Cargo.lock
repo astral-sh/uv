@@ -5256,7 +5256,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.9.8"
+version = "0.9.9"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5463,11 +5463,12 @@ dependencies = [
  "uv-extract",
  "uv-pep440",
  "uv-platform",
+ "uv-redacted",
 ]
 
 [[package]]
 name = "uv-build"
-version = "0.9.8"
+version = "0.9.9"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6437,6 +6438,7 @@ dependencies = [
  "ref-cast",
  "schemars",
  "serde",
+ "thiserror 2.0.17",
  "url",
 ]
 
@@ -6760,7 +6762,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.9.8"
+version = "0.9.9"
 
 [[package]]
 name = "uv-virtualenv"

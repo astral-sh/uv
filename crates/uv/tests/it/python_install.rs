@@ -2255,6 +2255,45 @@ fn python_install_broken_link() {
     });
 }
 
+/// Test that --default works with pre-release versions (e.g., 3.15.0a1).
+/// This test verifies the fix for issue #16696 where --default didn't create
+/// python.exe and python3.exe links for pre-release versions.
+#[test]
+fn python_install_default_prerelease() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
+    context
+        .python_install()
+        .arg("--default")
+        .arg("--preview-features")
+        .arg("python-install-default")
+        .arg("3.15")
+        .assert()
+        .success();
+
+    let bin_python_minor_15 = context
+        .bin_dir
+        .child(format!("python3.15{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_major = context
+        .bin_dir
+        .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_default = context
+        .bin_dir
+        .child(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+    // Verify that all three executables are created when --default is used with a pre-release version
+    bin_python_minor_15.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::exists());
+    bin_python_default.assert(predicate::path::exists());
+}
+
 #[test]
 fn python_install_default_from_env() {
     let context: TestContext = TestContext::new_with_versions(&[])
@@ -2694,13 +2733,27 @@ fn python_install_no_cache() {
     ");
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn python_install_emulated_macos() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
         .with_python_download_cache();
+
+    let arch_status = Command::new("/usr/bin/arch")
+        .arg("-x86_64")
+        .arg("true")
+        .status();
+    if !arch_status.is_ok_and(|x| x.success()) {
+        // Rosetta is not available to run the x86_64 interpreter
+        // fail the test in CI, otherwise skip it
+        if env::var("CI").is_ok() {
+            panic!("x86_64 emulation is not available on this CI runner");
+        }
+        debug!("Skipping test because x86_64 emulation is not available");
+        return;
+    }
 
     // Before installation, `uv python list` should not show the x86_64 download
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"

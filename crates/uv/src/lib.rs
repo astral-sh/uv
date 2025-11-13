@@ -1,3 +1,5 @@
+#![deny(clippy::print_stdout, clippy::print_stderr)]
+
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -709,6 +711,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
+                args.settings.install_mirrors,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.python,
@@ -860,6 +864,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.modifications,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
+                args.settings.install_mirrors,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.sources,
@@ -2119,8 +2125,13 @@ async fn run_project(
                 args.active,
                 args.no_sync,
                 args.no_install_project,
+                args.only_install_project,
                 args.no_install_workspace,
+                args.only_install_workspace,
                 args.no_install_local,
+                args.only_install_local,
+                args.no_install_package,
+                args.only_install_package,
                 requirements,
                 constraints,
                 args.marker,

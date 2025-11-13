@@ -1420,7 +1420,7 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref() {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                DisplaySafeUrl::from(
+                DisplaySafeUrl::from_url(
                     Url::from_directory_path(install_path.join(path))
                         .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
                 )

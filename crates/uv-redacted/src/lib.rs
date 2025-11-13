@@ -4,7 +4,20 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
+use thiserror::Error;
 use url::Url;
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum DisplaySafeUrlError {
+    /// Failed to parse a URL.
+    #[error(transparent)]
+    Url(#[from] url::ParseError),
+
+    /// We parsed a URL, but couldn't disambiguate its authority
+    /// component.
+    #[error("ambiguous user/pass authority in URL (not percent-encoded?): {0}")]
+    AmbiguousAuthority(String),
+}
 
 /// A [`Url`] wrapper that redacts credentials when displaying the URL.
 ///
@@ -47,8 +60,55 @@ pub struct DisplaySafeUrl(Url);
 
 impl DisplaySafeUrl {
     #[inline]
-    pub fn parse(input: &str) -> Result<Self, url::ParseError> {
-        Ok(Self(Url::parse(input)?))
+    pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
+        let url = Url::parse(input)?;
+
+        // Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
+        //
+        // In this case the user *probably* meant to have a username of "user/name", but both RFC
+        // 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
+        // non-percent-encoded slash or other special character.
+        //
+        // This ends up being moderately annoying to detect, since the above gets parsed into a
+        // "valid" WHATWG URL where the host is `used` and the pathname is
+        // `/name:password@domain/a/b/c` rather than causing a parse error.
+        //
+        // To detect it, we use a heuristic: if the password component is missing but the path or
+        // fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
+        if url.password().is_none()
+            && (url
+                .path()
+                .find(':')
+                .is_some_and(|pos| url.path()[pos..].contains('@'))
+                || url
+                    .fragment()
+                    .map(|fragment| {
+                        fragment
+                            .find(':')
+                            .is_some_and(|pos| fragment[pos..].contains('@'))
+                    })
+                    .unwrap_or(false))
+            // If the above is true, we should always expect to find these in the given URL
+            && let Some(col_pos) = input.find(':')
+            && let Some(at_pos) = input.rfind('@')
+        {
+            // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
+            // the error message. We somewhat aggressively replace everything between the scheme's
+            // ':' and the lastmost `@` with `***`.
+            let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
+            return Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path));
+        }
+
+        Ok(Self(url))
+    }
+
+    /// Create a new [`DisplaySafeUrl`] from a [`Url`].
+    ///
+    /// Unlike [`Self::parse`], this doesn't perform any ambiguity checks.
+    /// That means that it's primarily useful for contexts where a human can't easily accidentally
+    /// introduce an ambiguous URL, such as URLs being read from a request.
+    pub fn from_url(url: Url) -> Self {
+        Self(url)
     }
 
     /// Cast a `&Url` to a `&DisplaySafeUrl` using ref-cast.
@@ -59,8 +119,8 @@ impl DisplaySafeUrl {
 
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
-    pub fn join(&self, input: &str) -> Result<Self, url::ParseError> {
-        self.0.join(input).map(Self)
+    pub fn join(&self, input: &str) -> Result<Self, DisplaySafeUrlError> {
+        Ok(Self(self.0.join(input)?))
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
@@ -78,12 +138,12 @@ impl DisplaySafeUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        Url::deserialize_internal(deserializer).map(Self)
+        Ok(Self(Url::deserialize_internal(deserializer)?))
     }
 
     #[allow(clippy::result_unit_err)]
     pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
-        Url::from_file_path(path).map(Self::from)
+        Ok(Self(Url::from_file_path(path)?))
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
@@ -175,12 +235,6 @@ impl Debug for DisplaySafeUrl {
     }
 }
 
-impl From<Url> for DisplaySafeUrl {
-    fn from(url: Url) -> Self {
-        Self(url)
-    }
-}
-
 impl From<DisplaySafeUrl> for Url {
     fn from(url: DisplaySafeUrl) -> Self {
         url.0
@@ -188,10 +242,10 @@ impl From<DisplaySafeUrl> for Url {
 }
 
 impl FromStr for DisplaySafeUrl {
-    type Err = url::ParseError;
+    type Err = DisplaySafeUrlError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(Url::from_str(input)?))
+        Self::parse(input)
     }
 }
 
@@ -250,8 +304,8 @@ mod tests {
     #[test]
     fn from_url_no_credentials() {
         let url_str = "https://pypi-proxy.fly.dev/basic-auth/simple";
-        let url = DisplaySafeUrl::parse(url_str).unwrap();
-        let log_safe_url = url;
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_none());
         assert_eq!(log_safe_url.to_string(), url_str);
@@ -259,9 +313,9 @@ mod tests {
 
     #[test]
     fn from_url_username_and_password() {
-        let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = DisplaySafeUrl::parse(url_str).unwrap();
-        let log_safe_url = url;
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://user:pass@pypi-proxy.fly.dev/basic-auth/simple")
+                .unwrap();
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -272,9 +326,8 @@ mod tests {
 
     #[test]
     fn from_url_just_password() {
-        let url_str = "https://:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = DisplaySafeUrl::parse(url_str).unwrap();
-        let log_safe_url = url;
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://:pass@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -285,9 +338,8 @@ mod tests {
 
     #[test]
     fn from_url_just_username() {
-        let url_str = "https://user@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = DisplaySafeUrl::parse(url_str).unwrap();
-        let log_safe_url = url;
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_none());
         assert_eq!(
@@ -382,5 +434,23 @@ mod tests {
             log_safe_url.to_string(),
             "https://user:****@pypi-proxy.fly.dev/basic-auth/simple"
         );
+    }
+
+    #[test]
+    fn parse_url_ambiguous() {
+        for url in &[
+            "https://user/name:password@domain/a/b/c",
+            "https://user\\name:password@domain/a/b/c",
+            "https://user#name:password@domain/a/b/c",
+            "https://user.com/name:password@domain/a/b/c",
+        ] {
+            let err = DisplaySafeUrl::parse(url).unwrap_err();
+            match err {
+                DisplaySafeUrlError::AmbiguousAuthority(redacted) => {
+                    assert!(redacted.starts_with("https:***@domain/a/b/c"));
+                }
+                DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
+            }
+        }
     }
 }
