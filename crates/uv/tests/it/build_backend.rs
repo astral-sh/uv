@@ -1,7 +1,7 @@
 use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
@@ -757,6 +757,49 @@ fn complex_namespace_packages() -> Result<()> {
     ----- stderr -----
     "
     );
+    Ok(())
+}
+
+#[test]
+fn license_file_must_be_utf8() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("license-utf8");
+    context
+        .init()
+        .arg("--lib")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "license-utf8"
+        version = "1.0.0"
+        license-files = ["LICENSE.bin"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    project.child("LICENSE.bin").write_binary(&[0xff])?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid pyproject.toml
+      Caused by: License file `LICENSE.bin` must be UTF-8 encoded
+    "###);
+
     Ok(())
 }
 
