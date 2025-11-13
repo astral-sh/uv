@@ -186,7 +186,7 @@ fn dubious_filenames() {
         .arg("dummy")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg(context.temp_dir.join("*")), @r###"
+        .arg(context.temp_dir.join("*")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -196,7 +196,7 @@ fn dubious_filenames() {
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
     error: No files found to publish
-    "###
+    "
     );
 }
 

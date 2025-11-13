@@ -1,6 +1,6 @@
 mod trusted_publishing;
 
-use std::os::macos::raw;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -15,7 +15,7 @@ use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
@@ -257,10 +257,11 @@ pub struct UploadGroup {
 }
 
 /// Given a list of paths (which may contain globs), unroll them into
-/// a flat, unique list of files.
+/// a flat, unique list of files. Files are returned in a stable
+/// but unspecified order.
 #[allow(clippy::result_large_err)]
 fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
-    let mut files = FxHashSet::default();
+    let mut files = BTreeSet::default();
     for path in paths {
         for file in glob(&path).map_err(|err| PublishError::Pattern(path.clone(), err))? {
             let file = file?;
@@ -268,9 +269,7 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
                 continue;
             }
 
-            if !files.insert(file) {
-                continue;
-            }
+            files.insert(file);
         }
     }
 
@@ -365,17 +364,7 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadGroup> {
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
 #[allow(clippy::result_large_err)]
 pub fn group_files_for_publishing(paths: Vec<String>) -> Result<Vec<UploadGroup>, PublishError> {
-    let files = unroll_paths(paths)?;
-    if files.is_empty() {
-        return Err(PublishError::NoFiles);
-    }
-
-    let groups = group_files(files);
-    if groups.is_empty() {
-        return Err(PublishError::NoFiles);
-    }
-
-    Ok(groups)
+    Ok(group_files(unroll_paths(paths)?))
 }
 
 pub enum TrustedPublishResult {
@@ -949,7 +938,7 @@ async fn build_upload_request<'a>(
 
     let mut attestations = vec![];
     for attestation_path in &group.attestations {
-        let contents = tokio::fs::read_to_string(&attestation_path).await?;
+        let contents = fs_err::read_to_string(attestation_path)?;
         // NOTE: We don't currently validate the interior structure of an attestation beyond being
         // valid JSON. We could validate it pretty easily in the future.
         let raw_attestation = serde_json::from_str::<serde_json::Value>(&contents)
