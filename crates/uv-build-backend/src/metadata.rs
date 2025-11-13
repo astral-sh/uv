@@ -532,10 +532,11 @@ impl PyProjectToml {
                 license_files.push(relative.portable_display().to_string());
             }
 
-            if let Some((pattern, _)) = license_globs_parsed
-                .iter()
-                .zip(license_globs_matched.iter())
-                .find(|(_, matched)| !**matched)
+            if let Some(pattern) = license_globs_parsed
+                .into_iter()
+                .zip(license_globs_matched.into_iter())
+                .find(|(_, matched)| !matched)
+                .map(|(pattern, _)| pattern)
             {
                 return Err(ValidationError::LicenseGlobNoMatches {
                     field: "project.license-files".to_string(),
