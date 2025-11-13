@@ -534,7 +534,7 @@ impl PyProjectToml {
 
             if let Some(pattern) = license_globs_parsed
                 .into_iter()
-                .zip(license_globs_matched.into_iter())
+                .zip(license_globs_matched)
                 .find(|(_, matched)| !matched)
                 .map(|(pattern, _)| pattern)
             {
