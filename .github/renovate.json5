@@ -7,7 +7,7 @@
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal"],
+  labels: ["internal", "no-build"],
   schedule: ["before 4am on Monday"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
