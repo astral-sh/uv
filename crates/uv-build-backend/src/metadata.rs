@@ -449,7 +449,8 @@ impl PyProjectToml {
             };
 
             let mut license_files = Vec::new();
-            let mut license_globs_parsed = Vec::new();
+            let mut license_globs_parsed = Vec::with_capacity(license_globs.len());
+            let mut license_glob_matchers = Vec::with_capacity(license_globs.len());
 
             for license_glob in license_globs {
                 let pep639_glob =
@@ -459,13 +460,9 @@ impl PyProjectToml {
                             field: license_glob.to_owned(),
                             source: err,
                         })?;
+                license_glob_matchers.push(pep639_glob.compile_matcher());
                 license_globs_parsed.push(pep639_glob);
             }
-
-            let license_glob_matchers = license_globs_parsed
-                .iter()
-                .map(|glob| glob.compile_matcher())
-                .collect::<Vec<_>>();
 
             // Track whether each user-specified glob matched so we can flag the unmatched ones.
             let mut license_globs_matched = vec![false; license_globs_parsed.len()];
