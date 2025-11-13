@@ -255,6 +255,7 @@ pub struct UploadGroup {
 
 /// Given a list of paths (which may contain globs), unroll them into
 /// a flat, unique list of files.
+#[allow(clippy::result_large_err)]
 fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
     let mut files = FxHashSet::default();
     for path in paths {
@@ -274,8 +275,8 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
 }
 
 /// Given a flat list of input files, merge them into upload groups.
-fn group_files(files: Vec<PathBuf>) -> Result<Vec<UploadGroup>, PublishError> {
-    const ATTESTATION_PATTERN: std::sync::LazyLock<glob::Pattern> =
+fn group_files(files: Vec<PathBuf>) -> Vec<UploadGroup> {
+    static ATTESTATION_PATTERN: std::sync::LazyLock<glob::Pattern> =
         std::sync::LazyLock::new(|| glob::Pattern::new("*.*.attestation").unwrap());
 
     let mut groups = FxHashMap::default();
@@ -332,7 +333,7 @@ fn group_files(files: Vec<PathBuf>) -> Result<Vec<UploadGroup>, PublishError> {
             groups.insert(
                 filename.clone(),
                 UploadGroup {
-                    file: file,
+                    file,
                     raw_filename: filename,
                     filename: dist_filename,
                     attestations: Vec::new(),
@@ -349,7 +350,7 @@ fn group_files(files: Vec<PathBuf>) -> Result<Vec<UploadGroup>, PublishError> {
         }
     }
 
-    Ok(groups.into_values().collect())
+    groups.into_values().collect()
 }
 
 /// Collect the source distributions and wheels for publishing.
@@ -366,7 +367,7 @@ pub fn group_files_for_publishing(paths: Vec<String>) -> Result<Vec<UploadGroup>
         return Err(PublishError::NoFiles);
     }
 
-    let groups = group_files(files)?;
+    let groups = group_files(files);
     if groups.is_empty() {
         return Err(PublishError::NoFiles);
     }
@@ -469,7 +470,7 @@ pub async fn upload(
     let start_time = SystemTime::now();
     loop {
         let (request, idx) = build_upload_request(
-            &group,
+            group,
             registry,
             client,
             credentials,
@@ -477,7 +478,7 @@ pub async fn upload(
             reporter.clone(),
         )
         .await
-        .map_err(|err| PublishError::PublishPrepare(group.file.to_path_buf(), Box::new(err)))?;
+        .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         let result = request.send().await;
         if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
@@ -500,7 +501,7 @@ pub async fn upload(
 
         let response = result.map_err(|err| {
             PublishError::PublishSend(
-                group.file.to_path_buf(),
+                group.file.clone(),
                 registry.clone(),
                 PublishSendError::ReqwestMiddleware(err),
             )
@@ -533,7 +534,7 @@ pub async fn upload(
                     }
                 }
                 Err(PublishError::PublishSend(
-                    group.file.to_path_buf(),
+                    group.file.clone(),
                     registry.clone(),
                     err,
                 ))
@@ -940,7 +941,7 @@ async fn build_upload_request<'a>(
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
     // See [`files_for_publishing`] on `raw_filename`
     let part =
-        Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.to_string());
+        Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
     form = form.part("content", part);
 
     if !group.attestations.is_empty() {
@@ -1173,7 +1174,7 @@ mod tests {
         {
             let dists = vec![valid_sdist, valid_wheel];
 
-            let mut groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect()).unwrap();
+            let mut groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
             groups.sort_by_key(|group| group.raw_filename.clone());
 
             assert_debug_snapshot!(groups, @r#"
@@ -1237,7 +1238,7 @@ mod tests {
                     shuffle(&mut dists);
 
                     let mut groups =
-                        group_files(dists.iter().map(|s| PathBuf::from(s)).collect()).unwrap();
+                        group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
                     groups.sort_by_key(|group| group.raw_filename.clone());
 
                     assert_debug_snapshot!(groups, @r#"
@@ -1306,7 +1307,7 @@ mod tests {
                 &invalid_attestation,
             ];
 
-            let groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect()).unwrap();
+            let groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
             assert_debug_snapshot!(groups, @r#"
             [
                 UploadGroup {
