@@ -587,7 +587,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from(response.url().clone());
+                let url = DisplaySafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -766,7 +766,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from(response.url().clone());
+                let url = DisplaySafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()

@@ -1858,6 +1858,11 @@ pub struct PipSyncArgs {
 
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
 
@@ -1868,6 +1873,11 @@ pub struct PipSyncArgs {
     /// scripts and other artifacts installed via `--prefix` will reference the installing
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
@@ -2187,6 +2197,11 @@ pub struct PipInstallArgs {
 
     /// Install packages into the specified directory, rather than into the virtual or system Python
     /// environment. The packages will be installed at the top-level of the directory.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "prefix")]
     pub target: Option<PathBuf>,
 
@@ -2197,6 +2212,11 @@ pub struct PipInstallArgs {
     /// scripts and other artifacts installed via `--prefix` will reference the installing
     /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
     /// non-portable.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
@@ -3713,34 +3733,62 @@ pub struct SyncArgs {
     /// of its dependencies are still installed. This is particularly useful in situations like
     /// building Docker images where installing the project separately from its dependencies allows
     /// optimal layer caching.
-    #[arg(long)]
+    ///
+    /// The inverse `--only-install-project` can be used to install _only_ the project itself,
+    /// excluding all dependencies.
+    #[arg(long, conflicts_with = "only_install_project")]
     pub no_install_project: bool,
+
+    /// Only install the current project.
+    #[arg(long, conflicts_with = "no_install_project", hide = true)]
+    pub only_install_project: bool,
 
     /// Do not install any workspace members, including the root project.
     ///
-    /// By default, all of the workspace members and their dependencies are installed into the
+    /// By default, all workspace members and their dependencies are installed into the
     /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
     /// members while retaining their dependencies. This is particularly useful in situations like
     /// building Docker images where installing the workspace separately from its dependencies
     /// allows optimal layer caching.
-    #[arg(long)]
+    ///
+    /// The inverse `--only-install-workspace` can be used to install _only_ workspace members,
+    /// excluding all other dependencies.
+    #[arg(long, conflicts_with = "only_install_workspace")]
     pub no_install_workspace: bool,
+
+    /// Only install workspace members, including the root project.
+    #[arg(long, conflicts_with = "no_install_workspace", hide = true)]
+    pub only_install_workspace: bool,
 
     /// Do not install local path dependencies
     ///
     /// Skips the current project, workspace members, and any other local (path or editable)
     /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
     /// heavy third-party dependencies first and layer local packages separately.
-    #[arg(long)]
+    ///
+    /// The inverse `--only-install-local` can be used to install _only_ local packages, excluding
+    /// all remote dependencies.
+    #[arg(long, conflicts_with = "only_install_local")]
     pub no_install_local: bool,
+
+    /// Only install local path dependencies
+    #[arg(long, conflicts_with = "no_install_local", hide = true)]
+    pub only_install_local: bool,
 
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
     /// `--no-install-package` option allows exclusion of specific packages. Note this can result
     /// in a broken environment, and should be used with caution.
-    #[arg(long)]
+    ///
+    /// The inverse `--only-install-package` can be used to install _only_ the specified packages,
+    /// excluding all others.
+    #[arg(long, conflicts_with = "only_install_package")]
     pub no_install_package: Vec<PackageName>,
+
+    /// Only install the given package(s).
+    #[arg(long, conflicts_with = "no_install_package", hide = true)]
+    pub only_install_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -4158,26 +4206,106 @@ pub struct AddArgs {
     /// its dependencies are still installed. This is particularly useful in situations like building
     /// Docker images where installing the project separately from its dependencies allows optimal
     /// layer caching.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    ///
+    /// The inverse `--only-install-project` can be used to install _only_ the project itself,
+    /// excluding all dependencies.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "only_install_project"
+    )]
     pub no_install_project: bool,
+
+    /// Only install the current project.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "no_install_project",
+        hide = true
+    )]
+    pub only_install_project: bool,
 
     /// Do not install any workspace members, including the current project.
     ///
-    /// By default, all of the workspace members and their dependencies are installed into the
+    /// By default, all workspace members and their dependencies are installed into the
     /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
     /// members while retaining their dependencies. This is particularly useful in situations like
     /// building Docker images where installing the workspace separately from its dependencies
     /// allows optimal layer caching.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    ///
+    /// The inverse `--only-install-workspace` can be used to install _only_ workspace members,
+    /// excluding all other dependencies.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "only_install_workspace"
+    )]
     pub no_install_workspace: bool,
+
+    /// Only install workspace members, including the current project.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "no_install_workspace",
+        hide = true
+    )]
+    pub only_install_workspace: bool,
 
     /// Do not install local path dependencies
     ///
     /// Skips the current project, workspace members, and any other local (path or editable)
     /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
     /// heavy third-party dependencies first and layer local packages separately.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    ///
+    /// The inverse `--only-install-local` can be used to install _only_ local packages, excluding
+    /// all remote dependencies.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "only_install_local"
+    )]
     pub no_install_local: bool,
+
+    /// Only install local path dependencies
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "no_install_local",
+        hide = true
+    )]
+    pub only_install_local: bool,
+
+    /// Do not install the given package(s).
+    ///
+    /// By default, all project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    ///
+    /// The inverse `--only-install-package` can be used to install _only_ the specified packages,
+    /// excluding all others.
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "only_install_package"
+    )]
+    pub no_install_package: Vec<PackageName>,
+
+    /// Only install the given package(s).
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "no_sync",
+        conflicts_with = "no_install_package",
+        hide = true
+    )]
+    pub only_install_package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -4564,31 +4692,91 @@ pub struct ExportArgs {
     /// By default, the current project is included in the exported requirements file with all of
     /// its dependencies. The `--no-emit-project` option allows the project to be excluded, but all
     /// of its dependencies to remain included.
-    #[arg(long, alias = "no-install-project")]
+    ///
+    /// The inverse `--only-emit-project` can be used to emit _only_ the project itself, excluding
+    /// all dependencies.
+    #[arg(
+        long,
+        alias = "no-install-project",
+        conflicts_with = "only_emit_project"
+    )]
     pub no_emit_project: bool,
+
+    /// Only emit the current project.
+    #[arg(
+        long,
+        alias = "only-install-project",
+        conflicts_with = "no_emit_project",
+        hide = true
+    )]
+    pub only_emit_project: bool,
 
     /// Do not emit any workspace members, including the root project.
     ///
     /// By default, all workspace members and their dependencies are included in the exported
     /// requirements file, with all of their dependencies. The `--no-emit-workspace` option allows
     /// exclusion of all the workspace members while retaining their dependencies.
-    #[arg(long, alias = "no-install-workspace")]
+    ///
+    /// The inverse `--only-emit-workspace` can be used to emit _only_ workspace members, excluding
+    /// all other dependencies.
+    #[arg(
+        long,
+        alias = "no-install-workspace",
+        conflicts_with = "only_emit_workspace"
+    )]
     pub no_emit_workspace: bool,
+
+    /// Only emit workspace members, including the root project.
+    #[arg(
+        long,
+        alias = "only-install-workspace",
+        conflicts_with = "no_emit_workspace",
+        hide = true
+    )]
+    pub only_emit_workspace: bool,
 
     /// Do not include local path dependencies in the exported requirements.
     ///
     /// Omits the current project, workspace members, and any other local (path or editable)
     /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
     /// and CI flows that want to export and cache third-party dependencies first.
-    #[arg(long, alias = "no-install-local")]
+    ///
+    /// The inverse `--only-emit-local` can be used to emit _only_ local packages, excluding all
+    /// remote dependencies.
+    #[arg(long, alias = "no-install-local", conflicts_with = "only_emit_local")]
     pub no_emit_local: bool,
+
+    /// Only include local path dependencies in the exported requirements.
+    #[arg(
+        long,
+        alias = "only-install-local",
+        conflicts_with = "no_emit_local",
+        hide = true
+    )]
+    pub only_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
-    /// By default, all of the project's dependencies are included in the exported requirements
+    /// By default, all project's dependencies are included in the exported requirements
     /// file. The `--no-emit-package` option allows exclusion of specific packages.
-    #[arg(long, alias = "no-install-package")]
+    ///
+    /// The inverse `--only-emit-package` can be used to emit _only_ the specified packages,
+    /// excluding all others.
+    #[arg(
+        long,
+        alias = "no-install-package",
+        conflicts_with = "only_emit_package"
+    )]
     pub no_emit_package: Vec<PackageName>,
+
+    /// Only emit the given package(s).
+    #[arg(
+        long,
+        alias = "only-install-package",
+        conflicts_with = "no_emit_package",
+        hide = true
+    )]
+    pub only_emit_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -5679,6 +5867,19 @@ pub struct PythonInstallArgs {
     /// Implies `--reinstall`.
     #[arg(long, short)]
     pub force: bool,
+
+    /// Upgrade existing Python installations to the latest patch version.
+    ///
+    /// By default, uv will not upgrade already-installed Python versions to newer patch releases.
+    /// With `--upgrade`, uv will upgrade to the latest available patch version for the specified
+    /// minor version(s).
+    ///
+    /// If the requested versions are not yet installed, uv will install them.
+    ///
+    /// This option is only supported for minor version requests, e.g., `3.12`; uv will exit with an
+    /// error if a patch version, e.g., `3.12.2`, is requested.
+    #[arg(long, short = 'U')]
+    pub upgrade: bool,
 
     /// Use as the default Python version.
     ///

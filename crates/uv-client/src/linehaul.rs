@@ -63,7 +63,7 @@ pub struct LineHaul {
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
     #[instrument(name = "linehaul", skip_all)]
-    pub fn new(markers: &MarkerEnvironment, platform: Option<&Platform>) -> Self {
+    pub fn new(markers: Option<&MarkerEnvironment>, platform: Option<&Platform>) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = [
             EnvVars::BUILD_BUILDID,
@@ -124,17 +124,17 @@ impl LineHaul {
                 name: Some("uv".to_string()),
                 version: Some(version().to_string()),
             }),
-            python: Some(markers.python_full_version().version.to_string()),
+            python: markers.map(|markers| markers.python_full_version().version.to_string()),
             implementation: Option::from(Implementation {
-                name: Some(markers.platform_python_implementation().to_string()),
-                version: Some(markers.python_full_version().version.to_string()),
+                name: markers.map(|markers| markers.platform_python_implementation().to_string()),
+                version: markers.map(|markers| markers.python_full_version().version.to_string()),
             }),
             distro,
             system: Option::from(System {
-                name: Some(markers.platform_system().to_string()),
-                release: Some(markers.platform_release().to_string()),
+                name: markers.map(|markers| markers.platform_system().to_string()),
+                release: markers.map(|markers| markers.platform_release().to_string()),
             }),
-            cpu: Some(markers.platform_machine().to_string()),
+            cpu: markers.map(|markers| markers.platform_machine().to_string()),
             // Should probably always be None in uv.
             openssl_version: None,
             // Should probably always be None in uv.

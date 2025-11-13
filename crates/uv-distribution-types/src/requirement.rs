@@ -13,7 +13,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -29,7 +29,7 @@ pub enum RequirementError {
     #[error(transparent)]
     ParsedUrlError(#[from] ParsedUrlError),
     #[error(transparent)]
-    UrlParseError(#[from] url::ParseError),
+    UrlParseError(#[from] DisplaySafeUrlError),
     #[error(transparent)]
     OidParseError(#[from] OidParseError),
     #[error(transparent)]

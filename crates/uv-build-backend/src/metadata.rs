@@ -3,9 +3,8 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::str::{self, FromStr};
 
-use globset::Glob;
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
@@ -63,6 +62,8 @@ pub enum ValidationError {
     InvalidSpdx(String, #[source] spdx::error::ParseError),
     #[error("`{field}` glob `{glob}` did not match any files")]
     LicenseGlobNoMatches { field: String, glob: String },
+    #[error("License file `{}` must be UTF-8 encoded", _0)]
+    LicenseFileNotUtf8(String),
 }
 
 /// Check if the build backend is matching the currently running uv version.
@@ -342,139 +343,7 @@ impl PyProjectToml {
             "2.3"
         };
 
-        // TODO(konsti): Issue a warning on old license metadata once PEP 639 is universal.
-        let (license, license_expression, license_files) =
-            if let Some(license_globs) = &self.project.license_files {
-                let license_expression = match &self.project.license {
-                    None => None,
-                    Some(License::Spdx(license_expression)) => Some(license_expression.clone()),
-                    Some(License::Text { .. } | License::File { .. }) => {
-                        return Err(ValidationError::MixedLicenseGenerations.into());
-                    }
-                };
-
-                let mut license_files = Vec::new();
-                let mut license_glob_patterns = Vec::new();
-                let mut license_globs_parsed = Vec::new();
-
-                for license_glob in license_globs {
-                    let pep639_glob =
-                        PortableGlobParser::Pep639
-                            .parse(license_glob)
-                            .map_err(|err| Error::PortableGlob {
-                                field: license_glob.to_owned(),
-                                source: err,
-                            })?;
-                    license_globs_parsed.push(pep639_glob);
-                    license_glob_patterns.push(license_glob.clone());
-                }
-
-                let mut license_globs_matched = vec![false; license_glob_patterns.len()];
-
-                let license_glob_matchers = license_globs_parsed
-                    .iter()
-                    .map(Glob::compile_matcher)
-                    .collect::<Vec<_>>();
-
-                let license_glob_filter = GlobDirFilter::from_globs(&license_globs_parsed)
-                    .map_err(|err| Error::GlobSetTooLarge {
-                        field: "tool.uv.build-backend.source-include".to_string(),
-                        source: err,
-                    })?;
-
-                for entry in WalkDir::new(root)
-                    .sort_by_file_name()
-                    .into_iter()
-                    .filter_entry(|entry| {
-                        license_glob_filter.match_directory(
-                            entry
-                                .path()
-                                .strip_prefix(root)
-                                .expect("walkdir starts with root"),
-                        )
-                    })
-                {
-                    let entry = entry.map_err(|err| Error::WalkDir {
-                        root: root.to_path_buf(),
-                        err,
-                    })?;
-
-                    let relative = entry
-                        .path()
-                        .strip_prefix(root)
-                        .expect("walkdir starts with root");
-
-                    if !license_glob_filter.match_path(relative) {
-                        trace!("Not a license files match: {}", relative.user_display());
-                        continue;
-                    }
-
-                    let file_type = entry.file_type();
-
-                    if !(file_type.is_file() || file_type.is_symlink()) {
-                        trace!(
-                            "Not a file or symlink in license files match: {}",
-                            relative.user_display()
-                        );
-                        continue;
-                    }
-
-                    error_on_venv(entry.file_name(), entry.path())?;
-
-                    debug!("License files match: {}", relative.user_display());
-
-                    for (matched, matcher) in license_globs_matched
-                        .iter_mut()
-                        .zip(license_glob_matchers.iter())
-                    {
-                        if *matched {
-                            continue;
-                        }
-
-                        if matcher.is_match(relative) {
-                            *matched = true;
-                        }
-                    }
-
-                    license_files.push(relative.portable_display().to_string());
-                }
-
-                if let Some(pattern) = license_glob_patterns
-                    .iter()
-                    .zip(license_globs_matched.iter())
-                    .find_map(|(pattern, matched)| (!matched).then_some(pattern))
-                {
-                    return Err(ValidationError::LicenseGlobNoMatches {
-                        field: "project.license-files".to_string(),
-                        glob: pattern.clone(),
-                    }
-                    .into());
-                }
-
-                // The glob order may be unstable
-                license_files.sort();
-
-                (None, license_expression, license_files)
-            } else {
-                match &self.project.license {
-                    None => (None, None, Vec::new()),
-                    Some(License::Spdx(license_expression)) => {
-                        (None, Some(license_expression.clone()), Vec::new())
-                    }
-                    Some(License::Text { text }) => (Some(text.clone()), None, Vec::new()),
-                    Some(License::File { file }) => {
-                        let text = fs_err::read_to_string(root.join(file))?;
-                        (Some(text), None, Vec::new())
-                    }
-                }
-            };
-
-        // Check that the license expression is a valid SPDX identifier.
-        if let Some(license_expression) = &license_expression {
-            if let Err(err) = spdx::Expression::parse(license_expression) {
-                return Err(ValidationError::InvalidSpdx(license_expression.clone(), err).into());
-            }
-        }
+        let (license, license_expression, license_files) = self.license_metadata(root)?;
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
         let project_urls = self
@@ -559,6 +428,158 @@ impl PyProjectToml {
             project_urls,
             dynamic: vec![],
         })
+    }
+
+    /// Parse and validate the old (PEP 621) and new (PEP 639) license files.
+    #[allow(clippy::type_complexity)]
+    fn license_metadata(
+        &self,
+        root: &Path,
+    ) -> Result<(Option<String>, Option<String>, Vec<String>), Error> {
+        // TODO(konsti): Issue a warning on old license metadata once PEP 639 is universal.
+        let (license, license_expression, license_files) = if let Some(license_globs) =
+            &self.project.license_files
+        {
+            let license_expression = match &self.project.license {
+                None => None,
+                Some(License::Spdx(license_expression)) => Some(license_expression.clone()),
+                Some(License::Text { .. } | License::File { .. }) => {
+                    return Err(ValidationError::MixedLicenseGenerations.into());
+                }
+            };
+
+            let mut license_files = Vec::new();
+            let mut license_globs_parsed = Vec::new();
+
+            for license_glob in license_globs {
+                let pep639_glob =
+                    PortableGlobParser::Pep639
+                        .parse(license_glob)
+                        .map_err(|err| Error::PortableGlob {
+                            field: license_glob.to_owned(),
+                            source: err,
+                        })?;
+                license_globs_parsed.push(pep639_glob);
+            }
+
+            let license_glob_matchers = license_globs_parsed
+                .iter()
+                .map(|glob| glob.compile_matcher())
+                .collect::<Vec<_>>();
+
+            let mut license_globs_matched = vec![false; license_globs_parsed.len()];
+
+            let license_globs =
+                GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
+                    Error::GlobSetTooLarge {
+                        field: "project.license-files".to_string(),
+                        source: err,
+                    }
+                })?;
+
+            for entry in WalkDir::new(root)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_entry(|entry| {
+                    license_globs.match_directory(
+                        entry
+                            .path()
+                            .strip_prefix(root)
+                            .expect("walkdir starts with root"),
+                    )
+                })
+            {
+                let entry = entry.map_err(|err| Error::WalkDir {
+                    root: root.to_path_buf(),
+                    err,
+                })?;
+
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .expect("walkdir starts with root");
+
+                if !license_globs.match_path(relative) {
+                    trace!("Not a license files match: {}", relative.user_display());
+                    continue;
+                }
+
+                let file_type = entry.file_type();
+
+                if !(file_type.is_file() || file_type.is_symlink()) {
+                    trace!(
+                        "Not a file or symlink in license files match: {}",
+                        relative.user_display()
+                    );
+                    continue;
+                }
+
+                error_on_venv(entry.file_name(), entry.path())?;
+
+                debug!("License files match: {}", relative.user_display());
+
+                for (matched, matcher) in license_globs_matched
+                    .iter_mut()
+                    .zip(license_glob_matchers.iter())
+                {
+                    if *matched {
+                        continue;
+                    }
+
+                    if matcher.is_match(relative) {
+                        *matched = true;
+                    }
+                }
+
+                license_files.push(relative.portable_display().to_string());
+            }
+
+            if let Some(pattern) = license_globs_parsed
+                .iter()
+                .zip(license_globs_matched.iter())
+                .find_map(|(pattern, matched)| (!matched).then_some(pattern))
+            {
+                return Err(ValidationError::LicenseGlobNoMatches {
+                    field: "project.license-files".to_string(),
+                    glob: pattern.to_string(),
+                }
+                .into());
+            }
+
+            for license_file in &license_files {
+                let file_path = root.join(license_file);
+                let bytes = fs_err::read(&file_path)?;
+                if str::from_utf8(&bytes).is_err() {
+                    return Err(ValidationError::LicenseFileNotUtf8(license_file.clone()).into());
+                }
+            }
+
+            // The glob order may be unstable
+            license_files.sort();
+
+            (None, license_expression, license_files)
+        } else {
+            match &self.project.license {
+                None => (None, None, Vec::new()),
+                Some(License::Spdx(license_expression)) => {
+                    (None, Some(license_expression.clone()), Vec::new())
+                }
+                Some(License::Text { text }) => (Some(text.clone()), None, Vec::new()),
+                Some(License::File { file }) => {
+                    let text = fs_err::read_to_string(root.join(file))?;
+                    (Some(text), None, Vec::new())
+                }
+            }
+        };
+
+        // Check that the license expression is a valid SPDX identifier.
+        if let Some(license_expression) = &license_expression {
+            if let Err(err) = spdx::Expression::parse(license_expression) {
+                return Err(ValidationError::InvalidSpdx(license_expression.clone(), err).into());
+            }
+        }
+
+        Ok((license, license_expression, license_files))
     }
 
     /// Validate and convert the entrypoints in `pyproject.toml`, including console and GUI scripts,

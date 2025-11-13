@@ -8,7 +8,7 @@
     "customManagers:githubActionsVersions",
   ],
   labels: ["internal"],
-  schedule: ["before 4am on Monday"],
+  schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,

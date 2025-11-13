@@ -24,6 +24,7 @@ use uv_client::{BaseClient, is_transient_network_error};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
 use uv_platform::Platform;
+use uv_redacted::DisplaySafeUrl;
 
 /// Binary tools that can be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -311,7 +312,7 @@ async fn download_and_unpack(
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
-        .for_host(&download_url.clone().into())
+        .for_host(&DisplaySafeUrl::from_url(download_url.clone()))
         .get(download_url.clone())
         .send()
         .await

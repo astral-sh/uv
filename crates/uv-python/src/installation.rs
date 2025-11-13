@@ -6,6 +6,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use ref_cast::RefCast;
 use tracing::{debug, info};
+use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -63,6 +64,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_if_outdated_prerelease(request, None);
         Ok(installation)
     }
 
@@ -75,13 +77,10 @@ impl PythonInstallation {
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        Ok(find_best_python_installation(
-            request,
-            environments,
-            preference,
-            cache,
-            preview,
-        )??)
+        let installation =
+            find_best_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_if_outdated_prerelease(request, None);
+        Ok(installation)
     }
 
     /// Find or fetch a [`PythonInstallation`].
@@ -201,7 +200,7 @@ impl PythonInstallation {
             return Err(err);
         }
 
-        Self::fetch(
+        let installation = Self::fetch(
             download,
             client_builder,
             cache,
@@ -210,7 +209,11 @@ impl PythonInstallation {
             pypy_install_mirror,
             preview,
         )
-        .await
+        .await?;
+
+        installation.warn_if_outdated_prerelease(request, python_downloads_json_url);
+
+        Ok(installation)
     }
 
     /// Download and install the requested installation.
@@ -343,6 +346,81 @@ impl PythonInstallation {
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    pub(crate) fn warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        python_downloads_json_url: Option<&str>,
+    ) {
+        if request.allows_prereleases() {
+            return;
+        }
+
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
+
+        if version.pre().is_none() {
+            return;
+        }
+
+        if !interpreter.is_managed() {
+            return;
+        }
+
+        // Transparent upgrades only exist for CPython, so skip the warning for other
+        // managed implementations.
+        //
+        // See: https://github.com/astral-sh/uv/issues/16675
+        if !interpreter
+            .implementation_name()
+            .eq_ignore_ascii_case("cpython")
+        {
+            return;
+        }
+
+        let release = version.only_release();
+
+        let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+            return;
+        };
+
+        let download_request = download_request.with_prereleases(false);
+
+        let has_stable_download = {
+            let Ok(mut downloads) = download_request.iter_downloads(python_downloads_json_url)
+            else {
+                return;
+            };
+
+            downloads.any(|download| {
+                let download_version = download.key().version().into_version();
+                download_version.pre().is_none() && download_version.only_release() >= release
+            })
+        };
+
+        if !has_stable_download {
+            return;
+        }
+
+        if let Some(upgrade_request) = download_request
+            .unset_defaults()
+            .without_patch()
+            .simplified_display()
+        {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
+                version,
+                upgrade_request
+            );
+        } else {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Run `uv python upgrade` to update your managed interpreters.",
+                version,
+            );
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -432,6 +510,10 @@ impl PythonInstallationKey {
 
     pub fn minor(&self) -> u8 {
         self.minor
+    }
+
+    pub fn prerelease(&self) -> Option<Prerelease> {
+        self.prerelease
     }
 
     pub fn platform(&self) -> &Platform {

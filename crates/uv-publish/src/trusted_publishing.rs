@@ -10,13 +10,13 @@ use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
     #[error(transparent)]
-    Url(#[from] url::ParseError),
+    Url(#[from] DisplaySafeUrlError),
     #[error("Failed to obtain OIDC token: is the `id-token: write` permission missing?")]
     GitHubPermissions(#[source] ambient_id::Error),
     /// A hard failure during OIDC token discovery.

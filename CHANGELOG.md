@@ -3,6 +3,42 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.9
+
+Released on 2025-11-12.
+
+### Deprecations
+
+- Deprecate use of `--project` in `uv init` ([#16674](https://github.com/astral-sh/uv/pull/16674))
+
+### Enhancements
+
+- Add iOS support to Python interpreter discovery ([#16686](https://github.com/astral-sh/uv/pull/16686))
+- Reject ambiguously parsed URLs ([#16622](https://github.com/astral-sh/uv/pull/16622))
+- Allow explicit values in `uv version --bump` ([#16555](https://github.com/astral-sh/uv/pull/16555))
+- Warn on use of managed pre-release Python versions when a stable version is available ([#16619](https://github.com/astral-sh/uv/pull/16619))
+- Allow signing trampolines on Windows by using `.rcdata` to store metadata ([#15068](https://github.com/astral-sh/uv/pull/15068))
+- Add `--only-emit-workspace` and similar variants to `uv export` ([#16681](https://github.com/astral-sh/uv/pull/16681))
+
+### Preview features
+
+- Add `uv workspace dir` command ([#16678](https://github.com/astral-sh/uv/pull/16678))
+- Add `uv workspace metadata` command ([#16516](https://github.com/astral-sh/uv/pull/16516))
+
+### Configuration
+
+- Add `UV_NO_DEFAULT_GROUPS` environment variable ([#16645](https://github.com/astral-sh/uv/pull/16645))
+
+### Bug fixes
+
+- Remove `torch-model-archiver` and `torch-tb-profiler` from PyTorch backend ([#16655](https://github.com/astral-sh/uv/pull/16655))
+- Fix Pixi environment detection ([#16585](https://github.com/astral-sh/uv/pull/16585))
+
+### Documentation
+
+- Fix `CMD` path in FastAPI Dockerfile ([#16701](https://github.com/astral-sh/uv/pull/16701))
+
+
 ## 0.9.8
 
 Released on 2025-11-07.
