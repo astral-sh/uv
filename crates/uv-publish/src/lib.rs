@@ -750,6 +750,8 @@ impl FormMetadata {
             requires_external,
             project_urls,
             provides_extra,
+            import_names: _,
+            import_namespaces: _,
             dynamic,
         } = metadata(file, filename).await?;
 

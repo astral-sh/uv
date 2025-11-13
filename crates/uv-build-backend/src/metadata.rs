@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, Bound};
+use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
@@ -18,13 +18,16 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Identifier, IdentifierParseError, Metadata23, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
+
+const PROJECT_IMPORT_NAMES: &str = "project.import-names";
+const PROJECT_IMPORT_NAMESPACES: &str = "project.import-namespaces";
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -60,6 +63,168 @@ pub enum ValidationError {
     ReservedGuiScripts,
     #[error("`project.license` is not a valid SPDX expression: {0}")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
+    #[error("`{field}` must not contain empty strings")]
+    EmptyImportName { field: &'static str },
+    #[error("`{field}` entry `{value}` must end with `; private` or nothing, found `{suffix}`")]
+    InvalidImportSuffix {
+        field: &'static str,
+        value: String,
+        suffix: String,
+    },
+    #[error("`{field}` entry `{value}` has an invalid import name")]
+    InvalidImportName {
+        field: &'static str,
+        value: String,
+        #[source]
+        source: IdentifierParseError,
+    },
+    #[error("Duplicate value `{value}` in `{field}`")]
+    DuplicateImportEntry { field: &'static str, value: String },
+    #[error(
+        "`project.import-names` and `project.import-namespaces` must not both contain `{name}`"
+    )]
+    DuplicateImportAcross { name: String },
+    #[error(
+        "`{field}` entry `{name}` requires listing `{missing}` in `project.import-names` or `project.import-namespaces`"
+    )]
+    MissingImportPrefix {
+        field: &'static str,
+        name: String,
+        missing: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct ImportEntry {
+    base: String,
+    is_private: bool,
+}
+
+impl ImportEntry {
+    fn canonical(&self) -> String {
+        if self.is_private {
+            format!("{}; private", self.base)
+        } else {
+            self.base.clone()
+        }
+    }
+}
+
+fn parse_optional_import_entries(
+    entries: Option<&Vec<String>>,
+    field: &'static str,
+    allow_explicit_empty: bool,
+) -> Result<(Vec<ImportEntry>, bool, bool), ValidationError> {
+    let Some(entries) = entries else {
+        return Ok((Vec::new(), false, false));
+    };
+    if entries.is_empty() {
+        return Ok((Vec::new(), true, allow_explicit_empty));
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut parsed = Vec::with_capacity(entries.len());
+
+    for value in entries {
+        let entry = parse_import_entry(value, field)?;
+        if !seen.insert(entry.base.clone()) {
+            return Err(ValidationError::DuplicateImportEntry {
+                field,
+                value: entry.base.clone(),
+            });
+        }
+        parsed.push(entry);
+    }
+
+    Ok((parsed, true, false))
+}
+
+fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, ValidationError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ValidationError::EmptyImportName { field });
+    }
+
+    let (name_part, suffix_part) = match trimmed.split_once(';') {
+        Some((name, suffix)) => {
+            if suffix.contains(';') {
+                return Err(ValidationError::InvalidImportSuffix {
+                    field,
+                    value: trimmed.to_string(),
+                    suffix: suffix.trim().to_string(),
+                });
+            }
+            (name.trim(), Some(suffix.trim()))
+        }
+        None => (trimmed, None),
+    };
+
+    if name_part.is_empty() {
+        return Err(ValidationError::EmptyImportName { field });
+    }
+
+    let mut is_private = false;
+    if let Some(suffix) = suffix_part {
+        if suffix.is_empty() {
+            return Err(ValidationError::InvalidImportSuffix {
+                field,
+                value: trimmed.to_string(),
+                suffix: suffix.to_string(),
+            });
+        }
+        if suffix != "private" {
+            return Err(ValidationError::InvalidImportSuffix {
+                field,
+                value: trimmed.to_string(),
+                suffix: suffix.to_string(),
+            });
+        }
+        is_private = true;
+    }
+
+    for segment in name_part.split('.') {
+        Identifier::from_str(segment).map_err(|source| ValidationError::InvalidImportName {
+            field,
+            value: name_part.to_string(),
+            source,
+        })?;
+    }
+
+    Ok(ImportEntry {
+        base: name_part.to_string(),
+        is_private,
+    })
+}
+
+fn ensure_import_prefixes(
+    entries: &[ImportEntry],
+    field: &'static str,
+    combined: &BTreeSet<String>,
+) -> Result<(), ValidationError> {
+    for entry in entries {
+        let segments: Vec<&str> = entry.base.split('.').collect();
+        if segments.len() <= 1 {
+            continue;
+        }
+
+        let mut prefix = String::new();
+        for segment in segments.iter().take(segments.len() - 1) {
+            if prefix.is_empty() {
+                prefix.push_str(segment);
+            } else {
+                prefix.push('.');
+                prefix.push_str(segment);
+            }
+            if !combined.contains(&prefix) {
+                return Err(ValidationError::MissingImportPrefix {
+                    field,
+                    name: entry.base.clone(),
+                    missing: prefix.clone(),
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Check if the build backend is matching the currently running uv version.
@@ -268,6 +433,73 @@ impl PyProjectToml {
             return Err(ValidationError::Dynamic.into());
         }
 
+        let (import_names_entries, import_names_provided, import_names_explicit_empty) =
+            parse_optional_import_entries(
+                self.project.import_names.as_ref(),
+                PROJECT_IMPORT_NAMES,
+                true,
+            )?;
+        let (import_namespaces_entries, import_namespaces_provided, _) =
+            parse_optional_import_entries(
+                self.project.import_namespaces.as_ref(),
+                PROJECT_IMPORT_NAMESPACES,
+                false,
+            )?;
+
+        if import_names_provided || import_namespaces_provided {
+            let import_name_set: BTreeSet<_> = import_names_entries
+                .iter()
+                .map(|entry| entry.base.clone())
+                .collect();
+            let import_namespace_set: BTreeSet<_> = import_namespaces_entries
+                .iter()
+                .map(|entry| entry.base.clone())
+                .collect();
+
+            if let Some(overlap) = import_name_set.intersection(&import_namespace_set).next() {
+                return Err(ValidationError::DuplicateImportAcross {
+                    name: overlap.clone(),
+                }
+                .into());
+            }
+
+            let mut combined = import_name_set;
+            combined.extend(import_namespace_set.iter().cloned());
+
+            ensure_import_prefixes(&import_names_entries, PROJECT_IMPORT_NAMES, &combined)?;
+            ensure_import_prefixes(
+                &import_namespaces_entries,
+                PROJECT_IMPORT_NAMESPACES,
+                &combined,
+            )?;
+        }
+
+        let metadata_import_names = if import_names_provided {
+            if import_names_explicit_empty {
+                Some(vec![String::new()])
+            } else {
+                Some(
+                    import_names_entries
+                        .iter()
+                        .map(ImportEntry::canonical)
+                        .collect(),
+                )
+            }
+        } else {
+            None
+        };
+
+        let metadata_import_namespaces = if import_namespaces_entries.is_empty() {
+            None
+        } else {
+            Some(
+                import_namespaces_entries
+                    .iter()
+                    .map(ImportEntry::canonical)
+                    .collect(),
+            )
+        };
+
         let author = self
             .project
             .authors
@@ -330,9 +562,13 @@ impl PyProjectToml {
             .filter(|maintainer_email| !maintainer_email.is_empty());
 
         // Using PEP 639 bumps the METADATA version
-        let metadata_version = if self.project.license_files.is_some()
-            || matches!(self.project.license, Some(License::Spdx(_)))
-        {
+        let uses_pep639 = self.project.license_files.is_some()
+            || matches!(self.project.license, Some(License::Spdx(_)));
+        let uses_pep794 = import_names_provided || import_namespaces_provided;
+        let metadata_version = if uses_pep794 {
+            debug!("Found import name metadata declarations, using METADATA 2.5");
+            "2.5"
+        } else if uses_pep639 {
             debug!("Found PEP 639 license declarations, using METADATA 2.4");
             "2.4"
         } else {
@@ -515,6 +751,8 @@ impl PyProjectToml {
             requires_external: vec![],
             project_urls,
             dynamic: vec![],
+            import_names: metadata_import_names,
+            import_namespaces: metadata_import_namespaces,
         })
     }
 
@@ -647,6 +885,14 @@ struct Project {
     dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
+    /// Import names exclusively provided by the project.
+    ///
+    /// From PEP 794.
+    import_names: Option<Vec<String>>,
+    /// Import namespaces provided by the project.
+    ///
+    /// From PEP 794.
+    import_namespaces: Option<Vec<String>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     ///
@@ -1021,6 +1267,138 @@ mod tests {
         foo-bar = foo:bar
 
         "###);
+    }
+
+    #[test]
+    fn import_names_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam", "spam.eggs; private", "mod.tools.cli"]
+            import-namespaces = ["mod", "mod.tools"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_eq!(metadata.metadata_version, "2.5");
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name: spam
+        Import-Name: spam.eggs; private
+        Import-Name: mod.tools.cli
+        Import-Namespace: mod
+        Import-Namespace: mod.tools
+        "###);
+    }
+
+    #[test]
+    fn import_names_empty_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r"
+            import-names = []
+        ",
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_eq!(metadata.metadata_version, "2.5");
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name:
+        "###);
+    }
+
+    #[test]
+    fn import_names_duplicate() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam", "spam"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"Invalid pyproject.toml
+  Caused by: Duplicate value `spam` in `project.import-names`"#);
+    }
+
+    #[test]
+    fn import_names_overlap() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam"]
+            import-namespaces = ["spam"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"Invalid pyproject.toml
+  Caused by: `project.import-names` and `project.import-namespaces` must not both contain `spam`"#);
+    }
+
+    #[test]
+    fn import_names_missing_prefix() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam.eggs"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"Invalid pyproject.toml
+  Caused by: `project.import-names` entry `spam.eggs` requires listing `spam` in `project.import-names` or `project.import-namespaces`"#);
+    }
+
+    #[test]
+    fn import_names_invalid_suffix() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam; secret"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"Invalid pyproject.toml
+  Caused by: `project.import-names` entry `spam; secret` must end with `; private` or nothing, found `secret`"#);
+    }
+
+    #[test]
+    fn import_names_invalid_identifier() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r#"
+            import-names = ["spam.1eggs"]
+        "#,
+        );
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"Invalid pyproject.toml
+  Caused by: `project.import-names` entry `spam.1eggs` has an invalid import name
+  Caused by: Invalid first character `1` for identifier `1eggs`, expected an underscore or an alphabetic character"#);
     }
 
     #[test]
