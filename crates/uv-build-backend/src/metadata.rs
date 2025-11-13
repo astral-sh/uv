@@ -467,6 +467,7 @@ impl PyProjectToml {
                 .map(|glob| glob.compile_matcher())
                 .collect::<Vec<_>>();
 
+            // Track whether each user-specified glob matched so we can flag the unmatched ones.
             let mut license_globs_matched = vec![false; license_globs_parsed.len()];
 
             let license_globs =
@@ -534,10 +535,10 @@ impl PyProjectToml {
                 license_files.push(relative.portable_display().to_string());
             }
 
-            if let Some(pattern) = license_globs_parsed
+            if let Some((pattern, _)) = license_globs_parsed
                 .iter()
                 .zip(license_globs_matched.iter())
-                .find_map(|(pattern, matched)| (!matched).then_some(pattern))
+                .find(|(_, matched)| !**matched)
             {
                 return Err(ValidationError::LicenseGlobNoMatches {
                     field: "project.license-files".to_string(),

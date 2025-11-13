@@ -772,11 +772,15 @@ fn license_glob_without_matches_errors() -> Result<()> {
         .assert()
         .success();
 
+    project
+        .child("LICENSE.txt")
+        .write_str("permissive license")?;
+
     project.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "missing-license"
         version = "1.0.0"
-        license-files = ["abc"]
+        license-files = ["abc", "LICENSE.txt"]
 
         [build-system]
         requires = ["uv_build>=0.7,<10000"]
