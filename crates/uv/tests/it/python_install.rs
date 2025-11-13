@@ -2679,18 +2679,19 @@ fn python_install_no_cache() {
         "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
     ));
     filters.push((r"releases/download/\d{8}/", "releases/download/[DATE]/"));
+    let offline_cache = context.temp_dir.child("offline-python-cache");
     uv_snapshot!(filters, context
         .python_install()
         .arg("3.12")
-        .arg("--offline"), @r"
+        .arg("--offline")
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, offline_cache.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to install cpython-3.12.12-[PLATFORM]
-      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      Caused by: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in offline-python-cache
     ");
 }
 
@@ -2709,9 +2710,10 @@ fn python_install_emulated_macos() {
     if !arch_status.is_ok_and(|x| x.success()) {
         // Rosetta is not available to run the x86_64 interpreter
         // fail the test in CI, otherwise skip it
-        if env::var("CI").is_ok() {
-            panic!("x86_64 emulation is not available on this CI runner");
-        }
+        assert!(
+            env::var("CI").is_err(),
+            "x86_64 emulation is not available on this CI runner"
+        );
         debug!("Skipping test because x86_64 emulation is not available");
         return;
     }
