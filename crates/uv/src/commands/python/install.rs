@@ -234,6 +234,9 @@ pub(crate) async fn install(
     // Resolve the requests
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
+    // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
+    // have generalized request source tracking instead
+    let mut is_from_python_version_file = false;
     let requests: Vec<_> = if targets.is_empty() {
         if matches!(
             upgrade,
@@ -270,6 +273,7 @@ pub(crate) async fn install(
                 );
             })
             .map(PythonVersionFile::into_versions)
+            .inspect(|_| is_from_python_version_file = true)
             .unwrap_or_else(|| {
                 // If no version file is found and no requests were made
                 // TODO(zanieb): We should consider differentiating between a global Python version
@@ -335,6 +339,14 @@ pub(crate) async fn install(
                 "error: `{source}` only accepts minor versions, got: {}",
                 request.request.to_canonical_string()
             )?;
+            if is_from_python_version_file {
+                writeln!(
+                    printer.stderr(),
+                    "\n{}{} The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                )?;
+            }
             return Ok(ExitStatus::Failure);
         }
     }
@@ -590,10 +602,20 @@ pub(crate) async fn install(
 
     if changelog.installed.is_empty() && errors.is_empty() {
         if is_default_install {
-            writeln!(
-                printer.stderr(),
-                "Python is already installed. Use `uv python install <request>` to install another version.",
-            )?;
+            if matches!(
+                upgrade,
+                PythonUpgrade::Enabled(PythonUpgradeSource::Install)
+            ) {
+                writeln!(
+                    printer.stderr(),
+                    "The default Python installation is already on the latest supported patch release. Use `uv python install <request>` to install another version.",
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "Python is already installed. Use `uv python install <request>` to install another version.",
+                )?;
+            }
         } else if matches!(
             upgrade,
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
