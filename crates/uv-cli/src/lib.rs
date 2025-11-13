@@ -5868,6 +5868,19 @@ pub struct PythonInstallArgs {
     #[arg(long, short)]
     pub force: bool,
 
+    /// Upgrade existing Python installations to the latest patch version.
+    ///
+    /// By default, uv will not upgrade already-installed Python versions to newer patch releases.
+    /// With `--upgrade`, uv will upgrade to the latest available patch version for the specified
+    /// minor version(s).
+    ///
+    /// If the requested versions are not yet installed, uv will install them.
+    ///
+    /// This option is only supported for minor version requests, e.g., `3.12`; uv will exit with an
+    /// error if a patch version, e.g., `3.12.2`, is requested.
+    #[arg(long, short = 'U')]
+    pub upgrade: bool,
+
     /// Use as the default Python version.
     ///
     /// By default, only a `python{major}.{minor}` executable is installed, e.g., `python3.10`. When

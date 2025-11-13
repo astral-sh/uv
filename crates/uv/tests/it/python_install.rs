@@ -1379,7 +1379,8 @@ fn python_install_debug_freethreaded() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_python_download_cache();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13td"), @r"
@@ -2748,6 +2749,7 @@ fn python_install_emulated_macos() {
     if !arch_status.is_ok_and(|x| x.success()) {
         // Rosetta is not available to run the x86_64 interpreter
         // fail the test in CI, otherwise skip it
+        #[allow(clippy::manual_assert)]
         if env::var("CI").is_ok() {
             panic!("x86_64 emulation is not available on this CI runner");
         }
@@ -3772,5 +3774,179 @@ fn python_install_build_version_pypy() {
 
     ----- stderr -----
     error: No download found for request: pypy-3.10-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_install_upgrade() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Provide `--upgrade` as an `install` option without any versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0 in [TIME]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
+    ");
+
+    // Provide `--upgrade` as an `install` option without any versions again!
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    The default Python installation is already on the latest supported patch release. Use `uv python install <request>` to install another version.
+    ");
+
+    // Install an earlier patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
+    ");
+
+    // Ask for an `--upgrade`
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
+    ");
+
+    // Request a patch version with `--upgrade`
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11.4"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv python install --upgrade` only accepts minor versions, got: 3.11.4
+    ");
+
+    // Request a version that isn't installed yet
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.14 in [TIME]
+     + cpython-3.11.14-[PLATFORM] (python3.11)
+    ");
+
+    // Ask for it again
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.11 is already on the latest supported patch release
+    ");
+
+    // Install an outdated version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.9.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.9.5 in [TIME]
+     + cpython-3.9.5-[PLATFORM] (python3.9)
+    ");
+
+    // We shouldn't update it when not relevant
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.11 is already on the latest supported patch release
+    ");
+
+    // Ask for multiple already satisfied versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.10").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    All requested versions already on latest supported patch release
+    ");
+
+    // Mix in an unsatisfied version and a missing one
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.9").arg("3.10").arg("3.11").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.9.25-[PLATFORM] (python3.9)
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+    ");
+}
+
+#[test]
+fn python_install_upgrade_version_file() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Pin to a minor version
+    context.python_pin().arg("3.13").assert().success();
+
+    // Provide `--upgrade` as an `install` option without any versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.9 in [TIME]
+     + cpython-3.13.9-[PLATFORM] (python3.13)
+    ");
+
+    // Provide `--upgrade` as an `install` option without any versions again!
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.13 is already on the latest supported patch release
+    ");
+
+    // Pin to a patch version
+    context.python_pin().arg("3.12.4").assert().success();
+
+    // Provide `--upgrade` as an `install` option without any versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv python install --upgrade` only accepts minor versions, got: 3.12.4
+
+    hint: The version request came from a `.python-version` file; change the patch version in the file to upgrade instead
     ");
 }
