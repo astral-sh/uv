@@ -5965,12 +5965,40 @@ pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
-    #[arg(required = true)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
     #[arg(long, conflicts_with("targets"))]
     pub all: bool,
+
+    /// Uninstall outdated Python versions, keeping the latest patch version for each minor version.
+    ///
+    /// For example, if you have Python 3.11.8, 3.11.10, 3.12.1, and 3.12.5 installed,
+    /// this will remove 3.11.8 and 3.12.1, keeping only 3.11.10 and 3.12.5.
+    ///
+    /// # Examples
+    ///
+    /// Remove all outdated Python versions:
+    /// ```sh
+    /// uv python uninstall --outdated
+    /// ```
+    ///
+    /// Remove outdated versions for a specific minor version:
+    /// ```sh
+    /// uv python uninstall 3.12 --outdated
+    /// ```
+    ///
+    /// Remove outdated PyPy versions:
+    /// ```sh
+    /// uv python uninstall --outdated pypy
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// When a specific patch version is provided (e.g., `3.12.1`), the `--outdated` flag is
+    /// ignored and the exact version is removed regardless of whether it's the latest.
+    #[arg(long, conflicts_with_all(["all"]))]
+    pub outdated: bool,
 }
 
 #[derive(Args)]

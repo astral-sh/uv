@@ -3855,7 +3855,7 @@ Uninstall Python versions
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv python uninstall [OPTIONS] <TARGETS>...
+uv python uninstall [OPTIONS] [TARGETS]...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -3903,7 +3903,15 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-python-uninstall--no-python-downloads"><a href="#uv-python-uninstall--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-uninstall--offline"><a href="#uv-python-uninstall--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-uninstall--project"><a href="#uv-python-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-uninstall--outdated"><a href="#uv-python-uninstall--outdated"><code>--outdated</code></a></dt><dd><p>Uninstall outdated Python versions, keeping the latest patch version for each minor version.</p>
+<p>For example, if you have Python 3.11.8, 3.11.10, 3.12.1, and 3.12.5 installed, this will remove 3.11.8 and 3.12.1, keeping only 3.11.10 and 3.12.5.</p>
+<h1>Examples</h1>
+<p>Remove all outdated Python versions: <code>sh uv python uninstall --outdated </code></p>
+<p>Remove outdated versions for a specific minor version: <code>sh uv python uninstall 3.12 --outdated </code></p>
+<p>Remove outdated PyPy versions: <code>sh uv python uninstall --outdated pypy </code></p>
+<h1>Note</h1>
+<p>When a specific patch version is provided (e.g., <code>3.12.1</code>), the <code>--outdated</code> flag is ignored and the exact version is removed regardless of whether it's the latest.</p>
+</dd><dt id="uv-python-uninstall--project"><a href="#uv-python-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
