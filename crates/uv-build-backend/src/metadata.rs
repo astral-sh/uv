@@ -341,6 +341,98 @@ impl PyProjectToml {
             "2.3"
         };
 
+        let (license, license_expression, license_files) = self.license_metadata(root)?;
+
+        // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
+        let project_urls = self
+            .project
+            .urls
+            .iter()
+            .flatten()
+            .map(|(key, value)| format!("{key}, {value}"))
+            .collect();
+
+        let extras = self
+            .project
+            .optional_dependencies
+            .iter()
+            .flat_map(|optional_dependencies| optional_dependencies.keys())
+            .collect::<Vec<_>>();
+
+        let requires_dist =
+            self.project
+                .dependencies
+                .iter()
+                .flatten()
+                .cloned()
+                .chain(self.project.optional_dependencies.iter().flat_map(
+                    |optional_dependencies| {
+                        optional_dependencies
+                            .iter()
+                            .flat_map(|(extra, requirements)| {
+                                requirements.iter().cloned().map(|mut requirement| {
+                                    requirement.marker.and(MarkerTree::expression(
+                                        MarkerExpression::Extra {
+                                            operator: ExtraOperator::Equal,
+                                            name: MarkerValueExtra::Extra(extra.clone()),
+                                        },
+                                    ));
+                                    requirement
+                                })
+                            })
+                    },
+                ))
+                .collect::<Vec<_>>();
+
+        Ok(Metadata23 {
+            metadata_version: metadata_version.to_string(),
+            name: self.project.name.given.clone(),
+            version: self.project.version.to_string(),
+            // Not supported.
+            platforms: vec![],
+            // Not supported.
+            supported_platforms: vec![],
+            summary,
+            description,
+            description_content_type,
+            keywords: self
+                .project
+                .keywords
+                .as_ref()
+                .map(|keywords| keywords.join(",")),
+            home_page: None,
+            download_url: None,
+            author,
+            author_email,
+            maintainer,
+            maintainer_email,
+            license,
+            license_expression,
+            license_files,
+            classifiers: self.project.classifiers.clone().unwrap_or_default(),
+            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
+            provides_extra: extras.iter().map(ToString::to_string).collect(),
+            // Not commonly set.
+            provides_dist: vec![],
+            // Not supported.
+            obsoletes_dist: vec![],
+            requires_python: self
+                .project
+                .requires_python
+                .as_ref()
+                .map(ToString::to_string),
+            // Not used by other tools, not supported.
+            requires_external: vec![],
+            project_urls,
+            dynamic: vec![],
+        })
+    }
+
+    /// Parse and validate the old (PEP 621) and new (PEP 639) license files.
+    fn license_metadata(
+        &self,
+        root: &Path,
+    ) -> Result<(Option<String>, Option<String>, Vec<String>), Error> {
         // TODO(konsti): Issue a warning on old license metadata once PEP 639 is universal.
         let (license, license_expression, license_files) = if let Some(license_globs) =
             &self.project.license_files
@@ -444,89 +536,7 @@ impl PyProjectToml {
             }
         }
 
-        // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
-        let project_urls = self
-            .project
-            .urls
-            .iter()
-            .flatten()
-            .map(|(key, value)| format!("{key}, {value}"))
-            .collect();
-
-        let extras = self
-            .project
-            .optional_dependencies
-            .iter()
-            .flat_map(|optional_dependencies| optional_dependencies.keys())
-            .collect::<Vec<_>>();
-
-        let requires_dist =
-            self.project
-                .dependencies
-                .iter()
-                .flatten()
-                .cloned()
-                .chain(self.project.optional_dependencies.iter().flat_map(
-                    |optional_dependencies| {
-                        optional_dependencies
-                            .iter()
-                            .flat_map(|(extra, requirements)| {
-                                requirements.iter().cloned().map(|mut requirement| {
-                                    requirement.marker.and(MarkerTree::expression(
-                                        MarkerExpression::Extra {
-                                            operator: ExtraOperator::Equal,
-                                            name: MarkerValueExtra::Extra(extra.clone()),
-                                        },
-                                    ));
-                                    requirement
-                                })
-                            })
-                    },
-                ))
-                .collect::<Vec<_>>();
-
-        Ok(Metadata23 {
-            metadata_version: metadata_version.to_string(),
-            name: self.project.name.given.clone(),
-            version: self.project.version.to_string(),
-            // Not supported.
-            platforms: vec![],
-            // Not supported.
-            supported_platforms: vec![],
-            summary,
-            description,
-            description_content_type,
-            keywords: self
-                .project
-                .keywords
-                .as_ref()
-                .map(|keywords| keywords.join(",")),
-            home_page: None,
-            download_url: None,
-            author,
-            author_email,
-            maintainer,
-            maintainer_email,
-            license,
-            license_expression,
-            license_files,
-            classifiers: self.project.classifiers.clone().unwrap_or_default(),
-            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
-            provides_extra: extras.iter().map(ToString::to_string).collect(),
-            // Not commonly set.
-            provides_dist: vec![],
-            // Not supported.
-            obsoletes_dist: vec![],
-            requires_python: self
-                .project
-                .requires_python
-                .as_ref()
-                .map(ToString::to_string),
-            // Not used by other tools, not supported.
-            requires_external: vec![],
-            project_urls,
-            dynamic: vec![],
-        })
+        Ok((license, license_expression, license_files))
     }
 
     /// Validate and convert the entrypoints in `pyproject.toml`, including console and GUI scripts,
