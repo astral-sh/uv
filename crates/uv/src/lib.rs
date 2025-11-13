@@ -1543,15 +1543,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
-            // TODO(john): If we later want to support `--upgrade`, we need to replace this.
-            let upgrade = false;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
                 args.reinstall,
-                upgrade,
+                args.upgrade,
                 args.bin,
                 args.registry,
                 args.force,
@@ -1573,7 +1571,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
-            let upgrade = true;
+            let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
 
             commands::python_install(
                 &project_dir,
