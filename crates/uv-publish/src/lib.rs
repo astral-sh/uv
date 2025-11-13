@@ -1,5 +1,6 @@
 mod trusted_publishing;
 
+use std::os::macos::raw;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -99,6 +100,8 @@ pub enum PublishPrepareError {
     MultiplePkgInfo(String),
     #[error("Failed to read: `{0}`")]
     Read(String, #[source] io::Error),
+    #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
+    InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
 
 /// Failure in or after (HTTP) transport for a specific file.
@@ -944,9 +947,21 @@ async fn build_upload_request<'a>(
         Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
     form = form.part("content", part);
 
-    if !group.attestations.is_empty() {
-        // TODO: Load attestations into the 'attestations' field.
-        // form = form.part("attestations", Part::text("lol"));
+    let mut attestations = vec![];
+    for attestation_path in &group.attestations {
+        let contents = tokio::fs::read_to_string(&attestation_path).await?;
+        // NOTE: We don't currently validate the interior structure of an attestation beyond being
+        // valid JSON. We could validate it pretty easily in the future.
+        let raw_attestation = serde_json::from_str::<serde_json::Value>(&contents)
+            .map_err(|err| PublishPrepareError::InvalidAttestation(attestation_path.into(), err))?;
+        attestations.push(raw_attestation);
+    }
+
+    if !attestations.is_empty() {
+        // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
+        let attestations_json =
+            serde_json::to_string(&attestations).expect("Round-trip of PEP 740 attestation failed");
+        form = form.text("attestations", attestations_json);
     }
 
     // If we have a username but no password, attach the username to the URL so the authentication
