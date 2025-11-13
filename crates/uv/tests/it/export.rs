@@ -5054,7 +5054,7 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask @ git+https://github.com/pallets/flask.git@2.3.3"]
+        dependencies = ["urllib3 @ git+https://github.com/urllib3/urllib3.git@2.2.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -5092,122 +5092,27 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "blinker-2@1.7.0",
-          "name": "blinker",
-          "version": "1.7.0",
-          "purl": "pkg:pypi/blinker@1.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "click-3@8.1.7",
-          "name": "click",
-          "version": "8.1.7",
-          "purl": "pkg:pypi/click@8.1.7"
-        },
-        {
-          "type": "library",
-          "bom-ref": "colorama-4@0.4.6",
-          "name": "colorama",
-          "version": "0.4.6",
-          "purl": "pkg:pypi/colorama@0.4.6",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "flask-5@2.3.3",
-          "name": "flask",
-          "version": "2.3.3",
-          "purl": "pkg:pypi/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
-        },
-        {
-          "type": "library",
-          "bom-ref": "itsdangerous-6@2.1.2",
-          "name": "itsdangerous",
-          "version": "2.1.2",
-          "purl": "pkg:pypi/itsdangerous@2.1.2"
-        },
-        {
-          "type": "library",
-          "bom-ref": "jinja2-7@3.1.3",
-          "name": "jinja2",
-          "version": "3.1.3",
-          "purl": "pkg:pypi/jinja2@3.1.3"
-        },
-        {
-          "type": "library",
-          "bom-ref": "markupsafe-8@2.1.5",
-          "name": "markupsafe",
-          "version": "2.1.5",
-          "purl": "pkg:pypi/markupsafe@2.1.5"
-        },
-        {
-          "type": "library",
-          "bom-ref": "werkzeug-9@3.0.1",
-          "name": "werkzeug",
-          "version": "3.0.1",
-          "purl": "pkg:pypi/werkzeug@3.0.1"
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0?vcs_url=https://github.com/urllib3/urllib3.git%3Frev%3D2.2.0%2304df048cf4b1c3790c56e26c659db764aad62d6f"
         }
       ],
       "dependencies": [
         {
-          "ref": "blinker-2@1.7.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "click-3@8.1.7",
-          "dependsOn": [
-            "colorama-4@0.4.6"
-          ]
-        },
-        {
-          "ref": "colorama-4@0.4.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "flask-5@2.3.3",
-          "dependsOn": [
-            "blinker-2@1.7.0",
-            "click-3@8.1.7",
-            "itsdangerous-6@2.1.2",
-            "jinja2-7@3.1.3",
-            "werkzeug-9@3.0.1"
-          ]
-        },
-        {
-          "ref": "itsdangerous-6@2.1.2",
-          "dependsOn": []
-        },
-        {
-          "ref": "jinja2-7@3.1.3",
-          "dependsOn": [
-            "markupsafe-8@2.1.5"
-          ]
-        },
-        {
-          "ref": "markupsafe-8@2.1.5",
-          "dependsOn": []
-        },
-        {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "flask-5@2.3.3"
+            "urllib3-2@2.2.0"
           ]
         },
         {
-          "ref": "werkzeug-9@3.0.1",
-          "dependsOn": [
-            "markupsafe-8@2.1.5"
-          ]
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
         }
       ]
     }
     ----- stderr -----
-    Resolved 9 packages in [TIME]
+    Resolved 2 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5289,9 +5194,9 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests==2.31.0",  # PyPI registry package
-            "flask @ git+https://github.com/pallets/flask.git@2.3.3",  # Git package
-            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"  # Direct URL package
+            "iniconfig==2.0.0",  # PyPI registry package
+            "urllib3 @ git+https://github.com/urllib3/urllib3.git@2.2.0",  # Git package
+            "idna @ https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"  # Direct URL package
         ]
 
         [build-system]
@@ -5330,195 +5235,51 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "blinker-2@1.7.0",
-          "name": "blinker",
-          "version": "1.7.0",
-          "purl": "pkg:pypi/blinker@1.7.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "certifi-3@2024.2.2",
-          "name": "certifi",
-          "version": "2024.2.2",
-          "purl": "pkg:pypi/certifi@2024.2.2"
-        },
-        {
-          "type": "library",
-          "bom-ref": "charset-normalizer-4@3.3.2",
-          "name": "charset-normalizer",
-          "version": "3.3.2",
-          "purl": "pkg:pypi/charset-normalizer@3.3.2"
-        },
-        {
-          "type": "library",
-          "bom-ref": "click-5@8.1.7",
-          "name": "click",
-          "version": "8.1.7",
-          "purl": "pkg:pypi/click@8.1.7"
-        },
-        {
-          "type": "library",
-          "bom-ref": "colorama-6@0.4.6",
-          "name": "colorama",
-          "version": "0.4.6",
-          "purl": "pkg:pypi/colorama@0.4.6",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "flask-7@2.3.3",
-          "name": "flask",
-          "version": "2.3.3",
-          "purl": "pkg:pypi/flask@2.3.3?vcs_url=https://github.com/pallets/flask.git%3Frev%3D2.3.3%233205b53c7cf69d17fee49cac6b84978175b7dd73"
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-8@3.6",
+          "bom-ref": "idna-2@3.6",
           "name": "idna",
           "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6"
+          "purl": "pkg:pypi/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
         },
         {
           "type": "library",
-          "bom-ref": "iniconfig-9@2.0.0",
+          "bom-ref": "iniconfig-3@2.0.0",
           "name": "iniconfig",
           "version": "2.0.0",
-          "purl": "pkg:pypi/iniconfig@2.0.0?download_url=https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl"
+          "purl": "pkg:pypi/iniconfig@2.0.0"
         },
         {
           "type": "library",
-          "bom-ref": "itsdangerous-10@2.1.2",
-          "name": "itsdangerous",
-          "version": "2.1.2",
-          "purl": "pkg:pypi/itsdangerous@2.1.2"
-        },
-        {
-          "type": "library",
-          "bom-ref": "jinja2-11@3.1.3",
-          "name": "jinja2",
-          "version": "3.1.3",
-          "purl": "pkg:pypi/jinja2@3.1.3"
-        },
-        {
-          "type": "library",
-          "bom-ref": "markupsafe-12@2.1.5",
-          "name": "markupsafe",
-          "version": "2.1.5",
-          "purl": "pkg:pypi/markupsafe@2.1.5"
-        },
-        {
-          "type": "library",
-          "bom-ref": "requests-13@2.31.0",
-          "name": "requests",
-          "version": "2.31.0",
-          "purl": "pkg:pypi/requests@2.31.0"
-        },
-        {
-          "type": "library",
-          "bom-ref": "urllib3-14@2.2.1",
+          "bom-ref": "urllib3-4@2.2.0",
           "name": "urllib3",
-          "version": "2.2.1",
-          "purl": "pkg:pypi/urllib3@2.2.1"
-        },
-        {
-          "type": "library",
-          "bom-ref": "werkzeug-15@3.0.1",
-          "name": "werkzeug",
-          "version": "3.0.1",
-          "purl": "pkg:pypi/werkzeug@3.0.1"
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0?vcs_url=https://github.com/urllib3/urllib3.git%3Frev%3D2.2.0%2304df048cf4b1c3790c56e26c659db764aad62d6f"
         }
       ],
       "dependencies": [
         {
-          "ref": "blinker-2@1.7.0",
+          "ref": "idna-2@3.6",
           "dependsOn": []
         },
         {
-          "ref": "certifi-3@2024.2.2",
-          "dependsOn": []
-        },
-        {
-          "ref": "charset-normalizer-4@3.3.2",
-          "dependsOn": []
-        },
-        {
-          "ref": "click-5@8.1.7",
-          "dependsOn": [
-            "colorama-6@0.4.6"
-          ]
-        },
-        {
-          "ref": "colorama-6@0.4.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "flask-7@2.3.3",
-          "dependsOn": [
-            "blinker-2@1.7.0",
-            "click-5@8.1.7",
-            "itsdangerous-10@2.1.2",
-            "jinja2-11@3.1.3",
-            "werkzeug-15@3.0.1"
-          ]
-        },
-        {
-          "ref": "idna-8@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "iniconfig-9@2.0.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "itsdangerous-10@2.1.2",
-          "dependsOn": []
-        },
-        {
-          "ref": "jinja2-11@3.1.3",
-          "dependsOn": [
-            "markupsafe-12@2.1.5"
-          ]
-        },
-        {
-          "ref": "markupsafe-12@2.1.5",
+          "ref": "iniconfig-3@2.0.0",
           "dependsOn": []
         },
         {
           "ref": "mixed-project-1@0.1.0",
           "dependsOn": [
-            "flask-7@2.3.3",
-            "iniconfig-9@2.0.0",
-            "requests-13@2.31.0"
+            "idna-2@3.6",
+            "iniconfig-3@2.0.0",
+            "urllib3-4@2.2.0"
           ]
         },
         {
-          "ref": "requests-13@2.31.0",
-          "dependsOn": [
-            "certifi-3@2024.2.2",
-            "charset-normalizer-4@3.3.2",
-            "idna-8@3.6",
-            "urllib3-14@2.2.1"
-          ]
-        },
-        {
-          "ref": "urllib3-14@2.2.1",
+          "ref": "urllib3-4@2.2.0",
           "dependsOn": []
-        },
-        {
-          "ref": "werkzeug-15@3.0.1",
-          "dependsOn": [
-            "markupsafe-12@2.1.5"
-          ]
         }
       ]
     }
     ----- stderr -----
-    Resolved 15 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -5536,11 +5297,11 @@ fn cyclonedx_export_project_extra() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["typing-extensions"]
+        dependencies = ["typing-extensions==4.10.0"]
 
         [project.optional-dependencies]
         url = ["urllib3==2.2.0"]
-        pytest = ["iniconfig"]
+        pytest = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -5616,11 +5377,11 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["typing-extensions"]
+        dependencies = ["typing-extensions==4.10.0"]
 
         [project.optional-dependencies]
         url = ["urllib3==2.2.0"]
-        pytest = ["iniconfig"]
+        pytest = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -5742,7 +5503,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -5901,7 +5662,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -5979,6 +5740,10 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["child"]
 
+        [project.optional-dependencies]
+        url = ["urllib3==2.2.0"]
+        test = ["iniconfig==2.0.0"]
+
         [tool.uv.workspace]
         members = ["child"]
 
@@ -5998,11 +5763,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["typing-extensions"]
-
-        [project.optional-dependencies]
-        url = ["urllib3==2.2.0"]
-        test = ["iniconfig"]
+        dependencies = ["typing-extensions==4.10.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6122,27 +5883,51 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "typing-extensions-3@4.10.0",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-4@4.10.0",
           "name": "typing-extensions",
           "version": "4.10.0",
           "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-5@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
       "dependencies": [
         {
           "ref": "child-2@0.1.0",
           "dependsOn": [
-            "typing-extensions-3@4.10.0"
+            "typing-extensions-4@4.10.0"
           ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "child-2@0.1.0"
+            "child-2@0.1.0",
+            "iniconfig-3@2.0.0",
+            "urllib3-5@2.2.0"
           ]
         },
         {
-          "ref": "typing-extensions-3@4.10.0",
+          "ref": "typing-extensions-4@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-5@2.2.0",
           "dependsOn": []
         }
       ]
@@ -6187,7 +5972,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6336,7 +6121,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6351,7 +6136,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         name = "child2"
         version = "0.2.0"
         requires-python = ">=3.12"
-        dependencies = ["sniffio"]
+        dependencies = ["sniffio==1.3.1"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6520,7 +6305,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["child2", "iniconfig>=2"]
+        dependencies = ["child2", "iniconfig==2.0.0"]
 
         [tool.uv.sources]
         child2 = { workspace = true }
@@ -6538,7 +6323,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
         name = "child2"
         version = "0.2.0"
         requires-python = ">=3.12"
-        dependencies = ["sniffio"]
+        dependencies = ["sniffio==1.3.1"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6674,7 +6459,10 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["urllib3 ; sys_platform == 'darwin'", "iniconfig"]
+        dependencies = [
+            "urllib3==2.2.1 ; sys_platform == 'darwin'",
+            "iniconfig==2.0.0",
+        ]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6769,8 +6557,8 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.10"
         dependencies = [
-            "trio ; python_version > '3.11'",
-            "trio ; sys_platform == 'win32'",
+            "cryptography==42.0.5 ; python_version > '3.11'",
+            "cryptography==42.0.5 ; sys_platform == 'win32'",
         ]
 
         [build-system]
@@ -6809,49 +6597,23 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "attrs-2@23.2.0",
-          "name": "attrs",
-          "version": "23.2.0",
-          "purl": "pkg:pypi/attrs@23.2.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "cffi-3@1.16.0",
+          "bom-ref": "cffi-2@1.16.0",
           "name": "cffi",
           "version": "1.16.0",
           "purl": "pkg:pypi/cffi@1.16.0",
           "properties": [
             {
               "name": "uv:package:marker",
-              "value": "(python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32')"
+              "value": "(python_full_version >= '3.12' and platform_python_implementation != 'PyPy') or (platform_python_implementation != 'PyPy' and sys_platform == 'win32')"
             }
           ]
         },
         {
           "type": "library",
-          "bom-ref": "exceptiongroup-4@1.2.0",
-          "name": "exceptiongroup",
-          "version": "1.2.0",
-          "purl": "pkg:pypi/exceptiongroup@1.2.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version < '3.11' and sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "idna-5@3.6",
-          "name": "idna",
-          "version": "3.6",
-          "purl": "pkg:pypi/idna@3.6",
+          "bom-ref": "cryptography-3@42.0.5",
+          "name": "cryptography",
+          "version": "42.0.5",
+          "purl": "pkg:pypi/cryptography@42.0.5",
           "properties": [
             {
               "name": "uv:package:marker",
@@ -6861,129 +6623,45 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
         },
         {
           "type": "library",
-          "bom-ref": "outcome-6@1.3.0.post0",
-          "name": "outcome",
-          "version": "1.3.0.post0",
-          "purl": "pkg:pypi/outcome@1.3.0.post0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "pycparser-7@2.21",
+          "bom-ref": "pycparser-4@2.21",
           "name": "pycparser",
           "version": "2.21",
           "purl": "pkg:pypi/pycparser@2.21",
           "properties": [
             {
               "name": "uv:package:marker",
-              "value": "(python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32')"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "sniffio-8@1.3.1",
-          "name": "sniffio",
-          "version": "1.3.1",
-          "purl": "pkg:pypi/sniffio@1.3.1",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "sortedcontainers-9@2.4.0",
-          "name": "sortedcontainers",
-          "version": "2.4.0",
-          "purl": "pkg:pypi/sortedcontainers@2.4.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
-            }
-          ]
-        },
-        {
-          "type": "library",
-          "bom-ref": "trio-10@0.25.0",
-          "name": "trio",
-          "version": "0.25.0",
-          "purl": "pkg:pypi/trio@0.25.0",
-          "properties": [
-            {
-              "name": "uv:package:marker",
-              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+              "value": "(python_full_version >= '3.12' and platform_python_implementation != 'PyPy') or (platform_python_implementation != 'PyPy' and sys_platform == 'win32')"
             }
           ]
         }
       ],
       "dependencies": [
         {
-          "ref": "attrs-2@23.2.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "cffi-3@1.16.0",
+          "ref": "cffi-2@1.16.0",
           "dependsOn": [
-            "pycparser-7@2.21"
+            "pycparser-4@2.21"
           ]
         },
         {
-          "ref": "exceptiongroup-4@1.2.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "idna-5@3.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "outcome-6@1.3.0.post0",
+          "ref": "cryptography-3@42.0.5",
           "dependsOn": [
-            "attrs-2@23.2.0"
+            "cffi-2@1.16.0"
           ]
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "trio-10@0.25.0"
+            "cryptography-3@42.0.5"
           ]
         },
         {
-          "ref": "pycparser-7@2.21",
+          "ref": "pycparser-4@2.21",
           "dependsOn": []
-        },
-        {
-          "ref": "sniffio-8@1.3.1",
-          "dependsOn": []
-        },
-        {
-          "ref": "sortedcontainers-9@2.4.0",
-          "dependsOn": []
-        },
-        {
-          "ref": "trio-10@0.25.0",
-          "dependsOn": [
-            "attrs-2@23.2.0",
-            "cffi-3@1.16.0",
-            "exceptiongroup-4@1.2.0",
-            "idna-5@3.6",
-            "outcome-6@1.3.0.post0",
-            "sniffio-8@1.3.1",
-            "sortedcontainers-9@2.4.0"
-          ]
         }
       ]
     }
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 4 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7001,7 +6679,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask[dotenv]"]
+        dependencies = ["cryptography[ssh]==42.0.5"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -7039,134 +6717,77 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
       "components": [
         {
           "type": "library",
-          "bom-ref": "blinker-2@1.7.0",
-          "name": "blinker",
-          "version": "1.7.0",
-          "purl": "pkg:pypi/blinker@1.7.0"
+          "bom-ref": "bcrypt-2@4.1.2",
+          "name": "bcrypt",
+          "version": "4.1.2",
+          "purl": "pkg:pypi/bcrypt@4.1.2"
         },
         {
           "type": "library",
-          "bom-ref": "click-3@8.1.7",
-          "name": "click",
-          "version": "8.1.7",
-          "purl": "pkg:pypi/click@8.1.7"
-        },
-        {
-          "type": "library",
-          "bom-ref": "colorama-4@0.4.6",
-          "name": "colorama",
-          "version": "0.4.6",
-          "purl": "pkg:pypi/colorama@0.4.6",
+          "bom-ref": "cffi-3@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
           "properties": [
             {
               "name": "uv:package:marker",
-              "value": "sys_platform == 'win32'"
+              "value": "platform_python_implementation != 'PyPy'"
             }
           ]
         },
         {
           "type": "library",
-          "bom-ref": "flask-5@3.0.2",
-          "name": "flask",
-          "version": "3.0.2",
-          "purl": "pkg:pypi/flask@3.0.2"
+          "bom-ref": "cryptography-4@42.0.5",
+          "name": "cryptography",
+          "version": "42.0.5",
+          "purl": "pkg:pypi/cryptography@42.0.5"
         },
         {
           "type": "library",
-          "bom-ref": "itsdangerous-6@2.1.2",
-          "name": "itsdangerous",
-          "version": "2.1.2",
-          "purl": "pkg:pypi/itsdangerous@2.1.2"
-        },
-        {
-          "type": "library",
-          "bom-ref": "jinja2-7@3.1.3",
-          "name": "jinja2",
-          "version": "3.1.3",
-          "purl": "pkg:pypi/jinja2@3.1.3"
-        },
-        {
-          "type": "library",
-          "bom-ref": "markupsafe-8@2.1.5",
-          "name": "markupsafe",
-          "version": "2.1.5",
-          "purl": "pkg:pypi/markupsafe@2.1.5"
-        },
-        {
-          "type": "library",
-          "bom-ref": "python-dotenv-9@1.0.1",
-          "name": "python-dotenv",
-          "version": "1.0.1",
-          "purl": "pkg:pypi/python-dotenv@1.0.1"
-        },
-        {
-          "type": "library",
-          "bom-ref": "werkzeug-10@3.0.1",
-          "name": "werkzeug",
-          "version": "3.0.1",
-          "purl": "pkg:pypi/werkzeug@3.0.1"
+          "bom-ref": "pycparser-5@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "platform_python_implementation != 'PyPy'"
+            }
+          ]
         }
       ],
       "dependencies": [
         {
-          "ref": "blinker-2@1.7.0",
+          "ref": "bcrypt-2@4.1.2",
           "dependsOn": []
         },
         {
-          "ref": "click-3@8.1.7",
+          "ref": "cffi-3@1.16.0",
           "dependsOn": [
-            "colorama-4@0.4.6"
+            "pycparser-5@2.21"
           ]
         },
         {
-          "ref": "colorama-4@0.4.6",
-          "dependsOn": []
-        },
-        {
-          "ref": "flask-5@3.0.2",
+          "ref": "cryptography-4@42.0.5",
           "dependsOn": [
-            "blinker-2@1.7.0",
-            "click-3@8.1.7",
-            "itsdangerous-6@2.1.2",
-            "jinja2-7@3.1.3",
-            "python-dotenv-9@1.0.1",
-            "werkzeug-10@3.0.1"
+            "bcrypt-2@4.1.2",
+            "cffi-3@1.16.0"
           ]
-        },
-        {
-          "ref": "itsdangerous-6@2.1.2",
-          "dependsOn": []
-        },
-        {
-          "ref": "jinja2-7@3.1.3",
-          "dependsOn": [
-            "markupsafe-8@2.1.5"
-          ]
-        },
-        {
-          "ref": "markupsafe-8@2.1.5",
-          "dependsOn": []
         },
         {
           "ref": "project-1@0.1.0",
           "dependsOn": [
-            "flask-5@3.0.2"
+            "cryptography-4@42.0.5"
           ]
         },
         {
-          "ref": "python-dotenv-9@1.0.1",
+          "ref": "pycparser-5@2.21",
           "dependsOn": []
-        },
-        {
-          "ref": "werkzeug-10@3.0.1",
-          "dependsOn": [
-            "markupsafe-8@2.1.5"
-          ]
         }
       ]
     }
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 5 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -7185,23 +6806,12 @@ fn cyclonedx_export_prune() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "jupyter-client"
+            "jupyter-client==8.6.1"
         ]
     "#,
     )?;
 
     context.lock().assert().success();
-
-    // project v0.1.0
-    // └── jupyter-client v8.6.1
-    //     ├── jupyter-core v5.7.2
-    //     │   ├── platformdirs v4.2.0
-    //     │   └── traitlets v5.14.2
-    //     ├── python-dateutil v2.9.0.post0
-    //     │   └── six v1.16.0
-    //     ├── pyzmq v25.1.2
-    //     ├── tornado v6.4
-    //     └── traitlets v5.14.2
 
     uv_snapshot!(
         context.filters(),
@@ -7377,12 +6987,12 @@ fn cyclonedx_export_group() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["typing-extensions"]
+        dependencies = ["typing-extensions==4.10.0"]
 
         [dependency-groups]
-        foo = ["urllib3 ; sys_platform == 'darwin'"]
-        bar = ["iniconfig"]
-        dev = ["sniffio"]
+        foo = ["urllib3==2.2.1 ; sys_platform == 'darwin'"]
+        bar = ["iniconfig==2.0.0"]
+        dev = ["sniffio==1.3.1"]
         "#,
     )?;
 
@@ -7597,7 +7207,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
         members = []
 
         [dependency-groups]
-        url = ["urllib3"]
+        url = ["urllib3==2.2.1"]
         "#,
     )?;
 
@@ -7709,7 +7319,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -7880,7 +7490,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
         name = "dependency"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>=2"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -8180,10 +7790,10 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["typing-extensions"]
+        dependencies = ["typing-extensions==4.10.0"]
 
         [tool.uv]
-        dev-dependencies = ["urllib3"]
+        dev-dependencies = ["urllib3==2.2.1"]
 
         [build-system]
         requires = ["setuptools>=42"]
