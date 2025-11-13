@@ -152,8 +152,11 @@ impl PyProjectToml {
         &self.project.version
     }
 
-    pub(crate) fn parse(contents: &str) -> Result<Self, Error> {
-        Ok(toml::from_str(contents)?)
+    pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
+        let contents = fs_err::read_to_string(path)?;
+        let pyproject_toml =
+            toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
+        Ok(pyproject_toml)
     }
 
     pub(crate) fn readme(&self) -> Option<&Readme> {
@@ -909,7 +912,7 @@ mod tests {
             requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#;
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let temp_dir = TempDir::new().unwrap();
 
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
@@ -994,7 +997,7 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
@@ -1088,7 +1091,7 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r"
@@ -1180,7 +1183,7 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
@@ -1241,7 +1244,7 @@ mod tests {
     #[test]
     fn build_system_valid() {
         let contents = extend_project("");
-        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @""
@@ -1259,7 +1262,7 @@ mod tests {
             requires = ["uv_build"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
@@ -1277,7 +1280,7 @@ mod tests {
             requires = ["uv_build>=0.4.15,<0.5.0", "wheel"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
@@ -1295,7 +1298,7 @@ mod tests {
             requires = ["setuptools"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
@@ -1313,7 +1316,7 @@ mod tests {
             requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "setuptools"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
@@ -1324,7 +1327,7 @@ mod tests {
     fn minimal() {
         let contents = extend_project("");
 
-        let metadata = PyProjectToml::parse(&contents)
+        let metadata = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
@@ -1343,15 +1346,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents).unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
-          Caused by: TOML parse error at line 4, column 10
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(format_err(err), @r#"
+        TOML parse error at line 4, column 10
           |
         4 | readme = { path = "Readme.md" }
           |          ^^^^^^^^^^^^^^^^^^^^^^
         data did not match any variant of untagged enum Readme
-        "###);
+        "#);
     }
 
     #[test]
@@ -1361,7 +1363,7 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
@@ -1383,14 +1385,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @r"
+        Invalid project metadata
           Caused by: `project.description` must be a single line
-        "###);
+        ");
     }
 
     #[test]
@@ -1401,14 +1403,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @r"
+        Invalid project metadata
           Caused by: When `project.license-files` is defined, `project.license` must be an SPDX expression string
-        "###);
+        ");
     }
 
     #[test]
@@ -1417,7 +1419,7 @@ mod tests {
             license = "MIT OR Apache-2.0"
         "#
         });
-        let metadata = PyProjectToml::parse(&contents)
+        let metadata = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
@@ -1435,13 +1437,13 @@ mod tests {
             license = "MIT XOR Apache-2"
         "#
         });
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
         assert_snapshot!(format_err(err), @r"
-        Invalid pyproject.toml
+        Invalid project metadata
           Caused by: `project.license` is not a valid SPDX expression: MIT XOR Apache-2
           Caused by: MIT XOR Apache-2
             ^^^ unknown term
@@ -1455,18 +1457,18 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @r"
+        Invalid project metadata
           Caused by: Dynamic metadata is not supported
-        "###);
+        ");
     }
 
     fn script_error(contents: &str) -> String {
-        let err = PyProjectToml::parse(contents)
+        let err = toml::from_str::<PyProjectToml>(contents)
             .unwrap()
             .to_entry_points()
             .unwrap_err();
