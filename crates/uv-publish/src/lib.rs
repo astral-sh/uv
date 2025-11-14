@@ -245,7 +245,7 @@ impl PublishSendError {
 /// Represents a single "to-be-uploaded" distribution, alone with zero
 /// or more attestations that will be uploaded alongside it.
 #[derive(Debug)]
-pub struct UploadGroup {
+pub struct UploadDistribution {
     /// The path to the main distribution file to upload.
     pub file: PathBuf,
     /// The raw filename of the main distribution file.
@@ -276,42 +276,39 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
     Ok(files.into_iter().collect())
 }
 
-/// Given a flat list of input files, merge them into upload groups.
-fn group_files(files: Vec<PathBuf>) -> Vec<UploadGroup> {
-    static ATTESTATION_PATTERN: std::sync::LazyLock<glob::Pattern> =
-        std::sync::LazyLock::new(|| glob::Pattern::new("*.*.attestation").unwrap());
-
+/// Given a flat list of input files, merge them into a list of [`UploadDistribution`]s.
+fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
     let mut groups = FxHashMap::default();
     let mut attestations_by_dist = FxHashMap::default();
     for file in files {
-        if ATTESTATION_PATTERN.matches_path(&file) {
+        let Some(filename) = file
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+
+        let mut filename_parts = filename.rsplitn(3, '.');
+        if filename_parts.next() == Some("attestation")
+            && let Some(_) = filename_parts.next()
+            && let Some(dist_name) = filename_parts.next()
+        {
             // Attestations are named as `<dist>.<type>.attestation`, e.g.
             // `foo-1.2.3.tar.gz.publish.attestation`.
             // We use this to build up a map of `dist -> [attestations]`
             // for subsequent merging.
-            let Some(attestation_filename) = file
-                .file_name()
-                .and_then(|filename| filename.to_str())
-                .map(ToString::to_string)
-            else {
-                continue;
-            };
-
-            let dist_name = attestation_filename.rsplitn(3, '.').nth(2).unwrap();
+            debug!(
+                "Found attestation for distribution: `{}` -> `{}`",
+                file.user_display(),
+                dist_name
+            );
 
             attestations_by_dist
                 .entry(dist_name.to_string())
                 .or_insert_with(Vec::new)
                 .push(file);
         } else {
-            let Some(filename) = file
-                .file_name()
-                .and_then(|filename| filename.to_str())
-                .map(ToString::to_string)
-            else {
-                continue;
-            };
-
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
                 // I've never seen these in upper case
@@ -334,7 +331,7 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadGroup> {
 
             groups.insert(
                 filename.clone(),
-                UploadGroup {
+                UploadDistribution {
                     file,
                     raw_filename: filename,
                     filename: dist_filename,
@@ -363,7 +360,9 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadGroup> {
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
 #[allow(clippy::result_large_err)]
-pub fn group_files_for_publishing(paths: Vec<String>) -> Result<Vec<UploadGroup>, PublishError> {
+pub fn group_files_for_publishing(
+    paths: Vec<String>,
+) -> Result<Vec<UploadDistribution>, PublishError> {
     Ok(group_files(unroll_paths(paths)?))
 }
 
@@ -448,7 +447,7 @@ pub async fn check_trusted_publishing(
 ///
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
-    group: &UploadGroup,
+    group: &UploadDistribution,
     form_metadata: &FormMetadata,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -910,7 +909,7 @@ impl<'a> IntoIterator for &'a FormMetadata {
 ///
 /// Returns the [`RequestBuilder`] and the reporter progress bar ID.
 async fn build_upload_request<'a>(
-    group: &UploadGroup,
+    group: &UploadDistribution,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
     credentials: &Credentials,
@@ -1130,7 +1129,7 @@ mod tests {
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{FormMetadata, Reporter, UploadGroup, build_upload_request, group_files};
+    use crate::{FormMetadata, Reporter, UploadDistribution, build_upload_request, group_files};
 
     struct DummyReporter;
 
@@ -1184,7 +1183,7 @@ mod tests {
 
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadGroup {
+                UploadDistribution {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1207,7 +1206,7 @@ mod tests {
                     ),
                     attestations: [],
                 },
-                UploadGroup {
+                UploadDistribution {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1248,7 +1247,7 @@ mod tests {
 
                     assert_debug_snapshot!(groups, @r#"
                     [
-                        UploadGroup {
+                        UploadDistribution {
                             file: "dist/acme-1.2.3-py3-none-any.whl",
                             raw_filename: "acme-1.2.3-py3-none-any.whl",
                             filename: WheelFilename(
@@ -1275,7 +1274,7 @@ mod tests {
                                 "dist/acme-1.2.3-py3-none-any.whl.publish.attestation",
                             ],
                         },
-                        UploadGroup {
+                        UploadDistribution {
                             file: "dist/acme-1.2.3.tar.gz",
                             raw_filename: "acme-1.2.3.tar.gz",
                             filename: SourceDistFilename(
@@ -1315,7 +1314,7 @@ mod tests {
             let groups = group_files(dists.iter().map(PathBuf::from).collect());
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadGroup {
+                UploadDistribution {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1340,7 +1339,7 @@ mod tests {
                         "dist/acme-1.2.3-py3-none-any.whl.build.attestation",
                     ],
                 },
-                UploadGroup {
+                UploadDistribution {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1369,7 +1368,7 @@ mod tests {
             let file = PathBuf::from("../../scripts/links/").join(raw_filename);
             let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-            UploadGroup {
+            UploadDistribution {
                 file,
                 raw_filename: raw_filename.to_string(),
                 filename,
@@ -1491,7 +1490,7 @@ mod tests {
             let file = PathBuf::from("../../scripts/links/").join(raw_filename);
             let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-            UploadGroup {
+            UploadDistribution {
                 file,
                 raw_filename: raw_filename.to_string(),
                 filename,
