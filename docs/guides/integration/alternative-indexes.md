@@ -88,7 +88,7 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=VssSessionToken
     setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
     Similarly, the username for the index can be added directly to the index URL.
-    
+
     Environment variable credentials (`UV_INDEX_<name>_USERNAME` and `UV_INDEX_<name>_PASSWORD`)
     will always override any credentials embedded in the index URL, making it easy to use keyring
     locally (e.g., with `VssSessionToken@` in the URL) while using explicit tokens in CI/CD
