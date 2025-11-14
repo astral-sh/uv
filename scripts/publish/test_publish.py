@@ -554,8 +554,7 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     elif target == "pyx-token":
         extra_args = []
         env = {
-            "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
-            # We also need to give uv read access.
+            # We use UV_API_KEY because it provides both publish access and read access.
             "UV_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
         }
     else:
