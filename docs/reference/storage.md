@@ -1,116 +1,200 @@
 # Storage
 
-uv persists data in several locations on your system.
+## Storage directories
 
-## Directory Strategies
+uv uses the following high-level directories for storage.
 
-For determining where to store different types of data, uv follows the
+For each location, uv checks for the existence of environment variables in the given order and uses
+the first path found.
+
+The paths of storage directories are platform-specific. uv follows the
 [XDG](https://specifications.freedesktop.org/basedir-spec/latest/) conventions on Linux and macOS
-and the platform defaults on Windows, with XDG paths where Windows does not have defaults.
-Generally, it's best to configure these rather than each uv-specific storage location.
+and the [Known Folder](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders) scheme
+on Windows.
 
-Here's a summary of the locations uv uses on each platform:
+### Temporary directory
 
-| Purpose                    | Unix Default                                                                                                                                      | Windows Default                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Temporary files and caches | `$XDG_CACHE_HOME/uv` or `~/.cache/uv` if `XDG_CACHE_HOME` is not set                                                                              | `%LOCALAPPDATA%\uv\cache`                                                                                                                       |
-| Persistent data            | `$XDG_DATA_HOME/uv`, or `~/.local/share/uv` if `XDG_DATA_HOME` is not set, or `.uv` in the current directory if the home directory is unavailable | `%APPDATA%\uv`, unless the legacy `%APPDATA%\uv\data` exists; if the home directory is unavailable, then `.uv` in the current directory is used |
-| User configuration files   | `$XDG_CONFIG_HOME/uv` or `~/.config/uv` if `XDG_CONFIG_HOME` is not set                                                                           | `%APPDATA%\uv`                                                                                                                                  |
-| System configuration files | `$XDG_CONFIG_DIRS/uv` or `/etc/uv` if `XDG_CONFIG_DIRS` is not set                                                                                | `%PROGRAMDATA%\uv`                                                                                                                              |
-| Executables                | `$XDG_BIN_HOME`, or `$XDG_DATA_HOME/../bin` if the former is not set, or `~/.local/bin` if `XDG_DATA_HOME` is also not set                        | same as on Unix                                                                                                                                 |
-| Environment                | `.venv` in the project or workspace directory                                                                                                     | same as on Unix                                                                                                                                 |
+The temporary directory is used for ephemeral data.
 
-## Caching
+=== "Unix"
+
+    - `$TMPDIR`
+    - `/tmp`
+
+=== "Windows"
+
+    - `%TMP`
+    - `%TEMP`
+    - `%USERPROFILE`
+
+### Cache directory
+
+The cache directory is used for data that is disposable, but is useful to be long-lived.
+
+=== "Unix"
+
+    - `$XDG_CACHE_HOME/uv`
+    - `$HOME/.cache/uv`
+
+=== "Windows"
+
+    - `%LOCALAPPDATA%\uv\cache`
+    - `FOLDERID_LocalAppData\uv\cache`
+
+### Persistent data directory
+
+The persistent data directory is used for non-disposable data.
+
+=== "Unix"
+
+    - `$XDG_DATA_HOME/uv`
+    - `$HOME/.local/share/uv`
+    - `$PWD/.uv`
+
+=== "Windows"
+
+    - `%APPDATA%\uv\data`
+    - `.\.uv`
+
+### Configuration directories
+
+The configuration directories are used to store changes to uv's settings.
+
+User-level configuration
+
+=== "Unix"
+
+    - `$XDG_CONFIG_HOME/uv`
+    - `$HOME/.config/uv`
+
+=== "Windows"
+
+    - `%APPDATA%\uv`
+    - `FOLDERID_RoamingAppData\uv`
+
+System-level configuration
+
+=== "Unix"
+
+    - `$XDG_CONFIG_DIRS/uv`
+    - `/etc/uv`
+
+=== "Windows"
+
+    - `%PROGRAMDATA%\uv`
+    - `FOLDERID_AppDataProgramData\uv`
+
+### Executable directory
+
+The executable directory is used to store files that can be run by the user, i.e., a directory that
+should be on the `PATH`.
+
+=== "Unix"
+
+    - `$XDG_BIN_HOME`
+    - `$XDG_DATA_HOME/../bin`
+    - `$HOME/.local/bin`
+
+=== "Windows"
+
+    - `%XDG_BIN_HOME%`
+    - `%XDG_DATA_HOME%\..\bin`
+    - `%USERPROFILE%\.local\bin`©
+
+## Types of data
+
+### Dependency cache
 
 uv uses a local cache to avoid re-downloading and re-building dependencies.
 
-By default, the cache is stored according to [the table above](#directory-strategies), and can be
-overridden via command line arguments, environment variables, or settings as detailed in
-[the cache documentation](../concepts/cache.md#cache-directory).
+By default, the cache is stored in the [cache directory](#cache-directory) but it can be overridden
+via command line arguments, environment variables, or settings as detailed in
+[the cache documentation](../concepts/cache.md#cache-directory). When the cache is disabled, the
+cache will be stored in a [temporary directory](#temporary-directory).
 
 Use `uv cache dir` to show the current cache directory path.
 
-It is important for performance for the cache directory to be on the same filesystem as the
-[virtual environments](#project-environments) uv operates on.
+!!! important
 
-## Python versions
+    For optimal performance, the cache directory needs to be on the same filesystem as virtual
+    environments.
 
-uv can download and manage Python versions.
+### Python versions
 
-By default, Python versions are stored as persistent data according to
-[the table above](#directory-strategies), in a `python/` subdirectory, e.g.,
-`~/.local/share/uv/python`.
+uv can install managed [Python versions](../concepts/python-versions.md), e.g., with
+`uv python install`.
+
+By default, Python versions managed by uv are stored in a `python/` subdirectory of the
+[persistent data directory](#persistent-data-directory), e.g., `~/.local/share/uv/python`.
 
 Use `uv python dir` to show the Python installation directory.
 
-Use the `UV_PYTHON_INSTALL_DIR` environment variable to configure the installation directory.
+Use the `UV_PYTHON_INSTALL_DIR` environment variable to override the installation directory.
 
 !!! note
 
     Changing where Python is installed will not be automatically reflected in existing virtual environments; they will keep referring to the old location, and will need to be updated manually (e.g. by re-creating them).
 
-For more details on how uv manages Python versions, see the
-[dedicated documentation page](../concepts/python-versions.md).
-
 ### Python executables
 
-uv also supports adding Python executables to your `PATH`.
+uv installs executables for [Python versions](#python-versions), e.g., `python3.13`.
 
-By default, Python executables are stored according to [the table above](#directory-strategies).
+By default, Python executables are stored in the [executable directory](#executable-directory).
 
 Use `uv python dir --bin` to show the Python executable directory.
 
-Use the `UV_PYTHON_BIN_DIR` environment variable to configure the executable directory.
+Use the `UV_PYTHON_BIN_DIR` environment variable to override the Python executable directory.
 
-## Tools
+### Tools
 
-uv can install Python applications as tools using `uv tool install`.
+uv can install Python packages as [command-line tools](../concepts/tools.md) using
+`uv tool install`.
 
-By default, tools are installed as persistent data according to
-[the table above](#directory-strategies), under a `tools/` subdirectory, e.g.,
-`~/.local/share/uv/tools`
+By default, tools are installed in a `tools/` subdirectory of the
+[persistent data directory](#persistent-data-directory), e.g., `~/.local/share/uv/tools`.
 
 Use `uv tool dir` to show the tool installation directory.
 
 Use the `UV_TOOL_DIR` environment variable to configure the installation directory.
 
-For more details, see the [tools documentation](../concepts/tools.md).
-
 ### Tool executables
 
-When installing tools, uv will add tools to your `PATH`.
+uv installs executables for installed [tools](#tools), e.g., `ruff`.
 
-By default, tool executables are stored according to [the table above](#directory-strategies).
+By default, tool executables are stored in the [executable directory](#executable-directory).
 
 Use `uv tool dir --bin` to show the tool executable directory.
 
-Use the `UV_TOOL_BIN_DIR` environment variable to configure the executable directory.
+Use the `UV_TOOL_BIN_DIR` environment variable to configure the tool executable directory.
 
-## uv
+### The uv executable
 
-uv itself is also installed by [the installer](./installer.md) into the executables folder from
-[the table above](#directory-strategies), and this can be overridden via the `UV_INSTALL_DIR`
-environment variable.
+When using uv's [standalone installer](./installer.md) to install uv, the `uv` and `uvx` executables
+are installed into the [executable directory](#executable-directory).
 
-## Configuration
+Use the `UV_INSTALL_DIR` environment variable to configure uv's installation directory.
 
-uv's behavior (including most of the storage locations on this page) can be configured through
-configuration files stored in standard locations.
+### Configuration files
 
-Configuration files are located in the corresponding system- or user-specific locations from
-[the table above](#directory-strategies).
+uv's behavior can be configured through TOML files.
+
+Configuration files are discovered in the [configuration directories](#configuration-directories).
 
 For more details, see the [configuration files documentation](../concepts/configuration-files.md).
 
-## Project environments
+### Project virtual environments
 
-uv creates virtual environments for projects to isolate their dependencies.
+When working on [projects](../concepts/projects/index.md), uv creates a dedicated virtual
+environment for each project.
 
-By default, project virtual environments are created in `.venv` within the project directory, and a
-workspace's environment is created with the same name in the workspace root.
+By default, project virtual environments are created in `.venv` in the project or workspace root,
+i.e., next to the `pyproject.toml`.
 
-Use the `UV_PROJECT_ENVIRONMENT` environment variable to override this location, which is should be
-either an absolute path, or relative to the workspace root.
-
-For more details, see the
+Use the `UV_PROJECT_ENVIRONMENT` environment variable to override this location. For more details,
+see the
 [projects environment documentation](../concepts/projects/config.md#project-environment-path).
+
+### Script virtual environments
+
+When running [scripts with inline metadata](../guides/scripts.md), uv creates a dedicated virtual
+environment for each script in the [cache directory](#cache-directory).

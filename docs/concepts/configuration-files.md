@@ -42,11 +42,14 @@ default = true
     `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
     `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
-uv will also discover user- and system-level configuration files, which must use the `uv.toml`
-format, according to [the storage documentation](../reference/storage.md#config); e.g., user-level
+uv will also discover `uv.toml` configuration files in the user- and system-level
+[configuration directories](../reference/storage.md#configuration-directories), e.g., user-level
 configuration in `~/.config/uv/uv.toml`, and system-level configuration at `/etc/uv/uv.toml` on
-macOS and Linux. These cannot use the `pyproject.toml` format, which is intended to define a Python
-_project_.
+macOS and Linux.
+
+!!! important
+
+    User- and system-level configuration files cannot use the `pyproject.toml` format.
 
 If project-, user-, and system-level configuration files are found, the settings will be merged,
 with project-level configuration taking precedence over the user-level configuration, and user-level

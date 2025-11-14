@@ -2,10 +2,7 @@
 
 ## Changing the installation path
 
-By default, uv is installed to `~/.local/bin`. If `XDG_BIN_HOME` is set, it will be used instead.
-Similarly, if `XDG_DATA_HOME` is set, the target directory will be inferred as
-`XDG_DATA_HOME/../bin`. See [storage reference](./storage.md#Executables) for details on these
-locations and how to customize them.
+By default, uv is installed in the user [executable directory](./storage.md#executable-directory).
 
 To change the installation path, use `UV_INSTALL_DIR`:
 
