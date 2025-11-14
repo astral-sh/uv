@@ -556,7 +556,7 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
         env = {
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
             # We also need to give uv read access.
-            "UV_API_TOKEN": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
+            "UV_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
         }
     else:
         raise ValueError(f"Unknown target: {target}")
