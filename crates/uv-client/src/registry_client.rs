@@ -82,7 +82,6 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Set a pre-download hook from a [`PreDownloadHook`].
-    /// This is useful when you already have a `PreDownloadHook` and want to avoid wrapping it again.
     #[must_use]
     pub fn pre_download_hook_arc(mut self, hook: Option<PreDownloadHook>) -> Self {
         self.pre_download_hook = hook;
