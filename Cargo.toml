@@ -92,7 +92,7 @@ async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "f6a41d32
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
-bitflags = { version = "2.6.0" }
+bitflags = { version = "2.10.0" }
 blake2 = { version = "0.10.6" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
@@ -172,12 +172,12 @@ sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.12.0" }
 syn = { version = "2.0.77" }
-sys-info = { version = "0.9.1" }
+sysinfo = { version = "0.37.2" }
 tar = { version = "0.4.43" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
-thiserror = { version = "2.0.0" }
+thiserror = { version = "2.0.17" }
 astral-tl = { version = "0.7.9" }
 tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync"] }
 tokio-stream = { version = "0.1.16" }
@@ -199,7 +199,7 @@ which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.59.0", features = ["std", "Win32_Globalization", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Registry", "Win32_System_IO", "Win32_System_Ioctl"] }
 windows-registry = { version = "0.5.0" }
 wiremock = { version = "0.6.4" }
-wmi = { version = "0.16.0", default-features = false }
+wmi = { version = "0.18.0", default-features = false }
 xz2 = { version = "0.1.7" }
 zeroize = { version = "1.8.1" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }

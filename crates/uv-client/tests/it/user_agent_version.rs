@@ -238,7 +238,8 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     // Assert distro
     if cfg!(windows) {
         assert_json_snapshot!(&linehaul.distro, @"null");
-    } else if cfg!(target_os = "linux") {
+    } 
+    else if cfg!(target_os = "linux") {
         assert_json_snapshot!(&linehaul.distro, {
             ".id" => "[distro.id]",
             ".name" => "[distro.name]",
@@ -255,16 +256,28 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
               }
             }"###
         );
+                
         // Check dynamic values
         let distro_info = linehaul
             .distro
             .expect("got no distro, but expected one in linehaul");
-        // Gather distribution info from /etc/os-release.
-        let release_info = sys_info::linux_os_release()
+        // Gather distribution info from sysinfo.
+        let (name, version_id, version_codename) = sysinfo::System::long_os_version()
+            .and_then(|s| {
+                let parts: Vec<&str> = s.split_whitespace().collect();
+                let name = parts.get(0).unwrap_or(&"Linux").to_string();
+                let version = parts.get(1).unwrap_or(&"").to_string();
+                let codename = if parts.len() > 3 && parts[3].starts_with('(') {
+                    Some(parts[3].trim_matches('(').trim_matches(')').to_string())
+                } else {
+                    None
+                };
+                Some((name, version, codename))
+            })
             .expect("got no os release info, but expected one in linux");
-        assert_eq!(distro_info.id, release_info.version_codename);
-        assert_eq!(distro_info.name, release_info.name);
-        assert_eq!(distro_info.version, release_info.version_id);
+        assert_eq!(distro_info.id, version_codename);
+        assert_eq!(distro_info.name, Some(name));
+        assert_eq!(distro_info.version, Some(version_id));
     } else if cfg!(target_os = "macos") {
         // We mock the macOS distro
         assert_json_snapshot!(&linehaul.distro, @r###"

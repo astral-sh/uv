@@ -57,6 +57,7 @@ pub struct LineHaul {
     pub ci: Option<bool>,
 }
 
+
 /// Implements Linehaul information format as defined by
 /// <https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L109>.
 /// This metadata is added to the user agent to enrich PyPI statistics.
@@ -86,18 +87,31 @@ impl LineHaul {
             _ => None,
         };
 
+
+
+        // sys-info -> sysinfo 
+        // https://crates.io/crates/sysinfo
+        // sys-info:
+        // https://crates.io/crates/sys-info
+        // Outdated, and not supported by many systems
         // Build Distro as Linehaul expects.
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
-            // Gather distribution info from /etc/os-release.
-            sys_info::linux_os_release().ok().map(|info| Distro {
-                // e.g., Jammy, Focal, etc.
-                id: info.version_codename,
-                // e.g., Ubuntu, Fedora, etc.
-                name: info.name,
-                // e.g., 22.04, etc.
-                version: info.version_id,
-                // e.g., glibc 2.38, musl 1.2
-                libc,
+            // Gather distribution info from sysinfo.
+            sysinfo::System::long_os_version().and_then(|s| {
+                let parts: Vec<&str> = s.split_whitespace().collect();
+                let name = parts.get(0).unwrap_or(&"Linux").to_string();
+                let version = parts.get(1).unwrap_or(&"").to_string();
+                let codename = if parts.len() > 3 && parts[3].starts_with('(') {
+                    Some(parts[3].trim_matches('(').trim_matches(')').to_string())
+                } else {
+                    None
+                };
+                Some(Distro {
+                    id: codename,
+                    name: Some(name),
+                    version: Some(version),
+                    libc,
+                })
             })
         } else if cfg!(target_os = "macos") {
             let version = match platform.map(Platform::os) {

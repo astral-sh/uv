@@ -1097,8 +1097,13 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                sys_info::os_type().unwrap_or_default(),
-                sys_info::os_release().unwrap_or_default(),
+                sysinfo::System::name().unwrap_or_default(),
+                sysinfo::System::os_version().unwrap_or_default(),
+            
+                // sys_info::os_type() -> sysinfo::System::name() 
+                // sys_info::os_release() -> sysinfo::System::os_version()
+                // These are static methods that return the OS name (e.g., "Linux") and kernel version (e.g., "5.15.0-119-generic")
+                // Used to shard cache by host OS and version, invalidating when OS is upgraded.
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because
