@@ -954,6 +954,11 @@ The domain of the pyx CDN.
 
 Specifies the directory where uv stores pyx credentials.
 
+### `PYX_GIT_CACHE`
+<small class="added-in">added in `0.9.9`</small>
+
+The pyx workspace in which to search for cached Git dependencies.
+
 ### `RUST_BACKTRACE`
 <small class="added-in">added in `0.7.22`</small>
 
