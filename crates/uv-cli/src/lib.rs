@@ -6969,6 +6969,8 @@ pub enum WorkspaceCommand {
     #[command(hide = true)]
     Dir(WorkspaceDirArgs),
     /// List the members of a workspace.
+    ///
+    /// Displays newline separated names of workspace members.
     #[command(hide = true)]
     List(WorkspaceListArgs),
 }
