@@ -60,11 +60,16 @@ fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
     let reg_value = environment.get_hstring(EnvVars::PATH);
     match reg_value {
         Ok(reg_value) => Ok(Some(reg_value)),
-        Err(err) if err.code() == HRESULT::from(ERROR_INVALID_DATA) => {
+        // `err.code()` returns a `HRESULT` from the `windows_result` crate.
+        // Multiple versions of `windows_result` may be present in the dependency
+        // graph which makes the concrete `HRESULT` types incompatible. To
+        // avoid comparing two different `HRESULT` types, compare their inner
+        // i32 values instead (the `.0` field).
+        Err(err) if err.code().0 == HRESULT::from(ERROR_INVALID_DATA).0 => {
             warn!("`HKEY_CURRENT_USER\\Environment\\PATH` is a non-string");
             Ok(None)
         }
-        Err(err) if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) => Ok(Some(HSTRING::new())),
+        Err(err) if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0 => Ok(Some(HSTRING::new())),
         Err(err) => Err(err.into()),
     }
 }
