@@ -238,8 +238,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     // Assert distro
     if cfg!(windows) {
         assert_json_snapshot!(&linehaul.distro, @"null");
-    } 
-    else if cfg!(target_os = "linux") {
+    } else if cfg!(target_os = "linux") {
         assert_json_snapshot!(&linehaul.distro, {
             ".id" => "[distro.id]",
             ".name" => "[distro.name]",
@@ -256,7 +255,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
               }
             }"###
         );
-                
+
         // Check dynamic values
         let distro_info = linehaul
             .distro

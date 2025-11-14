@@ -57,7 +57,6 @@ pub struct LineHaul {
     pub ci: Option<bool>,
 }
 
-
 /// Implements Linehaul information format as defined by
 /// <https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L109>.
 /// This metadata is added to the user agent to enrich PyPI statistics.
@@ -87,9 +86,7 @@ impl LineHaul {
             _ => None,
         };
 
-
-
-        // sys-info -> sysinfo 
+        // sys-info -> sysinfo
         // https://crates.io/crates/sysinfo
         // sys-info:
         // https://crates.io/crates/sys-info

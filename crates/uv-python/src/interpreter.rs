@@ -1099,8 +1099,7 @@ impl InterpreterInfo {
                 ARCH,
                 sysinfo::System::name().unwrap_or_default(),
                 sysinfo::System::os_version().unwrap_or_default(),
-            
-                // sys_info::os_type() -> sysinfo::System::name() 
+                // sys_info::os_type() -> sysinfo::System::name()
                 // sys_info::os_release() -> sysinfo::System::os_version()
                 // These are static methods that return the OS name (e.g., "Linux") and kernel version (e.g., "5.15.0-119-generic")
                 // Used to shard cache by host OS and version, invalidating when OS is upgraded.
