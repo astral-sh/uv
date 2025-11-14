@@ -3162,3 +3162,452 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that tool install confirmation prompt is shown when preview flag is enabled.
+#[test]
+fn tool_run_install_confirmation_preview_enabled() -> anyhow::Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create uv.toml with empty heuristics to disable top-packages check
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        approve-all-heuristics = []
+    "#})?;
+
+    // Run with preview flag enabled and tool-install-confirmation feature
+    // Use a package not in top-packages list to trigger prompt
+    let mut cmd = context.tool_run();
+    cmd.arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("iniconfig")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::XDG_CONFIG_HOME, context.temp_dir.as_os_str())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn()?;
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+
+    // Send 'y' to confirm
+    stdin.write_all(b"y\n")?;
+    drop(stdin);
+
+    let output = child.wait_with_output()?;
+    assert!(
+        output.status.success(),
+        "Command should succeed when confirmed"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("This tool is provided by the following package"),
+        "Should show confirmation prompt"
+    );
+    assert!(
+        stderr.contains("iniconfig"),
+        "Should show package name in prompt"
+    );
+    assert!(
+        stderr.contains("Would you like to proceed?"),
+        "Should ask for confirmation"
+    );
+
+    Ok(())
+}
+
+/// Test that tool install confirmation prompt is NOT shown when preview flag is disabled.
+#[test]
+fn tool_run_install_confirmation_preview_disabled() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run without preview flag - should not prompt
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.3.0 (compiled: yes)
+    Python (CPython) 3.12.[X]
+    
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation is skipped when --approve-all-tool-installs is set.
+#[test]
+fn tool_run_install_confirmation_approve_all_flag() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create uv.toml with empty heuristics list
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        approve-all-heuristics = []
+    "#})?;
+
+    // Run with --approve-all-tool-installs flag and preview enabled - should not prompt
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("--approve-all-tool-installs")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, [VERSION] (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==[VERSION]
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation is skipped when approve-all-tool-installs is set via config.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn tool_run_install_confirmation_approve_all_config() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create uv.toml with approve-all-tool-installs = true and empty heuristics list
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        approve-all-tool-installs = true
+        approve-all-heuristics = []
+    "#})?;
+
+    // Run with preview enabled - should not prompt due to config
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::XDG_CONFIG_HOME, context.temp_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, [VERSION] (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==[VERSION]
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation is skipped when package is in top-packages (default heuristic).
+#[test]
+fn tool_run_install_confirmation_top_packages_heuristic() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with preview enabled - ruff is in top-packages, so should not prompt
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("ruff")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruff 0.3.4
+
+    ----- stderr -----
+    Resolved 1 packages in [TIME]
+    Prepared 1 packages in [TIME]
+    Installed 1 packages in [TIME]
+     + ruff==0.3.4
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation shows reasoning when package is not in top-packages.
+#[test]
+fn tool_run_install_confirmation_reasoning_top_packages() -> anyhow::Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with a package not in top-packages - should show reasoning
+    let mut cmd = context.tool_run();
+    cmd.arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("iniconfig")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn()?;
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+
+    // Send 'n' to cancel (we just want to see the prompt)
+    stdin.write_all(b"n\n")?;
+    drop(stdin);
+
+    let output = child.wait_with_output()?;
+    assert!(
+        !output.status.success(),
+        "Command should fail when cancelled"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("is not in a top python package"),
+        "Should show reasoning about top-packages"
+    );
+
+    Ok(())
+}
+
+/// Test that tool install confirmation is skipped when package is already cached.
+#[test]
+fn tool_run_install_confirmation_cached_package() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // First, run the tool without the preview flag enabled
+    context
+        .tool_run()
+        .arg("ruff")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Now run it with preview enabled - should not prompt since it's cached
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("ruff")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruff 0.3.4
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation shows message in non-TTY mode with reasoning.
+#[test]
+fn tool_run_install_confirmation_non_tty() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Use a package not in top-packages to show reasoning
+    // This should print a message but proceed automatically
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("a-very-unpopular-python-package")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    This tool is provided by the following package:
+
+    + a-very-unpopular-python-package
+
+    This package is not currently installed and is not a top python package.
+    Non-interactive mode: installation will proceed automatically.
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because a-very-unpopular-python-package was not found in the package registry and you require a-very-unpopular-python-package, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation can be cancelled.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Interactive prompt tests are not yet supported on Windows"
+)]
+fn tool_run_install_confirmation_cancelled() -> anyhow::Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with preview flag enabled - use package not in top-packages
+    let mut cmd = context.tool_run();
+    cmd.arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("ruff")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn()?;
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+
+    // Send 'n' to cancel
+    stdin.write_all(b"n\n")?;
+    drop(stdin);
+
+    let output = child.wait_with_output()?;
+    assert!(
+        !output.status.success(),
+        "Command should fail when cancelled"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Cancelled by the user"),
+        "Should show cancellation message"
+    );
+
+    Ok(())
+}
+
+/// Test that heuristics can be disabled via config.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn tool_run_install_confirmation_no_heuristics() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create uv.toml with empty heuristics list
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        approve-all-heuristics = []
+    "#})?;
+
+    // Run with preview enabled - should prompt even for top packages since heuristics are disabled
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("tool-install-confirmation")
+        .arg("ruff")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::XDG_CONFIG_HOME, context.temp_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruff [VERSION]
+
+    ----- stderr -----
+    This tool is provided by the following package:
+
+    + ruff
+
+    This package is not currently installed.
+    Non-interactive mode: installation will proceed automatically.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ruff==[VERSION]
+    "###);
+
+    Ok(())
+}
+
+/// Test that tool install confirmation shows message in non-TTY mode with reasoning.
+#[test]
+fn tool_run_install_confirmation_tool_from_package() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Use a package not in top-packages to show reasoning
+    // This should print a message but proceed automatically
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features").arg("tool-install-confirmation")
+        .arg("--from").arg("a-very-unpopular-python-package")
+        .arg("tool-name-here")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    This tool is provided by the following package:
+
+    + a-very-unpopular-python-package
+
+    This package is not currently installed and is not in a top python package.
+    Non-interactive mode: installation will proceed automatically.
+     × No solution found when resolving tool dependencies:
+     ╰─▶ Because a-very-unpopular-python-package was not found in the package registry and you require a-very-unpopular-python-package, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}

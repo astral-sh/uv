@@ -48,7 +48,7 @@ use crate::{
 };
 
 /// A builder for an [`RegistryClient`].
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
