@@ -169,7 +169,7 @@ local_targets: dict[str, TargetConfiguration] = {
     "pyx-token": TargetConfiguration(
         "astral-test-token",
         "https://astral-sh-staging-api.pyx.dev/v1/upload/uv-publish-integration/main",
-        "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main",
+        "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main/",
     ),
 }
 all_targets: dict[str, TargetConfiguration] = local_targets | {
@@ -241,12 +241,18 @@ def collect_versions(url: str, client: httpx.Client) -> set[Version]:
         else:
             [_name, version] = parse_sdist_filename(filename)
         versions.add(version)
+
+    print(
+        f"Found versions at {url}: {', '.join(str(v) for v in versions)}",
+        file=sys.stderr,
+    )
     return versions
 
 
 def get_filenames(url: str, client: httpx.Client) -> list[str]:
     """Get the filenames (source dists and wheels) from an index URL."""
     response = client.get(url)
+    response.raise_for_status()
     data = response.text
     # Works for the indexes in the list
     href_text = r"<a(?:\s*[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
@@ -382,13 +388,11 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     # If we're publishing to pyx, we need to give the httpx client
     # access to an appropriate credential.
     if target == "pyx-token":
-        client.headers.update(
-            {"Authorization": f"Bearer {os.environ['UV_TEST_PUBLISH_PYX_TOKEN']}"}
+        client.auth = httpx.BasicAuth(
+            username="__token__", password=os.environ["UV_TEST_PUBLISH_PYX_TOKEN"]
         )
-    else:
-        # We reuse the same client for multiple targets, so make sure no
-        # credentials leak between targets.
-        client.headers.pop("Authorization", None)
+    # else:
+    #     client._auth = None
 
     project_name = all_targets[target].project_name
 
