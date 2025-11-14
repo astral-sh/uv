@@ -558,6 +558,8 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
             # For reading back during check-url.
             "UV_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
+            # So that uv accesses the right API for check-url.
+            "PYX_API_URL": "https://astral-sh-staging-api.pyx.dev",
         }
     else:
         raise ValueError(f"Unknown target: {target}")
