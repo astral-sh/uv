@@ -449,7 +449,7 @@ impl<'a> IndexLocations {
                     index
                         .name
                         .as_ref()
-                        .map(|n| n.to_string())
+                        .map(std::string::ToString::to_string)
                         .unwrap_or_else(|| index.url.to_string())
                 );
 
