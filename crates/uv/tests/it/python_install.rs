@@ -1370,8 +1370,7 @@ fn python_install_debug_freethreaded() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
-        .with_python_download_cache();
+        .with_managed_python_dirs();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13td"), @r"
@@ -3748,7 +3747,6 @@ fn python_install_build_version_pypy() {
 #[test]
 fn python_install_upgrade() {
     let context: TestContext = TestContext::new_with_versions(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -3874,7 +3872,6 @@ fn python_install_upgrade() {
 #[test]
 fn python_install_upgrade_version_file() {
     let context: TestContext = TestContext::new_with_versions(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
