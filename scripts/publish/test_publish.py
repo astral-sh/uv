@@ -379,6 +379,17 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
     """
+    # If we're publishing to pyx, we need to give the httpx client
+    # access to an appropriate credential.
+    if target == "pyx-token":
+        client.headers.update(
+            {"Authorization": f"Bearer {os.environ['UV_TEST_PUBLISH_PYX_TOKEN']}"}
+        )
+    else:
+        # We reuse the same client for multiple targets, so make sure no
+        # credentials leak between targets.
+        client.headers.pop("Authorization", None)
+
     project_name = all_targets[target].project_name
 
     # If a version was recently uploaded by another run of this script,
