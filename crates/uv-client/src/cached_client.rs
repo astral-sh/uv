@@ -13,14 +13,24 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
+use std::pin::Pin;
+use std::sync::Arc;
+
 use crate::BaseClient;
 use crate::base_client::is_transient_network_error;
-use crate::error::ProblemDetails;
+use crate::error::{Error, ErrorKind, ProblemDetails};
 use crate::{
-    Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
 };
+
+/// A hook function that is called before downloading a file.
+/// Returns `Ok(true)` to proceed with download, `Ok(false)` to cancel, or `Err` on error.
+pub type PreDownloadHook = Arc<
+    dyn Fn(&DisplaySafeUrl) -> Pin<Box<dyn std::future::Future<Output = Result<bool, Error>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Extract problem details from an HTTP response if it has the correct content type
 ///
@@ -120,6 +130,7 @@ where
 }
 
 /// Dispatch type: Either a cached client error or a (user specified) error from the callback
+#[derive(Debug)]
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
     Client {
         retries: Option<u32>,
@@ -244,17 +255,42 @@ impl From<Freshness> for CacheControl<'_> {
 ///
 /// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
 /// that it's a file.
-#[derive(Debug, Clone)]
-pub struct CachedClient(BaseClient);
+#[derive(Clone)]
+pub struct CachedClient {
+    client: BaseClient,
+    /// Optional hook called before downloading a file. Returns `Ok(true)` to proceed with download,
+    /// `Ok(false)` to cancel, or `Err`.
+    pre_download_hook: Option<PreDownloadHook>,
+}
+
+impl std::fmt::Debug for CachedClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CachedClient")
+            .field("client", &self.client)
+            .field("pre_download_hook", &self.pre_download_hook.as_ref().map(|_| "..."))
+            .finish()
+    }
+}
 
 impl CachedClient {
     pub fn new(client: BaseClient) -> Self {
-        Self(client)
+        Self {
+            client,
+            pre_download_hook: None,
+        }
+    }
+
+    /// Create a new [`CachedClient`] with a pre-download hook.
+    pub fn with_pre_download_hook(client: BaseClient, hook: PreDownloadHook) -> Self {
+        Self {
+            client,
+            pre_download_hook: Some(hook),
+        }
     }
 
     /// The underlying [`BaseClient`] without caching.
     pub fn uncached(&self) -> &BaseClient {
-        &self.0
+        &self.client
     }
 
     /// Make a cached request with a custom response transformation
@@ -560,7 +596,7 @@ impl CachedClient {
         let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending revalidation request for: {url}");
         let mut response = self
-            .0
+            .client
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -628,10 +664,19 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
         let url = DisplaySafeUrl::from_url(req.url().clone());
+        
+        // Call pre-download hook if set, before downloading.
+        if let Some(ref hook) = self.pre_download_hook {
+            let proceed = hook(&url).await?;
+            if !proceed {
+                return Err(ErrorKind::DownloadCancelled(url).into());
+            }
+        }
+        
         trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let mut response = self
-            .0
+            .client
             .execute(req)
             .await
             .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;

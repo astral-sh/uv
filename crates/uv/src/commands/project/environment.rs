@@ -5,14 +5,14 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
+    EnvironmentSpecification, PlatformState, ProjectError, sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, PreDownloadHook};
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
@@ -124,11 +124,50 @@ impl CachedEnvironment {
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
+        Self::from_spec_with_hook(
+            spec,
+            build_constraints,
+            interpreter,
+            python_platform,
+            settings,
+            client_builder,
+            state,
+            resolve,
+            install,
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+            None,
+        )
+        .await
+    }
+
+    /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
+    /// Allows specifying a pre-download hook that is called before downloading any file.
+    pub(crate) async fn from_spec_with_hook(
+        spec: EnvironmentSpecification<'_>,
+        build_constraints: Constraints,
+        interpreter: &Interpreter,
+        python_platform: Option<&TargetTriple>,
+        settings: &ResolverInstallerSettings,
+        client_builder: &BaseClientBuilder<'_>,
+        state: &PlatformState,
+        resolve: Box<dyn ResolveLogger>,
+        install: Box<dyn InstallLogger>,
+        installer_metadata: bool,
+        concurrency: Concurrency,
+        cache: &Cache,
+        printer: Printer,
+        preview: Preview,
+        pre_download_hook: Option<PreDownloadHook>,
+    ) -> Result<Self, ProjectError> {
         let interpreter = Self::base_interpreter(interpreter, cache)?;
 
         // Resolve the requirements with the interpreter.
         let resolution = Resolution::from(
-            resolve_environment(
+            crate::commands::project::resolve_environment_with_hook(
                 spec,
                 &interpreter,
                 python_platform,
@@ -141,6 +180,7 @@ impl CachedEnvironment {
                 cache,
                 printer,
                 preview,
+                pre_download_hook,
             )
             .await?,
         );

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::pin::Pin;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -37,7 +38,7 @@ use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
+use crate::cached_client::{CacheControl, PreDownloadHook};
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -48,13 +49,27 @@ use crate::{
 };
 
 /// A builder for an [`RegistryClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
+    pre_download_hook: Option<PreDownloadHook>,
+}
+
+impl<'a> std::fmt::Debug for RegistryClientBuilder<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryClientBuilder")
+            .field("index_locations", &self.index_locations)
+            .field("index_strategy", &self.index_strategy)
+            .field("torch_backend", &self.torch_backend)
+            .field("cache", &self.cache)
+            .field("base_client_builder", &self.base_client_builder)
+            .field("pre_download_hook", &self.pre_download_hook.as_ref().map(|_| "..."))
+            .finish()
+    }
 }
 
 impl<'a> RegistryClientBuilder<'a> {
@@ -65,7 +80,31 @@ impl<'a> RegistryClientBuilder<'a> {
             torch_backend: None,
             cache,
             base_client_builder,
+            pre_download_hook: None,
         }
+    }
+
+    /// Set a pre-download hook that is called before downloading any file.
+    /// The hook receives the URL and returns `Ok(true)` to proceed with download,
+    /// `Ok(false)` to cancel, or `Err` on error.
+    #[must_use]
+    pub fn pre_download_hook<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(&DisplaySafeUrl) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<bool, Error>> + Send + 'static,
+    {
+        self.pre_download_hook = Some(Arc::new(move |url| {
+            Box::pin(hook(url)) as Pin<Box<dyn std::future::Future<Output = Result<bool, Error>> + Send>>
+        }));
+        self
+    }
+
+    /// Set a pre-download hook from a [`PreDownloadHook`].
+    /// This is useful when you already have a `PreDownloadHook` and want to avoid wrapping it again.
+    #[must_use]
+    pub fn pre_download_hook_arc(mut self, hook: Option<PreDownloadHook>) -> Self {
+        self.pre_download_hook = hook;
+        self
     }
 
     #[must_use]
@@ -164,7 +203,11 @@ impl<'a> RegistryClientBuilder<'a> {
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
-        let client = CachedClient::new(client);
+        let client = if let Some(hook) = self.pre_download_hook.clone() {
+            CachedClient::with_pre_download_hook(client, hook)
+        } else {
+            CachedClient::new(client)
+        };
 
         RegistryClient {
             index_urls,
@@ -194,7 +237,11 @@ impl<'a> RegistryClientBuilder<'a> {
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
-        let client = CachedClient::new(client);
+        let client = if let Some(hook) = self.pre_download_hook.clone() {
+            CachedClient::with_pre_download_hook(client, hook)
+        } else {
+            CachedClient::new(client)
+        };
 
         RegistryClient {
             index_urls,
