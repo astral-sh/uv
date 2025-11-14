@@ -1937,6 +1937,15 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum InstallPromptHeuristic {
+    TopPackages,
+    PreviouslyInstalled,
+    UserAllowlist,
+}
+
 /// Settings for tool install confirmation prompts.
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
@@ -1970,7 +1979,7 @@ pub struct InstallPromptOptions {
             approve-all-heuristics = ["top-packages", "previously-installed"]
         "#
     )]
-    pub approve_all_heuristics: Option<Vec<String>>,
+    pub approve_all_heuristics: Option<Vec<InstallPromptHeuristic>>,
 }
 
 /// The options persisted alongside an installed tool.

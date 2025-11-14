@@ -36,7 +36,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{InstallPromptHeuristic, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
@@ -107,6 +107,8 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: Preview,
+    approve_all_tool_installs: bool,
+    approve_all_heuristics: Vec<InstallPromptHeuristic>,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -261,6 +263,9 @@ pub(crate) async fn run(
         cache
     };
 
+    // Clone approve_all_heuristics early since it's needed in multiple places and for the 'static closure
+    let approve_all_heuristics_owned = approve_all_heuristics.clone();
+
     // Get or create a compatible environment in which to execute the tool.
     let result = Box::pin(get_or_create_environment(
         &request,
@@ -279,6 +284,8 @@ pub(crate) async fn run(
         python_preference,
         python_downloads,
         installer_metadata,
+        &approve_all_heuristics_owned,
+        approve_all_tool_installs,
         concurrency,
         &cache,
         printer,
@@ -694,6 +701,8 @@ async fn get_or_create_environment(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
+    approve_all_heuristics: &[InstallPromptHeuristic],
+    approve_all_tool_installs: bool,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,

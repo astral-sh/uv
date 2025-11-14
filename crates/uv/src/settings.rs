@@ -46,8 +46,9 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
-    Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
-    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
+    Combine, EnvironmentOptions, FilesystemOptions, InstallPromptHeuristic, Options, PipOptions,
+    PublishOptions, PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema,
+    ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -555,7 +556,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
     pub(crate) approve_all_tool_installs: bool,
-    pub(crate) approve_all_heuristics: Vec<String>,
+    pub(crate) approve_all_heuristics: Vec<InstallPromptHeuristic>,
 }
 
 impl ToolRunSettings {
@@ -648,7 +649,7 @@ impl ToolRunSettings {
             .as_ref()
             .and_then(|fs| fs.install_prompt.as_ref())
             .and_then(|prompt| prompt.approve_all_heuristics.clone())
-            .unwrap_or_else(|| vec!["top-packages".to_string()]);
+            .unwrap_or_else(|| vec![InstallPromptHeuristic::TopPackages]);
 
         Self {
             command,
