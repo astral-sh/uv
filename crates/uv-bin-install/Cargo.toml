@@ -23,6 +23,7 @@ uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
+uv-redacted = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 reqwest = { workspace = true }
@@ -34,4 +35,3 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-

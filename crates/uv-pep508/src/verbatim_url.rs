@@ -9,12 +9,12 @@ use std::sync::LazyLock;
 use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::Pep508Url;
 
@@ -57,8 +57,10 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from a string.
-    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = DisplaySafeUrl::parse(given.as_ref())?;
+    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+        let given = given.as_ref();
+        let url = DisplaySafeUrl::parse(given)?;
+
         Ok(Self { url, given: None })
     }
 
@@ -251,7 +253,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(s).map(|url| url.with_given(s))?)
+        Self::parse_url(s).map(|url| url.with_given(s))
     }
 }
 
@@ -271,7 +273,7 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        Self::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from_url(url))
     }
 }
 
@@ -390,7 +392,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] ParseError),
+    Url(#[from] DisplaySafeUrlError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
@@ -645,6 +647,8 @@ impl std::fmt::Display for Scheme {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_snapshot;
+
     use super::*;
 
     #[test]
@@ -748,5 +752,28 @@ mod tests {
 
         let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
+    }
+
+    #[test]
+    fn parse_url_ambiguous() {
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user\\name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user#name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user.com/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
     }
 }

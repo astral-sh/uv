@@ -2,12 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 #[derive(Error, Debug)]
 pub enum ServiceParseError {
     #[error(transparent)]
-    InvalidUrl(#[from] url::ParseError),
+    InvalidUrl(#[from] DisplaySafeUrlError),
     #[error("Unsupported scheme: {0}")]
     UnsupportedScheme(String),
     #[error("HTTPS is required for non-local hosts")]
@@ -51,7 +51,7 @@ impl FromStr for Service {
         // First try parsing as-is
         let url = match DisplaySafeUrl::parse(s) {
             Ok(url) => url,
-            Err(url::ParseError::RelativeUrlWithoutBase) => {
+            Err(DisplaySafeUrlError::Url(url::ParseError::RelativeUrlWithoutBase)) => {
                 // If it's a relative URL, try prepending https://
                 let with_https = format!("https://{s}");
                 DisplaySafeUrl::parse(&with_https)?

@@ -70,8 +70,28 @@ async fn test_user_agent_has_version() -> Result<()> {
     // Check User Agent
     let body = res.text().await?;
 
-    // Verify body matches regex
-    assert_eq!(body, format!("uv/{}", version()));
+    let (uv_version, uv_linehaul) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header");
+
+    // Deserializing Linehaul
+    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+
+    // Assert linehaul user agent
+    let filters = vec![(version(), "[VERSION]")];
+    with_settings!({
+        filters => filters
+    }, {
+        // Assert uv version
+        assert_snapshot!(uv_version, @"uv/[VERSION]");
+        // Assert linehaul json
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]"
+        }
+        "#);
+    });
 
     // Wait for the server task to complete, to be a good citizen.
     server_task.await?;

@@ -557,7 +557,7 @@ impl CachedClient {
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
-        let url = DisplaySafeUrl::from(req.url().clone());
+        let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending revalidation request for: {url}");
         let mut response = self
             .0
@@ -627,7 +627,7 @@ impl CachedClient {
         req: Request,
         cache_control: CacheControl<'_>,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        let url = DisplaySafeUrl::from(req.url().clone());
+        let url = DisplaySafeUrl::from_url(req.url().clone());
         trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let mut response = self

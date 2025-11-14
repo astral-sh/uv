@@ -35,6 +35,7 @@ use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
+use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -357,11 +358,9 @@ impl<'a> BaseClientBuilder<'a> {
         let mut user_agent_string = format!("uv/{}", version());
 
         // Add linehaul metadata.
-        if let Some(markers) = self.markers {
-            let linehaul = LineHaul::new(markers, self.platform);
-            if let Ok(output) = serde_json::to_string(&linehaul) {
-                let _ = write!(user_agent_string, " {output}");
-            }
+        let linehaul = LineHaul::new(self.markers, self.platform);
+        if let Ok(output) = serde_json::to_string(&linehaul) {
+            let _ = write!(user_agent_string, " {output}");
         }
 
         // Check for the presence of an `SSL_CERT_FILE`.
@@ -577,7 +576,7 @@ impl BaseClient {
 
     /// Executes a request, applying redirect policy.
     pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
-        let client = self.for_host(&DisplaySafeUrl::from(req.url().clone()));
+        let client = self.for_host(&DisplaySafeUrl::from_url(req.url().clone()));
         client.execute(req).await
     }
 
@@ -707,7 +706,7 @@ fn request_into_redirect(
     res: &Response,
     cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
 ) -> reqwest_middleware::Result<Option<Request>> {
-    let original_req_url = DisplaySafeUrl::from(req.url().clone());
+    let original_req_url = DisplaySafeUrl::from_url(req.url().clone());
     let status = res.status();
     let should_redirect = match status {
         StatusCode::MOVED_PERMANENTLY
@@ -760,7 +759,7 @@ fn request_into_redirect(
     let mut redirect_url = match DisplaySafeUrl::parse(location) {
         Ok(url) => url,
         // Per RFC 7231, URLs should be resolved against the request URL.
-        Err(ParseError::RelativeUrlWithoutBase) => original_req_url.join(location).map_err(|err| {
+        Err(DisplaySafeUrlError::Url(ParseError::RelativeUrlWithoutBase)) => original_req_url.join(location).map_err(|err| {
             reqwest_middleware::Error::Middleware(anyhow!(
                 "Invalid HTTP {status} 'Location' value `{location}` relative to `{original_req_url}`: {err}"
             ))

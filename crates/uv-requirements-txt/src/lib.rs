@@ -57,6 +57,7 @@ use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
 use uv_redacted::DisplaySafeUrl;
+use uv_redacted::DisplaySafeUrlError;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -282,7 +283,7 @@ impl RequirementsTxt {
                             requirements_txt.join(
                                 Url::parse(filename.as_ref())
                                     .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: err,
+                                        source: DisplaySafeUrlError::Url(err).into(),
                                         url: filename.to_string(),
                                         start,
                                         end,
@@ -356,7 +357,7 @@ impl RequirementsTxt {
                             requirements_txt.join(
                                 Url::parse(filename.as_ref())
                                     .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: err,
+                                        source: DisplaySafeUrlError::Url(err).into(),
                                         url: filename.to_string(),
                                         start,
                                         end,
@@ -1041,7 +1042,7 @@ pub struct RequirementsTxtFileError {
 pub enum RequirementsTxtParserError {
     Io(io::Error),
     Url {
-        source: url::ParseError,
+        source: uv_pep508::VerbatimUrlError,
         url: String,
         start: usize,
         end: usize,
@@ -1112,7 +1113,7 @@ pub enum RequirementsTxtParserError {
     #[cfg(feature = "http")]
     Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
-    InvalidUrl(String, url::ParseError),
+    InvalidUrl(String, DisplaySafeUrlError),
 }
 
 impl Display for RequirementsTxtParserError {
@@ -1184,7 +1185,15 @@ impl Display for RequirementsTxtParserError {
             }
             #[cfg(feature = "http")]
             Self::InvalidUrl(url, err) => {
-                write!(f, "Not a valid  URL, {err}: `{url}`")
+                match err {
+                    DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
+                    DisplaySafeUrlError::AmbiguousAuthority(_) => {
+                        // Intentionally avoid leaking the URL here, since we suspect that the user
+                        // has given us an ambiguous URL that contains sensitive information.
+                        // The error's own Display will provide a redacted version of the URL.
+                        write!(f, "Invalid URL: {err}")
+                    }
+                }
             }
         }
     }
@@ -1343,9 +1352,15 @@ impl Display for RequirementsTxtFileError {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
-            RequirementsTxtParserError::InvalidUrl(url, err) => {
-                write!(f, "Not a valid URL, {err}: `{url}`")
-            }
+            RequirementsTxtParserError::InvalidUrl(url, err) => match err {
+                DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
+                DisplaySafeUrlError::AmbiguousAuthority(_) => {
+                    // Intentionally avoid leaking the URL here, since we suspect that the user
+                    // has given us an ambiguous URL that contains sensitive information.
+                    // The error's own Display will provide a redacted version of the URL.
+                    write!(f, "Invalid URL: {err}")
+                }
+            },
         }
     }
 }

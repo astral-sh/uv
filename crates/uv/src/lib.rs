@@ -711,6 +711,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
+                args.settings.install_mirrors,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.python,
@@ -862,6 +864,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.modifications,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
+                args.settings.install_mirrors,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.sources,
@@ -1539,15 +1543,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
-            // TODO(john): If we later want to support `--upgrade`, we need to replace this.
-            let upgrade = false;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
                 args.reinstall,
-                upgrade,
+                args.upgrade,
                 args.bin,
                 args.registry,
                 args.force,
@@ -1569,7 +1571,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
-            let upgrade = true;
+            let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
 
             commands::python_install(
                 &project_dir,
@@ -2121,8 +2123,13 @@ async fn run_project(
                 args.active,
                 args.no_sync,
                 args.no_install_project,
+                args.only_install_project,
                 args.no_install_workspace,
+                args.only_install_workspace,
                 args.no_install_local,
+                args.only_install_local,
+                args.no_install_package,
+                args.only_install_package,
                 requirements,
                 constraints,
                 args.marker,

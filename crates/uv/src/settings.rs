@@ -5,6 +5,7 @@ use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
+use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
@@ -1061,6 +1062,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
+    pub(crate) upgrade: PythonUpgrade,
     pub(crate) bin: Option<bool>,
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
@@ -1101,6 +1103,7 @@ impl PythonInstallSettings {
             registry,
             no_registry,
             force,
+            upgrade,
             mirror: _,
             pypy_mirror: _,
             python_downloads_json_url: _,
@@ -1112,6 +1115,11 @@ impl PythonInstallSettings {
             targets,
             reinstall,
             force,
+            upgrade: if upgrade {
+                PythonUpgrade::Enabled(PythonUpgradeSource::Install)
+            } else {
+                PythonUpgrade::Disabled
+            },
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
             registry: flag(registry, no_registry, "registry")
                 .or(environment.python_install_registry),
@@ -1346,9 +1354,13 @@ impl SyncSettings {
             inexact,
             exact,
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
             no_install_package,
+            only_install_package,
             locked,
             frozen,
             active,
@@ -1417,9 +1429,13 @@ impl SyncSettings {
             editable: flag(editable, no_editable, "editable").map(EditableMode::from),
             install_options: InstallOptions::new(
                 no_install_project,
+                only_install_project,
                 no_install_workspace,
+                only_install_workspace,
                 no_install_local,
+                only_install_local,
                 no_install_package,
+                only_install_package,
             ),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(true) {
                 Modifications::Exact
@@ -1526,8 +1542,13 @@ pub(crate) struct AddSettings {
     pub(crate) python: Option<String>,
     pub(crate) workspace: Option<bool>,
     pub(crate) no_install_project: bool,
+    pub(crate) only_install_project: bool,
     pub(crate) no_install_workspace: bool,
+    pub(crate) only_install_workspace: bool,
     pub(crate) no_install_local: bool,
+    pub(crate) only_install_local: bool,
+    pub(crate) no_install_package: Vec<PackageName>,
+    pub(crate) only_install_package: Vec<PackageName>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1572,8 +1593,13 @@ impl AddSettings {
             workspace,
             no_workspace,
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
+            no_install_package,
+            only_install_package,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1680,8 +1706,13 @@ impl AddSettings {
             python: python.and_then(Maybe::into_option),
             workspace: flag(workspace, no_workspace, "workspace"),
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
+            no_install_package,
+            only_install_package,
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -2019,9 +2050,13 @@ impl ExportSettings {
             no_hashes,
             output_file,
             no_emit_project,
+            only_emit_project,
             no_emit_workspace,
-            no_emit_package,
+            only_emit_workspace,
             no_emit_local,
+            only_emit_local,
+            no_emit_package,
+            only_emit_package,
             locked,
             frozen,
             resolver,
@@ -2063,9 +2098,13 @@ impl ExportSettings {
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
+                only_emit_project,
                 no_emit_workspace,
+                only_emit_workspace,
                 no_emit_local,
+                only_emit_local,
                 no_emit_package,
+                only_emit_package,
             ),
             output_file,
             lock_check: if locked {
