@@ -9,7 +9,7 @@ doctest = false
 
 [dependencies]
 
-[target.'cfg(all(target_os = "windows"))'.dependencies]
+[target.'cfg(any(target_os = "windows", target_os = "android"))'.dependencies]
 mimalloc = { version = "0.1.43" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), not(target_os = "freebsd"), not(target_os = "android"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
