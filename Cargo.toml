@@ -198,6 +198,7 @@ walkdir = { version = "2.5.0" }
 which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.59.0", features = ["std", "Win32_Globalization", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Registry", "Win32_System_IO", "Win32_System_Ioctl"] }
 windows-registry = { version = "0.6.1" }
+windows-result = { version = "0.4.1" }
 wiremock = { version = "0.6.5" }
 wmi = { version = "0.18.0", default-features = false }
 xz2 = { version = "0.1.7" }

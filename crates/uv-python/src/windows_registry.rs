@@ -43,10 +43,10 @@ pub(crate) struct WindowsPython {
 /// By returning `windows_registry::Result` we avoid needing to convert the
 /// `windows_registry` errors into another error type inside this function and
 /// keep the `?` ergonomics. Callers that require a different error type can
-/// still map or convert the error at the call site. A longer-term fix is to
-/// unify the `windows-result` version across the workspace (for example via a
-/// direct dependency or `[patch.crates-io]`) so these type mismatches do not
-/// arise.
+/// still map or convert the error at the call site.
+///
+/// Note: The `windows-result` version has been unified across the workspace
+/// via workspace dependencies to prevent version conflicts.
 pub(crate) fn registry_pythons() -> windows_registry::Result<Vec<WindowsPython>> {
     let mut registry_pythons = Vec::new();
     // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`.
@@ -147,9 +147,9 @@ pub enum ManagedPep514Error {
     InvalidPointerSize(Arch),
     #[error("Failed to write registry entry: {0}")]
     // `write_registry_entry` returns `windows_registry::Result<()>` which uses
-    // the `windows_result::error::Error` type. Multiple versions of the
-    // `windows-result` crate exist in the dependency graph; accept the
-    // `windows_result::Error` here so `?` can convert directly.
+    // the `windows_result::error::Error` type. The `windows-result` version
+    // has been unified across the workspace via workspace dependencies to
+    // prevent version conflicts.
     WriteError(#[from] windows_result::Error),
 }
 
