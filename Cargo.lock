@@ -45,12 +45,12 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "ambient-id"
-version = "0.0.5"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a55e62faa820045efacb144fd9bcb16e62a5960ffc4bc270aaff7b78f0fcdcaa"
+checksum = "36b48a3b1ad866e5034859be45edd1ebba2f097289c8a34b61623c76f10480f3"
 dependencies = [
+ "astral-reqwest-middleware",
  "reqwest",
- "reqwest-middleware",
  "secrecy",
  "serde",
  "serde_json",
@@ -197,6 +197,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-reqwest-middleware"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "638d02e24aeb92f9537897cd1ff82e2bc98fd9ac9575a503e27bb07cdf64d4d7"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest",
+ "serde",
+ "thiserror 2.0.17",
+ "tower-service",
+]
+
+[[package]]
+name = "astral-reqwest-retry"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7549bd00f62f73f2e7e76f3f77ccdabb31873f4f02f758ed88ad739d522867"
+dependencies = [
+ "anyhow",
+ "astral-reqwest-middleware",
+ "async-trait",
+ "futures",
+ "getrandom 0.2.16",
+ "http",
+ "hyper",
+ "reqwest",
+ "retry-policies",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "wasmtimer",
+]
+
+[[package]]
 name = "astral-tl"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,6 +252,26 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "xattr",
+]
+
+[[package]]
+name = "astral_async_http_range_reader"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ddaca0fbbf0d91103cca7c7611790c65f6eff1d456f7fe6bf565d436dc9b8f3"
+dependencies = [
+ "astral-reqwest-middleware",
+ "bisection",
+ "futures",
+ "http-content-range",
+ "itertools 0.13.0",
+ "memmap2 0.9.7",
+ "reqwest",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -280,26 +336,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "async_http_range_reader"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
-dependencies = [
- "bisection",
- "futures",
- "http-content-range",
- "itertools 0.13.0",
- "memmap2 0.9.7",
- "reqwest",
- "reqwest-middleware",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -3592,40 +3628,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqwest-middleware"
-version = "0.4.2"
-source = "git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2#7650ed76215a962a96d94a79be71c27bffde7ab2"
-dependencies = [
- "anyhow",
- "async-trait",
- "http",
- "reqwest",
- "serde",
- "thiserror 2.0.17",
- "tower-service",
-]
-
-[[package]]
-name = "reqwest-retry"
-version = "0.7.0"
-source = "git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2#7650ed76215a962a96d94a79be71c27bffde7ab2"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "getrandom 0.2.16",
- "http",
- "hyper",
- "reqwest",
- "reqwest-middleware",
- "retry-policies",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "wasmtimer",
-]
-
-[[package]]
 name = "resvg"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5378,6 +5380,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "arcstr",
+ "astral-reqwest-middleware",
  "async-trait",
  "base64 0.22.1",
  "etcetera",
@@ -5389,7 +5392,6 @@ dependencies = [
  "percent-encoding",
  "reqsign",
  "reqwest",
- "reqwest-middleware",
  "rust-netrc",
  "rustc-hash",
  "schemars",
@@ -5446,11 +5448,11 @@ dependencies = [
 name = "uv-bin-install"
 version = "0.0.1"
 dependencies = [
+ "astral-reqwest-middleware",
+ "astral-reqwest-retry",
  "fs-err",
  "futures",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -5646,9 +5648,11 @@ name = "uv-client"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "astral-reqwest-middleware",
+ "astral-reqwest-retry",
  "astral-tl",
+ "astral_async_http_range_reader",
  "async-trait",
- "async_http_range_reader",
  "async_zip",
  "bytecheck",
  "fs-err",
@@ -5664,8 +5668,6 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
@@ -5835,6 +5837,7 @@ name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "astral-reqwest-middleware",
  "either",
  "fs-err",
  "futures",
@@ -5843,7 +5846,6 @@ dependencies = [
  "nanoid",
  "owo-colors",
  "reqwest",
- "reqwest-middleware",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -5999,11 +6001,11 @@ name = "uv-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "astral-reqwest-middleware",
  "cargo-util",
  "dashmap",
  "fs-err",
  "reqwest",
- "reqwest-middleware",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -6302,6 +6304,8 @@ name = "uv-publish"
 version = "0.1.0"
 dependencies = [
  "ambient-id",
+ "astral-reqwest-middleware",
+ "astral-reqwest-retry",
  "astral-tokio-tar",
  "async-compression",
  "base64 0.22.1",
@@ -6311,8 +6315,6 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -6374,6 +6376,8 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "astral-reqwest-middleware",
+ "astral-reqwest-retry",
  "clap",
  "configparser",
  "dunce",
@@ -6388,8 +6392,6 @@ dependencies = [
  "ref-cast",
  "regex",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -6483,6 +6485,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "astral-reqwest-middleware",
  "fs-err",
  "indoc",
  "insta",
@@ -6490,7 +6493,6 @@ dependencies = [
  "memchr",
  "regex",
  "reqwest",
- "reqwest-middleware",
  "rustc-hash",
  "tempfile",
  "test-case",
