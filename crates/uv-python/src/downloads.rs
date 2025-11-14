@@ -105,6 +105,8 @@ pub enum Error {
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
     #[error("This version of uv is too old to support the JSON Python download list at {0}")]
     UnsupportedPythonDownloadsJSON(String),
+    #[error("Error while fetching remote python downloads json from '{0}'")]
+    FetchingPythonDownloadsJSONError(String, #[source] Box<Error>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -1015,13 +1017,10 @@ impl ManagedPythonDownloadList {
         let buf: Cow<'_, [u8]> = match json_source {
             Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
             Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => {
-                let (mut reader, size) = read_url(url, client).await?;
-                let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
-                let mut buf = Vec::with_capacity(capacity);
-                reader.read_to_end(&mut buf).await?;
-                buf.into()
-            }
+            Source::Http(ref url) => fetch_bytes_from_url(client, url)
+                .await
+                .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
+                .into(),
         };
         let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
             .map_err(
@@ -1063,6 +1062,14 @@ impl ManagedPythonDownloadList {
         let result = parse_json_downloads(json_downloads);
         Ok(Self { downloads: result })
     }
+}
+
+async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
+    let (mut reader, size) = read_url(url, client).await?;
+    let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
+    let mut buf = Vec::with_capacity(capacity);
+    reader.read_to_end(&mut buf).await?;
+    Ok(buf)
 }
 
 impl ManagedPythonDownload {
