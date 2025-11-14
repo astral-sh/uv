@@ -197,6 +197,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-pubgrub"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf544aa6f110fc4bfdffcc68b1ebeb1b39ce6188e3b9e057d7a5ed4fa865e7be"
+dependencies = [
+ "astral-version-ranges",
+ "indexmap",
+ "log",
+ "priority-queue",
+ "rustc-hash",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "astral-reqwest-middleware"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -252,6 +266,15 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "xattr",
+]
+
+[[package]]
+name = "astral-version-ranges"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7adc2308a566fab9de02bc0e05d18c5a21cb0e793684e4f64c8eb956969b074"
+dependencies = [
+ "smallvec",
 ]
 
 [[package]]
@@ -3191,19 +3214,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pubgrub"
-version = "0.3.0"
-source = "git+https://github.com/astral-sh/pubgrub?rev=d8efd77673c9a90792da9da31b6c0da7ea8a324b#d8efd77673c9a90792da9da31b6c0da7ea8a324b"
-dependencies = [
- "indexmap",
- "log",
- "priority-queue",
- "rustc-hash",
- "thiserror 2.0.17",
- "version-ranges",
-]
-
-[[package]]
 name = "quick-xml"
 version = "0.38.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5265,6 +5275,7 @@ dependencies = [
  "arrayvec",
  "assert_cmd",
  "assert_fs",
+ "astral-version-ranges",
  "axoupdater",
  "backon",
  "base64 0.22.1",
@@ -5365,7 +5376,6 @@ dependencies = [
  "uv-virtualenv",
  "uv-warnings",
  "uv-workspace",
- "version-ranges",
  "walkdir",
  "which",
  "whoami",
@@ -5484,6 +5494,7 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.1.0"
 dependencies = [
+ "astral-version-ranges",
  "base64 0.22.1",
  "csv",
  "flate2",
@@ -5515,7 +5526,6 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
- "version-ranges",
  "walkdir",
  "zip",
 ]
@@ -5902,6 +5912,7 @@ name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
  "arcstr",
+ "astral-version-ranges",
  "bitflags 2.9.4",
  "fs-err",
  "http",
@@ -5934,7 +5945,6 @@ dependencies = [
  "uv-redacted",
  "uv-small-str",
  "uv-warnings",
- "version-ranges",
 ]
 
 [[package]]
@@ -6213,6 +6223,7 @@ dependencies = [
 name = "uv-pep440"
 version = "0.7.0"
 dependencies = [
+ "astral-version-ranges",
  "indoc",
  "rkyv",
  "serde",
@@ -6220,7 +6231,6 @@ dependencies = [
  "unicode-width 0.2.2",
  "unscanny",
  "uv-cache-key",
- "version-ranges",
 ]
 
 [[package]]
@@ -6228,6 +6238,7 @@ name = "uv-pep508"
 version = "0.6.0"
 dependencies = [
  "arcstr",
+ "astral-version-ranges",
  "boxcar",
  "indexmap",
  "insta",
@@ -6249,7 +6260,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-redacted",
- "version-ranges",
 ]
 
 [[package]]
@@ -6517,6 +6527,7 @@ name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
  "arcstr",
+ "astral-pubgrub",
  "clap",
  "dashmap",
  "either",
@@ -6529,7 +6540,6 @@ dependencies = [
  "jiff",
  "owo-colors",
  "petgraph",
- "pubgrub",
  "rkyv",
  "rustc-hash",
  "same-file",
@@ -6841,14 +6851,6 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
-
-[[package]]
-name = "version-ranges"
-version = "0.1.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=d8efd77673c9a90792da9da31b6c0da7ea8a324b#d8efd77673c9a90792da9da31b6c0da7ea8a324b"
-dependencies = [
- "smallvec",
-]
 
 [[package]]
 name = "version_check"
