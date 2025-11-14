@@ -128,7 +128,12 @@ def extract_package_name(match_text: str) -> Optional[str]:
         package = package.split("@")[0]
 
     # Validation checks
-    if package.startswith("--") or "/" in package or "\\" in package or len(package) < 2:
+    if (
+        package.startswith("--")
+        or "/" in package
+        or "\\" in package
+        or len(package) < 2
+    ):
         return None
 
     return package
@@ -303,7 +308,9 @@ async def wait_for_rate_limit(rate_limit: RateLimitInfo) -> None:
         await asyncio.sleep(RATE_LIMIT_DELAY)
 
 
-def build_size_query(base_query: str, start_bytes: int, end_bytes: Optional[int]) -> str:
+def build_size_query(
+    base_query: str, start_bytes: int, end_bytes: Optional[int]
+) -> str:
     """Build a GitHub Code Search query with size filter."""
     if end_bytes is None:
         return f"{base_query} size:>={start_bytes}"
@@ -365,6 +372,7 @@ async def check_packages_batch(
     Returns:
         Dictionary mapping package names to their existence status
     """
+
     async def check_one(package: str) -> tuple[str, bool]:
         async with semaphore:
             async with httpx.AsyncClient() as client:
@@ -422,7 +430,7 @@ async def search_uvx_usage(
     current_rate_limit = RateLimitInfo(None, None)
 
     # Size buckets to work around GitHub's 1000 result limit
-    # It would be way smarter to do this dynamically (query a given size range and do a 
+    # It would be way smarter to do this dynamically (query a given size range and do a
     # binary/proportional split on the number of results) but I already got this far
     # so I'm not going to change it for now.
     markdown_size_buckets = [
@@ -500,7 +508,9 @@ async def search_uvx_usage(
         packages_to_check = list(set(unknown_packages_queue))
         unknown_packages_queue.clear()
 
-        logger.info(f"Checking {len(packages_to_check)} unknown packages against PyPI...")
+        logger.info(
+            f"Checking {len(packages_to_check)} unknown packages against PyPI..."
+        )
         results = await check_packages_batch(packages_to_check, pypi_cache, semaphore)
 
         # Update valid package counts based on results
@@ -509,7 +519,9 @@ async def search_uvx_usage(
                 count = all_package_counts.get(package, 0)
                 if count > 0:
                     valid_package_counts[package] = count
-                    logger.debug(f"Added {package} to valid packages ({count} occurrences)")
+                    logger.debug(
+                        f"Added {package} to valid packages ({count} occurrences)"
+                    )
                 else:
                     logger.warning(f"Package {package} validated but has no count")
 
@@ -639,9 +651,7 @@ def write_top_packages(
             )
 
             # Sort by count descending, then alphabetically
-            sorted_packages = sorted(
-                packages.items(), key=lambda x: (-x[1], x[0])
-            )
+            sorted_packages = sorted(packages.items(), key=lambda x: (-x[1], x[0]))
 
             for package, count in sorted_packages:
                 f.write(f"{package}\n")

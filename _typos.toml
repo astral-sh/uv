@@ -4,6 +4,7 @@ extend-exclude = [
     "ecosystem/**",
     "scripts/**/*.in",
     "crates/uv-build-frontend/src/pipreqs/mapping",
+    "crates/uv/src/commands/tool/top_packages.txt",
 ]
 ignore-hidden = false
 
