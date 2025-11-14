@@ -298,6 +298,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral_async_zip"
+version = "0.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
+dependencies = [
+ "async-compression",
+ "crc32fast",
+ "futures-lite",
+ "pin-project",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -359,20 +374,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "async_zip"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/rs-async-zip?rev=f6a41d32866003c868d03ed791a89c794f61b703#f6a41d32866003c868d03ed791a89c794f61b703"
-dependencies = [
- "async-compression",
- "crc32fast",
- "futures-lite",
- "pin-project",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -5662,8 +5663,8 @@ dependencies = [
  "astral-reqwest-retry",
  "astral-tl",
  "astral_async_http_range_reader",
+ "astral_async_zip",
  "async-trait",
- "async_zip",
  "bytecheck",
  "fs-err",
  "futures",
@@ -5952,8 +5953,8 @@ name = "uv-extract"
 version = "0.0.1"
 dependencies = [
  "astral-tokio-tar",
+ "astral_async_zip",
  "async-compression",
- "async_zip",
  "blake2",
  "fs-err",
  "futures",
@@ -6180,7 +6181,7 @@ dependencies = [
 name = "uv-metadata"
 version = "0.1.0"
 dependencies = [
- "async_zip",
+ "astral_async_zip",
  "fs-err",
  "futures",
  "thiserror 2.0.17",
