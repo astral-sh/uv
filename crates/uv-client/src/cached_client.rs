@@ -13,7 +13,6 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
-use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::BaseClient;
@@ -26,11 +25,8 @@ use crate::{
 
 /// A hook function that is called before downloading a file.
 /// Returns `Ok(true)` to proceed with download, `Ok(false)` to cancel, or `Err` on error.
-pub type PreDownloadHook = Arc<
-    dyn Fn(&DisplaySafeUrl) -> Pin<Box<dyn std::future::Future<Output = Result<bool, Error>> + Send>>
-        + Send
-        + Sync,
->;
+
+pub type PreDownloadHook = Arc<dyn Fn(&DisplaySafeUrl) -> Result<bool, Error>>;
 
 /// Extract problem details from an HTTP response if it has the correct content type
 ///
@@ -267,7 +263,10 @@ impl std::fmt::Debug for CachedClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CachedClient")
             .field("client", &self.client)
-            .field("pre_download_hook", &self.pre_download_hook.as_ref().map(|_| "..."))
+            .field(
+                "pre_download_hook",
+                &self.pre_download_hook.as_ref().map(|_| "..."),
+            )
             .finish()
     }
 }
@@ -664,15 +663,15 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
         let url = DisplaySafeUrl::from_url(req.url().clone());
-        
+
         // Call pre-download hook if set, before downloading.
         if let Some(ref hook) = self.pre_download_hook {
-            let proceed = hook(&url).await?;
+            let proceed = hook(&url)?;
             if !proceed {
                 return Err(ErrorKind::DownloadCancelled(url).into());
             }
         }
-        
+
         trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let mut response = self

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::pin::Pin;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -88,14 +87,9 @@ impl<'a> RegistryClientBuilder<'a> {
     /// The hook receives the URL and returns `Ok(true)` to proceed with download,
     /// `Ok(false)` to cancel, or `Err` on error.
     #[must_use]
-    pub fn pre_download_hook<F, Fut>(mut self, hook: F) -> Self
-    where
-        F: Fn(&DisplaySafeUrl) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<bool, Error>> + Send + 'static,
+    pub fn pre_download_hook(mut self, hook: PreDownloadHook) -> Self
     {
-        self.pre_download_hook = Some(Arc::new(move |url| {
-            Box::pin(hook(url)) as Pin<Box<dyn std::future::Future<Output = Result<bool, Error>> + Send>>
-        }));
+        self.pre_download_hook = Some(hook);
         self
     }
 
