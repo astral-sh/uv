@@ -100,6 +100,7 @@ pub(crate) async fn pin(
                         pin,
                         virtual_project,
                         python_preference,
+                        install_mirrors.python_downloads_json_url.as_deref(),
                         cache,
                         preview,
                     );
@@ -264,6 +265,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
+    python_downloads_json_url: Option<&str>,
     cache: &Cache,
     preview: Preview,
 ) {
@@ -289,6 +291,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_downloads_json_url,
         cache,
         preview,
     ) {

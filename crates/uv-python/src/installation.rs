@@ -59,12 +59,13 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        python_downloads_json_url: Option<&str>,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, None);
+        installation.warn_if_outdated_prerelease(request, python_downloads_json_url);
         Ok(installation)
     }
 
@@ -74,12 +75,13 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        python_downloads_json_url: Option<&str>,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_best_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, None);
+        installation.warn_if_outdated_prerelease(request, python_downloads_json_url);
         Ok(installation)
     }
 
@@ -102,7 +104,14 @@ impl PythonInstallation {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache, preview) {
+        let err = match Self::find(
+            request,
+            environments,
+            preference,
+            python_downloads_json_url,
+            cache,
+            preview,
+        ) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };

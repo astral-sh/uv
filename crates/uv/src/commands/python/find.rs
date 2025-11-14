@@ -31,6 +31,7 @@ pub(crate) async fn find(
     no_config: bool,
     system: bool,
     python_preference: PythonPreference,
+    python_downloads_json_url: Option<&str>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -78,6 +79,7 @@ pub(crate) async fn find(
         &python_request.unwrap_or_default(),
         environment_preference,
         python_preference,
+        python_downloads_json_url,
         cache,
         preview,
     )?;

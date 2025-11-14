@@ -44,6 +44,7 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy};
@@ -102,6 +103,7 @@ pub(crate) async fn pip_compile(
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
+    install_mirrors: PythonInstallMirrors,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
@@ -296,6 +298,7 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            install_mirrors.python_downloads_json_url.as_deref(),
             &cache,
             preview,
         )
@@ -312,6 +315,7 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            install_mirrors.python_downloads_json_url.as_deref(),
             &cache,
             preview,
         )
