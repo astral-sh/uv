@@ -3525,6 +3525,10 @@ uv python install [OPTIONS] [TARGETS]...
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-install--reinstall"><a href="#uv-python-install--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it's already installed.</p>
 <p>By default, uv will exit successfully if the version is already installed.</p>
+</dd><dt id="uv-python-install--upgrade"><a href="#uv-python-install--upgrade"><code>--upgrade</code></a>, <code>-U</code></dt><dd><p>Upgrade existing Python installations to the latest patch version.</p>
+<p>By default, uv will not upgrade already-installed Python versions to newer patch releases. With <code>--upgrade</code>, uv will upgrade to the latest available patch version for the specified minor version(s).</p>
+<p>If the requested versions are not yet installed, uv will install them.</p>
+<p>This option is only supported for minor version requests, e.g., <code>3.12</code>; uv will exit with an error if a patch version, e.g., <code>3.12.2</code>, is requested.</p>
 </dd><dt id="uv-python-install--verbose"><a href="#uv-python-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
