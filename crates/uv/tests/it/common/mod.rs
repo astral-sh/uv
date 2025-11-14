@@ -486,7 +486,7 @@ impl TestContext {
 
     /// Use a shared global cache for Python downloads.
     #[must_use]
-    pub fn with_python_download_cache(mut self) -> Self {
+    fn with_python_download_cache(mut self) -> Self {
         let key: OsString = EnvVars::UV_PYTHON_CACHE_DIR.into();
         self.extra_env.retain(|(existing, _)| existing != &key);
         let value = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
@@ -504,9 +504,6 @@ impl TestContext {
     pub fn without_python_download_cache(mut self) -> Self {
         let key: OsString = EnvVars::UV_PYTHON_CACHE_DIR.into();
         self.extra_env.retain(|(existing, _)| existing != &key);
-        let empty_cache = self.temp_dir.child("python-cache-empty");
-        self.extra_env
-            .push((key, empty_cache.as_os_str().to_owned()));
         self
     }
 
