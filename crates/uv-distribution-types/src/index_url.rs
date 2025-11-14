@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::trace;
 use url::{ParseError, Url};
-use uv_auth::RealmRef;
+use uv_auth::{Credentials, RealmRef};
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
@@ -449,13 +449,38 @@ impl<'a> IndexLocations {
                     index
                         .name
                         .as_ref()
-                        .map(ToString::to_string)
+                        .map(|n| n.to_string())
                         .unwrap_or_else(|| index.url.to_string())
                 );
-                if let Some(root_url) = index.root_url() {
-                    uv_auth::store_credentials(&root_url, credentials.clone());
+                
+                // When environment credentials are provided for a named index, use a URL without
+                // embedded credentials for caching. This ensures that the environment credentials
+                // take precedence over any credentials in the URL.
+                let has_env_credentials = index
+                    .name
+                    .as_ref()
+                    .and_then(|name| Credentials::from_env(name.to_env_var()))
+                    .is_some();
+                
+                if has_env_credentials {
+                    // Strip credentials from the URL before caching
+                    let mut url_without_creds = index.raw_url().clone();
+                    let _ = url_without_creds.set_username("");
+                    let _ = url_without_creds.set_password(None);
+                    
+                    if let Some(mut root_url) = index.root_url() {
+                        let _ = root_url.set_username("");
+                        let _ = root_url.set_password(None);
+                        uv_auth::store_credentials(&root_url, credentials.clone());
+                    }
+                    uv_auth::store_credentials(&url_without_creds, credentials);
+                } else {
+                    // Use the URL as-is when credentials come from the URL itself
+                    if let Some(root_url) = index.root_url() {
+                        uv_auth::store_credentials(&root_url, credentials.clone());
+                    }
+                    uv_auth::store_credentials(index.raw_url(), credentials);
                 }
-                uv_auth::store_credentials(index.raw_url(), credentials);
             }
         }
     }
