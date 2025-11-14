@@ -1154,6 +1154,7 @@ mod tests {
         fn shuffle<T>(vec: &mut [T]) {
             let n: usize = vec.len();
             for i in 0..(n - 1) {
+                #[allow(clippy::cast_possible_truncation)]
                 let j = (rand() as usize) % (n - i) + i;
                 vec.swap(i, j);
             }
@@ -1176,9 +1177,9 @@ mod tests {
 
         // Valid sdists/wheels without attestations
         {
-            let dists = vec![valid_sdist, valid_wheel];
+            let dists = [valid_sdist, valid_wheel];
 
-            let mut groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
+            let mut groups = group_files(dists.iter().map(PathBuf::from).collect());
             groups.sort_by_key(|group| group.raw_filename.clone());
 
             assert_debug_snapshot!(groups, @r#"
@@ -1242,7 +1243,7 @@ mod tests {
                     shuffle(&mut dists);
 
                     let mut groups =
-                        group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
+                        group_files(dists.iter().map(PathBuf::from).collect());
                     groups.sort_by_key(|group| group.raw_filename.clone());
 
                     assert_debug_snapshot!(groups, @r#"
@@ -1300,7 +1301,7 @@ mod tests {
 
         // Invalid dist/attestation filenames get ignored.
         {
-            let dists = vec![
+            let dists = [
                 valid_sdist,
                 &valid_sdist_frob_attestation,
                 valid_wheel,
@@ -1308,10 +1309,10 @@ mod tests {
                 invalid_sdist,
                 invalid_wheel,
                 &valid_sdist_invalid_attestation,
-                &invalid_attestation,
+                invalid_attestation,
             ];
 
-            let groups = group_files(dists.iter().map(|s| PathBuf::from(s)).collect());
+            let groups = group_files(dists.iter().map(PathBuf::from).collect());
             assert_debug_snapshot!(groups, @r#"
             [
                 UploadGroup {
@@ -1369,9 +1370,9 @@ mod tests {
             let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
             UploadGroup {
-                file: file,
+                file,
                 raw_filename: raw_filename.to_string(),
-                filename: filename,
+                filename,
                 attestations: vec![],
             }
         };
@@ -1491,9 +1492,9 @@ mod tests {
             let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
             UploadGroup {
-                file: file,
+                file,
                 raw_filename: raw_filename.to_string(),
-                filename: filename,
+                filename,
                 attestations: vec![],
             }
         };
