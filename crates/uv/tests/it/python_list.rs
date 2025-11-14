@@ -2,6 +2,11 @@ use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Result;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[test]
 fn python_list() {
@@ -478,4 +483,111 @@ fn python_list_downloads_installed() {
 
     ----- stderr -----
     ");
+}
+
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    let remote_json = r#"
+    {
+        "cpython-3.14.0-darwin-aarch64-none": {
+            "name": "cpython",
+            "arch": {
+                "family": "aarch64",
+                "variant": null
+            },
+            "os": "darwin",
+            "libc": "none",
+            "major": 3,
+            "minor": 14,
+            "patch": 0,
+            "prerelease": "",
+            "url": "https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz",
+            "sha256": "c3223d5924a0ed0ef5958a750377c362d0957587f896c0f6c635ae4b39e0f337",
+            "variant": null,
+            "build": "20251028"
+        },
+        "cpython-3.13.2+freethreaded-linux-powerpc64le-gnu": {
+            "name": "cpython",
+            "arch": {
+                "family": "powerpc64le",
+                "variant": null
+            },
+            "os": "linux",
+            "libc": "gnu",
+            "major": 3,
+            "minor": 13,
+            "patch": 2,
+            "prerelease": "",
+            "url": "https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz",
+            "sha256": "6ae8fa44cb2edf4ab49cff1820b53c40c10349c0f39e11b8cd76ce7f3e7e1def",
+            "variant": "freethreaded",
+            "build": "20250317"
+        }
+    }
+    "#;
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(remote_json, "application/json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/invalid"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/json"))
+        .mount(&server)
+        .await;
+
+    // Test showing all interpreters from the remote JSON URL
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0-macos-aarch64-none                    https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz
+    cpython-3.13.2+freethreaded-linux-powerpc64le-gnu    https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz
+
+    ----- stderr -----
+    ");
+
+    // test invalid URL path
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/404", server.uri())), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
+      Caused by: Failed to download http://[LOCALHOST]/404
+      Caused by: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
+
+    ");
+
+    // test invalid json
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/invalid", server.uri())), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
+      Caused by: EOF while parsing an object at line 1 column 1
+
+    ");
+
+    Ok(())
 }
