@@ -452,7 +452,7 @@ impl<'a> IndexLocations {
                         .map(|n| n.to_string())
                         .unwrap_or_else(|| index.url.to_string())
                 );
-                
+
                 // When environment credentials are provided for a named index, use a URL without
                 // embedded credentials for caching. This ensures that the environment credentials
                 // take precedence over any credentials in the URL.
@@ -461,13 +461,13 @@ impl<'a> IndexLocations {
                     .as_ref()
                     .and_then(|name| Credentials::from_env(name.to_env_var()))
                     .is_some();
-                
+
                 if has_env_credentials {
                     // Strip credentials from the URL before caching
                     let mut url_without_creds = index.raw_url().clone();
                     let _ = url_without_creds.set_username("");
                     let _ = url_without_creds.set_password(None);
-                    
+
                     if let Some(mut root_url) = index.root_url() {
                         let _ = root_url.set_username("");
                         let _ = root_url.set_password(None);

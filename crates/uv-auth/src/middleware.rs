@@ -560,9 +560,9 @@ impl AuthMiddleware {
                     // cached credentials for this index (username-agnostic). This allows
                     // environment-provided credentials for a named index to override a username
                     // embedded in the request URL.
-                    self.cache().get_url(&index.url, &Username::none()).or_else(|| {
-                        self.cache().get_url(&index.root_url, &Username::none())
-                    })
+                    self.cache()
+                        .get_url(&index.url, &Username::none())
+                        .or_else(|| self.cache().get_url(&index.root_url, &Username::none()))
                 })
         } else {
             // First, try realm credentials matching the provided username
