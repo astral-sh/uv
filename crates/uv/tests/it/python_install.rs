@@ -2614,7 +2614,8 @@ fn python_install_no_cache() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .without_python_download_cache();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @r"
