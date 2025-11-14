@@ -4,6 +4,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use anstream::eprint;
 use anyhow::{Context, bail};
@@ -80,7 +81,6 @@ impl Display for ToolRunCommand {
         }
     }
 }
-
 /// Embedded list of top Python packages.
 const TOP_PACKAGES: &str = include_str!("top_packages.txt");
 
@@ -90,8 +90,7 @@ fn load_top_packages() -> std::collections::HashSet<String> {
         .lines()
         .filter_map(|line| {
             let line = line.trim();
-            // Skip empty lines and comments
-            if line.is_empty() || line.starts_with('#') {
+            if line.is_empty() {
                 None
             } else {
                 Some(line.to_lowercase())
@@ -109,30 +108,26 @@ fn is_top_package(package_name: &PackageName) -> bool {
 /// Check heuristics and build reasoning string.
 ///
 /// Returns (should_skip_prompt, reasoning_string)
-fn check_heuristics(requirement: &Requirement, enabled_heuristics: &[String]) -> (bool, String) {
+fn check_heuristics(requirement: &Requirement, enabled_heuristics: &[InstallPromptHeuristic]) -> (bool, String) {
     let mut reasoning_parts = Vec::new();
     let mut should_skip_prompt = false;
 
     for heuristic in enabled_heuristics {
-        match heuristic.as_str() {
-            "top-packages" => {
+        match heuristic {
+            InstallPromptHeuristic::TopPackages => {
                 if !is_top_package(&requirement.name) {
                     reasoning_parts.push("is not a top python package");
                 } else {
                     should_skip_prompt = true;
                 }
             }
-            "previously-installed" => {
+            InstallPromptHeuristic::PreviouslyInstalled => {
                 // Not yet implemented - always fails for now
                 reasoning_parts.push("has never been previously approved by the user");
             }
-            "user-allowlist" => {
+            InstallPromptHeuristic::UserAllowlist => {
                 // Not yet implemented - always fails for now
                 reasoning_parts.push("is not in the user's allowlist");
-            }
-            _ => {
-                debug!("Unknown heuristic: {}", heuristic);
-                // Unknown heuristics are treated as failing
             }
         }
     }
@@ -153,7 +148,7 @@ fn check_and_prompt_for_tool_install(
     requirement: &Requirement,
     preview: Preview,
     approve_all_tool_installs: bool,
-    approve_all_heuristics: &[String],
+    approve_all_heuristics: &[InstallPromptHeuristic],
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     use uv_preview::PreviewFeatures;
@@ -185,17 +180,20 @@ fn check_and_prompt_for_tool_install(
         return Ok(ExitStatus::Success);
     }
 
-    let not_installed_message = String::from("This package is not currently installed");
+    let not_installed_message = "This package is not currently installed";
 
-    let prompt_message = format!(
-        "This tool is provided by the following package:\n\n+ {}\n\n{}.",
-        requirement.to_string().cyan(),
-        if reasoning.is_empty() {
-            not_installed_message
-        } else {
-            not_installed_message + " and " + reasoning.as_str()
-        }
-    );
+    let prompt_message = if reasoning.is_empty() {
+        format!(
+            "This tool is provided by the following package:\n\n+ {}\n\n{not_installed_message}.",
+            requirement.to_string().cyan()
+        )
+    } else {
+        format!(
+            "This tool is provided by the following package:\n\n+ {}\n\n{not_installed_message} and {reasoning}.",
+            requirement.to_string().cyan()
+        )
+    };
+
     // Check if we have a TTY
     let term = Term::stderr();
     if !term.is_term() {
@@ -1049,52 +1047,51 @@ async fn get_or_create_environment(
     )
     .await?;
 
+
     // Set up a pre-download hook that prompts before downloading new files.
     // The hook is called before any download happens, allowing us to prompt only when needed.
-    let pre_download_hook: Option<PreDownloadHook> = if let ToolRequirement::Package { requirement, .. } = &from {
-        // Use Arc for shared ownership to avoid cloning on each hook call
-        let requirement = std::sync::Arc::new(requirement.clone());
-        let approve_all_heuristics = std::sync::Arc::new(approve_all_heuristics.iter().cloned().collect::<Vec<String>>());
-        let prompt_approved = std::sync::Arc::new(std::sync::Mutex::new(None));
+    // Clone approve_all_heuristics to Vec to own it for the 'static closure
+    let approve_all_heuristics_owned: Vec<InstallPromptHeuristic> = approve_all_heuristics.to_vec();
+    let pre_download_hook: Option<PreDownloadHook> =
+        if let ToolRequirement::Package { requirement, .. } = &from {
+            // Use Arc for shared ownership to avoid cloning on each hook call
+            let requirement = Arc::new(requirement.clone());
+            let approve_all_heuristics_arc = Arc::new(approve_all_heuristics_owned);
+            let prompt_approved = Arc::new(Mutex::new(None));
 
-        Some(Arc::new(move |url: &uv_redacted::DisplaySafeUrl| {
-            let prompt_approved = prompt_approved.clone();
-            let requirement = requirement.clone();
-            let approve_all_heuristics = approve_all_heuristics.clone();
-            let url = url.clone();
+            Some(Arc::new(move |url: &uv_redacted::DisplaySafeUrl| {
+                let prompt_approved = prompt_approved.clone();
+                let requirement = requirement.clone();
+                let approve_all_heuristics = approve_all_heuristics_arc.clone();
+                let url = url.clone();
 
-            Box::pin(async move {
-                // Check if we've already prompted and got approval
-                if let Some(result) = *prompt_approved.lock().unwrap() {
-                    return Ok(result);
-                }
+                    // Check if we've already prompted and got approval
+                    if let Some(result) = *prompt_approved.lock().unwrap() {
+                        return Ok(result);
+                    }
+                    debug!("Pre-download hook triggered for: {}", url);
 
-                debug!("Pre-download hook triggered for: {}", url);
+                    // Prompt the user
+                    let approved = matches!(
+                        check_and_prompt_for_tool_install(
+                            &*requirement,
+                            preview,
+                            approve_all_tool_installs,
+                            &*approve_all_heuristics,
+                            printer,
+                        )
+                        .map_err(|_| { Error::from(ErrorKind::DownloadCancelled(url)) })?,
+                        ExitStatus::Success
+                    );
 
-                // Prompt the user
-                let approved = matches!(
-                    check_and_prompt_for_tool_install(
-                        &*requirement,
-                        preview,
-                        approve_all_tool_installs,
-                        &*approve_all_heuristics,
-                        printer,
-                    )
-                    .map_err(|_| {
-                        Error::from(ErrorKind::DownloadCancelled(url))
-                    })?,
-                    ExitStatus::Success
-                );
+                    // Cache the result
+                    *prompt_approved.lock().unwrap() = Some(approved);
 
-                // Cache the result
-                *prompt_approved.lock().unwrap() = Some(approved);
-
-                Ok(approved)
-            })
-        }))
-    } else {
-        None
-    };
+                    Ok(approved)
+                }))
+        } else {
+            None
+        };
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

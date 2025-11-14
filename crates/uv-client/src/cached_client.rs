@@ -25,7 +25,6 @@ use crate::{
 
 /// A hook function that is called before downloading a file.
 /// Returns `Ok(true)` to proceed with download, `Ok(false)` to cancel, or `Err` on error.
-
 pub type PreDownloadHook = Arc<dyn Fn(&DisplaySafeUrl) -> Result<bool, Error>>;
 
 /// Extract problem details from an HTTP response if it has the correct content type

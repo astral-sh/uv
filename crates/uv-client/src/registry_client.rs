@@ -48,7 +48,7 @@ use crate::{
 };
 
 /// A builder for an [`RegistryClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
@@ -58,18 +58,6 @@ pub struct RegistryClientBuilder<'a> {
     pre_download_hook: Option<PreDownloadHook>,
 }
 
-impl<'a> std::fmt::Debug for RegistryClientBuilder<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RegistryClientBuilder")
-            .field("index_locations", &self.index_locations)
-            .field("index_strategy", &self.index_strategy)
-            .field("torch_backend", &self.torch_backend)
-            .field("cache", &self.cache)
-            .field("base_client_builder", &self.base_client_builder)
-            .field("pre_download_hook", &self.pre_download_hook.as_ref().map(|_| "..."))
-            .finish()
-    }
-}
 
 impl<'a> RegistryClientBuilder<'a> {
     pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
