@@ -8,8 +8,17 @@ use uv_static::EnvVars;
 
 #[cfg(windows)]
 use serde::Deserialize;
+// Note: `wmi` crate v0.18.0 provides a no-argument `WMIConnection::new()` and
+// does not export a `COMLibrary` type at the crate root. Older code used to
+// construct a `COMLibrary` guard and pass it into `WMIConnection::new(com)` to
+// ensure COM was initialized for the current thread. In this workspace we pin
+// `wmi = 0.18.0` (see `Cargo.toml`), so importing `COMLibrary` caused
+// "no `COMLibrary` in the root" and passing it to `WMIConnection::new(...)`
+// resulted in a signature mismatch. To match the current `wmi` API we call
+// `WMIConnection::new()` directly and let the crate manage COM initialization.
+// See: https://docs.rs/wmi/latest/wmi/
 #[cfg(windows)]
-use wmi::{COMLibrary, WMIConnection};
+use wmi::WMIConnection;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
@@ -208,34 +217,27 @@ impl Accelerator {
                 name: Option<String>,
             }
 
-            match COMLibrary::new() {
-                Ok(com_library) => match WMIConnection::new(com_library) {
-                    Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
-                        Ok(gpu_controllers) => {
-                            for gpu_controller in gpu_controllers {
-                                if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
-                                    if pnp_device_id
-                                        .contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
-                                    {
-                                        debug!(
-                                            "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
-                                            pnp_device_id, gpu_controller.name
-                                        );
-                                        return Ok(Some(Self::Xpu));
-                                    }
+            match WMIConnection::new() {
+                Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
+                    Ok(gpu_controllers) => {
+                        for gpu_controller in gpu_controllers {
+                            if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
+                                if pnp_device_id.contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}")) {
+                                    debug!(
+                                        "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
+                                        pnp_device_id, gpu_controller.name
+                                    );
+                                    return Ok(Some(Self::Xpu));
                                 }
                             }
                         }
-                        Err(e) => {
-                            debug!("Failed to query WMI for video controllers: {e}");
-                        }
-                    },
+                    }
                     Err(e) => {
-                        debug!("Failed to create WMI connection: {e}");
+                        debug!("Failed to query WMI for video controllers: {e}");
                     }
                 },
                 Err(e) => {
-                    debug!("Failed to initialize COM library: {e}");
+                    debug!("Failed to create WMI connection: {e}");
                 }
             }
         }
