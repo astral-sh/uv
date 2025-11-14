@@ -5111,6 +5111,13 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// Automatically approve all tool installations without prompting.
+    ///
+    /// When enabled, skips confirmation prompts for installing uncached packages.
+    /// This is useful for CI/CD environments or when you trust all packages.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub approve_all_tool_installs: bool,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
