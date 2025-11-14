@@ -295,7 +295,7 @@ pub enum ErrorKind {
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
     /// Download was cancelled by the pre-download hook.
-    #[error("Download cancelled: `{0}`")]
+    #[error("Download cancelled by user")]
     DownloadCancelled(DisplaySafeUrl),
 
     /// Add the number of failed retries to the error.

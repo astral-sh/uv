@@ -5,7 +5,8 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, sync_environment,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment_with_hook,
+    sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -167,7 +168,7 @@ impl CachedEnvironment {
 
         // Resolve the requirements with the interpreter.
         let resolution = Resolution::from(
-            crate::commands::project::resolve_environment_with_hook(
+            resolve_environment_with_hook(
                 spec,
                 &interpreter,
                 python_platform,

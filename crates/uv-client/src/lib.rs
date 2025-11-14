@@ -3,7 +3,9 @@ pub use base_client::{
     RedirectClientWithMiddleware, RequestBuilder, RetryParsingError, UvRetryableStrategy,
     is_transient_network_error,
 };
-pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy, PreDownloadHook};
+pub use cached_client::{
+    CacheControl, CachedClient, CachedClientError, DataWithCachePolicy, PreDownloadHook,
+};
 pub use error::{Error, ErrorKind, WrappedReqwestError};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use linehaul::LineHaul;

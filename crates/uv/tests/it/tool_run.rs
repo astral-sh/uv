@@ -3176,9 +3176,9 @@ fn tool_run_install_confirmation() -> anyhow::Result<()> {
 
     // Create uv.toml with empty heuristics to disable top-packages check
     let config = context.temp_dir.child("uv.toml");
-    config.write_str(indoc::indoc! {r#"
+    config.write_str(indoc::indoc! {r"
         approve-all-heuristics = []
-    "#})?;
+    "})?;
 
     // Run with preview flag enabled and tool-install-confirmation feature
     // Use a package not in top-packages list to trigger prompt
@@ -3226,7 +3226,7 @@ fn tool_run_install_confirmation() -> anyhow::Result<()> {
 
 /// Test that tool install confirmation prompt is NOT shown when preview flag is disabled.
 #[test]
-fn tool_run_install_confirmation_preview_disabled() -> anyhow::Result<()> {
+fn tool_run_install_confirmation_preview_disabled() {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -3254,8 +3254,6 @@ fn tool_run_install_confirmation_preview_disabled() -> anyhow::Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     "###);
-
-    Ok(())
 }
 
 /// Test that tool install confirmation is skipped when --approve-all-tool-installs is set.
@@ -3267,9 +3265,9 @@ fn tool_run_install_confirmation_approve_all_flag() -> anyhow::Result<()> {
 
     // Create uv.toml with empty heuristics list
     let config = context.temp_dir.child("uv.toml");
-    config.write_str(indoc::indoc! {r#"
+    config.write_str(indoc::indoc! {r"
         approve-all-heuristics = []
-    "#})?;
+    "})?;
 
     // Run with --approve-all-tool-installs flag and preview enabled - should not prompt
     uv_snapshot!(context.filters(), context.tool_run()
@@ -3304,10 +3302,10 @@ fn tool_run_install_confirmation_approve_all_config() -> anyhow::Result<()> {
 
     // Create uv.toml with approve-all-tool-installs = true and empty heuristics list
     let config = context.temp_dir.child("uv.toml");
-    config.write_str(indoc::indoc! {r#"
+    config.write_str(indoc::indoc! {r"
         approve-all-tool-installs = true
         approve-all-heuristics = []
-    "#})?;
+    "})?;
 
     // Run with preview enabled - should not prompt due to config
     uv_snapshot!(context.filters(), context.tool_run()
@@ -3335,7 +3333,7 @@ fn tool_run_install_confirmation_approve_all_config() -> anyhow::Result<()> {
 
 /// Test that tool install confirmation is skipped when package is in top-packages (default heuristic).
 #[test]
-fn tool_run_install_confirmation_top_packages_heuristic() -> anyhow::Result<()> {
+fn tool_run_install_confirmation_top_packages_heuristic() {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -3359,8 +3357,6 @@ fn tool_run_install_confirmation_top_packages_heuristic() -> anyhow::Result<()> 
     Installed 1 package in [TIME]
      + ruff==0.3.4
     "###);
-
-    Ok(())
 }
 
 /// Test that tool install confirmation shows reasoning when package is not in top-packages.
@@ -3410,7 +3406,7 @@ fn tool_run_install_confirmation_reasoning_top_packages() -> anyhow::Result<()> 
 
 /// Test that tool install confirmation is skipped when package is already cached.
 #[test]
-fn tool_run_install_confirmation_cached_package() -> anyhow::Result<()> {
+fn tool_run_install_confirmation_cached_package() {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -3441,13 +3437,11 @@ fn tool_run_install_confirmation_cached_package() -> anyhow::Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     "###);
-
-    Ok(())
 }
 
 /// Test that tool install confirmation shows message in non-TTY mode with reasoning.
 #[test]
-fn tool_run_install_confirmation_non_tty() -> anyhow::Result<()> {
+fn tool_run_install_confirmation_non_tty() {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -3475,8 +3469,6 @@ fn tool_run_install_confirmation_non_tty() -> anyhow::Result<()> {
       × No solution found when resolving tool dependencies:
       ╰─▶ Because a-very-unpopular-python-package was not found in the package registry and you require a-very-unpopular-python-package, we can conclude that your requirements are unsatisfiable.
     "###);
-
-    Ok(())
 }
 
 /// Test that tool install confirmation can be cancelled.
@@ -3525,7 +3517,7 @@ fn tool_run_install_confirmation_cancelled() -> anyhow::Result<()> {
 }
 
 #[test]
-fn tool_run_install_confirmation_tool_from_package() -> anyhow::Result<()> {
+fn tool_run_install_confirmation_tool_from_package() {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -3553,6 +3545,4 @@ fn tool_run_install_confirmation_tool_from_package() -> anyhow::Result<()> {
       × No solution found when resolving tool dependencies:
       ╰─▶ Because a-very-unpopular-python-package was not found in the package registry and you require a-very-unpopular-python-package, we can conclude that your requirements are unsatisfiable.
     "###);
-
-    Ok(())
 }

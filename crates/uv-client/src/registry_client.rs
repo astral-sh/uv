@@ -58,7 +58,6 @@ pub struct RegistryClientBuilder<'a> {
     pre_download_hook: Option<PreDownloadHook>,
 }
 
-
 impl<'a> RegistryClientBuilder<'a> {
     pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
         Self {
@@ -75,8 +74,7 @@ impl<'a> RegistryClientBuilder<'a> {
     /// The hook receives the URL and returns `Ok(true)` to proceed with download,
     /// `Ok(false)` to cancel, or `Err` on error.
     #[must_use]
-    pub fn pre_download_hook(mut self, hook: PreDownloadHook) -> Self
-    {
+    pub fn pre_download_hook(mut self, hook: PreDownloadHook) -> Self {
         self.pre_download_hook = Some(hook);
         self
     }

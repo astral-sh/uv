@@ -38,7 +38,9 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{InstallPromptHeuristic, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{
+    InstallPromptHeuristic, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions,
+};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
@@ -107,8 +109,11 @@ fn is_top_package(package_name: &PackageName) -> bool {
 
 /// Check heuristics and build reasoning string.
 ///
-/// Returns (should_skip_prompt, reasoning_string)
-fn check_heuristics(requirement: &Requirement, enabled_heuristics: &[InstallPromptHeuristic]) -> (bool, String) {
+/// Returns (`should_skip_prompt`, `reasoning_string`)
+fn check_heuristics(
+    requirement: &Requirement,
+    enabled_heuristics: &[InstallPromptHeuristic],
+) -> (bool, String) {
     let mut reasoning_parts = Vec::new();
     let mut should_skip_prompt = false;
 
@@ -143,7 +148,7 @@ fn check_heuristics(requirement: &Requirement, enabled_heuristics: &[InstallProm
 
 /// Check if we need to prompt for tool installation and prompt if necessary.
 ///
-/// Returns Ok(ExitStatus::Success) if we should proceed, Ok(ExitStatus::Failure) if cancelled, Err on error.
+/// Returns `Ok(ExitStatus::Success)` if we should proceed, `Ok(ExitStatus::Failure)` if cancelled, Err on error.
 fn check_and_prompt_for_tool_install(
     requirement: &Requirement,
     preview: Preview,
@@ -199,10 +204,9 @@ fn check_and_prompt_for_tool_install(
     if !term.is_term() {
         debug!("Not a TTY interface, skipping prompt but printing message");
         let message = format!(
-            "{}\nNon-interactive mode: installation will proceed automatically.",
-            prompt_message
+            "{prompt_message}\nNon-interactive mode: installation will proceed automatically."
         );
-        writeln!(printer.stderr(), "{}", message)?;
+        writeln!(printer.stderr(), "{message}")?;
         return Ok(ExitStatus::Success);
     }
 
@@ -212,8 +216,8 @@ fn check_and_prompt_for_tool_install(
         requirement.name.as_str()
     );
 
-    write!(printer.stderr(), "{}\n", prompt_message)?;
-    match uv_console::confirm("Would you like to proceed?", &term, true) {
+    writeln!(printer.stderr(), "{prompt_message}")?;
+    match uv_console::confirm("Would you like to proceed?\n", &term, true) {
         Ok(true) => {
             debug!(
                 "User confirmed installation of {}",
@@ -1047,7 +1051,6 @@ async fn get_or_create_environment(
     )
     .await?;
 
-
     // Set up a pre-download hook that prompts before downloading new files.
     // The hook is called before any download happens, allowing us to prompt only when needed.
     // Clone approve_all_heuristics to Vec to own it for the 'static closure
@@ -1065,30 +1068,30 @@ async fn get_or_create_environment(
                 let approve_all_heuristics = approve_all_heuristics_arc.clone();
                 let url = url.clone();
 
-                    // Check if we've already prompted and got approval
-                    if let Some(result) = *prompt_approved.lock().unwrap() {
-                        return Ok(result);
-                    }
-                    debug!("Pre-download hook triggered for: {}", url);
+                // Check if we've already prompted and got approval
+                if let Some(result) = *prompt_approved.lock().unwrap() {
+                    return Ok(result);
+                }
+                debug!("Pre-download hook triggered for: {}", url);
 
-                    // Prompt the user
-                    let approved = matches!(
-                        check_and_prompt_for_tool_install(
-                            &*requirement,
-                            preview,
-                            approve_all_tool_installs,
-                            &*approve_all_heuristics,
-                            printer,
-                        )
-                        .map_err(|_| { Error::from(ErrorKind::DownloadCancelled(url)) })?,
-                        ExitStatus::Success
-                    );
+                // Prompt the user
+                let approved = matches!(
+                    check_and_prompt_for_tool_install(
+                        &requirement,
+                        preview,
+                        approve_all_tool_installs,
+                        &approve_all_heuristics,
+                        printer,
+                    )
+                    .map_err(|_| { Error::from(ErrorKind::DownloadCancelled(url)) })?,
+                    ExitStatus::Success
+                );
 
-                    // Cache the result
-                    *prompt_approved.lock().unwrap() = Some(approved);
+                // Cache the result
+                *prompt_approved.lock().unwrap() = Some(approved);
 
-                    Ok(approved)
-                }))
+                Ok(approved)
+            }))
         } else {
             None
         };
@@ -1313,35 +1316,35 @@ async fn get_or_create_environment(
         Ok(environment) => environment,
         Err(err) => match err {
             ProjectError::Operation(err) => {
-            // If the resolution failed due to the discovered interpreter not satisfying the
-            // `requires-python` constraint, we can try to refine the interpreter.
-            //
-            // For example, if we discovered a Python 3.8 interpreter on the user's machine,
-            // but the tool requires Python 3.10 or later, we can try to download a
-            // Python 3.10 interpreter and re-resolve.
-            let Some(interpreter) = refine_interpreter(
-                &interpreter,
-                python_request.as_ref(),
-                &err,
-                client_builder,
-                &reporter,
-                &install_mirrors,
-                python_preference,
-                python_downloads,
-                cache,
-                preview,
-            )
-            .await
-            .ok()
-            .flatten() else {
-                return Err(err.into());
-            };
+                // If the resolution failed due to the discovered interpreter not satisfying the
+                // `requires-python` constraint, we can try to refine the interpreter.
+                //
+                // For example, if we discovered a Python 3.8 interpreter on the user's machine,
+                // but the tool requires Python 3.10 or later, we can try to download a
+                // Python 3.10 interpreter and re-resolve.
+                let Some(interpreter) = refine_interpreter(
+                    &interpreter,
+                    python_request.as_ref(),
+                    &err,
+                    client_builder,
+                    &reporter,
+                    &install_mirrors,
+                    python_preference,
+                    python_downloads,
+                    cache,
+                    preview,
+                )
+                .await
+                .ok()
+                .flatten() else {
+                    return Err(err.into());
+                };
 
-            debug!(
-                "Re-resolving with Python {} (`{}`)",
-                interpreter.python_version(),
-                interpreter.sys_executable().display()
-            );
+                debug!(
+                    "Re-resolving with Python {} (`{}`)",
+                    interpreter.python_version(),
+                    interpreter.sys_executable().display()
+                );
 
                 CachedEnvironment::from_spec(
                     spec,
