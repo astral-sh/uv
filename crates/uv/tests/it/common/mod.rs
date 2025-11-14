@@ -631,7 +631,7 @@ impl TestContext {
             .iter()
             .map(|version| PythonVersion::from_str(version).unwrap())
             .zip(
-                python_installations_for_versions(&temp_dir, python_versions)
+                python_installations_for_versions(&temp_dir, python_versions, None)
                     .expect("Failed to find test Python versions"),
             )
             .collect();
@@ -1689,7 +1689,7 @@ pub fn python_path_with_versions(
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
     Ok(env::join_paths(
-        python_installations_for_versions(temp_dir, python_versions)?
+        python_installations_for_versions(temp_dir, python_versions, None)?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
     )?)
@@ -1701,6 +1701,7 @@ pub fn python_path_with_versions(
 pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
+    python_downloads_json_url: Option<&str>,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
     let selected_pythons = python_versions
@@ -1710,6 +1711,7 @@ pub fn python_installations_for_versions(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
+                python_downloads_json_url,
                 &cache,
                 Preview::default(),
             ) {

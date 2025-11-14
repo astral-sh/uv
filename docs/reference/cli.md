@@ -3686,7 +3686,9 @@ uv python find [OPTIONS] [REQUEST]
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-find--python-downloads-json-url"><a href="#uv-python-find--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+<p>Note that currently, only local paths are supported.</p>
+</dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-find--script"><a href="#uv-python-find--script"><code>--script</code></a> <i>script</i></dt><dd><p>Find the environment for a Python script, rather than the current project</p>
 </dd><dt id="uv-python-find--show-version"><a href="#uv-python-find--show-version"><code>--show-version</code></a></dt><dd><p>Show the Python version that would be used instead of the path to the interpreter</p>

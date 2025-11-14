@@ -6032,6 +6032,12 @@ pub struct PythonFindArgs {
     /// Show the Python version that would be used instead of the path to the interpreter.
     #[arg(long)]
     pub show_version: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    ///
+    /// Note that currently, only local paths are supported.
+    #[arg(long)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
