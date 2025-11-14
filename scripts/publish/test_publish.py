@@ -156,11 +156,11 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
     ),
-    "codeberg": TargetConfiguration(
-        "astral-test-token",
-        "https://codeberg.org/api/packages/astral-test-user/pypi",
-        "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
-    ),
+    # "codeberg": TargetConfiguration(
+    #     "astral-test-token",
+    #     "https://codeberg.org/api/packages/astral-test-user/pypi",
+    #     "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
+    # ),
     "cloudsmith": TargetConfiguration(
         "astral-test-token",
         "https://python.cloudsmith.io/astral-test/astral-test-1/",
