@@ -29,7 +29,25 @@ pub(crate) struct WindowsPython {
 }
 
 /// Find all Pythons registered in the Windows registry following PEP 514.
-pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows::core::Error> {
+///
+/// NOTE: this function returns `windows_registry::Result` (alias for
+/// `Result<_, windows_result::error::Error>`) instead of the previous
+/// `Result<_, windows::core::Error>`. The change was made because the body
+/// calls `windows_registry` APIs (e.g. `key.keys()`, `open`, `get_value`)
+/// which return `windows_result::error::Error`. Using the `?` operator on
+/// those results previously failed to type-check due to multiple versions of
+/// the `windows-result` crate being present in the dependency graph, which
+/// makes two `windows_result::error::Error`/`HRESULT` types distinct and not
+/// directly convertible via `From`.
+///
+/// By returning `windows_registry::Result` we avoid needing to convert the
+/// `windows_registry` errors into another error type inside this function and
+/// keep the `?` ergonomics. Callers that require a different error type can
+/// still map or convert the error at the call site. A longer-term fix is to
+/// unify the `windows-result` version across the workspace (for example via a
+/// direct dependency or `[patch.crates-io]`) so these type mismatches do not
+/// arise.
+pub(crate) fn registry_pythons() -> windows_registry::Result<Vec<WindowsPython>> {
     let mut registry_pythons = Vec::new();
     // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`.
     // By default, a 64-bit program does not see a 32-bit global (HKLM) installation of Python in
@@ -128,7 +146,11 @@ pub enum ManagedPep514Error {
     #[error("Windows has an unknown pointer width for arch: `{_0}`")]
     InvalidPointerSize(Arch),
     #[error("Failed to write registry entry: {0}")]
-    WriteError(#[from] windows::core::Error),
+    // `write_registry_entry` returns `windows_registry::Result<()>` which uses
+    // the `windows_result::error::Error` type. Multiple versions of the
+    // `windows-result` crate exist in the dependency graph; accept the
+    // `windows_result::Error` here so `?` can convert directly.
+    WriteError(#[from] windows_result::Error),
 }
 
 /// Register a managed Python installation in the Windows registry following PEP 514.
@@ -213,8 +235,12 @@ pub fn remove_registry_entry<'a>(
     if all {
         debug!("Removing registry key HKCU:\\{}", astral_key);
         if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            // Multiple versions of `windows_result` may be present in the dependency
+            // graph which makes the concrete `HRESULT` types incompatible. Compare
+            // the inner i32 value (`.0`) instead to avoid type mismatches while
+            // preserving the original semantics.
+            if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0
+                || err.code().0 == HRESULT::from(ERROR_KEY_DELETED).0
             {
                 debug!("No registry entries to remove, no registry key {astral_key}");
             } else {
@@ -229,8 +255,8 @@ pub fn remove_registry_entry<'a>(
         let python_entry = format!("{astral_key}\\{python_tag}");
         debug!("Removing registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0
+                || err.code().0 == HRESULT::from(ERROR_KEY_DELETED).0
             {
                 debug!(
                     "No registry entries to remove for {}, no registry key {}",
@@ -257,9 +283,11 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     let key = match CURRENT_USER.open(&astral_key) {
         Ok(subkeys) => subkeys,
+        // Compare inner HRESULT values to avoid type mismatches from multiple
+        // `windows_result` versions being present in the dependency graph.
         Err(err)
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+            if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0
+                || err.code().0 == HRESULT::from(ERROR_KEY_DELETED).0 =>
         {
             return;
         }
@@ -272,9 +300,11 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
+        // Compare inner HRESULT values to avoid type mismatches from multiple
+        // `windows_result` versions being present in the dependency graph.
         Err(err)
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
+            if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0
+                || err.code().0 == HRESULT::from(ERROR_KEY_DELETED).0 =>
         {
             return;
         }
@@ -291,8 +321,8 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
+            if err.code().0 == HRESULT::from(ERROR_FILE_NOT_FOUND).0
+                || err.code().0 == HRESULT::from(ERROR_KEY_DELETED).0
             {
                 continue;
             }

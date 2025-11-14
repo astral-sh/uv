@@ -71,6 +71,7 @@ once_cell = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
 windows = { workspace = true }
+windows-result = "0.4.1"
 
 [dev-dependencies]
 anyhow = { workspace = true }

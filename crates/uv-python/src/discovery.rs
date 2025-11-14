@@ -255,7 +255,7 @@ pub enum Error {
 
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
-    RegistryError(#[from] windows::core::Error),
+    RegistryError(#[from] windows_result::Error),
 
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
