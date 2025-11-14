@@ -166,13 +166,24 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://python.cloudsmith.io/astral-test/astral-test-1/",
         "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
     ),
+    "pyx-token": TargetConfiguration(
+        "astral-test-token",
+        "https://astral-sh-staging-api.pyx.dev/v1/upload/uv-publish-integration/main",
+        "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main",
+    ),
 }
 all_targets: dict[str, TargetConfiguration] = local_targets | {
     "pypi-trusted-publishing": TargetConfiguration(
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
-    )
+    ),
+    # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
+    # "pyx-trusted-publishing": TargetConfiguration(
+    #     "astral-test-trusted-publishing",
+    #     "https://api.pyx.dev/v1/upload/astral-test/main",
+    #     "https://api.pyx.dev/simple/astral-test/main",
+    # ),
 }
 
 
@@ -539,6 +550,11 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
         extra_args = []
         env = {
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
+        }
+    elif target == "pyx-token":
+        extra_args = []
+        env = {
+            "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
         }
     else:
         raise ValueError(f"Unknown target: {target}")
