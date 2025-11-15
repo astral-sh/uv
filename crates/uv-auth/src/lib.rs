@@ -49,10 +49,7 @@ pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> bool {
         // with URL-derived credentials. This ensures credentials provided via environment
         // variables (or other higher-precedence sources) are not replaced by credentials
         // embedded in an index URL.
-        if CREDENTIALS_CACHE
-            .get_url(url, &Username::none())
-            .is_some()
-        {
+        if CREDENTIALS_CACHE.get_url(url, &Username::none()).is_some() {
             trace!("Skipping caching credentials for {url}: credentials already present");
             return false;
         }
@@ -82,7 +79,8 @@ mod tests {
 
         let base = DisplaySafeUrl::parse("https://example.com/simple/real").unwrap();
         // Seed the cache with env-var-like credentials using store_credentials
-        let env_creds = Credentials::basic(Some("envuser".to_string()), Some("envpass".to_string()));
+        let env_creds =
+            Credentials::basic(Some("envuser".to_string()), Some("envpass".to_string()));
         store_credentials(&base, env_creds.clone());
 
         // Construct a URL with embedded credentials that would otherwise override the cache

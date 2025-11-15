@@ -58,7 +58,8 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://github.com/astral-sh/uv").unwrap();
         let repo = RepositoryUrl::new(&base);
         // Seed the store with env-var-like creds
-        let env_creds = Credentials::basic(Some("envuser".to_string()), Some("envpass".to_string()));
+        let env_creds =
+            Credentials::basic(Some("envuser".to_string()), Some("envpass".to_string()));
         GIT_STORE.insert(repo.clone(), env_creds.clone());
 
         // URL with embedded credentials that would have overridden

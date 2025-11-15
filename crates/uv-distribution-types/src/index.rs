@@ -653,18 +653,20 @@ mod tests {
         const PASSWORD_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_PASSWORD";
 
         // Set env var username and clear password env var using with_vars to ensure safe testing
-        with_vars(vec![(USERNAME_ENV, Some("envuser")), (PASSWORD_ENV, None)], || {
+        with_vars(
+            vec![(USERNAME_ENV, Some("envuser")), (PASSWORD_ENV, None)],
+            || {
+                // Index URL includes credentials
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
 
-        // Index URL includes credentials
-        let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
-        let mut index = Index::from(url);
-        index.name = Some(IndexName::new("private-registry").unwrap());
-
-            let creds = index.credentials().unwrap();
-        assert_eq!(creds.username(), Some("envuser"));
-        assert_eq!(creds.password(), Some("pass"));
-            ()
-        });
+                let creds = index.credentials().unwrap();
+                assert_eq!(creds.username(), Some("envuser"));
+                assert_eq!(creds.password(), Some("pass"));
+                ()
+            },
+        );
     }
 
     #[test]
@@ -674,17 +676,19 @@ mod tests {
         const USERNAME_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_USERNAME";
         const PASSWORD_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_PASSWORD";
 
-        with_vars(vec![(USERNAME_ENV, None), (PASSWORD_ENV, Some("envpass"))], || {
+        with_vars(
+            vec![(USERNAME_ENV, None), (PASSWORD_ENV, Some("envpass"))],
+            || {
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
 
-        let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
-        let mut index = Index::from(url);
-        index.name = Some(IndexName::new("private-registry").unwrap());
-
-            let creds = index.credentials().unwrap();
-        assert_eq!(creds.username(), Some("urluser"));
-        assert_eq!(creds.password(), Some("envpass"));
-            ()
-        });
+                let creds = index.credentials().unwrap();
+                assert_eq!(creds.username(), Some("urluser"));
+                assert_eq!(creds.password(), Some("envpass"));
+                ()
+            },
+        );
     }
 
     #[test]
@@ -697,14 +701,13 @@ mod tests {
         with_vars(
             vec![(USERNAME_ENV, Some("")), (PASSWORD_ENV, Some("envtoken"))],
             || {
-
-        let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
-        let mut index = Index::from(url);
-        index.name = Some(IndexName::new("private-registry").unwrap());
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
 
                 let creds = index.credentials().unwrap();
-        assert_eq!(creds.username(), None);
-        assert_eq!(creds.password(), Some("envtoken"));
+                assert_eq!(creds.username(), None);
+                assert_eq!(creds.password(), Some("envtoken"));
                 ()
             },
         );
