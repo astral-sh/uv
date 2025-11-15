@@ -1406,17 +1406,20 @@ mod tests {
             ))),
         );
         let client = test_client_builder()
-            .with(AuthMiddleware::new().with_cache(cache).with_text_store(None).with_keyring(Some(
-                KeyringProvider::dummy([(
-                    format!(
-                        "{}:{}",
-                        base_url.host_str().unwrap(),
-                        base_url.port().unwrap()
-                    ),
-                    username,
-                    password,
-                )]),
-            )))
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(cache)
+                    .with_text_store(None)
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        format!(
+                            "{}:{}",
+                            base_url.host_str().unwrap(),
+                            base_url.port().unwrap()
+                        ),
+                        username,
+                        password,
+                    )]))),
+            )
             .build();
 
         assert_eq!(
