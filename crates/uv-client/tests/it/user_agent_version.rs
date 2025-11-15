@@ -1,5 +1,4 @@
 use anyhow::Result;
-use fs_err as fs;
 use futures::future;
 use http_body_util::Full;
 use hyper::body::Bytes;
