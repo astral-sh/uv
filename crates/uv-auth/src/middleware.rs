@@ -1060,6 +1060,10 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
+                    .with_text_store(None)
+                    .with_text_store(None)
+                    .with_text_store(None)
                     .with_netrc(Netrc::from_file(netrc_file.path()).ok()),
             )
             .build();
@@ -1230,6 +1234,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([(
                         format!(
                             "{}:{}",
@@ -1296,6 +1301,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([(
                         format!(
                             "{}:{}",
@@ -1360,6 +1366,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([(
                         // Omit the port from the keyring entry
                         base_url.host_str().unwrap(),
@@ -1399,7 +1406,7 @@ mod tests {
             ))),
         );
         let client = test_client_builder()
-            .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
+            .with(AuthMiddleware::new().with_cache(cache).with_text_store(None).with_keyring(Some(
                 KeyringProvider::dummy([(
                     format!(
                         "{}:{}",
@@ -1512,6 +1519,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([
                         (
                             format!(
@@ -1762,6 +1770,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([
                         (
                             format!(
@@ -1893,6 +1902,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([
                         (base_url_1.clone(), username, password_1),
                         (base_url_2.clone(), username, password_2),
@@ -2005,6 +2015,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([
                         (base_url_1.clone(), username, password_1),
                         (base_url_2.clone(), username, password_2),
@@ -2107,6 +2118,7 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_text_store(None)
                     .with_keyring(Some(KeyringProvider::dummy([(
                         base_url.clone(),
                         username,
