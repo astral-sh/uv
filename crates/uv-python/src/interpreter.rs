@@ -9,9 +9,9 @@ use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use heck::ToTitleCase;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
-use heck::ToTitleCase;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use thiserror::Error;
