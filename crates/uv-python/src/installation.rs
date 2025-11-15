@@ -87,10 +87,11 @@ impl PythonInstallation {
         python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build()?;
+        let client = client_builder.build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build()?;
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
@@ -131,12 +132,14 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
+        let client = client_builder.build()?;
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 
         // Search for the installation
         let err = match Self::find(

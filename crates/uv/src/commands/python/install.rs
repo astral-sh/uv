@@ -335,12 +335,13 @@ async fn perform_install(
     // Resolve the requests
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
+    let client = client_builder.build()?;
+    let download_list =
+        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build()?;
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
