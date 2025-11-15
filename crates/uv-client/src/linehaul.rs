@@ -1,4 +1,5 @@
 use std::env;
+use std::io::Read;
 
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -89,16 +90,18 @@ impl LineHaul {
         // Build Distro as Linehaul expects.
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
             // Gather distribution info from /etc/os-release.
-            sys_info::linux_os_release().ok().map(|info| Distro {
+            Some(Distro {
                 // e.g., Jammy, Focal, etc.
-                id: info.version_codename,
+                id: Self::get_version_codename().ok().flatten(),
                 // e.g., Ubuntu, Fedora, etc.
-                name: info.name,
+                name: sysinfo::System::name(),
                 // e.g., 22.04, etc.
-                version: info.version_id,
+                version: sysinfo::System::os_version(),
                 // e.g., glibc 2.38, musl 1.2
                 libc,
             })
+
+
         } else if cfg!(target_os = "macos") {
             let version = match platform.map(Platform::os) {
                 Some(Os::Macos { major, minor }) => Some(format!("{major}.{minor}")),
@@ -144,4 +147,25 @@ impl LineHaul {
             ci: looks_like_ci,
         }
     }
+
+    // https://docs.rs/sys-info/latest/src/sys_info/lib.rs.html#473-515
+    fn get_version_codename() -> Result<Option<String>, std::io::Error> {
+        if !cfg!(target_os = "linux") {
+            return Ok(None);
+        }
+
+        let mut s = String::new();
+        std::fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
+
+        for line in s.lines() {
+            let line = line.trim();
+            if line.starts_with("VERSION_CODENAME=") {
+                let value = line.strip_prefix("VERSION_CODENAME=").unwrap().trim_matches('"');
+                return Ok(Some(value.to_string()));
+            }
+        }
+
+        Ok(None)
+    }
+ 
 }
