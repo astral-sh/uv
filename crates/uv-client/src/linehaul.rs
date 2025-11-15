@@ -100,8 +100,6 @@ impl LineHaul {
                 // e.g., glibc 2.38, musl 1.2
                 libc,
             })
-
-
         } else if cfg!(target_os = "macos") {
             let version = match platform.map(Platform::os) {
                 Some(Os::Macos { major, minor }) => Some(format!("{major}.{minor}")),
@@ -160,12 +158,14 @@ impl LineHaul {
         for line in s.lines() {
             let line = line.trim();
             if line.starts_with("VERSION_CODENAME=") {
-                let value = line.strip_prefix("VERSION_CODENAME=").unwrap().trim_matches('"');
+                let value = line
+                    .strip_prefix("VERSION_CODENAME=")
+                    .unwrap()
+                    .trim_matches('"');
                 return Ok(Some(value.to_string()));
             }
         }
 
         Ok(None)
     }
- 
 }

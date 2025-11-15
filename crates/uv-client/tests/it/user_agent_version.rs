@@ -8,8 +8,8 @@ use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
-use std::str::FromStr;
 use std::io::Read;
+use std::str::FromStr;
 use tokio::net::TcpListener;
 use url::Url;
 use uv_cache::Cache;
@@ -32,14 +32,16 @@ fn get_version_codename() -> Result<Option<String>, std::io::Error> {
     for line in s.lines() {
         let line = line.trim();
         if line.starts_with("VERSION_CODENAME=") {
-            let value = line.strip_prefix("VERSION_CODENAME=").unwrap().trim_matches('"');
+            let value = line
+                .strip_prefix("VERSION_CODENAME=")
+                .unwrap()
+                .trim_matches('"');
             return Ok(Some(value.to_string()));
         }
     }
 
     Ok(None)
 }
-
 
 #[tokio::test]
 async fn test_user_agent_has_version() -> Result<()> {
