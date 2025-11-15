@@ -53,6 +53,7 @@ version-ranges = { workspace = true }
 
 [dev-dependencies]
 toml = { workspace = true }
+temp-env = { workspace = true }
 
 [features]
 schemars = ["dep:schemars", "uv-redacted/schemars"]
