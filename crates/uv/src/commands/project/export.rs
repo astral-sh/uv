@@ -293,6 +293,17 @@ pub(crate) async fn export(
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
 
+    if output_file
+        .as_deref()
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is reserved for project metadata; `{}` exports produce requirements files or `pylock.toml` lockfiles. Choose a different output filename.",
+            "uv export".green()
+        ));
+    }
+
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
 
