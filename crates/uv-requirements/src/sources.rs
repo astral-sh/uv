@@ -6,6 +6,7 @@ use console::Term;
 
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
+use uv_scripts::{Pep723Error, Pep723Script};
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
@@ -14,7 +15,7 @@ pub enum RequirementsSource {
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
     /// Dependencies were provided via a PEP 723 script.
-    Pep723Script(PathBuf),
+    Pep723Script(Box<Pep723ScriptSource>),
     /// Dependencies were provided via a `pylock.toml` file.
     PylockToml(PathBuf),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
@@ -50,8 +51,15 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
-            // TODO(blueraft): Support scripts without an extension.
-            Ok(Self::Pep723Script(path))
+            Ok(Self::Pep723Script(Pep723ScriptSource::new(path)))
+        } else if path.extension().is_none() {
+            match Pep723Script::read_sync(&path) {
+                Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
+                    path, script,
+                ))),
+                Ok(None) => Ok(Self::RequirementsTxt(path)),
+                Err(err) => Err(pep723_error(&path, err)),
+            }
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -291,14 +299,43 @@ impl RequirementsSource {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Pep723ScriptSource {
+    path: PathBuf,
+    script: Option<Pep723Script>,
+}
+
+impl Pep723ScriptSource {
+    fn new(path: PathBuf) -> Box<Self> {
+        Box::new(Self { path, script: None })
+    }
+
+    fn with_script(path: PathBuf, script: Pep723Script) -> Box<Self> {
+        Box::new(Self {
+            path,
+            script: Some(script),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn script(&self) -> Option<&Pep723Script> {
+        self.script.as_ref()
+    }
+}
+
 impl std::fmt::Display for RequirementsSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Package(package) => write!(f, "{package:?}"),
             Self::Editable(path) => write!(f, "-e {path:?}"),
+            Self::Pep723Script(source) => {
+                write!(f, "{}", source.path().simplified_display())
+            }
             Self::PylockToml(path)
             | Self::RequirementsTxt(path)
-            | Self::Pep723Script(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
@@ -306,6 +343,15 @@ impl std::fmt::Display for RequirementsSource {
                 write!(f, "{}", path.simplified_display())
             }
         }
+    }
+}
+
+fn pep723_error(path: &Path, err: Pep723Error) -> anyhow::Error {
+    match err {
+        Pep723Error::Io(io_err) if io_err.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::anyhow!("Failed to read `{}` (not found)", path.user_display())
+        }
+        err => err.into(),
     }
 }
 
