@@ -1,4 +1,5 @@
 use anyhow::Result;
+use fs_err as fs;
 use futures::future;
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -17,7 +18,6 @@ use uv_client::RegistryClientBuilder;
 use uv_client::{BaseClientBuilder, LineHaul};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
-use fs_err as fs;
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
