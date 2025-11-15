@@ -377,7 +377,7 @@ impl Index {
                 } else {
                     url_credentials
                         .as_ref()
-                        .and_then(|creds| creds.username().map(|s| s.to_string()))
+                        .and_then(|creds| creds.username().map(ToString::to_string))
                 };
 
                 // If the environment provided a password, use that. Otherwise, if the URL
@@ -387,7 +387,7 @@ impl Index {
                 } else {
                     url_credentials
                         .as_ref()
-                        .and_then(|creds| creds.password().map(|s| s.to_string()))
+                        .and_then(|creds| creds.password().map(ToString::to_string))
                 };
 
                 return Some(Credentials::basic(username, password));
@@ -664,7 +664,6 @@ mod tests {
                 let creds = index.credentials().unwrap();
                 assert_eq!(creds.username(), Some("envuser"));
                 assert_eq!(creds.password(), Some("pass"));
-                ()
             },
         );
     }
@@ -686,7 +685,6 @@ mod tests {
                 let creds = index.credentials().unwrap();
                 assert_eq!(creds.username(), Some("urluser"));
                 assert_eq!(creds.password(), Some("envpass"));
-                ()
             },
         );
     }
@@ -708,7 +706,6 @@ mod tests {
                 let creds = index.credentials().unwrap();
                 assert_eq!(creds.username(), None);
                 assert_eq!(creds.password(), Some("envtoken"));
-                ()
             },
         );
     }
