@@ -548,15 +548,32 @@ impl AuthMiddleware {
         // If we have an index, check the cache for that URL. Otherwise,
         // check for the realm.
         let maybe_cached_credentials = if let Some(index) = index {
+            // First, try to find credentials matching the provided username
             self.cache()
                 .get_url(&index.url, credentials.as_username().as_ref())
                 .or_else(|| {
                     self.cache()
                         .get_url(&index.root_url, credentials.as_username().as_ref())
                 })
+                .or_else(|| {
+                    // If no credentials were found for the given username, fall back to any
+                    // cached credentials for this index (username-agnostic). This allows
+                    // environment-provided credentials for a named index to override a username
+                    // embedded in the request URL.
+                    self.cache()
+                        .get_url(&index.url, &Username::none())
+                        .or_else(|| self.cache().get_url(&index.root_url, &Username::none()))
+                })
         } else {
+            // First, try realm credentials matching the provided username
             self.cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
+                .or_else(|| {
+                    // Fall back to any credentials for the realm if none were found for the
+                    // provided username
+                    self.cache()
+                        .get_realm(Realm::from(request.url()), Username::none())
+                })
         };
         if let Some(credentials) = maybe_cached_credentials {
             request = credentials.authenticate(request).await;

@@ -89,6 +89,11 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=VssSessionToken
 
     Similarly, the username for the index can be added directly to the index URL.
 
+    Environment variable credentials (`UV_INDEX_<name>_USERNAME` and `UV_INDEX_<name>_PASSWORD`)
+    will always override any credentials embedded in the index URL, making it easy to use keyring
+    locally (e.g., with `VssSessionToken@` in the URL) while using explicit tokens in CI/CD
+    (e.g., setting `UV_INDEX_PRIVATE_REGISTRY_PASSWORD=$(System.AccessToken)` in Azure Pipelines).
+
 ### Publishing packages to Azure Artifacts
 
 If you also want to publish your own packages to Azure Artifacts, you can use `uv publish` as
