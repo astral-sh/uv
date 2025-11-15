@@ -28,7 +28,7 @@ fn get_version_codename() -> Result<Option<String>, std::io::Error> {
     }
 
     let mut s = String::new();
-    fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
+    fs_err::File::open("/etc/os-release")?.read_to_string(&mut s)?;
 
     for line in s.lines() {
         let line = line.trim();
