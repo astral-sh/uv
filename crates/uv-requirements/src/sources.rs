@@ -52,7 +52,7 @@ impl RequirementsSource {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
             Ok(Self::Pep723Script(Pep723ScriptSource::new(path)))
-        } else if path.extension().is_none() {
+        } else if path.extension().is_none() && path.is_file() {
             match Pep723Script::read_sync(&path) {
                 Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
                     path, script,
