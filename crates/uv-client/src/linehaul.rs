@@ -153,7 +153,7 @@ impl LineHaul {
         }
 
         let mut s = String::new();
-        std::fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
+        fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
 
         for line in s.lines() {
             let line = line.trim();

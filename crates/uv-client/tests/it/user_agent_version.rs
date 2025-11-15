@@ -17,6 +17,7 @@ use uv_client::RegistryClientBuilder;
 use uv_client::{BaseClientBuilder, LineHaul};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
+use fs_err as fs;
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
@@ -27,7 +28,7 @@ fn get_version_codename() -> Result<Option<String>, std::io::Error> {
     }
 
     let mut s = String::new();
-    std::fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
+    fs::File::open("/etc/os-release")?.read_to_string(&mut s)?;
 
     for line in s.lines() {
         let line = line.trim();
