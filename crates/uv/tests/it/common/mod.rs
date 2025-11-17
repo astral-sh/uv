@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::str::FromStr;
 use std::{env, io};
+use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
@@ -627,11 +628,13 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
 
+        let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+
         let python_versions: Vec<_> = python_versions
             .iter()
             .map(|version| PythonVersion::from_str(version).unwrap())
             .zip(
-                python_installations_for_versions(&temp_dir, python_versions)
+                python_installations_for_versions(&temp_dir, python_versions, &download_list)
                     .expect("Failed to find test Python versions"),
             )
             .collect();
@@ -1086,6 +1089,14 @@ impl TestContext {
     pub fn workspace_dir(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("workspace").arg("dir");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv workspace list` command with options shared across scenarios.
+    pub fn workspace_list(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("workspace").arg("list");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -1688,8 +1699,9 @@ pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
     Ok(env::join_paths(
-        python_installations_for_versions(temp_dir, python_versions)?
+        python_installations_for_versions(temp_dir, python_versions, &download_list)?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
     )?)
@@ -1701,6 +1713,7 @@ pub fn python_path_with_versions(
 pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
+    download_list: &ManagedPythonDownloadList,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
     let selected_pythons = python_versions
@@ -1710,6 +1723,7 @@ pub fn python_installations_for_versions(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
+                download_list,
                 &cache,
                 Preview::default(),
             ) {

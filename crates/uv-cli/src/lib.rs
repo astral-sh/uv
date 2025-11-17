@@ -5750,8 +5750,6 @@ pub struct PythonListArgs {
     pub output_format: PythonListFormat,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -5848,8 +5846,6 @@ pub struct PythonInstallArgs {
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
@@ -5952,8 +5948,6 @@ pub struct PythonUpgradeArgs {
     pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6032,6 +6026,10 @@ pub struct PythonFindArgs {
     /// Show the Python version that would be used instead of the path to the interpreter.
     #[arg(long)]
     pub show_version: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -7169,6 +7167,11 @@ pub enum WorkspaceCommand {
     ///
     /// If used outside of a workspace, i.e., if a `pyproject.toml` cannot be found, uv will exit with an error.
     Dir(WorkspaceDirArgs),
+    /// List the members of a workspace.
+    ///
+    /// Displays newline separated names of workspace members.
+    #[command(hide = true)]
+    List(WorkspaceListArgs),
 }
 
 #[derive(Args, Debug)]
@@ -7180,6 +7183,9 @@ pub struct WorkspaceDirArgs {
     #[arg(long)]
     pub package: Option<PackageName>,
 }
+
+#[derive(Args, Debug)]
+pub struct WorkspaceListArgs;
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.

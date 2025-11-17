@@ -1235,12 +1235,17 @@ pub(crate) struct PythonFindSettings {
     pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
+    pub(crate) python_downloads_json_url: Option<String>,
 }
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PythonFindArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PythonFindArgs {
             request,
             show_version,
@@ -1248,13 +1253,32 @@ impl PythonFindSettings {
             system,
             no_system,
             script: _,
+            python_downloads_json_url,
         } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror: _,
+            pypy_install_mirror: _,
+            python_downloads_json_url,
+        } = install_mirrors;
 
         Self {
             request,
             show_version,
             no_project,
             system: flag(system, no_system, "system").unwrap_or_default(),
+            python_downloads_json_url,
         }
     }
 }
