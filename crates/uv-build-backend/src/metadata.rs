@@ -60,6 +60,8 @@ pub enum ValidationError {
     ReservedGuiScripts,
     #[error("`project.license` is not a valid SPDX expression: {0}")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
+    #[error("`{field}` glob `{glob}` did not match any files")]
+    LicenseGlobNoMatches { field: String, glob: String },
     #[error("License file `{}` must be UTF-8 encoded", _0)]
     LicenseFileNotUtf8(String),
 }
@@ -447,7 +449,9 @@ impl PyProjectToml {
             };
 
             let mut license_files = Vec::new();
-            let mut license_globs_parsed = Vec::new();
+            let mut license_globs_parsed = Vec::with_capacity(license_globs.len());
+            let mut license_glob_matchers = Vec::with_capacity(license_globs.len());
+
             for license_glob in license_globs {
                 let pep639_glob =
                     PortableGlobParser::Pep639
@@ -456,12 +460,17 @@ impl PyProjectToml {
                             field: license_glob.to_owned(),
                             source: err,
                         })?;
+                license_glob_matchers.push(pep639_glob.compile_matcher());
                 license_globs_parsed.push(pep639_glob);
             }
+
+            // Track whether each user-specified glob matched so we can flag the unmatched ones.
+            let mut license_globs_matched = vec![false; license_globs_parsed.len()];
+
             let license_globs =
                 GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
                     Error::GlobSetTooLarge {
-                        field: "tool.uv.build-backend.source-include".to_string(),
+                        field: "project.license-files".to_string(),
                         source: err,
                     }
                 })?;
@@ -482,17 +491,22 @@ impl PyProjectToml {
                     root: root.to_path_buf(),
                     err,
                 })?;
+
                 let relative = entry
                     .path()
                     .strip_prefix(root)
                     .expect("walkdir starts with root");
+
                 if !license_globs.match_path(relative) {
                     trace!("Not a license files match: {}", relative.user_display());
                     continue;
                 }
-                if !entry.file_type().is_file() {
+
+                let file_type = entry.file_type();
+
+                if !(file_type.is_file() || file_type.is_symlink()) {
                     trace!(
-                        "Not a file in license files match: {}",
+                        "Not a file or symlink in license files match: {}",
                         relative.user_display()
                     );
                     continue;
@@ -501,7 +515,33 @@ impl PyProjectToml {
                 error_on_venv(entry.file_name(), entry.path())?;
 
                 debug!("License files match: {}", relative.user_display());
+
+                for (matched, matcher) in license_globs_matched
+                    .iter_mut()
+                    .zip(license_glob_matchers.iter())
+                {
+                    if *matched {
+                        continue;
+                    }
+
+                    if matcher.is_match(relative) {
+                        *matched = true;
+                    }
+                }
+
                 license_files.push(relative.portable_display().to_string());
+            }
+
+            if let Some((pattern, _)) = license_globs_parsed
+                .into_iter()
+                .zip(license_globs_matched)
+                .find(|(_, matched)| !matched)
+            {
+                return Err(ValidationError::LicenseGlobNoMatches {
+                    field: "project.license-files".to_string(),
+                    glob: pattern.to_string(),
+                }
+                .into());
             }
 
             for license_file in &license_files {

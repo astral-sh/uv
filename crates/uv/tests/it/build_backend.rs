@@ -761,6 +761,51 @@ fn complex_namespace_packages() -> Result<()> {
 }
 
 #[test]
+fn license_glob_without_matches_errors() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("missing-license");
+    context
+        .init()
+        .arg("--lib")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project
+        .child("LICENSE.txt")
+        .write_str("permissive license")?;
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "missing-license"
+        version = "1.0.0"
+        license-files = ["abc", "LICENSE.txt"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid pyproject.toml
+      Caused by: `project.license-files` glob `abc` did not match any files
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn license_file_must_be_utf8() -> Result<()> {
     let context = TestContext::new("3.12");
 
