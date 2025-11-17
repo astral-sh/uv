@@ -18,14 +18,14 @@ The temporary directory is used for ephemeral data.
 
 === "Unix"
 
-    - `$TMPDIR`
-    - `/tmp`
+    1. `$TMPDIR`
+    1. `/tmp`
 
 === "Windows"
 
-    - `%TMP`
-    - `%TEMP`
-    - `%USERPROFILE`
+    1. `%TMP`
+    1. `%TEMP`
+    1. `%USERPROFILE`
 
 ### Cache directory
 
@@ -33,13 +33,13 @@ The cache directory is used for data that is disposable, but is useful to be lon
 
 === "Unix"
 
-    - `$XDG_CACHE_HOME/uv`
-    - `$HOME/.cache/uv`
+    1. `$XDG_CACHE_HOME/uv`
+    1. `$HOME/.cache/uv`
 
 === "Windows"
 
-    - `%LOCALAPPDATA%\uv\cache`
-    - `FOLDERID_LocalAppData\uv\cache`
+    1. `%LOCALAPPDATA%\uv\cache`
+    1. `FOLDERID_LocalAppData\uv\cache`
 
 ### Persistent data directory
 
@@ -47,14 +47,14 @@ The persistent data directory is used for non-disposable data.
 
 === "Unix"
 
-    - `$XDG_DATA_HOME/uv`
-    - `$HOME/.local/share/uv`
-    - `$PWD/.uv`
+    1. `$XDG_DATA_HOME/uv`
+    1. `$HOME/.local/share/uv`
+    1. `$PWD/.uv`
 
 === "Windows"
 
-    - `%APPDATA%\uv\data`
-    - `.\.uv`
+    1. `%APPDATA%\uv\data`
+    1. `.\.uv`
 
 ### Configuration directories
 
@@ -64,25 +64,25 @@ User-level configuration
 
 === "Unix"
 
-    - `$XDG_CONFIG_HOME/uv`
-    - `$HOME/.config/uv`
+    1. `$XDG_CONFIG_HOME/uv`
+    1. `$HOME/.config/uv`
 
 === "Windows"
 
-    - `%APPDATA%\uv`
-    - `FOLDERID_RoamingAppData\uv`
+    1. `%APPDATA%\uv`
+    1. `FOLDERID_RoamingAppData\uv`
 
 System-level configuration
 
 === "Unix"
 
-    - `$XDG_CONFIG_DIRS/uv`
-    - `/etc/uv`
+    1. `$XDG_CONFIG_DIRS/uv`
+    1. `/etc/uv`
 
 === "Windows"
 
-    - `%PROGRAMDATA%\uv`
-    - `FOLDERID_AppDataProgramData\uv`
+    1. `%PROGRAMDATA%\uv`
+    1. `FOLDERID_AppDataProgramData\uv`
 
 ### Executable directory
 
@@ -91,15 +91,15 @@ should be on the `PATH`.
 
 === "Unix"
 
-    - `$XDG_BIN_HOME`
-    - `$XDG_DATA_HOME/../bin`
-    - `$HOME/.local/bin`
+    1. `$XDG_BIN_HOME`
+    1. `$XDG_DATA_HOME/../bin`
+    1. `$HOME/.local/bin`
 
 === "Windows"
 
-    - `%XDG_BIN_HOME%`
-    - `%XDG_DATA_HOME%\..\bin`
-    - `%USERPROFILE%\.local\bin`©
+    1. `%XDG_BIN_HOME%`
+    1. `%XDG_DATA_HOME%\..\bin`
+    1. `%USERPROFILE%\.local\bin`©
 
 ## Types of data
 
