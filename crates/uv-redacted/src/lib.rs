@@ -81,30 +81,42 @@ impl DisplaySafeUrl {
     /// To detect it, we use a heuristic: if the password component is missing but the path or
     /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
     fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
-        if url.password().is_none()
-            && (url
+        if url.password().is_some() {
+            return Ok(());
+        }
+
+        // Check for the suspicious pattern.
+        if !url
             .path()
             .find(':')
             .is_some_and(|pos| url.path()[pos..].contains('@'))
-            || url
-            .fragment()
-            .map(|fragment| {
-                fragment
-                    .find(':')
-                    .is_some_and(|pos| fragment[pos..].contains('@'))
-            })
-            .unwrap_or(false))
-            // If the above is true, we should always expect to find these in the given URL
-            && let Some(col_pos) = input.find(':')
-            && let Some(at_pos) = input.rfind('@')
+            && !url
+                .fragment()
+                .map(|fragment| {
+                    fragment
+                        .find(':')
+                        .is_some_and(|pos| fragment[pos..].contains('@'))
+                })
+                .unwrap_or(false)
         {
-            // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
-            // the error message. We somewhat aggressively replace everything between the scheme's
-            // ':' and the lastmost `@` with `***`.
-            let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
-            return Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path));
+            return Ok(());
         }
-        Ok(())
+
+        // If the previous check passed, we should always expect to find these in the given URL.
+        let (Some(col_pos), Some(at_pos)) = (input.find(':'), input.rfind('@')) else {
+            if cfg!(debug_assertions) {
+                unreachable!(
+                    "`:` or `@` sign missing in URL that was confirmed to contain them: {input}"
+                );
+            }
+            return Ok(());
+        };
+
+        // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
+        // the error message. We somewhat aggressively replace everything between the scheme's
+        // ':' and the lastmost `@` with `***`.
+        let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
+        Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path))
     }
 
     /// Create a new [`DisplaySafeUrl`] from a [`Url`].
