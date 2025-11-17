@@ -37,7 +37,7 @@ use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
+use crate::cached_client::{CacheControl, PreDownloadHook};
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -48,13 +48,14 @@ use crate::{
 };
 
 /// A builder for an [`RegistryClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
+    pre_download_hook: Option<PreDownloadHook>,
 }
 
 impl<'a> RegistryClientBuilder<'a> {
@@ -65,7 +66,24 @@ impl<'a> RegistryClientBuilder<'a> {
             torch_backend: None,
             cache,
             base_client_builder,
+            pre_download_hook: None,
         }
+    }
+
+    /// Set a pre-download hook that is called before downloading any file.
+    /// The hook receives the URL and returns `Ok(true)` to proceed with download,
+    /// `Ok(false)` to cancel, or `Err` on error.
+    #[must_use]
+    pub fn pre_download_hook(mut self, hook: PreDownloadHook) -> Self {
+        self.pre_download_hook = Some(hook);
+        self
+    }
+
+    /// Set a pre-download hook from a [`PreDownloadHook`].
+    #[must_use]
+    pub fn pre_download_hook_arc(mut self, hook: Option<PreDownloadHook>) -> Self {
+        self.pre_download_hook = hook;
+        self
     }
 
     #[must_use]
@@ -164,7 +182,11 @@ impl<'a> RegistryClientBuilder<'a> {
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
-        let client = CachedClient::new(client);
+        let client = if let Some(hook) = self.pre_download_hook.clone() {
+            CachedClient::with_pre_download_hook(client, hook)
+        } else {
+            CachedClient::new(client)
+        };
 
         RegistryClient {
             index_urls,
@@ -194,7 +216,11 @@ impl<'a> RegistryClientBuilder<'a> {
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
-        let client = CachedClient::new(client);
+        let client = if let Some(hook) = self.pre_download_hook.clone() {
+            CachedClient::with_pre_download_hook(client, hook)
+        } else {
+            CachedClient::new(client)
+        };
 
         RegistryClient {
             index_urls,

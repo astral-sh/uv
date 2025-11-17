@@ -46,8 +46,9 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
-    Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
-    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
+    Combine, EnvironmentOptions, FilesystemOptions, InstallPromptHeuristic, Options, PipOptions,
+    PublishOptions, PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema,
+    ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -554,6 +555,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
+    pub(crate) approve_all_tool_installs: bool,
+    pub(crate) approve_all_heuristics: Vec<InstallPromptHeuristic>,
 }
 
 impl ToolRunSettings {
@@ -583,6 +586,7 @@ impl ToolRunSettings {
             refresh,
             python,
             python_platform,
+            approve_all_tool_installs,
             generate_shell_completion: _,
         } = args;
 
@@ -622,11 +626,30 @@ impl ToolRunSettings {
             ));
 
         let filesystem_install_mirrors = filesystem
+            .clone()
             .map(FilesystemOptions::into_options)
             .map(|options| options.install_mirrors)
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
+
+        // Resolve approve_all_tool_installs from flag, config, or default to false
+        let approve_all_tool_installs = approve_all_tool_installs
+            .then_some(true)
+            .combine(
+                filesystem
+                    .as_ref()
+                    .and_then(|fs| fs.install_prompt.as_ref())
+                    .and_then(|prompt| prompt.approve_all_tool_installs),
+            )
+            .unwrap_or(false);
+
+        // Resolve approve_all_heuristics from config or default to ["top-packages"]
+        let approve_all_heuristics = filesystem
+            .as_ref()
+            .and_then(|fs| fs.install_prompt.as_ref())
+            .and_then(|prompt| prompt.approve_all_heuristics.clone())
+            .unwrap_or_else(|| vec![InstallPromptHeuristic::TopPackages]);
 
         Self {
             command,
@@ -667,6 +690,8 @@ impl ToolRunSettings {
                 .combine(filesystem_install_mirrors),
             env_file,
             no_env_file,
+            approve_all_tool_installs,
+            approve_all_heuristics,
         }
     }
 }

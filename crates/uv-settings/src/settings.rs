@@ -65,6 +65,9 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
+    #[option_group]
+    pub install_prompt: Option<InstallPromptOptions>,
+
     /// The keys to consider when caching builds for the project.
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
@@ -1932,6 +1935,51 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum InstallPromptHeuristic {
+    TopPackages,
+    PreviouslyInstalled,
+    UserAllowlist,
+}
+
+/// Settings for tool install confirmation prompts.
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct InstallPromptOptions {
+    /// Automatically approve all tool installations without prompting.
+    ///
+    /// When enabled, `uvx` and `uv tool run` will skip confirmation prompts for installing
+    /// uncached packages. This is useful for CI/CD environments or when you trust all packages.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            approve-all-tool-installs = true
+        "#
+    )]
+    pub approve_all_tool_installs: Option<bool>,
+    /// A list of heuristics to use when deciding whether to show a confirmation prompt.
+    ///
+    /// Each heuristic checks a different condition. If all enabled heuristics pass (i.e., the
+    /// package matches all checks), the prompt is skipped. Available heuristics:
+    /// - `top-packages`: Skip prompt if package is in the top Python packages list
+    /// - `previously-installed`: Skip prompt if package has been previously approved (not yet implemented)
+    /// - `user-allowlist`: Skip prompt if package is in user's allowlist file (not yet implemented)
+    ///
+    /// Defaults to `["top-packages"]`.
+    #[option(
+        default = r#"["top-packages"]"#,
+        value_type = "list[str]",
+        example = r#"
+            approve-all-heuristics = ["top-packages", "previously-installed"]
+        "#
+    )]
+    pub approve_all_heuristics: Option<Vec<InstallPromptHeuristic>>,
+}
+
 /// The options persisted alongside an installed tool.
 ///
 /// A mirror of [`ResolverInstallerSchema`], without upgrades and reinstalls, which shouldn't be
@@ -2106,6 +2154,7 @@ pub struct OptionsWire {
 
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
+    install_prompt: Option<InstallPromptOptions>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2180,6 +2229,7 @@ impl From<OptionsWire> for Options {
             no_binary,
             no_binary_package,
             pip,
+            install_prompt,
             cache_keys,
             override_dependencies,
             exclude_dependencies,
@@ -2254,6 +2304,7 @@ impl From<OptionsWire> for Options {
                 no_binary_package,
             },
             pip,
+            install_prompt,
             cache_keys,
             build_backend,
             override_dependencies,

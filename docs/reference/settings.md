@@ -2202,6 +2202,73 @@ Accepts both standalone package names (`ruff`) and version specifiers (`ruff<0.5
 
 ---
 
+### `install-prompt`
+
+Settings for tool install confirmation prompts.
+
+#### [`approve-all-heuristics`](#install-prompt_approve-all-heuristics) {: #install-prompt_approve-all-heuristics }
+<span id="approve-all-heuristics"></span>
+
+A list of heuristics to use when deciding whether to show a confirmation prompt.
+
+Each heuristic checks a different condition. If all enabled heuristics pass (i.e., the
+package matches all checks), the prompt is skipped. Available heuristics:
+- `top-packages`: Skip prompt if package is in the top Python packages list
+- `previously-installed`: Skip prompt if package has been previously approved (not yet implemented)
+- `user-allowlist`: Skip prompt if package is in user's allowlist file (not yet implemented)
+
+Defaults to `["top-packages"]`.
+
+**Default value**: `["top-packages"]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.install-prompt]
+    approve-all-heuristics = ["top-packages", "previously-installed"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [install-prompt]
+    approve-all-heuristics = ["top-packages", "previously-installed"]
+    ```
+
+---
+
+#### [`approve-all-tool-installs`](#install-prompt_approve-all-tool-installs) {: #install-prompt_approve-all-tool-installs }
+<span id="approve-all-tool-installs"></span>
+
+Automatically approve all tool installations without prompting.
+
+When enabled, `uvx` and `uv tool run` will skip confirmation prompts for installing
+uncached packages. This is useful for CI/CD environments or when you trust all packages.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.install-prompt]
+    approve-all-tool-installs = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [install-prompt]
+    approve-all-tool-installs = true
+    ```
+
+---
+
 ### `pip`
 
 Settings that are specific to the `uv pip` command-line interface.

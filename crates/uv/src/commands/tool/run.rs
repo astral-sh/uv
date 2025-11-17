@@ -3,6 +3,8 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use anstream::eprint;
 use anyhow::{Context, bail};
@@ -15,7 +17,7 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, Error, ErrorKind, PreDownloadHook};
 use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
 use uv_configuration::TargetTriple;
@@ -36,7 +38,9 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{
+    InstallPromptHeuristic, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions,
+};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
@@ -79,6 +83,162 @@ impl Display for ToolRunCommand {
         }
     }
 }
+/// Embedded list of top Python packages.
+const TOP_PACKAGES: &str = include_str!("top_packages.txt");
+
+/// Load the top packages list from the embedded file
+fn load_top_packages() -> std::collections::HashSet<String> {
+    TOP_PACKAGES
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line.to_lowercase())
+            }
+        })
+        .collect()
+}
+
+/// Check if a package is in the top packages list.
+fn is_top_package(package_name: &PackageName) -> bool {
+    let top_packages = load_top_packages();
+    top_packages.contains(package_name.as_str())
+}
+
+/// Check heuristics and build reasoning string.
+///
+/// Returns (`should_skip_prompt`, `reasoning_string`)
+fn check_heuristics(
+    requirement: &Requirement,
+    enabled_heuristics: &[InstallPromptHeuristic],
+) -> (bool, String) {
+    let mut reasoning_parts = Vec::new();
+    let mut should_skip_prompt = false;
+
+    for heuristic in enabled_heuristics {
+        match heuristic {
+            InstallPromptHeuristic::TopPackages => {
+                if !is_top_package(&requirement.name) {
+                    reasoning_parts.push("is not a top python package");
+                } else {
+                    should_skip_prompt = true;
+                }
+            }
+            InstallPromptHeuristic::PreviouslyInstalled => {
+                // Not yet implemented - always fails for now
+                reasoning_parts.push("has never been previously approved by the user");
+            }
+            InstallPromptHeuristic::UserAllowlist => {
+                // Not yet implemented - always fails for now
+                reasoning_parts.push("is not in the user's allowlist");
+            }
+        }
+    }
+
+    let reasoning = if reasoning_parts.is_empty() {
+        String::new()
+    } else {
+        reasoning_parts.join(", ")
+    };
+
+    (should_skip_prompt, reasoning)
+}
+
+/// Check if we need to prompt for tool installation and prompt if necessary.
+///
+/// Returns `Ok(ExitStatus::Success)` if we should proceed, `Ok(ExitStatus::Failure)` if cancelled, Err on error.
+fn check_and_prompt_for_tool_install(
+    requirement: &Requirement,
+    preview: Preview,
+    approve_all_tool_installs: bool,
+    approve_all_heuristics: &[InstallPromptHeuristic],
+    printer: Printer,
+) -> anyhow::Result<ExitStatus> {
+    use uv_preview::PreviewFeatures;
+
+    debug!(
+        "Checking if prompt is needed for package {}",
+        requirement.name.as_str()
+    );
+
+    // Check if preview flag is enabled
+    if !preview.is_enabled(PreviewFeatures::TOOL_INSTALL_CONFIRMATION) {
+        debug!("Preview flag 'tool-install-confirmation' is not enabled, skipping prompt");
+        return Ok(ExitStatus::Success);
+    }
+
+    // Check if approve_all_tool_installs is set
+    if approve_all_tool_installs {
+        debug!("approve-all-tool-installs is set, skipping prompt");
+        return Ok(ExitStatus::Success);
+    }
+
+    // Check heuristics
+    let (should_skip_prompt, reasoning) = check_heuristics(requirement, approve_all_heuristics);
+    if should_skip_prompt {
+        debug!(
+            "One or more heuristics passed for {}, skipping prompt. Reasoning: {}",
+            requirement, reasoning
+        );
+        return Ok(ExitStatus::Success);
+    }
+
+    let not_installed_message = "This package is not currently installed";
+
+    let prompt_message = if reasoning.is_empty() {
+        format!(
+            "This tool is provided by the following package:\n\n+ {}\n\n{not_installed_message}.",
+            requirement.to_string().cyan()
+        )
+    } else {
+        format!(
+            "This tool is provided by the following package:\n\n+ {}\n\n{not_installed_message} and {reasoning}.",
+            requirement.to_string().cyan()
+        )
+    };
+
+    // Check if we have a TTY
+    let term = Term::stderr();
+    if !term.is_term() {
+        debug!("Not a TTY interface, skipping prompt but printing message");
+        let message = format!(
+            "{prompt_message}\nNon-interactive mode: installation will proceed automatically."
+        );
+        writeln!(printer.stderr(), "{message}")?;
+        return Ok(ExitStatus::Success);
+    }
+
+    // Prompt for confirmation
+    debug!(
+        "Prompting user for confirmation to install {}",
+        requirement.name.as_str()
+    );
+
+    writeln!(printer.stderr(), "{prompt_message}")?;
+    match uv_console::confirm("Would you like to proceed?\n", &term, true) {
+        Ok(true) => {
+            debug!(
+                "User confirmed installation of {}",
+                requirement.name.as_str()
+            );
+            Ok(ExitStatus::Success)
+        }
+        Ok(false) => {
+            debug!(
+                "User cancelled installation of {}",
+                requirement.name.as_str()
+            );
+            writeln!(printer.stderr(), "Installation cancelled by the user.")?;
+            Ok(ExitStatus::Failure)
+        }
+        Err(err) => {
+            debug!("Error prompting user: {}", err);
+            Err(err.into())
+        }
+    }
+}
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -107,6 +267,8 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: Preview,
+    approve_all_tool_installs: bool,
+    approve_all_heuristics: Vec<InstallPromptHeuristic>,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -261,6 +423,9 @@ pub(crate) async fn run(
         cache
     };
 
+    // Clone approve_all_heuristics early since it's needed in multiple places and for the 'static closure
+    let approve_all_heuristics_owned = approve_all_heuristics.clone();
+
     // Get or create a compatible environment in which to execute the tool.
     let result = Box::pin(get_or_create_environment(
         &request,
@@ -279,6 +444,8 @@ pub(crate) async fn run(
         python_preference,
         python_downloads,
         installer_metadata,
+        &approve_all_heuristics_owned,
+        approve_all_tool_installs,
         concurrency,
         &cache,
         printer,
@@ -694,6 +861,8 @@ async fn get_or_create_environment(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
+    approve_all_heuristics: &[InstallPromptHeuristic],
+    approve_all_tool_installs: bool,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
@@ -871,6 +1040,7 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
+    // TODO (mikayla): install prompt logic is not handling this at all yet
     let spec = RequirementsSpecification::from_sources(
         with,
         constraints,
@@ -881,6 +1051,51 @@ async fn get_or_create_environment(
     )
     .await?;
 
+    // Set up a pre-download hook that prompts before downloading new files.
+    // The hook is called before any download happens, allowing us to prompt only when needed.
+    // Clone approve_all_heuristics to Vec to own it for the 'static closure
+    let approve_all_heuristics_owned: Vec<InstallPromptHeuristic> = approve_all_heuristics.to_vec();
+    let pre_download_hook: Option<PreDownloadHook> =
+        if let ToolRequirement::Package { requirement, .. } = &from {
+            // Use Arc for shared ownership to avoid cloning on each hook call
+            let requirement = Arc::new(requirement.clone());
+            let approve_all_heuristics_arc = Arc::new(approve_all_heuristics_owned);
+            let prompt_approved = Arc::new(Mutex::new(None));
+
+            Some(Arc::new(move |url: &uv_redacted::DisplaySafeUrl| {
+                let prompt_approved = prompt_approved.clone();
+                let requirement = requirement.clone();
+                let approve_all_heuristics = approve_all_heuristics_arc.clone();
+                let url = url.clone();
+
+                // Check if we've already prompted and got approval
+                if let Some(result) = *prompt_approved.lock().unwrap() {
+                    return Ok(result);
+                }
+                debug!("Pre-download hook triggered for: {}", url);
+
+                // Prompt the user
+                let approved = matches!(
+                    check_and_prompt_for_tool_install(
+                        &requirement,
+                        preview,
+                        approve_all_tool_installs,
+                        &approve_all_heuristics,
+                        printer,
+                    )
+                    .map_err(|_| { Error::from(ErrorKind::DownloadCancelled(url)) })?,
+                    ExitStatus::Success
+                );
+
+                // Cache the result
+                *prompt_approved.lock().unwrap() = Some(approved);
+
+                Ok(approved)
+            }))
+        } else {
+            None
+        };
+
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -888,7 +1103,22 @@ async fn get_or_create_environment(
             ToolRequirement::Python { .. } => {}
             ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
         }
-        requirements.extend(
+        requirements.extend(if let Some(hook) = &pre_download_hook {
+            crate::commands::project::resolve_names_with_hook(
+                spec.requirements.clone(),
+                &interpreter,
+                settings,
+                client_builder,
+                &state,
+                concurrency,
+                cache,
+                &workspace_cache,
+                printer,
+                preview,
+                Some(hook.clone()),
+            )
+            .await?
+        } else {
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
@@ -901,8 +1131,8 @@ async fn get_or_create_environment(
                 printer,
                 preview,
             )
-            .await?,
-        );
+            .await?
+        });
         requirements
     };
 
@@ -1027,31 +1257,60 @@ async fn get_or_create_environment(
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let result = CachedEnvironment::from_spec(
-        spec.clone(),
-        build_constraints.clone(),
-        &interpreter,
-        python_platform.as_ref(),
-        settings,
-        client_builder,
-        &state,
-        if show_resolution {
-            Box::new(DefaultResolveLogger)
-        } else {
-            Box::new(SummaryResolveLogger)
-        },
-        if show_resolution {
-            Box::new(DefaultInstallLogger)
-        } else {
-            Box::new(SummaryInstallLogger)
-        },
-        installer_metadata,
-        concurrency,
-        cache,
-        printer,
-        preview,
-    )
-    .await;
+    let result = if let Some(hook) = &pre_download_hook {
+        CachedEnvironment::from_spec_with_hook(
+            spec.clone(),
+            build_constraints.clone(),
+            &interpreter,
+            python_platform.as_ref(),
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            },
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+            Some(hook.clone()),
+        )
+        .await
+    } else {
+        CachedEnvironment::from_spec(
+            spec.clone(),
+            build_constraints.clone(),
+            &interpreter,
+            python_platform.as_ref(),
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            },
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await
+    };
 
     let environment = match result {
         Ok(environment) => environment,

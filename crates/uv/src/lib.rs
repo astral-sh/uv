@@ -1342,6 +1342,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                args.approve_all_tool_installs,
+                args.approve_all_heuristics,
             ))
             .await
         }

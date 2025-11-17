@@ -10,7 +10,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, PreDownloadHook, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
     TargetTriple, Upgrade,
@@ -1679,6 +1679,37 @@ pub(crate) async fn resolve_names(
     printer: Printer,
     preview: Preview,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
+    resolve_names_with_hook(
+        requirements,
+        interpreter,
+        settings,
+        client_builder,
+        state,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+        None,
+    )
+    .await
+}
+
+/// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
+/// Includes a pre-download hook that is called before downloading any file.
+pub(crate) async fn resolve_names_with_hook(
+    requirements: Vec<UnresolvedRequirementSpecification>,
+    interpreter: &Interpreter,
+    settings: &ResolverInstallerSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &SharedState,
+    concurrency: Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+    pre_download_hook: Option<PreDownloadHook>,
+) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements
@@ -1729,6 +1760,7 @@ pub(crate) async fn resolve_names(
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
+        .pre_download_hook_arc(pre_download_hook)
         .build();
 
     // Determine whether to enable build isolation.
@@ -1852,6 +1884,41 @@ pub(crate) async fn resolve_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
+    resolve_environment_with_hook(
+        spec,
+        interpreter,
+        python_platform,
+        build_constraints,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        printer,
+        preview,
+        None,
+    )
+    .await
+}
+
+/// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
+/// Allows specifying a pre-download hook that is called before downloading any file.
+pub(crate) async fn resolve_environment_with_hook(
+    spec: EnvironmentSpecification<'_>,
+    interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
+    build_constraints: Constraints,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn ResolveLogger>,
+    concurrency: Concurrency,
+    cache: &Cache,
+    printer: Printer,
+    preview: Preview,
+    pre_download_hook: Option<PreDownloadHook>,
+) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
@@ -1893,12 +1960,15 @@ pub(crate) async fn resolve_environment(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+    let mut builder = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
-        .platform(interpreter.platform())
-        .build();
+        .platform(interpreter.platform());
+
+    builder = builder.pre_download_hook_arc(pre_download_hook);
+
+    let client = builder.build();
 
     // Determine whether to enable build isolation.
     let environment;

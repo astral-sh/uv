@@ -294,6 +294,10 @@ pub enum ErrorKind {
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
+    /// Download was cancelled by the pre-download hook.
+    #[error("Download cancelled by user")]
+    DownloadCancelled(DisplaySafeUrl),
+
     /// Add the number of failed retries to the error.
     #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RequestWithRetries {
