@@ -511,7 +511,7 @@
       ]
     },
     "python-downloads-json-url": {
-      "description": "URL pointing to JSON of custom Python installations.\n\nNote that currently, only local paths are supported.",
+      "description": "URL pointing to JSON of custom Python installations.",
       "type": [
         "string",
         "null"

@@ -5,11 +5,12 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use ref_cast::RefCast;
+use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
 use uv_warnings::warn_user;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
@@ -17,7 +18,10 @@ use uv_preview::Preview;
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
-use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
+use crate::downloads::{
+    DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
+    Reporter,
+};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
@@ -59,12 +63,13 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        download_list: &ManagedPythonDownloadList,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, None);
+        installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
 
@@ -74,12 +79,13 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        download_list: &ManagedPythonDownloadList,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_best_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, None);
+        installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
 
@@ -101,8 +107,22 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware performing uncontrolled retries.
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build();
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache, preview) {
+        let err = match Self::find(
+            request,
+            environments,
+            preference,
+            &download_list,
+            cache,
+            preview,
+        ) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
@@ -125,9 +145,10 @@ impl PythonInstallation {
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
 
-        let download = download_request.clone().fill().map(|request| {
-            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
-        });
+        let download = download_request
+            .clone()
+            .fill()
+            .map(|request| download_list.find(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
         // available to power error messages. However, if downloads aren't enabled, we don't want to
@@ -202,7 +223,8 @@ impl PythonInstallation {
 
         let installation = Self::fetch(
             download,
-            client_builder,
+            &client,
+            &retry_policy,
             cache,
             reporter,
             python_install_mirror,
@@ -211,15 +233,16 @@ impl PythonInstallation {
         )
         .await?;
 
-        installation.warn_if_outdated_prerelease(request, python_downloads_json_url);
+        installation.warn_if_outdated_prerelease(request, &download_list);
 
         Ok(installation)
     }
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        download: &'static ManagedPythonDownload,
-        client_builder: &BaseClientBuilder<'_>,
+        download: &ManagedPythonDownload,
+        client: &BaseClient,
+        retry_policy: &ExponentialBackoff,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
@@ -231,16 +254,11 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        // Python downloads are performing their own retries to catch stream errors, disable the
-        // default retries to avoid the middleware from performing uncontrolled retries.
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
-
         info!("Fetching requested Python...");
         let result = download
             .fetch_with_retry(
-                &client,
-                &retry_policy,
+                client,
+                retry_policy,
                 installations_dir,
                 &scratch_dir,
                 false,
@@ -352,7 +370,7 @@ impl PythonInstallation {
     pub(crate) fn warn_if_outdated_prerelease(
         &self,
         request: &PythonRequest,
-        python_downloads_json_url: Option<&str>,
+        download_list: &ManagedPythonDownloadList,
     ) {
         if request.allows_prereleases() {
             return;
@@ -389,10 +407,7 @@ impl PythonInstallation {
         let download_request = download_request.with_prereleases(false);
 
         let has_stable_download = {
-            let Ok(mut downloads) = download_request.iter_downloads(python_downloads_json_url)
-            else {
-                return;
-            };
+            let mut downloads = download_list.iter_matching(&download_request);
 
             downloads.any(|download| {
                 let download_version = download.key().version().into_version();
