@@ -596,7 +596,7 @@ impl EnvVars {
     /// delimiter (`:` on Unix, `;` on Windows).
     ///
     /// Takes precedence over `UV_NATIVE_TLS` when set.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.10")]
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
     /// If set, uv will use this file for mTLS authentication.

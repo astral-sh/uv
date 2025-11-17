@@ -24,6 +24,7 @@ bitflags::bitflags! {
         const INIT_PROJECT_FLAG = 1 << 12;
         const WORKSPACE_METADATA = 1 << 13;
         const WORKSPACE_DIR = 1 << 14;
+        const WORKSPACE_LIST = 1 << 15;
     }
 }
 
@@ -48,6 +49,7 @@ impl PreviewFeatures {
             Self::INIT_PROJECT_FLAG => "init-project-flag",
             Self::WORKSPACE_METADATA => "workspace-metadata",
             Self::WORKSPACE_DIR => "workspace-dir",
+            Self::WORKSPACE_LIST => "workspace-list",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -100,6 +102,7 @@ impl FromStr for PreviewFeatures {
                 "init-project-flag" => Self::INIT_PROJECT_FLAG,
                 "workspace-metadata" => Self::WORKSPACE_METADATA,
                 "workspace-dir" => Self::WORKSPACE_DIR,
+                "workspace-list" => Self::WORKSPACE_LIST,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
