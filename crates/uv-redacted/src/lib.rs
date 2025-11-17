@@ -81,6 +81,9 @@ impl DisplaySafeUrl {
     /// To detect it, we use a heuristic: if the password component is missing but the path or
     /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
     fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
+        // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
+        // on Windows may contain both sigils, but it's always safe, e.g.
+        // `file://C:/Users/ferris/project@home/workspace`.
         if url.scheme() == "file" {
             return Ok(());
         }
