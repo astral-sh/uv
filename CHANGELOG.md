@@ -13,6 +13,8 @@ Released on 2025-11-17.
 - Enforce UTF‑8-encoded license files during `uv build` ([#16699](https://github.com/astral-sh/uv/pull/16699))
 - Error when a `project.license-files` glob matches nothing ([#16697](https://github.com/astral-sh/uv/pull/16697))
 - `pip install --target` (and `sync`) install Python if necessary ([#16694](https://github.com/astral-sh/uv/pull/16694))
+- Account for `python_downloads_json_url` in pre-release Python version warnings ([#16737](https://github.com/astral-sh/uv/pull/16737))
+- Support HTTP/HTTPS URLs in `uv python --python-downloads-json-url` ([#16542](https://github.com/astral-sh/uv/pull/16542))
 
 ### Preview features
 
@@ -26,11 +28,6 @@ Released on 2025-11-17.
 ### Documentation
 
 - Add a "storage" reference document ([#15954](https://github.com/astral-sh/uv/pull/15954))
-
-### Other changes
-
-- Account for `python_downloads_json_url` in pre-release Python version warnings ([#16737](https://github.com/astral-sh/uv/pull/16737))
-- Support http/https URLs in `uv python --python-downloads-json-url` ([#16542](https://github.com/astral-sh/uv/pull/16542))
 
 ## 0.9.9
 
