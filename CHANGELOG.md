@@ -20,6 +20,7 @@ Released on 2025-11-17.
 
 - Add support for `--upgrade` in `uv python install` ([#16676](https://github.com/astral-sh/uv/pull/16676))
 - Fix handling of `python install --default` for pre-release Python versions ([#16706](https://github.com/astral-sh/uv/pull/16706))
+- Add `uv workspace list` to list workspace members ([#16691](https://github.com/astral-sh/uv/pull/16691))
 
 ### Bug fixes
 
