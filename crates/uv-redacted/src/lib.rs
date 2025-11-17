@@ -63,7 +63,7 @@ impl DisplaySafeUrl {
     pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
         let url = Url::parse(input)?;
 
-        Self::reject_ambiguous_credentials(&input, &url)?;
+        Self::reject_ambiguous_credentials(input, &url)?;
 
         Ok(Self(url))
     }
@@ -477,6 +477,7 @@ mod tests {
 
     #[test]
     fn parse_url_not_ambiguous() {
+        #[allow(clippy::single_element_loop)]
         for url in &[
             // https://github.com/astral-sh/uv/issues/16756
             "file:///C:/jenkins/ython_Environment_Manager_PR-251@2/venv%201/workspace",
