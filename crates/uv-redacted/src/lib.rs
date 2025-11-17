@@ -81,6 +81,10 @@ impl DisplaySafeUrl {
     /// To detect it, we use a heuristic: if the password component is missing but the path or
     /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
     fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
+        if url.scheme() == "file" {
+            return Ok(());
+        }
+
         if url.password().is_some() {
             return Ok(());
         }
@@ -468,6 +472,16 @@ mod tests {
                 }
                 DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
             }
+        }
+    }
+
+    #[test]
+    fn parse_url_not_ambiguous() {
+        for url in &[
+            // https://github.com/astral-sh/uv/issues/16756
+            "file:///C:/jenkins/ython_Environment_Manager_PR-251@2/venv%201/workspace",
+        ] {
+            DisplaySafeUrl::parse(url).unwrap();
         }
     }
 }
