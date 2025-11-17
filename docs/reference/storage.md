@@ -23,9 +23,9 @@ The temporary directory is used for ephemeral data.
 
 === "Windows"
 
-    1. `%TMP`
-    1. `%TEMP`
-    1. `%USERPROFILE`
+    1. `%TMP%`
+    1. `%TEMP%`
+    1. `%USERPROFILE%`
 
 ### Cache directory
 
@@ -39,7 +39,7 @@ The cache directory is used for data that is disposable, but is useful to be lon
 === "Windows"
 
     1. `%LOCALAPPDATA%\uv\cache`
-    1. `FOLDERID_LocalAppData\uv\cache`
+    1. `uv\cache` within [`FOLDERID_LocalAppData`](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid#FOLDERID_LocalAppData)
 
 ### Persistent data directory
 
@@ -49,7 +49,7 @@ The persistent data directory is used for non-disposable data.
 
     1. `$XDG_DATA_HOME/uv`
     1. `$HOME/.local/share/uv`
-    1. `$PWD/.uv`
+    1. `$CWD/.uv`
 
 === "Windows"
 
@@ -70,7 +70,7 @@ User-level configuration
 === "Windows"
 
     1. `%APPDATA%\uv`
-    1. `FOLDERID_RoamingAppData\uv`
+    1. `uv` within [`FOLDERID_RoamingAppData`](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid#FOLDERID_RoamingAppData)
 
 System-level configuration
 
@@ -82,7 +82,7 @@ System-level configuration
 === "Windows"
 
     1. `%PROGRAMDATA%\uv`
-    1. `FOLDERID_AppDataProgramData\uv`
+    1. `uv` within [`FOLDERID_AppDataProgramData`](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid#FOLDERID_AppDataProgramData)
 
 ### Executable directory
 
@@ -99,7 +99,7 @@ should be on the `PATH`.
 
     1. `%XDG_BIN_HOME%`
     1. `%XDG_DATA_HOME%\..\bin`
-    1. `%USERPROFILE%\.local\bin`©
+    1. `%USERPROFILE%\.local\bin`
 
 ## Types of data
 
