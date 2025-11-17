@@ -58,6 +58,7 @@ Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-token/0.1
 Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 """
 
+import logging
 import os
 import re
 import shutil
@@ -251,7 +252,7 @@ def collect_versions(url: str, client: httpx.Client) -> set[Version]:
 
 def get_filenames(url: str, client: httpx.Client) -> list[str]:
     """Get the filenames (source dists and wheels) from an index URL."""
-    response = client.get(url)
+    response = client.get(url, follow_redirects=True)
     response.raise_for_status()
     data = response.text
     # Works for the indexes in the list
@@ -579,6 +580,12 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
 
 
 def main():
+    logging.basicConfig(
+        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.DEBUG,
+    )
+
     parser = ArgumentParser()
     target_choices = [*all_targets, "local", "all"]
     parser.add_argument("targets", choices=target_choices, nargs="+")
