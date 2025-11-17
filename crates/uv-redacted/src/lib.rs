@@ -63,31 +63,37 @@ impl DisplaySafeUrl {
     pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
         let url = Url::parse(input)?;
 
-        // Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
-        //
-        // In this case the user *probably* meant to have a username of "user/name", but both RFC
-        // 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
-        // non-percent-encoded slash or other special character.
-        //
-        // This ends up being moderately annoying to detect, since the above gets parsed into a
-        // "valid" WHATWG URL where the host is `used` and the pathname is
-        // `/name:password@domain/a/b/c` rather than causing a parse error.
-        //
-        // To detect it, we use a heuristic: if the password component is missing but the path or
-        // fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
+        Self::reject_ambiguous_credentials(&input, &url)?;
+
+        Ok(Self(url))
+    }
+
+    /// Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
+    ///
+    /// In this case the user *probably* meant to have a username of "user/name", but both RFC
+    /// 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
+    /// non-percent-encoded slash or other special character.
+    ///
+    /// This ends up being moderately annoying to detect, since the above gets parsed into a
+    /// "valid" WHATWG URL where the host is `used` and the pathname is
+    /// `/name:password@domain/a/b/c` rather than causing a parse error.
+    ///
+    /// To detect it, we use a heuristic: if the password component is missing but the path or
+    /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
+    fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
         if url.password().is_none()
             && (url
-                .path()
-                .find(':')
-                .is_some_and(|pos| url.path()[pos..].contains('@'))
-                || url
-                    .fragment()
-                    .map(|fragment| {
-                        fragment
-                            .find(':')
-                            .is_some_and(|pos| fragment[pos..].contains('@'))
-                    })
-                    .unwrap_or(false))
+            .path()
+            .find(':')
+            .is_some_and(|pos| url.path()[pos..].contains('@'))
+            || url
+            .fragment()
+            .map(|fragment| {
+                fragment
+                    .find(':')
+                    .is_some_and(|pos| fragment[pos..].contains('@'))
+            })
+            .unwrap_or(false))
             // If the above is true, we should always expect to find these in the given URL
             && let Some(col_pos) = input.find(':')
             && let Some(at_pos) = input.rfind('@')
@@ -98,8 +104,7 @@ impl DisplaySafeUrl {
             let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
             return Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path));
         }
-
-        Ok(Self(url))
+        Ok(())
     }
 
     /// Create a new [`DisplaySafeUrl`] from a [`Url`].
