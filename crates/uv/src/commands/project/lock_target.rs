@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use itertools::Either;
-
+use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, SourceStrategy};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
@@ -343,6 +343,7 @@ impl<'lock> LockTarget<'lock> {
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
             Self::Workspace(workspace) => {
@@ -362,6 +363,7 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    credentials_cache,
                 )?;
 
                 Ok(metadata
@@ -407,6 +409,7 @@ impl<'lock> LockTarget<'lock> {
                             sources,
                             indexes,
                             locations,
+                            credentials_cache,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),

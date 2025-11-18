@@ -1445,7 +1445,7 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
+    /// Check whether the lock matches the project structure, requirements and configuration.
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,

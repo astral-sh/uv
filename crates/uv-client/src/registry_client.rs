@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use uv_auth::{Indexes, PyxTokenStore};
+use uv_auth::{CredentialsCache, Indexes, PyxTokenStore};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
@@ -148,8 +148,30 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> RegistryClient {
-        self.index_locations.cache_index_credentials();
+    /// Add all authenticated sources to the cache.
+    pub fn cache_index_credentials(&mut self) {
+        for index in self.index_locations.known_indexes() {
+            if let Some(credentials) = index.credentials() {
+                trace!(
+                    "Read credentials for index {}",
+                    index
+                        .name
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| index.url.to_string())
+                );
+                if let Some(root_url) = index.root_url() {
+                    self.base_client_builder
+                        .store_credentials(&root_url, credentials.clone());
+                }
+                self.base_client_builder
+                    .store_credentials(index.raw_url(), credentials);
+            }
+        }
+    }
+
+    pub fn build(mut self) -> RegistryClient {
+        self.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
 
         // Build a base client
@@ -180,8 +202,8 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
-        self.index_locations.cache_index_credentials();
+    pub fn wrap_existing(mut self, existing: &BaseClient) -> RegistryClient {
+        self.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -267,6 +289,10 @@ impl RegistryClient {
     /// Return the timeout this client is configured with, in seconds.
     pub fn timeout(&self) -> Duration {
         self.timeout
+    }
+
+    pub fn credentials_cache(&self) -> &CredentialsCache {
+        self.client.uncached().credentials_cache()
     }
 
     /// Return the appropriate index URLs for the given [`PackageName`].

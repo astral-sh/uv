@@ -28,7 +28,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, Indexes, PyxTokenStore};
+use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -78,6 +78,8 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
+    credentials_cache: Arc<CredentialsCache>,
     indexes: Indexes,
     timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
@@ -138,6 +140,7 @@ impl Default for BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            credentials_cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             timeout: Duration::from_secs(30),
             extra_middleware: None,
@@ -150,7 +153,7 @@ impl Default for BaseClientBuilder<'_> {
     }
 }
 
-impl BaseClientBuilder<'_> {
+impl<'a> BaseClientBuilder<'a> {
     pub fn new(
         connectivity: Connectivity,
         native_tls: bool,
@@ -169,9 +172,7 @@ impl BaseClientBuilder<'_> {
             ..Self::default()
         }
     }
-}
 
-impl<'a> BaseClientBuilder<'a> {
     /// Use a custom reqwest client instead of creating a new one.
     ///
     /// This allows you to provide your own reqwest client with custom configuration.
@@ -285,6 +286,20 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    pub fn credentials_cache(&self) -> &CredentialsCache {
+        &self.credentials_cache
+    }
+
+    /// See [`CredentialsCache::store_credentials_from_url`].
+    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+        self.credentials_cache.store_credentials_from_url(url)
+    }
+
+    /// See [`CredentialsCache::store_credentials`].
+    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
+        self.credentials_cache.store_credentials(url, credentials);
+    }
+
     pub fn is_native_tls(&self) -> bool {
         self.native_tls
     }
@@ -333,6 +348,7 @@ impl<'a> BaseClientBuilder<'a> {
             dangerous_client,
             raw_dangerous_client,
             timeout,
+            credentials_cache: self.credentials_cache.clone(),
         }
     }
 
@@ -359,6 +375,7 @@ impl<'a> BaseClientBuilder<'a> {
             raw_client: existing.raw_client.clone(),
             raw_dangerous_client: existing.raw_dangerous_client.clone(),
             timeout: existing.timeout,
+            credentials_cache: existing.credentials_cache.clone(),
         }
     }
 
@@ -563,6 +580,7 @@ impl<'a> BaseClientBuilder<'a> {
                 match self.auth_integration {
                     AuthIntegration::Default => {
                         let mut auth_middleware = AuthMiddleware::new()
+                            .with_cache_arc(self.credentials_cache.clone())
                             .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
@@ -574,6 +592,7 @@ impl<'a> BaseClientBuilder<'a> {
                     }
                     AuthIntegration::OnlyAuthenticated => {
                         let mut auth_middleware = AuthMiddleware::new()
+                            .with_cache_arc(self.credentials_cache.clone())
                             .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
@@ -617,6 +636,8 @@ pub struct BaseClient {
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
     retries: u32,
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
+    credentials_cache: Arc<CredentialsCache>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -667,6 +688,10 @@ impl BaseClient {
             builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
         }
         builder.build_with_max_retries(self.retries)
+    }
+
+    pub fn credentials_cache(&self) -> &CredentialsCache {
+        &self.credentials_cache
     }
 }
 

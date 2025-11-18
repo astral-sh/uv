@@ -372,9 +372,17 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
-                let script_extra_build_requires =
-                    script_extra_build_requires((&script).into(), &settings.resolver)?.into_inner();
+            if let Some(spec) = script_specification(
+                (&script).into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )? {
+                let script_extra_build_requires = script_extra_build_requires(
+                    (&script).into(),
+                    &settings.resolver,
+                    client_builder.credentials_cache(),
+                )?
+                .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
