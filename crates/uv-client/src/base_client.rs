@@ -986,14 +986,13 @@ pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
-        if let Err(err) = res {
-            if contains_ssl_error(err) {
-                trace!(
-                    "Cannot retry SSL certificate error for {}",
-                    err.url().map(Url::as_str).unwrap_or("unknown URL")
-                );
-                return Some(Retryable::Fatal);
+        if let Err(reqwest_middleware::Error::Reqwest(err)) = res
+            && is_tls_request_error(err)
+        {
+            if let Some(url) = err.url() {
+                trace!("Cannot retry {url} due to TLS error: {err:?}");
             }
+            return Some(Retryable::Fatal);
         }
 
         // Use the default strategy and check for additional transient error cases.
@@ -1053,8 +1052,9 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
         if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
             has_known_error = true;
             if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
-                if is_ssl_request_error(reqwest_err) {
-                    trace!("Cannot retry nested reqwest middleware SSL error");
+                if is_tls_request_error(reqwest_err) {
+                    trace!("Cannot retry nested reqwest middleware TLS error");
+                    return false;
                 } else if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                     trace!("Retrying nested reqwest middleware error");
                     return true;
@@ -1068,8 +1068,9 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             trace!("Cannot retry nested reqwest middleware error");
         } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
             has_known_error = true;
-            if is_ssl_request_error(reqwest_err) {
-                trace!("Cannot retry nested reqwest SSL error");
+            if is_tls_request_error(reqwest_err) {
+                trace!("Cannot retry nested reqwest TLS error");
+                return false;
             } else if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Retrying nested reqwest error");
                 return true;
@@ -1119,43 +1120,8 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     false
 }
 
-fn contains_ssl_error(err: &(dyn Error + 'static)) -> bool {
-    if let Some(middleware_err) = err.downcast_ref::<reqwest_middleware::Error>() {
-        if let reqwest_middleware::Error::Reqwest(reqwest_err) = middleware_err {
-            if is_ssl_request_error(reqwest_err) {
-                return true;
-            }
-        } else if let reqwest_middleware::Error::Middleware(inner) = middleware_err {
-            if contains_ssl_error(inner.as_ref()) {
-                return true;
-            }
-        }
-    }
-
-    let mut current: Option<&(dyn Error + 'static)> = Some(err);
-    while let Some(error) = current {
-        if let Some(reqwest_err) = error.downcast_ref::<reqwest::Error>() {
-            if is_ssl_request_error(reqwest_err) {
-                return true;
-            }
-        }
-        current = error.source();
-    }
-    false
-}
-
-fn is_ssl_request_error(reqwest_err: &reqwest::Error) -> bool {
-    if !reqwest_err.is_connect() {
-        return false;
-    }
-    let mut current = reqwest_err.source();
-    while let Some(err) = current {
-        if err.to_string().starts_with("invalid peer certificate: ") {
-            return true;
-        }
-        current = err.source();
-    }
-    false
+fn is_tls_request_error(reqwest_err: &reqwest::Error) -> bool {
+    reqwest_err.is_connect() && find_source_with_io::<rustls::Error>(&reqwest_err).is_some()
 }
 
 /// Whether the error is a status code error that is retryable.
@@ -1178,6 +1144,31 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     while let Some(err) = cause {
         if let Some(typed) = err.downcast_ref() {
             return Some(typed);
+        }
+        cause = err.source();
+    }
+    None
+}
+
+/// Find the first source error of a specific type while also wrapped in `io::Error`.
+///
+/// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+/// See <https://github.com/hyperium/h2/issues/862>
+fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
+    let mut cause = orig.source();
+    while let Some(err) = cause {
+        if let Some(concrete_err) = err.downcast_ref() {
+            return Some(concrete_err);
+        }
+        // Walk io::Error in case get_ref wraps the real source
+        if let Some(io_err) = err.downcast_ref::<io::Error>() {
+            if let Some(inner_err) = io_err.get_ref() {
+                if let Some(concrete_err) = inner_err.downcast_ref() {
+                    return Some(concrete_err);
+                }
+                cause = Some(inner_err);
+                continue;
+            }
         }
         cause = err.source();
     }
