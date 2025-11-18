@@ -42,7 +42,6 @@ def main() -> None:
         )
 
         manifest.write_text(contents)
-        print(f"{name} {version} -> {new_version}")
 
 
 if __name__ == "__main__":
