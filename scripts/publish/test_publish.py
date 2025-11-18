@@ -3,6 +3,8 @@
 # dependencies = [
 #     "httpx>=0.28.1,<0.29",
 #     "packaging>=24.1,<25",
+#     "pypi-attestations==0.0.28",
+#     "sigstore==4.1.0",
 # ]
 # ///
 
@@ -78,6 +80,10 @@ from packaging.utils import (
     parse_wheel_filename,
 )
 from packaging.version import Version
+from pypi_attestations import Attestation, Distribution
+from sigstore import oidc
+from sigstore.models import ClientTrustConfig
+from sigstore.sign import SigningContext
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
@@ -115,6 +121,7 @@ class TargetConfiguration:
     publish_url: str
     index_url: str
     index: str | None = None
+    attestations: bool = False
 
     def index_declaration(self) -> str | None:
         if not self.index:
@@ -179,6 +186,8 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
+        index=None,
+        attestations=True,
     ),
     # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
     # "pyx-trusted-publishing": TargetConfiguration(
@@ -420,6 +429,30 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         expected_filenames.remove(".gitignore")
         # Ignore our test file
         expected_filenames.remove(".DS_Store")
+
+        if all_targets[target].attestations:
+            trust = ClientTrustConfig.production()
+            identity = oidc.detect_credential()
+
+            if not identity:
+                raise RuntimeError("Failed to detect OIDC credential for signing")
+
+            identity_token = oidc.IdentityToken(identity)
+            context = SigningContext.from_trust_config(trust)
+
+            with context.signer(identity_token=identity_token) as signer:
+                for dist_name in expected_filenames:
+                    dist_path = project_dir / "dist" / dist_name
+                    if dist_path.suffixes not in [[".tar", ".gz"], [".whl"]]:
+                        continue
+
+                    dist = Distribution.from_file(dist_path)
+                    attestation = Attestation.sign(signer, dist)
+
+                    attestation_path = dist_path.with_suffix(
+                        dist_path.suffix + ".publish.attestation"
+                    )
+                    attestation_path.write_text(attestation.model_dump_json())
 
         print(
             f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
