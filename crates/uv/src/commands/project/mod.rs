@@ -7,7 +7,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -2567,6 +2567,7 @@ pub(crate) fn detect_conflicts(
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -2586,6 +2587,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2606,6 +2608,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2626,6 +2629,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2643,6 +2647,7 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(settings.sources);
@@ -2675,6 +2680,7 @@ pub(crate) fn script_extra_build_requires(
                         script_sources,
                         script_indexes,
                         &settings.index_locations,
+                        credentials_cache,
                     )
                     .map_ok(move |requirement| ExtraBuildRequirement {
                         requirement: requirement.into_inner(),

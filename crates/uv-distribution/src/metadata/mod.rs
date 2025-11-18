@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-
+use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -91,6 +91,7 @@ impl Metadata {
         locations: &IndexLocations,
         sources: SourceStrategy,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -112,6 +113,7 @@ impl Metadata {
             locations,
             sources,
             cache,
+            credentials_cache,
         )
         .await?;
 

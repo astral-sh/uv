@@ -554,7 +554,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         self.builder
-            .source_tree_requires_dist(path, pyproject_toml)
+            .source_tree_requires_dist(
+                path,
+                pyproject_toml,
+                self.client.unmanaged.credentials_cache(),
+            )
             .await
     }
 

@@ -11,8 +11,8 @@ use url::Url;
 use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::Realm;
 use crate::credentials::{Authentication, Username};
+use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -33,6 +33,7 @@ impl Display for FetchUrl {
     }
 }
 
+#[derive(Debug)] // All internal types are redacted.
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Authentication>>>,
@@ -56,6 +57,27 @@ impl CredentialsCache {
             realms: RwLock::new(FxHashMap::default()),
             urls: RwLock::new(UrlTrie::new()),
         }
+    }
+
+    /// Populate the global authentication store with credentials on a URL, if there are any.
+    ///
+    /// Returns `true` if the store was updated.
+    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+        if let Some(credentials) = Credentials::from_url(url) {
+            trace!("Caching credentials for {url}");
+            self.insert(url, Arc::new(Authentication::from(credentials)));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Populate the global authentication store with credentials on a URL, if there are any.
+    ///
+    /// Returns `true` if the store was updated.
+    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
+        trace!("Caching credentials for {url}");
+        self.insert(url, Arc::new(Authentication::from(credentials)));
     }
 
     /// Return the credentials that should be used for a realm and username, if any.

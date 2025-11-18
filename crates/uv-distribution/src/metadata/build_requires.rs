@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-
+use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
@@ -42,6 +42,7 @@ impl BuildRequires {
         locations: &IndexLocations,
         sources: SourceStrategy,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = match sources {
             SourceStrategy::Enabled => DiscoveryOptions::default(),
@@ -56,7 +57,13 @@ impl BuildRequires {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, locations, sources)
+        Self::from_project_workspace(
+            metadata,
+            &project_workspace,
+            locations,
+            sources,
+            credentials_cache,
+        )
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
@@ -65,6 +72,7 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -114,6 +122,7 @@ impl BuildRequires {
                         locations,
                         project_workspace.workspace(),
                         None,
+                        credentials_cache,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -139,6 +148,7 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -186,6 +196,7 @@ impl BuildRequires {
                         locations,
                         workspace,
                         None,
+                        credentials_cache,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -225,6 +236,7 @@ impl LoweredExtraBuildDependencies {
         workspace: &Workspace,
         index_locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
             SourceStrategy::Enabled => {
@@ -271,6 +283,7 @@ impl LoweredExtraBuildDependencies {
                                     index_locations,
                                     workspace,
                                     None,
+                                    credentials_cache,
                                 )
                                 .map(move |requirement| {
                                     match requirement {

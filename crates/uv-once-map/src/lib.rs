@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::fmt::{Debug, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::pin::pin;
 use std::sync::Arc;
@@ -17,6 +18,12 @@ use tokio::sync::Notify;
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
 pub struct OnceMap<K, V, S = RandomState> {
     items: DashMap<K, Value<V>, S>,
+}
+
+impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K, V, S> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.items, f)
+    }
 }
 
 impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
@@ -142,6 +149,7 @@ where
     }
 }
 
+#[derive(Debug)]
 enum Value<V> {
     Waiting(Arc<Notify>),
     Filled(V),
