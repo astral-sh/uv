@@ -8114,3 +8114,229 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
     ");
     Ok(())
 }
+
+#[test]
+fn cyclonedx_export_alternative_registry() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_cyclonedx_filters()
+        .with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["torch==2.6.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [[tool.uv.index]]
+        name = "pytorch-cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        default = true
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "filelock-2@3.13.1",
+          "name": "filelock",
+          "version": "3.13.1",
+          "purl": "pkg:pypi/filelock@3.13.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "fsspec-3@2024.6.1",
+          "name": "fsspec",
+          "version": "2024.6.1",
+          "purl": "pkg:pypi/fsspec@2024.6.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "jinja2-4@3.1.4",
+          "name": "jinja2",
+          "version": "3.1.4",
+          "purl": "pkg:pypi/jinja2@3.1.4?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "markupsafe-5@3.0.2",
+          "name": "markupsafe",
+          "version": "3.0.2",
+          "purl": "pkg:pypi/markupsafe@3.0.2?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "mpmath-6@1.3.0",
+          "name": "mpmath",
+          "version": "1.3.0",
+          "purl": "pkg:pypi/mpmath@1.3.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "networkx-7@3.3",
+          "name": "networkx",
+          "version": "3.3",
+          "purl": "pkg:pypi/networkx@3.3?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "setuptools-8@70.2.0",
+          "name": "setuptools",
+          "version": "70.2.0",
+          "purl": "pkg:pypi/setuptools@70.2.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "sympy-9@1.13.1",
+          "name": "sympy",
+          "version": "1.13.1",
+          "purl": "pkg:pypi/sympy@1.13.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "torch-10@2.6.0",
+          "name": "torch",
+          "version": "2.6.0",
+          "purl": "pkg:pypi/torch@2.6.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "torch-11@2.6.0+cpu",
+          "name": "torch",
+          "version": "2.6.0+cpu",
+          "purl": "pkg:pypi/torch@2.6.0%2Bcpu?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform != 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-12@4.12.2",
+          "name": "typing-extensions",
+          "version": "4.12.2",
+          "purl": "pkg:pypi/typing-extensions@4.12.2?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "filelock-2@3.13.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "fsspec-3@2024.6.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "jinja2-4@3.1.4",
+          "dependsOn": [
+            "markupsafe-5@3.0.2"
+          ]
+        },
+        {
+          "ref": "markupsafe-5@3.0.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "mpmath-6@1.3.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "networkx-7@3.3",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "torch-10@2.6.0",
+            "torch-11@2.6.0+cpu"
+          ]
+        },
+        {
+          "ref": "setuptools-8@70.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "sympy-9@1.13.1",
+          "dependsOn": [
+            "mpmath-6@1.3.0"
+          ]
+        },
+        {
+          "ref": "torch-10@2.6.0",
+          "dependsOn": [
+            "filelock-2@3.13.1",
+            "fsspec-3@2024.6.1",
+            "jinja2-4@3.1.4",
+            "networkx-7@3.3",
+            "setuptools-8@70.2.0",
+            "sympy-9@1.13.1",
+            "typing-extensions-12@4.12.2"
+          ]
+        },
+        {
+          "ref": "torch-11@2.6.0+cpu",
+          "dependsOn": [
+            "filelock-2@3.13.1",
+            "fsspec-3@2024.6.1",
+            "jinja2-4@3.1.4",
+            "networkx-7@3.3",
+            "setuptools-8@70.2.0",
+            "sympy-9@1.13.1",
+            "typing-extensions-12@4.12.2"
+          ]
+        },
+        {
+          "ref": "typing-extensions-12@4.12.2",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}

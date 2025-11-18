@@ -81,7 +81,7 @@ which is useful for security auditing, compliance, and supply chain transparency
 
 !!! important
 
-    Support for exporting to CycloneDX is in [preview](../concepts/preview.md), so may be subject to change.
+    Support for exporting to CycloneDX is in [preview](../concepts/preview.md), and may change in any future release.
 
 ### What is CycloneDX?
 

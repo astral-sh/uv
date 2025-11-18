@@ -1855,7 +1855,7 @@ uv export [OPTIONS]
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-export--format"><a href="#uv-export--format"><code>--format</code></a> <i>format</i></dt><dd><p>The format to which <code>uv.lock</code> should be exported.</p>
-<p>Supports <code>requirements.txt</code>, <code>pylock.toml</code> (PEP 751) and <code>CycloneDX</code> v1.5 JSON output formats.</p>
+<p>Supports <code>requirements.txt</code>, <code>pylock.toml</code> (PEP 751) and CycloneDX v1.5 JSON output formats.</p>
 <p>uv will infer the output format from the file extension of the output file, if provided. Otherwise, defaults to <code>requirements.txt</code>.</p>
 <p>Possible values:</p>
 <ul>

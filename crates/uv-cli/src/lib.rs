@@ -4543,9 +4543,10 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
+    #[allow(clippy::doc_markdown)]
     /// The format to which `uv.lock` should be exported.
     ///
-    /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and `CycloneDX` v1.5 JSON output formats.
+    /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.
     ///
     /// uv will infer the output format from the file extension of the output file, if
     /// provided. Otherwise, defaults to `requirements.txt`.

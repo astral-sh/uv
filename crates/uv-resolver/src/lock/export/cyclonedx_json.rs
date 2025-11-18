@@ -1,16 +1,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use cyclonedx_bom::{
-    models::{
-        component::Classification,
-        dependency::{Dependencies, Dependency},
-        metadata::Metadata,
-        property::{Properties, Property},
-        tool::{Tool, Tools},
-    },
-    prelude::{Bom, Component, Components, NormalizedString},
-};
+use cyclonedx_bom::models::component::Classification;
+use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
+use cyclonedx_bom::models::metadata::Metadata;
+use cyclonedx_bom::models::property::{Properties, Property};
+use cyclonedx_bom::models::tool::{Tool, Tools};
+use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
 use itertools::Itertools;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 use rustc_hash::FxHashSet;
@@ -25,7 +21,7 @@ use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{LockErrorKind, Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -59,7 +55,7 @@ struct ComponentBuilder<'a> {
 }
 
 impl<'a> ComponentBuilder<'a> {
-    /// Creates a bom-ref string in the format "{id}-{package_name}@{version}" or "{id}-{package_name}" if no version is provided.
+    /// Creates a bom-ref string in the format "{package_name}-{id}@{version}" or "{package_name}-{id}" if no version is provided.
     fn create_bom_ref(&mut self, name: &str, version: Option<&str>) -> String {
         self.id_counter += 1;
         let id = self.id_counter;
@@ -88,12 +84,30 @@ impl<'a> ComponentBuilder<'a> {
     fn create_purl(package: &Package) -> Option<String> {
         let name = percent_encode(Self::get_package_name(package).as_bytes(), PURL_ENCODE_SET);
 
-        let version = Self::get_version_string(package).map_or_else(String::new, |v| {
-            format!("@{}", percent_encode(v.as_bytes(), PURL_ENCODE_SET))
-        });
+        let version = Self::get_version_string(package)
+            .map(|v| format!("@{}", percent_encode(v.as_bytes(), PURL_ENCODE_SET)))
+            .unwrap_or_default();
 
         let (purl_type, qualifiers) = match &package.id.source {
-            Source::Registry(_) => ("pypi", vec![]),
+            // By convention all Python packages use the "pypi" purl type, regardless of their source. For packages
+            // from non-default repositories, we add a qualifier to indicate their source explicitly.
+            // See the specs at
+            // https://github.com/package-url/purl-spec/blob/9041aa7/types/pypi-definition.json
+            // and https://github.com/package-url/purl-spec/blob/9041aa7/purl-specification.md
+            Source::Registry(registry_source) => {
+                let qualifiers = match registry_source {
+                    RegistrySource::Url(url) => {
+                        // Only add repository_url qualifier for non-default registries
+                        if !url.as_ref().starts_with("https://pypi.org/") {
+                            vec![("repository_url", url.as_ref())]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    RegistrySource::Path(_) => vec![],
+                };
+                ("pypi", qualifiers)
+            }
             Source::Git(url, _) => ("pypi", vec![("vcs_url", url.as_ref())]),
             Source::Direct(url, _) => ("pypi", vec![("download_url", url.as_ref())]),
             // No purl for local sources
@@ -299,9 +313,7 @@ pub fn from_lock<'lock>(
     let workspace_member_ids = nodes
         .iter()
         .filter_map(|node| {
-            if target.lock().members().contains(&node.package.id.name)
-                && node.package.id.source.is_local()
-            {
+            if target.lock().members().contains(&node.package.id.name) {
                 Some(&node.package.id)
             } else {
                 None
@@ -357,6 +369,7 @@ pub fn from_lock<'lock>(
                 .iter()
                 .filter_map(|c| component_builder.get_component(c))
                 .map(|c| c.bom_ref.clone().expect("bom-ref should always exist"))
+                .sorted_unstable()
                 .collect(),
         });
     }
