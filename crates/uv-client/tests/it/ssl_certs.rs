@@ -157,6 +157,63 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
     }
 
+    // ** Set SSL_CERT_FILE to an empty string
+    // ** Then verify it is treated as unset (falls back to default behavior)
+
+    unsafe {
+        std::env::set_var(EnvVars::SSL_CERT_FILE, "");
+    }
+    let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
+    let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
+    let cache = Cache::temp()?.init()?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await;
+    unsafe {
+        std::env::remove_var(EnvVars::SSL_CERT_FILE);
+    }
+
+    // Empty SSL_CERT_FILE should be ignored, falling back to default certificate handling.
+    // The connection will fail because we're using a self-signed cert without providing the cert,
+    // but the important thing is it doesn't fail due to "empty path does not exist".
+    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
+        panic!("expected middleware error");
+    };
+    let reqwest_error = middleware_error
+        .chain()
+        .find_map(|err| {
+            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
+                if let reqwest_middleware::Error::Reqwest(inner) = err {
+                    inner
+                } else {
+                    panic!("expected reqwest error")
+                }
+            })
+        })
+        .expect("expected reqwest error");
+    assert!(reqwest_error.is_connect());
+
+    // Validate the server error - should be UnknownCA (not a path-related error)
+    let server_res = server_task.await?;
+    let expected_err = if let Err(anyhow_err) = server_res
+        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
+        && let Some(wrapped_err) = io_err.get_ref()
+        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
+        && matches!(
+            tls_err,
+            rustls::Error::AlertReceived(AlertDescription::UnknownCA)
+        ) {
+        true
+    } else {
+        false
+    };
+    assert!(expected_err);
+
     // ** Set SSL_CERT_DIR to our cert dir as well as some other dir that does not exist
     // ** Then verify our request still successfully establishes a connection
 
