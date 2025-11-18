@@ -1,6 +1,6 @@
 [package]
 name = "uv-globfilter"
-version = "0.1.0"
+version = "0.0.1"
 readme = "README.md"
 edition = { workspace = true }
 rust-version = { workspace = true }

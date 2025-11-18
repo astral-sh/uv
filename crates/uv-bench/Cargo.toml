@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.0"
+version = "0.0.1"
 description = "uv Micro-benchmarks"
 publish = false
 authors = { workspace = true }
