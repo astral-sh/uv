@@ -1,6 +1,6 @@
-use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
-
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
@@ -405,6 +405,7 @@ pub struct ResolverInstallerOptions {
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
+    pub compile_bytecode_timeout: Option<Duration>,
     pub no_sources: Option<bool>,
     pub upgrade: Option<Upgrade>,
     pub reinstall: Option<Reinstall>,
@@ -472,6 +473,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
+            compile_bytecode_timeout: None,
             no_sources,
             upgrade: Upgrade::from_args(
                 upgrade,
@@ -1962,6 +1964,7 @@ pub struct ToolOptions {
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
+    pub compile_bytecode_timeout: Option<Duration>,
     pub no_sources: Option<bool>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
@@ -1992,6 +1995,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            compile_bytecode_timeout: value.compile_bytecode_timeout,
             no_sources: value.no_sources,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
@@ -2024,6 +2028,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            compile_bytecode_timeout: value.compile_bytecode_timeout,
             no_sources: value.no_sources,
             upgrade: None,
             reinstall: None,

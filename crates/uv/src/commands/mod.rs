@@ -165,6 +165,7 @@ pub(super) struct DryRunEvent<T: Display> {
 /// See the `--compile` option on `pip sync` and `pip install`.
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
+    compile_bytecode_timeout: Option<Duration>,
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
@@ -183,6 +184,7 @@ pub(super) async fn compile_bytecode(
         files += compile_tree(
             &site_packages,
             venv.python_executable(),
+            compile_bytecode_timeout,
             concurrency,
             cache.root(),
         )

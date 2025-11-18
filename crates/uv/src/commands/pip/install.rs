@@ -1,9 +1,9 @@
-use std::collections::BTreeSet;
-use std::fmt::Write;
-
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::time::Duration;
 use tracing::{Level, debug, enabled, warn};
 
 use uv_cache::Cache;
@@ -77,6 +77,7 @@ pub(crate) async fn pip_install(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    compile_bytecode_timeout: Option<Duration>,
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
@@ -649,6 +650,7 @@ pub(crate) async fn pip_install(
         &build_options,
         link_mode,
         compile,
+        compile_bytecode_timeout,
         &hasher,
         &tags,
         &client,
