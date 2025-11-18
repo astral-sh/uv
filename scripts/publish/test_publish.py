@@ -445,7 +445,9 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
                     print(f"Attestation: processing {dist_name}", file=sys.stderr)
 
                     dist_path = project_dir / "dist" / dist_name
-                    if dist_path.suffixes not in [[".tar", ".gz"], [".whl"]]:
+                    if not (
+                        dist_name.endswith(".tar.gz") or dist_name.endswith(".whl")
+                    ):
                         continue
 
                     print(f"Attesting for {dist_name}", file=sys.stderr)
