@@ -442,9 +442,13 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
 
             with context.signer(identity_token=identity_token) as signer:
                 for dist_name in expected_filenames:
+                    print(f"Attestation: processing {dist_name}", file=sys.stderr)
+
                     dist_path = project_dir / "dist" / dist_name
                     if dist_path.suffixes not in [[".tar", ".gz"], [".whl"]]:
                         continue
+
+                    print(f"Attesting for {dist_name}", file=sys.stderr)
 
                     dist = Distribution.from_file(dist_path)
                     attestation = Attestation.sign(signer, dist)
