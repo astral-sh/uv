@@ -13,5 +13,8 @@ cd "$project_root"
 # Update the changelog
 uvx --python 3.12 rooster@0.1.1 release "$@"
 
+# Bump library crate versions
+uv run "$project_root/scripts/bump-crates.py"
+
 echo "Updating lockfile..."
 cargo update -p uv
