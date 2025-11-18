@@ -157,11 +157,11 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
     ),
-    # "codeberg": TargetConfiguration(
-    #     "astral-test-token",
-    #     "https://codeberg.org/api/packages/astral-test-user/pypi",
-    #     "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
-    # ),
+    "codeberg": TargetConfiguration(
+        "astral-test-token",
+        "https://codeberg.org/api/packages/astral-test-user/pypi",
+        "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
+    ),
     "cloudsmith": TargetConfiguration(
         "astral-test-token",
         "https://python.cloudsmith.io/astral-test/astral-test-1/",
@@ -173,6 +173,7 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main/",
     ),
 }
+
 all_targets: dict[str, TargetConfiguration] = local_targets | {
     "pypi-trusted-publishing": TargetConfiguration(
         "astral-test-trusted-publishing",
@@ -186,6 +187,9 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
     #     "https://api.pyx.dev/simple/astral-test/main",
     # ),
 }
+
+# Temporarily disable codeberg on CI due to unreliability.
+all_targets.pop("codeberg", None)
 
 
 def get_latest_version(target: str, client: httpx.Client) -> Version | None:
@@ -242,11 +246,6 @@ def collect_versions(url: str, client: httpx.Client) -> set[Version]:
         else:
             [_name, version] = parse_sdist_filename(filename)
         versions.add(version)
-
-    print(
-        f"Found versions at {url}: {', '.join(str(v) for v in versions)}",
-        file=sys.stderr,
-    )
     return versions
 
 
