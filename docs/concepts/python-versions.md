@@ -121,10 +121,15 @@ present, uv will install all the Python versions listed in the file.
     The available Python versions are frozen for each uv release. To install new Python versions,
     you may need upgrade uv.
 
+See the [storage documentation](../reference/storage.md#python-versions) for details about where
+installed Python versions are stored.
+
 ### Installing Python executables
 
-uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
-install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., on Unix `uv python install 3.12`
+will install a Python executable into `~/.local/bin`, e.g., as `python3.12`. See the
+[storage documentation](../reference/storage.md#python-executables) for more details about the
+target directory.
 
 !!! tip
 

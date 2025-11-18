@@ -1214,7 +1214,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2126,9 +2126,9 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade6dfcba0dfb62ad59e59e7241ec8912af34fd29e0e743e3db992bd278e8b65"
+checksum = "9375e112e4b463ec1b1c6c011953545c65a30164fbab5b581df32b3abf0dcb88"
 dependencies = [
  "console 0.16.1",
  "portable-atomic",
@@ -2285,7 +2285,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2623,7 +2623,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.61.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3872,9 +3872,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fcff2dd52b58a8d98a70243663a0d234c4e2b79235637849d15913394a247d3"
+checksum = "9980d917ebb0c0536119ba501e90834767bffc3d60641457fd84a1f3fd337923"
 dependencies = [
  "openssl-probe",
  "rustls-pki-types",
@@ -5301,7 +5301,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.9.9"
+version = "0.9.10"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5513,7 +5513,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.9.9"
+version = "0.9.10"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5710,16 +5710,19 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "percent-encoding",
+ "rcgen",
  "reqwest",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
+ "rustls",
  "serde",
  "serde_json",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
  "url",
@@ -6807,7 +6810,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.9.9"
+version = "0.9.10"
 
 [[package]]
 name = "uv-virtualenv"

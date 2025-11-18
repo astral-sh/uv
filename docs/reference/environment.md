@@ -1004,10 +1004,21 @@ the fact that Windows' real main thread is only 1MB. That thread has size
 
 The standard `SHELL` posix env var.
 
+### `SSL_CERT_DIR`
+<small class="added-in">added in `0.9.10`</small>
+
+Custom path for certificate bundles for SSL connections.
+Multiple entries are supported separated using a platform-specific
+delimiter (`:` on Unix, `;` on Windows).
+
+Takes precedence over `UV_NATIVE_TLS` when set.
+
 ### `SSL_CERT_FILE`
 <small class="added-in">added in `0.1.14`</small>
 
 Custom certificate bundle file path for SSL connections.
+
+Takes precedence over `UV_NATIVE_TLS` when set.
 
 ### `SSL_CLIENT_CERT`
 <small class="added-in">added in `0.2.11`</small>

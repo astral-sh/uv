@@ -1,17 +1,12 @@
+use std::str::FromStr;
+
 use anyhow::Result;
-use futures::future;
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::header::USER_AGENT;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use std::io::Read;
 use std::str::FromStr;
 use tokio::net::TcpListener;
 use url::Url;
+
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_client::{BaseClientBuilder, LineHaul};
@@ -42,37 +37,12 @@ fn get_version_codename() -> Result<Option<String>, std::io::Error> {
 
     Ok(None)
 }
+use crate::http_util::start_http_user_agent_server;
 
 #[tokio::test]
 async fn test_user_agent_has_version() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
@@ -118,41 +88,15 @@ async fn test_user_agent_has_version() -> Result<()> {
     });
 
     // Wait for the server task to complete, to be a good citizen.
-    server_task.await?;
+    let _ = server_task.await?;
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_user_agent_has_linehaul() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Add some representative markers for an Ubuntu CI runner
     let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -167,8 +111,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         python_full_version: "3.12.2",
         python_version: "3.12",
         sys_platform: "linux",
-    })
-    .unwrap();
+    })?;
 
     // Initialize uv-client
     let cache = Cache::temp()?.init()?;
@@ -213,7 +156,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let body = res.text().await?;
 
     // Wait for the server task to complete, to be a good citizen.
-    server_task.await?;
+    let _ = server_task.await?;
 
     // Unpack User-Agent with linehaul
     let (uv_version, uv_linehaul) = body

@@ -586,8 +586,18 @@ impl EnvVars {
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
     /// Custom certificate bundle file path for SSL connections.
+    ///
+    /// Takes precedence over `UV_NATIVE_TLS` when set.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
+
+    /// Custom path for certificate bundles for SSL connections.
+    /// Multiple entries are supported separated using a platform-specific
+    /// delimiter (`:` on Unix, `;` on Windows).
+    ///
+    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    #[attr_added_in("0.9.10")]
+    pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
     /// If set, uv will use this file for mTLS authentication.
     /// This should be a single file containing both the certificate and the private key in PEM format.
