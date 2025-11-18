@@ -1,4 +1,5 @@
-use std::io::Write;
+use std::error::Error;
+use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -449,12 +450,62 @@ fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::E
     assert!(reqwest_error.is_connect());
 }
 
+/// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
+fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
+    let mut cause = orig.source();
+    while let Some(err) = cause {
+        if let Some(concrete_err) = err.downcast_ref() {
+            return Some(concrete_err);
+        }
+        if let Some(io_err) = err.downcast_ref::<io::Error>()
+            && let Some(inner_err) = io_err.get_ref()
+        {
+            if let Some(concrete_err) = inner_err.downcast_ref() {
+                return Some(concrete_err);
+            }
+            cause = Some(inner_err);
+            continue;
+        }
+        cause = err.source();
+    }
+    None
+}
+
 /// A self-signed server certificate is rejected when no custom certs are
 /// configured — the bundled webpki roots don't include our test CA.
 #[tokio::test]
 async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
     let cert = TestCertificate::new()?;
     client().expect_https_connect_fails(&cert).await;
+    Ok(())
+}
+
+/// TLS certificate failures are fatal and preserve the original TLS error
+/// instead of retrying against the single-use server.
+#[tokio::test]
+async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .run_https(&cert, |response, server_task| async move {
+            assert!(
+                matches!(response, Err(reqwest_middleware::Error::Middleware(_))),
+                "expected middleware error, got: {response:?}"
+            );
+            let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
+                return;
+            };
+            let tls_error = find_source_with_io::<rustls::Error>(middleware_error.as_ref());
+            assert!(tls_error.is_some(), "expected TLS error in chain");
+            let Some(tls_error) = tls_error else {
+                return;
+            };
+            assert!(matches!(
+                tls_error,
+                rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer)
+            ));
+            let _ = server_task.await;
+        })
+        .await;
     Ok(())
 }
 

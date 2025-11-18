@@ -174,6 +174,10 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
 
         if let Some(reqwest_err) = reqwest_err {
             has_known_error = true;
+            if is_tls_request_error(reqwest_err) {
+                trace!("Fatal nested reqwest TLS error");
+                return Some(Retryable::Fatal);
+            }
             // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Transient nested reqwest error");
@@ -255,6 +259,10 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
         || status == StatusCode::TOO_MANY_REQUESTS
 }
 
+fn is_tls_request_error(reqwest_err: &reqwest::Error) -> bool {
+    reqwest_err.is_connect() && find_source_with_io::<rustls::Error>(reqwest_err).is_some()
+}
+
 /// Find the first source error of a specific type.
 ///
 /// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
@@ -263,6 +271,30 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     while let Some(err) = cause {
         if let Some(typed) = err.downcast_ref() {
             return Some(typed);
+        }
+        cause = err.source();
+    }
+    None
+}
+
+/// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
+///
+/// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+/// See <https://github.com/hyperium/h2/issues/862>
+fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
+    let mut cause = orig.source();
+    while let Some(err) = cause {
+        if let Some(concrete_err) = err.downcast_ref() {
+            return Some(concrete_err);
+        }
+        if let Some(io_err) = err.downcast_ref::<io::Error>()
+            && let Some(inner_err) = io_err.get_ref()
+        {
+            if let Some(concrete_err) = inner_err.downcast_ref() {
+                return Some(concrete_err);
+            }
+            cause = Some(inner_err);
+            continue;
         }
         cause = err.source();
     }
