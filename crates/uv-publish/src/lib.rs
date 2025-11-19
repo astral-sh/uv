@@ -58,9 +58,17 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, DisplaySafeUrl, #[source] Box<PublishSendError>),
+    PublishSend(
+        PathBuf,
+        Box<DisplaySafeUrl>,
+        #[source] Box<PublishSendError>,
+    ),
     #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
-    Validate(PathBuf, DisplaySafeUrl, #[source] Box<PublishSendError>),
+    Validate(
+        PathBuf,
+        Box<DisplaySafeUrl>,
+        #[source] Box<PublishSendError>,
+    ),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -492,7 +500,7 @@ pub async fn upload(
         let response = result.map_err(|err| {
             PublishError::PublishSend(
                 group.file.clone(),
-                registry.clone(),
+                registry.clone().into(),
                 PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
@@ -525,7 +533,7 @@ pub async fn upload(
                 }
                 Err(PublishError::PublishSend(
                     group.file.clone(),
-                    registry.clone(),
+                    registry.clone().into(),
                     err.into(),
                 ))
             }
@@ -563,7 +571,7 @@ pub async fn validate(
         let response = request.send().await.map_err(|err| {
             PublishError::Validate(
                 file.to_path_buf(),
-                registry.clone(),
+                registry.clone().into(),
                 PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
@@ -571,7 +579,7 @@ pub async fn validate(
         handle_response(&validation_url, response)
             .await
             .map_err(|err| {
-                PublishError::Validate(file.to_path_buf(), registry.clone(), err.into())
+                PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
             })?;
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
