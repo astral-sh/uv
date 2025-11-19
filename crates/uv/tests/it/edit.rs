@@ -11498,7 +11498,7 @@ fn add_preserves_trailing_depth() -> Result<()> {
         dependencies = [
           "anyio==3.7.0",
           "idna",
-          "iniconfig", # Use iniconfig.
+          "iniconfig",# Use iniconfig.
           # First line.
           # Second line.
         ]
