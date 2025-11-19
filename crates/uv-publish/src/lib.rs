@@ -58,11 +58,11 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
+    PublishSend(PathBuf, DisplaySafeUrl, #[source] Box<PublishSendError>),
     #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
-    Validate(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
+    Validate(PathBuf, DisplaySafeUrl, #[source] Box<PublishSendError>),
     #[error("Failed to obtain token for trusted publishing")]
-    TrustedPublishing(#[from] TrustedPublishingError),
+    TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
     MixedCredentials(String),
     #[error("Failed to query check URL")]
@@ -259,7 +259,6 @@ pub struct UploadDistribution {
 /// Given a list of paths (which may contain globs), unroll them into
 /// a flat, unique list of files. Files are returned in a stable
 /// but unspecified order.
-#[allow(clippy::result_large_err)]
 fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
     let mut files = BTreeSet::default();
     for path in paths {
@@ -359,7 +358,6 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
-#[allow(clippy::result_large_err)]
 pub fn group_files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<UploadDistribution>, PublishError> {
@@ -428,10 +426,11 @@ pub async fn check_trusted_publishing(
 
             let Some(token) =
                 trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await?
+                    .await
+                    .map_err(Box::new)?
             else {
                 return Err(PublishError::TrustedPublishing(
-                    TrustedPublishingError::NoToken,
+                    TrustedPublishingError::NoToken.into(),
                 ));
             };
 
@@ -494,7 +493,7 @@ pub async fn upload(
             PublishError::PublishSend(
                 group.file.clone(),
                 registry.clone(),
-                PublishSendError::ReqwestMiddleware(err),
+                PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
 
@@ -527,7 +526,7 @@ pub async fn upload(
                 Err(PublishError::PublishSend(
                     group.file.clone(),
                     registry.clone(),
-                    err,
+                    err.into(),
                 ))
             }
         };
@@ -565,13 +564,15 @@ pub async fn validate(
             PublishError::Validate(
                 file.to_path_buf(),
                 registry.clone(),
-                PublishSendError::ReqwestMiddleware(err),
+                PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
 
         handle_response(&validation_url, response)
             .await
-            .map_err(|err| PublishError::Validate(file.to_path_buf(), registry.clone(), err))?;
+            .map_err(|err| {
+                PublishError::Validate(file.to_path_buf(), registry.clone(), err.into())
+            })?;
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
     }
