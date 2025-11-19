@@ -16,14 +16,15 @@ fn workspace_dir_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+    "
     );
 }
 
@@ -36,25 +37,27 @@ fn workspace_dir_specific_package() {
     let workspace = context.temp_dir.child("foo");
 
     // root workspace
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+    "
     );
 
     // with --package bar
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/foo/bar
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+    "
     );
 }
 
@@ -72,14 +75,15 @@ fn workspace_metadata_from_member() -> Result<()> {
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&member_dir), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&member_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/workspace
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+    "
     );
 
     Ok(())
@@ -95,14 +99,15 @@ fn workspace_dir_package_doesnt_exist() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
     error: Package `bar` not found in workspace.
-    "###
+    "
     );
 }
 
@@ -111,13 +116,14 @@ fn workspace_dir_package_doesnt_exist() {
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_dir(), @r###"
+    uv_snapshot!(context.filters(), context.workspace_dir(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
-    "###
+    "
     );
 }
