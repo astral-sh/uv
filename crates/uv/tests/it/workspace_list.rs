@@ -24,6 +24,17 @@ fn workspace_list_simple() {
     warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
     "
     );
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/foo
+
+    ----- stderr -----
+    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+    "
+    );
 }
 
 /// Test list output for a root workspace (workspace with a root package).
@@ -147,6 +158,19 @@ fn workspace_list_multiple_members() {
     pkg-a
     pkg-b
     pkg-c
+
+    ----- stderr -----
+    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/pkg-a
+    [TEMP_DIR]/pkg-a/pkg-b
+    [TEMP_DIR]/pkg-a/pkg-c
 
     ----- stderr -----
     warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
