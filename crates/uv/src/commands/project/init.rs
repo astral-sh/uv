@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
-use toml_edit::InlineTable;
+use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
@@ -941,14 +941,14 @@ impl Author {
 
         match self {
             Self::NameEmail { name, email } => {
-                inline.get_or_insert("name", name);
-                inline.get_or_insert("email", email);
+                inline.insert("name", Value::from(name));
+                inline.insert("email", Value::from(email));
             }
             Self::Name(name) => {
-                inline.get_or_insert("name", name);
+                inline.insert("name", Value::from(name));
             }
             Self::Email(email) => {
-                inline.get_or_insert("email", email);
+                inline.insert("email", Value::from(email));
             }
         }
 
