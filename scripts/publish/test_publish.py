@@ -268,6 +268,36 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
     return [m.group(1) for m in re.finditer(href_text, data)]
 
 
+def check_index_for_provenance(
+    index_url: str,
+    project_name: str,
+    version: Version,
+    client: httpx.Client,
+):
+    """Check that the index serves a provenance attribute on each of the
+    distributions for the given project and version.
+
+    This uses the PEP 691 JSON API for convenience. There shouldn't be
+    any PEP 740 implementations out there that don't also implement PEP 691.
+    """
+
+    url = index_url + project_name + "/"
+    response = client.get(
+        url,
+        follow_redirects=True,
+        headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    for file in data["files"]:
+        if str(version) in file["filename"] and not file.get("provenance"):
+            raise RuntimeError(
+                f"Missing provenance for {project_name} {version} "
+                f"file {file['filename']}"
+            )
+
+
 def build_project_at_version(
     target: str, version: Version, uv: Path, modified: bool = False
 ) -> Path:
@@ -392,9 +422,11 @@ def wait_for_index(
 def publish_project(target: str, uv: Path, client: httpx.Client):
     """Test that:
 
-    1. An upload with a fresh version succeeds.
+    1. An upload with a fresh version succeeds. If the upload includes attestations,
+       we confirm that the index accepts and serves them.
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
+    4. Uploading modified files at the same version fails.
     """
     # If we're publishing to pyx, we need to give the httpx client
     # access to an appropriate credential.
@@ -478,6 +510,9 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         else:
             # Raise the error after three failures
             result.check_returncode()
+
+    if all_targets[target].attestations:
+        check_index_for_provenance(index_url, project_name, version, client)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
