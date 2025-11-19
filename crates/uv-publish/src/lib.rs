@@ -289,15 +289,15 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
             continue;
         };
 
+        // Attestations are named as `<dist>.<type>.attestation`, e.g.
+        // `foo-1.2.3.tar.gz.publish.attestation`.
+        // We use this to build up a map of `dist -> [attestations]`
+        // for subsequent merging.
         let mut filename_parts = filename.rsplitn(3, '.');
         if filename_parts.next() == Some("attestation")
             && let Some(_) = filename_parts.next()
             && let Some(dist_name) = filename_parts.next()
         {
-            // Attestations are named as `<dist>.<type>.attestation`, e.g.
-            // `foo-1.2.3.tar.gz.publish.attestation`.
-            // We use this to build up a map of `dist -> [attestations]`
-            // for subsequent merging.
             debug!(
                 "Found attestation for distribution: `{}` -> `{}`",
                 file.user_display(),
@@ -1144,17 +1144,12 @@ mod tests {
 
     #[test]
     fn test_group_files() {
-        fn rand() -> u64 {
-            use std::hash::{BuildHasher, Hasher};
-            std::hash::RandomState::new().build_hasher().finish()
-        }
-
         // Fisher-Yates shuffle.
         fn shuffle<T>(vec: &mut [T]) {
             let n: usize = vec.len();
             for i in 0..(n - 1) {
                 #[allow(clippy::cast_possible_truncation)]
-                let j = (rand() as usize) % (n - i) + i;
+                let j = (fastrand::usize(..)) % (n - i) + i;
                 vec.swap(i, j);
             }
         }
