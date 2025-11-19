@@ -242,7 +242,7 @@ impl PublishSendError {
     }
 }
 
-/// Represents a single "to-be-uploaded" distribution, alone with zero
+/// Represents a single "to-be-uploaded" distribution, along with zero
 /// or more attestations that will be uploaded alongside it.
 #[derive(Debug)]
 pub struct UploadDistribution {
