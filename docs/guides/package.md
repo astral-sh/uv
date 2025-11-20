@@ -8,15 +8,17 @@ description: A guide to using uv to build and publish Python packages to a packa
 uv supports building Python packages into source and binary distributions via `uv build` and
 uploading them to a registry with `uv publish`.
 
-## Preparing your project for packaging
+## Preparing your project
 
 Before attempting to publish your project, you'll want to make sure it's ready to be packaged for
 distribution.
 
 If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
-build it by default. This means that your project may not be ready for distribution. Read more about
-the effect of declaring a build system in the
-[project concept](../concepts/projects/config.md#build-systems) documentation.
+build it during `uv sync` operations in the project, but will fall back to the legacy setuptools
+build system during `uv build`.
+
+We strongly recommend configuring a build system. Read more about build systems in the
+[project configuration](../concepts/projects/config.md#build-systems) documentation.
 
 ## Building your package
 
