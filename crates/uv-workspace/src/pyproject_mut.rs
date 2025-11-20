@@ -70,7 +70,7 @@ enum CommentType {
     /// A comment that appears on its own line.
     OwnLine,
     /// A comment that appears at the end of a line.
-    EndOfLine { padding: String },
+    EndOfLine { leading_whitespace: String },
 }
 
 #[derive(Debug, Clone)]
@@ -1635,8 +1635,8 @@ fn reformat_array_multiline(deps: &mut Array) {
                             CommentType::OwnLine
                         } else {
                             let before = &line[..index];
-                            let padding = before[before.trim_end().len()..].to_string();
-                            CommentType::EndOfLine { padding }
+                            let leading_whitespace = before[before.trim_end().len()..].to_string();
+                            CommentType::EndOfLine { leading_whitespace }
                         };
 
                         *prev_line_was_empty = trimmed_line.is_empty();
@@ -1688,8 +1688,8 @@ fn reformat_array_multiline(deps: &mut Array) {
                 CommentType::OwnLine => {
                     prefix.push_str(&indentation_prefix_str);
                 }
-                CommentType::EndOfLine { padding } => {
-                    prefix.push_str(padding);
+                CommentType::EndOfLine { leading_whitespace } => {
+                    prefix.push_str(leading_whitespace);
                 }
             }
             prefix.push_str(&comment.text);
@@ -1710,8 +1710,8 @@ fn reformat_array_multiline(deps: &mut Array) {
                             format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
-                    CommentType::EndOfLine { padding } => {
-                        rv.push_str(padding);
+                    CommentType::EndOfLine { leading_whitespace } => {
+                        rv.push_str(leading_whitespace);
                     }
                 }
                 rv.push_str(&comment.text);
