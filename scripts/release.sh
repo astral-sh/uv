@@ -15,7 +15,6 @@ uvx --python 3.12 rooster@0.1.1 release "$@"
 
 # Bump library crate versions
 uv run "$project_root/scripts/bump-workspace-crate-versions.py"
-uv run "$project_root/scripts/update-workspace-crate-pins.py"
 
 echo "Updating lockfile..."
 cargo update -p uv
