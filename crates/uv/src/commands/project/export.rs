@@ -304,7 +304,7 @@ pub(crate) async fn export(
             "uv export".green(),
             ExportFormat::value_variants()
                 .iter()
-                .filter_map(|variant| variant.to_possible_value())
+                .filter_map(clap::ValueEnum::to_possible_value)
                 .map(|value| value.get_name().to_string())
                 .join(", ")
         ));
