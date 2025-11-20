@@ -1628,15 +1628,22 @@ fn reformat_array_multiline(deps: &mut Array) {
                 |(prev_line_was_empty, prev_line_was_comment), line| {
                     let trimmed_line = line.trim();
 
-                    if let Some(index) = line.find('#') {
-                        let comment_text = line[index..].trim().to_string();
+                    if let Some((before, comment)) = line.split_once('#') {
+                        let comment_text = format!("#{}", comment.trim_end());
 
                         let comment_kind = if (*prev_line_was_empty) || (*prev_line_was_comment) {
                             CommentType::OwnLine
                         } else {
-                            let before = &line[..index];
-                            let leading_whitespace = before[before.trim_end().len()..].to_string();
-                            CommentType::EndOfLine { leading_whitespace }
+                            CommentType::EndOfLine {
+                                leading_whitespace: before
+                                    .chars()
+                                    .rev()
+                                    .take_while(|c| c.is_whitespace())
+                                    .collect::<String>()
+                                    .chars()
+                                    .rev()
+                                    .collect(),
+                            }
                         };
 
                         *prev_line_was_empty = trimmed_line.is_empty();
