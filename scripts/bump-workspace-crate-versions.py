@@ -1,5 +1,10 @@
 # Naively increment the patch version of each crate in the workspace.
 #
+# This excludes crates which are versioned as binaries.
+#
+# `update-workspace-crate-pins.py` should be run after this script to update the version pins in the
+# root `Cargo.toml` to match the new versions.
+
 # /// script
 # requires-python = ">=3.14"
 # dependencies = []
@@ -44,17 +49,6 @@ def main() -> None:
 
         version_changes[name] = (version, new_version)
         manifest.write_text(contents)
-
-    # Update all the pins in the workspace root
-    workspace_manifest = pathlib.Path(content["workspace_root"]) / "Cargo.toml"
-    contents = workspace_manifest.read_text()
-    for name, (old_version, new_version) in version_changes.items():
-        contents = contents.replace(
-            f'{name} = {{ version = "{old_version}"',
-            f'{name} = {{ version = "{new_version}"',
-        )
-
-    workspace_manifest.write_text(contents)
 
 
 if __name__ == "__main__":
