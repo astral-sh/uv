@@ -63,7 +63,6 @@ ignore-labels = ["internal", "ci", "testing"]
 version_files = [
   "README.md",
   "pyproject.toml",
-  "Cargo.toml",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
