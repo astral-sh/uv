@@ -26,9 +26,8 @@ use crate::{
 use crate::{Index, TextCredentialStore, TomlCredentialError};
 
 /// Cached check for whether we're running in Dependabot.
-static IS_DEPENDABOT: LazyLock<bool> = LazyLock::new(|| {
-    std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true")
-});
+static IS_DEPENDABOT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true"));
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
