@@ -178,6 +178,22 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+  cargo-publish-check:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    name: "cargo publish check"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "cargo publish dry-run"
+        run: cargo publish --workspace --dry-run
+
   cargo-dev-generate-all:
     timeout-minutes: 10
     needs: determine_changes
