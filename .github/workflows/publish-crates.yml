@@ -26,15 +26,7 @@ jobs:
       # TODO(zanieb): Switch to trusted publishing once published
       # - uses: rust-lang/crates-io-auth-action@v1
       #   id: auth
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
-        with:
-          version: "0.9.8"
       - name: Publish workspace crates
-        run: |
-          for crate in $(uv run ./scripts/list-crates.py); do
-            echo "Publishing $crate"
-            cargo publish -p $crate
-          done
+        run: cargo publish --workspace
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
