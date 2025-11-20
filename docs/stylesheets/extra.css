@@ -87,6 +87,19 @@
   display: inline; /* Show dark images in dark mode */
 }
 
+[data-md-color-scheme="astral-light"] .benchmark-image[src$="#only-light"],
+[data-md-color-scheme="astral-dark"] .benchmark-image[src$="#only-dark"] {
+  display: inline;
+  height: 250px;
+  width: 500px;
+  margin-top: -3rem;
+}
+
+.benchmark-caption {
+  margin-top: -3rem;
+  text-align: center;
+}
+
 /* See: https://github.com/squidfunk/mkdocs-material/issues/175#issuecomment-616694465 */
 .md-typeset__table {
   min-width: 100%;
