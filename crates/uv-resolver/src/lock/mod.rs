@@ -52,7 +52,7 @@ use uv_workspace::{Editability, WorkspaceMember};
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{PylockToml, PylockTomlErrorKind};
+pub use crate::lock::export::{PylockToml, PylockTomlErrorKind, cyclonedx_json};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
@@ -5962,6 +5962,12 @@ enum LockErrorKind {
         path: PathBuf,
         #[source]
         err: toml::de::Error,
+    },
+    /// An error that occurs when a workspace member has a non-local source.
+    #[error("Workspace member `{id}` has non-local source", id = id.cyan())]
+    NonLocalWorkspaceMember {
+        /// The ID of the workspace member with an invalid source.
+        id: PackageId,
     },
 }
 

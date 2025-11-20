@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -15,7 +16,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{PylockToml, RequirementsTxtExport};
+use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -286,9 +287,6 @@ pub(crate) async fn export(
         },
     };
 
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&target, &extras, &groups)?;
-
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
@@ -315,6 +313,11 @@ pub(crate) async fn export(
             ExportFormat::RequirementsTxt
         }
     });
+
+    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
+    if !matches!(format, ExportFormat::CycloneDX1_5) {
+        detect_conflicts(&target, &extras, &groups)?;
+    }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, ExportFormat::PylockToml) {
@@ -375,6 +378,20 @@ pub(crate) async fn export(
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
             write!(writer, "{}", export.to_toml()?)?;
+        }
+        ExportFormat::CycloneDX1_5 => {
+            let export = cyclonedx_json::from_lock(
+                &target,
+                &prune,
+                &extras,
+                &groups,
+                include_annotations,
+                &install_options,
+                preview,
+                all_packages,
+            )?;
+
+            export.output_as_json_v1_5(&mut writer)?;
         }
     }
 
