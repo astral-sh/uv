@@ -179,6 +179,13 @@ publishing source distribution and wheels with different contents for the same v
 
 ### Uploading attestations with your package
 
+!!! note
+
+    Some third-party package indexes may not support attestations, and may
+    reject uploads that include them (rather than silently ignoring them).
+    If you encounter issues when uploading, you can use `--no-attestations` or
+    `UV_PUBLISH_NO_ATTESTATIONS` to disable uv's default behavior.
+
 !!! tip
 
     `uv publish` does not currently generate attestations; attestations must
