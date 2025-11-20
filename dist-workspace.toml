@@ -57,19 +57,15 @@ build-local-artifacts = false
 # Local artifacts jobs to run in CI
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
-publish-jobs = ["./publish-pypi"]
+publish-jobs = ["./publish-pypi", "./publish-crates"]
 # Post-announce jobs to run in CI
 post-announce-jobs = ["./publish-docs"]
 # Custom permissions for GitHub Jobs
-github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" } }
+github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" }, "publish-crates" = { contents = "read" } }
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
-install-path = [
-    "$XDG_BIN_HOME/",
-    "$XDG_DATA_HOME/../bin",
-    "~/.local/bin"
-]
+install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 
 [dist.github-custom-runners]
 global = "depot-ubuntu-latest-4"

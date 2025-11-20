@@ -1,6 +1,7 @@
 [package]
 name = "uv-version"
-version = "0.9.10"
+version = "0.9.11"
+description = "This is a component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }

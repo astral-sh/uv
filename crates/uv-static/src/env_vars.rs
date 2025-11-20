@@ -668,7 +668,7 @@ impl EnvVars {
     pub const CONDA_ROOT: &'static str = "_CONDA_ROOT";
 
     /// Used to determine if we're running in Dependabot.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.11")]
     pub const DEPENDABOT: &'static str = "DEPENDABOT";
 
     /// If set to `1` before a virtual environment is activated, then the

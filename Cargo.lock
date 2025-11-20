@@ -5376,7 +5376,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.9.10"
+version = "0.9.11"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5537,7 +5537,7 @@ dependencies = [
 
 [[package]]
 name = "uv-bench"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "codspeed-criterion-compat",
@@ -5588,7 +5588,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.9.10"
+version = "0.9.11"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5600,7 +5600,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build-backend"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "astral-version-ranges",
  "base64 0.22.1",
@@ -6154,7 +6154,7 @@ dependencies = [
 
 [[package]]
 name = "uv-globfilter"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anstream",
  "fs-err",
@@ -6289,7 +6289,7 @@ dependencies = [
 
 [[package]]
 name = "uv-metadata"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "astral_async_zip",
  "fs-err",
@@ -6332,7 +6332,7 @@ dependencies = [
 
 [[package]]
 name = "uv-pep440"
-version = "0.7.0"
+version = "0.0.1"
 dependencies = [
  "astral-version-ranges",
  "indoc",
@@ -6346,7 +6346,7 @@ dependencies = [
 
 [[package]]
 name = "uv-pep508"
-version = "0.6.0"
+version = "0.0.1"
 dependencies = [
  "arcstr",
  "astral-version-ranges",
@@ -6375,7 +6375,7 @@ dependencies = [
 
 [[package]]
 name = "uv-performance-memory-allocator"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "mimalloc",
  "tikv-jemallocator",
@@ -6422,7 +6422,7 @@ dependencies = [
 
 [[package]]
 name = "uv-publish"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ambient-id",
  "astral-reqwest-middleware",
@@ -6567,7 +6567,7 @@ dependencies = [
 
 [[package]]
 name = "uv-requirements"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "configparser",
@@ -6830,7 +6830,7 @@ dependencies = [
 
 [[package]]
 name = "uv-torch"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "either",
@@ -6889,11 +6889,11 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.9.10"
+version = "0.9.11"
 
 [[package]]
 name = "uv-virtualenv"
-version = "0.0.4"
+version = "0.0.1"
 dependencies = [
  "console 0.16.1",
  "fs-err",

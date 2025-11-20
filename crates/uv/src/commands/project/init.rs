@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
+use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
@@ -936,13 +937,22 @@ enum Author {
 
 impl Author {
     fn to_toml_string(&self) -> String {
+        let mut inline = InlineTable::new();
+
         match self {
             Self::NameEmail { name, email } => {
-                format!("{{ name = \"{name}\", email = \"{email}\" }}")
+                inline.insert("name", Value::from(name));
+                inline.insert("email", Value::from(email));
             }
-            Self::Name(name) => format!("{{ name = \"{name}\" }}"),
-            Self::Email(email) => format!("{{ email = \"{email}\" }}"),
+            Self::Name(name) => {
+                inline.insert("name", Value::from(name));
+            }
+            Self::Email(email) => {
+                inline.insert("email", Value::from(email));
+            }
         }
+
+        inline.to_string()
     }
 }
 
@@ -1412,4 +1422,22 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
     };
 
     Ok(author)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn author_to_toml_string_handles_inline_quotes() {
+        let author = Author::NameEmail {
+            name: "Tony \"Iron Man\" Stark".to_string(),
+            email: "ironman@example.com".to_string(),
+        };
+
+        assert_eq!(
+            author.to_toml_string(),
+            "{ name = 'Tony \"Iron Man\" Stark', email = \"ironman@example.com\" }"
+        );
+    }
 }

@@ -7193,7 +7193,11 @@ pub struct WorkspaceDirArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct WorkspaceListArgs;
+pub struct WorkspaceListArgs {
+    /// Show paths instead of names.
+    #[arg(long)]
+    pub paths: bool,
+}
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.

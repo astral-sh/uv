@@ -798,7 +798,7 @@ Used to determine the name of the active Conda environment.
 Used to detect the path of an active Conda environment.
 
 ### `DEPENDABOT`
-<small class="added-in">added in `next release`</small>
+<small class="added-in">added in `0.9.11`</small>
 
 Used to determine if we're running in Dependabot.
 

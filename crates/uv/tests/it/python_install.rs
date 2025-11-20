@@ -2447,18 +2447,18 @@ fn python_install_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.15.0a1 in [TIME]
-     + cpython-3.15.0a1-[PLATFORM] (python3.15)
+    Installed Python 3.15.0a2 in [TIME]
+     + cpython-3.15.0a2-[PLATFORM] (python3.15)
     ");
 
     // Install a specific pre-release
-    uv_snapshot!(context.filters(), context.python_install().arg("3.15.0a1"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.15.0a2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Python 3.15a1 is already installed
+    Python 3.15a2 is already installed
     ");
 }
 
@@ -2474,7 +2474,7 @@ fn python_find_prerelease() {
 
     // See [`python_install_prerelease`] coverage of these.
     context.python_install().arg("3.15").assert().success();
-    context.python_install().arg("3.15.0a1").assert().success();
+    context.python_install().arg("3.15.0a2").assert().success();
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
@@ -2482,7 +2482,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2492,7 +2492,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2501,7 +2501,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
