@@ -22,7 +22,7 @@ def main() -> None:
     )
     content = json.loads(result.stdout)
     packages = {package["id"]: package for package in content["packages"]}
-    new_versions = {}
+    version_changes = {}
 
     for workspace_member in content["workspace_members"]:
         manifest = pathlib.Path(packages[workspace_member]["manifest_path"])
@@ -42,13 +42,13 @@ def main() -> None:
             1,
         )
 
-        new_versions[name] = (version, new_version)
+        version_changes[name] = (version, new_version)
         manifest.write_text(contents)
 
     # Update all the pins in the workspace root
     workspace_manifest = pathlib.Path(content["workspace_root"]) / "Cargo.toml"
     contents = workspace_manifest.read_text()
-    for name, (old_version, new_version) in new_versions.items():
+    for name, (old_version, new_version) in version_changes.items():
         contents = contents.replace(
             f'{name} = {{ version = "{old_version}"',
             f'{name} = {{ version = "{new_version}"',
