@@ -98,7 +98,7 @@ pub(crate) async fn export(
                 },
                 &workspace_cache,
             )
-                .await?
+            .await?
         } else if let [name] = package.as_slice() {
             VirtualProject::Project(
                 Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
@@ -112,7 +112,7 @@ pub(crate) async fn export(
                 &DiscoveryOptions::default(),
                 &workspace_cache,
             )
-                .await?;
+            .await?;
 
             for name in &package {
                 if !project.workspace().packages().contains_key(name) {
@@ -159,8 +159,8 @@ pub(crate) async fn export(
                 printer,
                 preview,
             )
-                .await?
-                .into_interpreter(),
+            .await?
+            .into_interpreter(),
             ExportTarget::Project(project) => ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
@@ -177,8 +177,8 @@ pub(crate) async fn export(
                 printer,
                 preview,
             )
-                .await?
-                .into_interpreter(),
+            .await?
+            .into_interpreter(),
         })
     };
 
@@ -213,9 +213,9 @@ pub(crate) async fn export(
             printer,
             preview,
         )
-            .execute((&target).into()),
+        .execute((&target).into()),
     )
-        .await
+    .await
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
