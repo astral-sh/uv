@@ -51,6 +51,7 @@ uv-metadata = { version = "0.0.1", path = "crates/uv-metadata" }
 uv-normalize = { version = "0.0.1", path = "crates/uv-normalize" }
 uv-once-map = { version = "0.0.1", path = "crates/uv-once-map" }
 uv-options-metadata = { version = "0.0.1", path = "crates/uv-options-metadata" }
+uv-performance-memory-allocator = { version = "0.0.1", path = "crates/uv-performance-memory-allocator" }
 uv-pep440 = { version = "0.0.1", path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
 uv-pep508 = { version = "0.0.1", path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
 uv-platform = { version = "0.0.1", path = "crates/uv-platform" }

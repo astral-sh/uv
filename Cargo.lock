@@ -6265,7 +6265,7 @@ dependencies = [
 
 [[package]]
 name = "uv-performance-memory-allocator"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "mimalloc",
  "tikv-jemallocator",
