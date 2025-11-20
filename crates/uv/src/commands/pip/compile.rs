@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -15,8 +16,8 @@ use uv_python::downloads::ManagedPythonDownloadList;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, Reinstall, SourceStrategy, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, PipCompileFormat, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -75,7 +76,7 @@ pub(crate) async fn pip_compile(
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
-    format: Option<ExportFormat>,
+    format: Option<PipCompileFormat>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     fork_strategy: ForkStrategy,
@@ -147,16 +148,16 @@ pub(crate) async fn pip_compile(
     let format = format.unwrap_or_else(|| {
         let extension = output_file.and_then(Path::extension);
         if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
-            ExportFormat::PylockToml
+            PipCompileFormat::PylockToml
         } else {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         }
     });
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
-    if matches!(format, ExportFormat::PylockToml) {
+    if matches!(format, PipCompileFormat::PylockToml) {
         if let Some(file_name) = output_file
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
@@ -398,7 +399,7 @@ pub(crate) async fn pip_compile(
 
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
-    let hasher = if generate_hashes || matches!(format, ExportFormat::PylockToml) {
+    let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
         HashStrategy::Generate(HashGeneration::All)
     } else {
         HashStrategy::None
@@ -455,10 +456,10 @@ pub(crate) async fn pip_compile(
     let LockedRequirements { preferences, git } =
         if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
             match format {
-                ExportFormat::RequirementsTxt => LockedRequirements::from_preferences(
+                PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
                     read_requirements_txt(output_file, &upgrade).await?,
                 ),
-                ExportFormat::PylockToml => {
+                PipCompileFormat::PylockToml => {
                     read_pylock_toml_requirements(output_file, &upgrade).await?
                 }
             }
@@ -613,7 +614,7 @@ pub(crate) async fn pip_compile(
     }
 
     match format {
-        ExportFormat::RequirementsTxt => {
+        PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
                     let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
@@ -704,7 +705,7 @@ pub(crate) async fn pip_compile(
                 )
             )?;
         }
-        ExportFormat::PylockToml => {
+        PipCompileFormat::PylockToml => {
             if include_marker_expression {
                 warn_user!(
                     "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
