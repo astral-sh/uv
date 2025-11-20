@@ -36,6 +36,7 @@ pub(crate) async fn publish(
     index: Option<String>,
     index_locations: IndexLocations,
     dry_run: bool,
+    no_attestations: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -87,7 +88,7 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let groups = group_files_for_publishing(paths)?;
+    let groups = group_files_for_publishing(paths, no_attestations)?;
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {

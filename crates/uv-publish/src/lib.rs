@@ -284,7 +284,7 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
 }
 
 /// Given a flat list of input files, merge them into a list of [`UploadDistribution`]s.
-fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
+fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribution> {
     let mut groups = FxHashMap::default();
     let mut attestations_by_dist = FxHashMap::default();
     for file in files {
@@ -348,11 +348,15 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
         }
     }
 
-    // Merge attestations into their respective upload groups.
-    for (dist_name, attestations) in attestations_by_dist {
-        if let Some(group) = groups.get_mut(&dist_name) {
-            group.attestations = attestations;
-            group.attestations.sort();
+    if no_attestations {
+        debug!("Not merging attestations with distributions per user request");
+    } else {
+        // Merge attestations into their respective upload groups.
+        for (dist_name, attestations) in attestations_by_dist {
+            if let Some(group) = groups.get_mut(&dist_name) {
+                group.attestations = attestations;
+                group.attestations.sort();
+            }
         }
     }
 
@@ -368,8 +372,9 @@ fn group_files(files: Vec<PathBuf>) -> Vec<UploadDistribution> {
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
 pub fn group_files_for_publishing(
     paths: Vec<String>,
+    no_attestations: bool,
 ) -> Result<Vec<UploadDistribution>, PublishError> {
-    Ok(group_files(unroll_paths(paths)?))
+    Ok(group_files(unroll_paths(paths)?, no_attestations))
 }
 
 pub enum TrustedPublishResult {

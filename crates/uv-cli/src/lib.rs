@@ -7146,6 +7146,13 @@ pub struct PublishArgs {
     /// and will perform validation against the index if supported, but will not upload any files.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Do not upload attestations for the published files.
+    ///
+    /// By default, uv attempts to upload matching PEP 740 attestations with each distribution
+    /// that is published.
+    #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
+    pub no_attestations: bool,
 }
 
 #[derive(Args)]
