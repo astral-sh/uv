@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -299,8 +300,13 @@ pub(crate) async fn export(
         .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
     {
         return Err(anyhow!(
-            "`pyproject.toml` is reserved for project metadata; `{}` exports produce requirements files or `pylock.toml` lockfiles. Choose a different output filename.",
-            "uv export".green()
+            "`pyproject.toml` is not a supported output format for {}. Supported formats: {}",
+            "uv export".green(),
+            ExportFormat::value_variants()
+                .iter()
+                .filter_map(|variant| variant.to_possible_value())
+                .map(|value| value.get_name().to_string())
+                .join(", ")
         ));
     }
 
