@@ -1187,7 +1187,7 @@ mod tests {
         {
             let dists = [valid_sdist, valid_wheel];
 
-            let mut groups = group_files(dists.iter().map(PathBuf::from).collect());
+            let mut groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
             groups.sort_by_key(|group| group.raw_filename.clone());
 
             assert_debug_snapshot!(groups, @r#"
@@ -1251,7 +1251,7 @@ mod tests {
                     shuffle(&mut dists);
 
                     let mut groups =
-                        group_files(dists.iter().map(PathBuf::from).collect());
+                        group_files(dists.iter().map(PathBuf::from).collect(), false);
                     groups.sort_by_key(|group| group.raw_filename.clone());
 
                     assert_debug_snapshot!(groups, @r#"
@@ -1307,6 +1307,73 @@ mod tests {
             }
         }
 
+        // Valid sdists/wheels with attestations in various orders, but
+        // attestations are disabled while grouping.
+        {
+            let mut dists = vec![
+                valid_sdist,
+                &valid_sdist_publish_attestation,
+                &valid_sdist_build_attestation,
+                &valid_sdist_frob_attestation,
+                valid_wheel,
+                &valid_wheel_build_attestation,
+                &valid_wheel_publish_attestation,
+                &valid_wheel_frob_attestation,
+            ];
+
+            allow_duplicates! {
+                for _ in 0..5 {
+                    shuffle(&mut dists);
+
+                    let mut groups =
+                        group_files(dists.iter().map(PathBuf::from).collect(), true);
+                    groups.sort_by_key(|group| group.raw_filename.clone());
+
+                    assert_debug_snapshot!(groups, @r#"
+                    [
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3-py3-none-any.whl",
+                            raw_filename: "acme-1.2.3-py3-none-any.whl",
+                            filename: WheelFilename(
+                                WheelFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    tags: Small {
+                                        small: WheelTagSmall {
+                                            python_tag: Python {
+                                                major: 3,
+                                                minor: None,
+                                            },
+                                            abi_tag: None,
+                                            platform_tag: Any,
+                                        },
+                                    },
+                                },
+                            ),
+                            attestations: [],
+                        },
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3.tar.gz",
+                            raw_filename: "acme-1.2.3.tar.gz",
+                            filename: SourceDistFilename(
+                                SourceDistFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    extension: TarGz,
+                                },
+                            ),
+                            attestations: [],
+                        },
+                    ]
+                    "#);
+                }
+            }
+        }
+
         // Invalid dist/attestation filenames get ignored.
         {
             let dists = [
@@ -1320,7 +1387,7 @@ mod tests {
                 invalid_attestation,
             ];
 
-            let groups = group_files(dists.iter().map(PathBuf::from).collect());
+            let groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
             assert_debug_snapshot!(groups, @r#"
             [
                 UploadDistribution {
