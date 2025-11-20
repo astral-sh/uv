@@ -1935,6 +1935,7 @@ pub(crate) struct TreeSettings {
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
     pub(crate) show_sizes: bool,
+    pub(crate) json: bool,
     #[allow(dead_code)]
     pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
@@ -2002,6 +2003,7 @@ impl TreeSettings {
             invert: tree.invert,
             outdated: tree.outdated,
             show_sizes: tree.show_sizes,
+            json: tree.json,
             script,
             python_version,
             python_platform,
