@@ -1,8 +1,8 @@
 [package]
 name = "uv-scripts"
 version = "0.0.1"
+description = "This is a component crate of uv"
 edition = { workspace = true }
-description = "Parse PEP 723-style Python scripts."
 rust-version = { workspace = true }
 homepage = { workspace = true }
 documentation = { workspace = true }
