@@ -34,7 +34,7 @@ The following Python version request formats are supported:
 - `<version>` (e.g., `3`, `3.12`, `3.12.3`)
 - `<version-specifier>` (e.g., `>=3.12,<3.13`)
 - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
-- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
+- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`, `3.14+gil`)
 - `<implementation>` (e.g., `cpython` or `cp`)
 - `<implementation>@<version>` (e.g., `cpython@3.12`)
 - `<implementation><version>` (e.g., `cpython3.12` or `cp312`)
@@ -339,8 +339,16 @@ uv supports discovering and installing
 [free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in
 CPython 3.13+.
 
-Free-threaded Python versions will not be selected by default. Free-threaded Python versions will
-only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
+For Python 3.13, free-threaded Python versions will not be selected by default. Free-threaded Python
+versions will only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
+
+For Python 3.14+, uv will allow use of free-threaded Python 3.14+ interpreters without explicit
+selection. The GIL-enabled build of Python will still be preferred, e.g., when performing an
+installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes
+before a GIL-enabled build on the `PATH`, it will be used.
+
+If both free-threaded and GIL-enabled Python versions are available on the system, and want to
+require the use of the GIL-enabled variant in a project, you can use the `+gil` variant specifier.
 
 ## Debug Python variants
 
