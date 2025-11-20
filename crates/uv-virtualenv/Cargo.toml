@@ -2,7 +2,6 @@
 name = "uv-virtualenv"
 version = "0.0.1"
 description = "This is a component crate of uv"
-publish = false
 keywords = ["virtualenv", "venv", "python"]
 
 edition = { workspace = true }
