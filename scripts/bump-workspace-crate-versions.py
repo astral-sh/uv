@@ -2,8 +2,8 @@
 #
 # This excludes crates which are versioned as binaries.
 #
-# `update-workspace-crate-pins.py` should be run after this script to update the version pins in the
-# root `Cargo.toml` to match the new versions.
+# After incrementing the version in each member `Cargo.toml`, it updates the version pins in the
+# root `Cargo.toml` to match.
 
 # /// script
 # requires-python = ">=3.14"
@@ -40,7 +40,9 @@ def main() -> None:
         name = packages[workspace_member]["name"]
 
         # For the members we're not bumping, we'll still make sure that the version pinned in the
-        # workspace manifest matches the version of the crate.
+        # workspace manifest matches the version of the crate. This is done because Rooster isn't
+        # Cargo workspace aware and won't otherwise bump these when updating the member `Cargo.toml`
+        # files. We could make Rooster smarter instead of this.
         if name in NO_BUMP_CRATES:
             manifest_dependency = parsed_workspace_manifest["workspace"][
                 "dependencies"
