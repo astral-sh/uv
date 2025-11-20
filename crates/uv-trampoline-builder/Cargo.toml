@@ -1,8 +1,7 @@
 [package]
 name = "uv-trampoline-builder"
 version = "0.0.1"
-publish = false
-description = "Builds launchers for `uv-trampoline`"
+description = "This is a component crate of uv"
 
 edition = { workspace = true }
 rust-version = { workspace = true }

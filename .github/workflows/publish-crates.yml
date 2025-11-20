@@ -1,0 +1,32 @@
+# Publish a release to crates.io.
+#
+# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a publish job
+# within `cargo-dist`.
+name: "Publish to crates.io"
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  crates-publish-uv:
+    name: Upload uv to crates.io
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # TODO(zanieb): Switch to trusted publishing once published
+      # - uses: rust-lang/crates-io-auth-action@v1
+      #   id: auth
+      - name: Publish workspace crates
+        run: cargo publish --workspace
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}

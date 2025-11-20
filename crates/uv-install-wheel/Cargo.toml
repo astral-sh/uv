@@ -1,8 +1,7 @@
 [package]
 name = "uv-install-wheel"
 version = "0.0.1"
-publish = false
-description = "Takes a wheel and installs it."
+description = "This is a component crate of uv"
 keywords = ["wheel", "python"]
 
 edition = { workspace = true }
