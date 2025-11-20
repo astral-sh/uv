@@ -178,12 +178,12 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-publish-check:
-    timeout-minutes: 10
+  cargo-publish-dry-run:
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
-    name: "cargo publish check"
+    runs-on: depot-ubuntu-22.04-8
+    name: "cargo publish dry-run"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
