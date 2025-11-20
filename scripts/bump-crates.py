@@ -22,7 +22,7 @@ def main() -> None:
     )
     content = json.loads(result.stdout)
     packages = {package["id"]: package for package in content["packages"]}
-    print(content["workspace_members"])
+
     for workspace_member in content["workspace_members"]:
         manifest = pathlib.Path(packages[workspace_member]["manifest_path"])
         name = packages[workspace_member]["name"]
