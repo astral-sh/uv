@@ -512,6 +512,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
             result.check_returncode()
 
     if all_targets[target].attestations:
+        wait_for_index(index_url, project_name, version, uv, env)
         check_index_for_provenance(index_url, project_name, version, client)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
