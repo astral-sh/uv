@@ -233,8 +233,7 @@ jobs:
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
-      "id-token": "write"
-      "packages": "write"
+      "contents": "read"
 
   # Create a GitHub Release while uploading all files to it
   announce:
