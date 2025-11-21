@@ -2723,9 +2723,9 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            // The error message is different on Windows
-            "Caused by: The system cannot find the file specified. (os error 2)",
-            "Caused by: No such file or directory (os error 2)",
+            // The error message is different on Windows.
+            "The system cannot find the file specified.",
+            "No such file or directory",
         )])
         .collect::<Vec<_>>();
 
