@@ -2719,8 +2719,18 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     error: `not_pep723_script.py` does not contain inline script metadata
     ");
 
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // The error message is different on Windows
+            "Caused by: The system cannot find the file specified. (os error 2)",
+            "Caused by: No such file or directory (os error 2)",
+        )])
+        .collect::<Vec<_>>();
+
     // Error when the script doesn't exist.
-    uv_snapshot!(context.filters(), context.tool_run()
+    uv_snapshot!(filters, context.tool_run()
         .arg("--with-requirements")
         .arg("missing_file.py")
         .arg("black"), @r"
