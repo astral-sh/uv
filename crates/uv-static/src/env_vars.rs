@@ -1210,4 +1210,7 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
+
+    #[attr_added_in("0.10.0")]
+    pub const UV_NO_WAIT: &'static str = "UV_NO_WAIT";
 }
