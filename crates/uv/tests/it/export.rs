@@ -4489,7 +4489,7 @@ fn pep_751_infer_output_format() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: `pyproject.toml` is not a supported output format for `uv export`. Supported formats: requirements.txt, pylock.toml
+    error: `pyproject.toml` is not a supported output format for `uv export` (supported formats: requirements.txt, pylock.toml, cyclonedx1.5)
     ");
 
     Ok(())

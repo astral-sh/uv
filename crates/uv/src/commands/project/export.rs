@@ -298,7 +298,7 @@ pub(crate) async fn export(
         .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
     {
         return Err(anyhow!(
-            "`pyproject.toml` is not a supported output format for `{}`. Supported formats: {}",
+            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
             "uv export".green(),
             ExportFormat::value_variants()
                 .iter()
