@@ -6,7 +6,7 @@ use console::Term;
 
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Script};
+use uv_scripts::Pep723Script;
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
@@ -52,14 +52,6 @@ impl RequirementsSource {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
             Ok(Self::Pep723Script(Pep723ScriptSource::new(path)))
-        } else if path.extension().is_none() && path.is_file() {
-            match Pep723Script::read_sync(&path) {
-                Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
-                    path, script,
-                ))),
-                Ok(None) => Ok(Self::RequirementsTxt(path)),
-                Err(err) => Err(pep723_error(&path, err)),
-            }
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -68,6 +60,21 @@ impl RequirementsSource {
                 "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
                 path.user_display(),
             ))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
+        {
+            Ok(Self::RequirementsTxt(path))
+        } else if path.extension().is_none() {
+            // If we don't have an extension, attempt to detect a PEP 723 script, and
+            // fall back to `requirements.txt` format if not.
+            match Pep723Script::read_sync(&path) {
+                Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
+                    path, script,
+                ))),
+                Ok(None) => Ok(Self::RequirementsTxt(path)),
+                Err(err) => Err(err.into()),
+            }
         } else {
             Ok(Self::RequirementsTxt(path))
         }
@@ -343,15 +350,6 @@ impl std::fmt::Display for RequirementsSource {
                 write!(f, "{}", path.simplified_display())
             }
         }
-    }
-}
-
-fn pep723_error(path: &Path, err: Pep723Error) -> anyhow::Error {
-    match err {
-        Pep723Error::Io(io_err) if io_err.kind() == std::io::ErrorKind::NotFound => {
-            anyhow::anyhow!("Failed to read `{}` (not found)", path.user_display())
-        }
-        err => err.into(),
     }
 }
 

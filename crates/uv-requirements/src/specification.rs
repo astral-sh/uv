@@ -46,7 +46,7 @@ use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
+use uv_scripts::{Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -193,12 +193,6 @@ impl RequirementsSpecification {
                         Ok(None) => {
                             return Err(anyhow::anyhow!(
                                 "`{}` does not contain inline script metadata",
-                                source.path().user_display(),
-                            ));
-                        }
-                        Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                            return Err(anyhow::anyhow!(
-                                "Failed to read `{}` (not found)",
                                 source.path().user_display(),
                             ));
                         }

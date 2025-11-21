@@ -2729,7 +2729,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `missing_file.py` (not found)
+    error: failed to read from file `missing_file.py`: No such file or directory (os error 2)
     ");
 
     Ok(())
