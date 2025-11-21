@@ -175,16 +175,28 @@ impl Pep723Script {
     ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let file = file.as_ref();
-        let contents = fs_err::tokio::read(file).await?;
-        Self::from_contents(file, &contents)
-    }
+        let contents = fs_err::tokio::read(&file).await?;
 
-    /// Read the PEP 723 `script` metadata from a Python file using blocking I/O.
-    pub fn read_sync(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let file = file.as_ref();
-        let contents = fs_err::read(file)?;
-        Self::from_contents(file, &contents)
+        // Extract the `script` tag.
+        let ScriptTag {
+            prelude,
+            metadata,
+            postlude,
+        } = match ScriptTag::parse(&contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // Parse the metadata.
+        let metadata = Pep723Metadata::from_str(&metadata)?;
+
+        Ok(Some(Self {
+            path: std::path::absolute(file)?,
+            metadata,
+            prelude,
+            postlude,
+        }))
     }
 
     /// Reads a Python script and generates a default PEP 723 metadata table.
@@ -336,29 +348,6 @@ impl Pep723Script {
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.sources.as_ref())
             .unwrap_or(&EMPTY)
-    }
-
-    fn from_contents(path: &Path, contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
-        let script_tag = match ScriptTag::parse(contents) {
-            Ok(Some(tag)) => tag,
-            Ok(None) => return Ok(None),
-            Err(err) => return Err(err),
-        };
-
-        let ScriptTag {
-            prelude,
-            metadata,
-            postlude,
-        } = script_tag;
-
-        let metadata = Pep723Metadata::from_str(&metadata)?;
-
-        Ok(Some(Self {
-            path: std::path::absolute(path)?,
-            metadata,
-            prelude,
-            postlude,
-        }))
     }
 }
 

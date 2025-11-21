@@ -2646,7 +2646,8 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
 fn tool_run_with_dependencies_from_script() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
-    let script_contents = indoc! {r#"
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -2655,13 +2656,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         # ///
 
         import anyio
-    "#};
-
-    let script = context.temp_dir.child("script.py");
-    script.write_str(script_contents)?;
-
-    let script_without_extension = context.temp_dir.child("script-no-ext");
-    script_without_extension.write_str(script_contents)?;
+    "#})?;
 
     // script dependencies (anyio) are now installed.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2687,20 +2682,6 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
      + sniffio==1.3.1
-    ");
-
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--with-requirements")
-        .arg("script-no-ext")
-        .arg("black")
-        .arg("script-no-ext")
-        .arg("-q"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
     ");
 
     // Error when the script is not a valid PEP723 script.
@@ -2729,7 +2710,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `missing_file.py`: No such file or directory (os error 2)
+    error: Failed to read `missing_file.py` (not found)
     ");
 
     Ok(())
