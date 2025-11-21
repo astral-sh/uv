@@ -252,7 +252,9 @@ pub(crate) async fn install(
             if existing_installations.is_empty() {
                 writeln!(
                     printer.stderr(),
-                    "No Python installations found; use `{}` to install a Python version.",
+                    "No Python installations found.\n{}{} Use {} to install a Python version.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
                     "uv python install".green()
                 )?;
                 return Ok(ExitStatus::Success);
