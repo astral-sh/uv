@@ -46,7 +46,7 @@ use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
+use uv_scripts::{Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -184,22 +184,20 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::Pep723Script(path) => {
-                let script = match Pep723Script::read(&path).await {
-                    Ok(Some(script)) => Pep723Item::Script(script),
-                    Ok(None) => {
-                        return Err(anyhow::anyhow!(
-                            "`{}` does not contain inline script metadata",
-                            path.user_display(),
-                        ));
+            RequirementsSource::Pep723Script(source) => {
+                let script = if let Some(script) = source.script() {
+                    Pep723Item::Script(script.clone())
+                } else {
+                    match Pep723Script::read(source.path()).await {
+                        Ok(Some(script)) => Pep723Item::Script(script),
+                        Ok(None) => {
+                            return Err(anyhow::anyhow!(
+                                "`{}` does not contain inline script metadata",
+                                source.path().user_display(),
+                            ));
+                        }
+                        Err(err) => return Err(err.into()),
                     }
-                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to read `{}` (not found)",
-                            path.user_display(),
-                        ));
-                    }
-                    Err(err) => return Err(err.into()),
                 };
 
                 let metadata = script.metadata();
