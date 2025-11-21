@@ -16,7 +16,7 @@ use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
@@ -85,7 +85,7 @@ macro_rules! impl_combine_or {
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
-impl_combine_or!(ExcludeNewerTimestamp);
+impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
@@ -230,7 +230,7 @@ impl Combine for ExcludeNewer {
             } else {
                 // Merge package-specific timestamps, with self taking precedence
                 for (pkg, timestamp) in &other.package {
-                    self.package.entry(pkg.clone()).or_insert(*timestamp);
+                    self.package.entry(pkg.clone()).or_insert(timestamp.clone());
                 }
             }
         }

@@ -45,6 +45,9 @@ mod lock;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod lock_conflict;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod lock_exclude_newer_relative;
+
 mod lock_scenarios;
 
 mod network;

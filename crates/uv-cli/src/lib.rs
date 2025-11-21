@@ -28,7 +28,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerValue, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
@@ -3041,15 +3041,27 @@ pub struct VenvArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) which use your system's configured time zone, or relative duration (e.g., `24
+    /// hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long)]
@@ -5517,15 +5529,27 @@ pub struct ToolUpgradeArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) which use your system's configured time zone, or relative duration (e.g., `24
+    /// hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6451,15 +6475,27 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) which use your system's configured time zone, or relative duration (e.g., `24
+    /// hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6671,15 +6707,27 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) which use your system's configured time zone, or relative duration (e.g., `24
+    /// hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6887,15 +6935,27 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) which use your system's configured time zone, or relative duration (e.g., `24
+    /// hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6995,10 +7055,15 @@ pub struct FetchArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) which use your system's configured time zone, and relative durations
+    /// (e.g., `24 hours`, `1 week`, `30 days`).
+    ///
+    /// Relative durations do not respect semantics of the local time zone and are always resolved
+    /// to a fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are
+    /// ignored). Calendar units such as months and years are not allowed.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
 }
 
 #[derive(Args)]

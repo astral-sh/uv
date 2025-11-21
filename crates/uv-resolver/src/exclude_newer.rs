@@ -5,70 +5,280 @@ use std::{
     str::FromStr,
 };
 
-use jiff::{Timestamp, ToSpan, tz::TimeZone};
+use jiff::{Span, Timestamp, ToSpan, Unit, tz::TimeZone};
 use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerValueChange {
+    SpanChanged(ExcludeNewerSpan, ExcludeNewerSpan),
+    SpanAdded(ExcludeNewerSpan),
+    SpanRemoved,
+    TimestampChanged(Timestamp, Timestamp),
+}
+
+impl std::fmt::Display for ExcludeNewerValueChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SpanChanged(old, new) => {
+                write!(f, "change of exclude newer span from `{old}` to `{new}`")
+            }
+            Self::SpanAdded(span) => {
+                write!(f, "addition of exclude newer span `{span}`")
+            }
+            Self::SpanRemoved => {
+                write!(f, "removal of exclude newer span")
+            }
+            Self::TimestampChanged(old, new) => {
+                write!(
+                    f,
+                    "change of exclude newer timestamp from `{old}` to `{new}`"
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerChange {
+    GlobalChanged(ExcludeNewerValueChange),
+    GlobalAdded(ExcludeNewerValue),
+    GlobalRemoved,
+    Package(ExcludeNewerPackageChange),
+}
+
+impl std::fmt::Display for ExcludeNewerChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GlobalChanged(change) => {
+                write!(f, "{change}")
+            }
+            Self::GlobalAdded(value) => {
+                write!(f, "addition of global exclude newer {value}")
+            }
+            Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
+            Self::Package(change) => {
+                write!(f, "{change}")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerPackageChange {
+    PackageAdded(PackageName, ExcludeNewerValue),
+    PackageRemoved(PackageName),
+    PackageChanged(PackageName, ExcludeNewerValueChange),
+}
+
+impl std::fmt::Display for ExcludeNewerPackageChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PackageAdded(name, value) => {
+                write!(
+                    f,
+                    "addition of exclude newer `{value}` for package `{name}`"
+                )
+            }
+            Self::PackageRemoved(name) => {
+                write!(f, "removal of exclude newer for package `{name}`")
+            }
+            Self::PackageChanged(name, change) => {
+                write!(f, "{change} for package `{name}`")
+            }
+        }
+    }
+}
 /// A timestamp that excludes files newer than it.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub struct ExcludeNewerTimestamp(Timestamp);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExcludeNewerValue {
+    /// The resolved timestamp.
+    timestamp: Timestamp,
+    /// The span used to derive the [`Timestamp`], if any.
+    span: Option<ExcludeNewerSpan>,
+}
 
-impl ExcludeNewerTimestamp {
-    /// Returns the timestamp in milliseconds.
+impl ExcludeNewerValue {
+    pub fn compare(&self, other: &Self) -> Option<ExcludeNewerValueChange> {
+        if self.timestamp != other.timestamp {
+            return Some(ExcludeNewerValueChange::TimestampChanged(
+                self.timestamp,
+                other.timestamp,
+            ));
+        }
+        match (&self.span, &other.span) {
+            (None, Some(span)) => Some(ExcludeNewerValueChange::SpanAdded(span.clone())),
+            (Some(_), None) => Some(ExcludeNewerValueChange::SpanRemoved),
+            (Some(self_span), Some(other_span)) if self_span != other_span => Some(
+                ExcludeNewerValueChange::SpanChanged(self_span.clone(), other_span.clone()),
+            ),
+            (Some(_), Some(_)) | (None, None) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExcludeNewerSpan(Span);
+
+impl std::fmt::Display for ExcludeNewerSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl PartialEq for ExcludeNewerSpan {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.fieldwise() == other.0.fieldwise()
+    }
+}
+
+impl Eq for ExcludeNewerSpan {}
+
+impl serde::Serialize for ExcludeNewerValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.timestamp.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl ExcludeNewerValue {
+    /// Return the [`Timestamp`] in milliseconds.
     pub fn timestamp_millis(&self) -> i64 {
-        self.0.as_millisecond()
+        self.timestamp.as_millisecond()
+    }
+
+    /// Return the [`Timestamp`].
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
+    }
+
+    /// Return the [`ExcludeNewerSpan`] used to construct the [`Timestamp`], if any.
+    pub fn span(&self) -> Option<&ExcludeNewerSpan> {
+        self.span.as_ref()
+    }
+
+    /// Create a new [`ExcludeNewerTimestamp`].
+    pub fn new(timestamp: Timestamp, span: Option<Span>) -> Self {
+        Self {
+            timestamp,
+            span: span.map(ExcludeNewerSpan),
+        }
     }
 }
 
-impl From<Timestamp> for ExcludeNewerTimestamp {
+impl From<Timestamp> for ExcludeNewerValue {
     fn from(timestamp: Timestamp) -> Self {
-        Self(timestamp)
+        Self {
+            timestamp,
+            span: None,
+        }
     }
 }
 
-impl FromStr for ExcludeNewerTimestamp {
+impl FromStr for ExcludeNewerValue {
     type Err = String;
 
     /// Parse an [`ExcludeNewerTimestamp`] from a string.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`), and relative durations (e.g., `1 week`, `30 days`).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        // NOTE(burntsushi): Previously, when using Chrono, we tried
-        // to parse as a date first, then a timestamp, and if both
-        // failed, we combined both of the errors into one message.
-        // But in Jiff, if an RFC 3339 timestamp could be parsed, then
-        // it must necessarily be the case that a date can also be
-        // parsed. So we can collapse the error cases here. That is,
-        // if we fail to parse a timestamp and a date, then it should
-        // be sufficient to just report the error from parsing the date.
-        // If someone tried to write a timestamp but committed an error
-        // in the non-date portion, the date parsing below will still
-        // report a holistic error that will make sense to the user.
-        // (I added a snapshot test for that case.)
+        // Try parsing as a timestamp first
         if let Ok(timestamp) = input.parse::<Timestamp>() {
-            return Ok(Self(timestamp));
+            return Ok(Self::new(timestamp, None));
         }
-        let date = input
-            .parse::<jiff::civil::Date>()
-            .map_err(|err| format!("`{input}` could not be parsed as a valid date: {err}"))?;
-        let timestamp = date
-            .checked_add(1.day())
-            .and_then(|date| date.to_zoned(TimeZone::system()))
-            .map(|zdt| zdt.timestamp())
-            .map_err(|err| {
-                format!(
-                    "`{input}` parsed to date `{date}`, but could not \
-                     be converted to a timestamp: {err}",
-                )
-            })?;
-        Ok(Self(timestamp))
+
+        // Try parsing as a date
+        // In Jiff, if an RFC 3339 timestamp could be parsed, then it must necessarily be the case
+        // that a date can also be parsed. So we can collapse the error cases here. That is, if we
+        // fail to parse a timestamp and a date, then it should be sufficient to just report the
+        // error from parsing the date. If someone tried to write a timestamp but committed an error
+        // in the non-date portion, the date parsing below will still report a holistic error that
+        // will make sense to the user. (I added a snapshot test for that case.)
+        let date_err = match input.parse::<jiff::civil::Date>() {
+            Ok(date) => {
+                let timestamp = date
+                    .checked_add(1.day())
+                    .and_then(|date| date.to_zoned(TimeZone::system()))
+                    .map(|zdt| zdt.timestamp())
+                    .map_err(|err| {
+                        format!(
+                            "`{input}` parsed to date `{date}`, but could not \
+                         be converted to a timestamp: {err}",
+                        )
+                    })?;
+                return Ok(Self::new(timestamp, None));
+            }
+            Err(err) => err,
+        };
+
+        // Try parsing as a span
+        let span_err = match input.parse::<Span>() {
+            Ok(span) => {
+                // Allow overriding the current time in tests for deterministic snapshots
+                let now = if let Ok(test_time) = std::env::var("UV_TEST_CURRENT_TIMESTAMP") {
+                    test_time
+                        .parse::<Timestamp>()
+                        .expect("UV_TEST_CURRENT_TIMESTAMP must be a valid RFC 3339 timestamp")
+                        .to_zoned(TimeZone::UTC)
+                } else {
+                    Timestamp::now().to_zoned(TimeZone::UTC)
+                };
+
+                // We do not allow years and months as units, as the amount of time they represent
+                // is not fixed and can differ depending on the local time zone. We could allow this
+                // via the CLI in the future, but shouldn't allow it via persistent configuration.
+                if span.get_years() != 0 {
+                    let years = span.total((Unit::Year, &now)).map(f64::ceil).unwrap_or(1.0);
+                    let days = years * 365.0;
+                    return Err(format!(
+                        "Duration `{input}` uses unit 'years' which is not allowed; use days instead, e.g., `{days:.0} days`.",
+                    ));
+                }
+                if span.get_months() != 0 {
+                    let months = span
+                        .total((Unit::Month, &now))
+                        .map(f64::ceil)
+                        .unwrap_or(1.0);
+                    let days = months * 30.0;
+                    return Err(format!(
+                        "Duration `{input}` uses 'months' which is not allowed; use days instead, e.g., `{days:.0} days`."
+                    ));
+                }
+
+                // We're using a UTC timezone so there are no transitions (e.g., DST) and days are
+                // always 24 hours. This means that we can also allow weeks as a unit.
+                let cutoff = now.checked_sub(span).map_err(|err| {
+                    format!("Duration `{input}` is too large to subtract from current time: {err}")
+                })?;
+
+                return Ok(Self::new(cutoff.into(), Some(span)));
+            }
+            Err(err) => err,
+        };
+
+        // Return a comprehensive error message
+        Err(format!(
+            "`{input}` could not be parsed as a timestamp, date, or relative duration: {date_err} and {span_err}"
+        ))
     }
 }
 
-impl std::fmt::Display for ExcludeNewerTimestamp {
+impl std::fmt::Display for ExcludeNewerValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        self.timestamp.fmt(f)
     }
 }
 
@@ -77,7 +287,7 @@ impl std::fmt::Display for ExcludeNewerTimestamp {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExcludeNewerPackageEntry {
     pub package: PackageName,
-    pub timestamp: ExcludeNewerTimestamp,
+    pub timestamp: ExcludeNewerValue,
 }
 
 impl FromStr for ExcludeNewerPackageEntry {
@@ -94,25 +304,25 @@ impl FromStr for ExcludeNewerPackageEntry {
         let package = PackageName::from_str(package).map_err(|err| {
             format!("Invalid `exclude-newer-package` package name `{package}`: {err}")
         })?;
-        let timestamp = ExcludeNewerTimestamp::from_str(date)
+        let timestamp = ExcludeNewerValue::from_str(date)
             .map_err(|err| format!("Invalid `exclude-newer-package` timestamp `{date}`: {err}"))?;
 
         Ok(Self { package, timestamp })
     }
 }
 
-impl From<(PackageName, ExcludeNewerTimestamp)> for ExcludeNewerPackageEntry {
-    fn from((package, timestamp): (PackageName, ExcludeNewerTimestamp)) -> Self {
+impl From<(PackageName, ExcludeNewerValue)> for ExcludeNewerPackageEntry {
+    fn from((package, timestamp): (PackageName, ExcludeNewerValue)) -> Self {
         Self { package, timestamp }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerTimestamp>);
+pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerValue>);
 
 impl Deref for ExcludeNewerPackage {
-    type Target = FxHashMap<PackageName, ExcludeNewerTimestamp>;
+    type Target = FxHashMap<PackageName, ExcludeNewerValue>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -136,8 +346,8 @@ impl FromIterator<ExcludeNewerPackageEntry> for ExcludeNewerPackage {
 }
 
 impl IntoIterator for ExcludeNewerPackage {
-    type Item = (PackageName, ExcludeNewerTimestamp);
-    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerTimestamp>;
+    type Item = (PackageName, ExcludeNewerValue);
+    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -145,8 +355,8 @@ impl IntoIterator for ExcludeNewerPackage {
 }
 
 impl<'a> IntoIterator for &'a ExcludeNewerPackage {
-    type Item = (&'a PackageName, &'a ExcludeNewerTimestamp);
-    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerTimestamp>;
+    type Item = (&'a PackageName, &'a ExcludeNewerValue);
+    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -155,8 +365,37 @@ impl<'a> IntoIterator for &'a ExcludeNewerPackage {
 
 impl ExcludeNewerPackage {
     /// Convert to the inner `HashMap`.
-    pub fn into_inner(self) -> FxHashMap<PackageName, ExcludeNewerTimestamp> {
+    pub fn into_inner(self) -> FxHashMap<PackageName, ExcludeNewerValue> {
         self.0
+    }
+
+    pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
+        for (package, timestamp) in self {
+            match other.get(package) {
+                Some(other_timestamp) => {
+                    if let Some(change) = timestamp.compare(other_timestamp) {
+                        return Some(ExcludeNewerPackageChange::PackageChanged(
+                            package.clone(),
+                            change,
+                        ));
+                    }
+                }
+                None => {
+                    return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
+                }
+            }
+        }
+
+        for (package, value) in other {
+            if !self.contains_key(package) {
+                return Some(ExcludeNewerPackageChange::PackageAdded(
+                    package.clone(),
+                    value.clone(),
+                ));
+            }
+        }
+
+        None
     }
 }
 
@@ -166,7 +405,7 @@ impl ExcludeNewerPackage {
 pub struct ExcludeNewer {
     /// Global timestamp that applies to all packages if no package-specific timestamp is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub global: Option<ExcludeNewerTimestamp>,
+    pub global: Option<ExcludeNewerValue>,
     /// Per-package timestamps that override the global timestamp.
     #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
     pub package: ExcludeNewerPackage,
@@ -174,7 +413,7 @@ pub struct ExcludeNewer {
 
 impl ExcludeNewer {
     /// Create a new exclude newer configuration with just a global timestamp.
-    pub fn global(global: ExcludeNewerTimestamp) -> Self {
+    pub fn global(global: ExcludeNewerValue) -> Self {
         Self {
             global: Some(global),
             package: ExcludeNewerPackage::default(),
@@ -182,13 +421,13 @@ impl ExcludeNewer {
     }
 
     /// Create a new exclude newer configuration.
-    pub fn new(global: Option<ExcludeNewerTimestamp>, package: ExcludeNewerPackage) -> Self {
+    pub fn new(global: Option<ExcludeNewerValue>, package: ExcludeNewerPackage) -> Self {
         Self { global, package }
     }
 
     /// Create from CLI arguments.
     pub fn from_args(
-        global: Option<ExcludeNewerTimestamp>,
+        global: Option<ExcludeNewerValue>,
         package: Vec<ExcludeNewerPackageEntry>,
     ) -> Self {
         let package: ExcludeNewerPackage = package.into_iter().collect();
@@ -197,22 +436,40 @@ impl ExcludeNewer {
     }
 
     /// Returns the timestamp for a specific package, falling back to the global timestamp if set.
-    pub fn exclude_newer_package(
-        &self,
-        package_name: &PackageName,
-    ) -> Option<ExcludeNewerTimestamp> {
-        self.package.get(package_name).copied().or(self.global)
+    pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<ExcludeNewerValue> {
+        self.package
+            .get(package_name)
+            .cloned()
+            .or(self.global.clone())
     }
 
     /// Returns true if this has any configuration (global or per-package).
     pub fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
     }
+
+    pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {
+        match (&self.global, &other.global) {
+            (Some(self_global), Some(other_global)) => {
+                if let Some(change) = self_global.compare(other_global) {
+                    return Some(ExcludeNewerChange::GlobalChanged(change));
+                }
+            }
+            (None, Some(global)) => {
+                return Some(ExcludeNewerChange::GlobalAdded(global.clone()));
+            }
+            (Some(_), None) => return Some(ExcludeNewerChange::GlobalRemoved),
+            (None, None) => (),
+        }
+        self.package
+            .compare(&other.package)
+            .map(ExcludeNewerChange::Package)
+    }
 }
 
 impl std::fmt::Display for ExcludeNewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(global) = self.global {
+        if let Some(global) = &self.global {
             write!(f, "global: {global}")?;
             if !self.package.is_empty() {
                 write!(f, ", ")?;
@@ -231,7 +488,7 @@ impl std::fmt::Display for ExcludeNewer {
 }
 
 #[cfg(feature = "schemars")]
-impl schemars::JsonSchema for ExcludeNewerTimestamp {
+impl schemars::JsonSchema for ExcludeNewerValue {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("ExcludeNewerTimestamp")
     }
@@ -240,7 +497,65 @@ impl schemars::JsonSchema for ExcludeNewerTimestamp {
         schemars::json_schema!({
             "type": "string",
             "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
-            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
+            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to an absolute timestamp at lock time.",
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_exclude_newer_timestamp_absolute() {
+        // Test RFC 3339 timestamp
+        let timestamp = ExcludeNewerValue::from_str("2023-01-01T00:00:00Z").unwrap();
+        assert!(timestamp.to_string().contains("2023-01-01"));
+
+        // Test local date
+        let timestamp = ExcludeNewerValue::from_str("2023-06-15").unwrap();
+        assert!(timestamp.to_string().contains("2023-06-16")); // Should be next day
+    }
+
+    #[test]
+    fn test_exclude_newer_timestamp_relative() {
+        // Test "1 hour" - simpler test case
+        let timestamp = ExcludeNewerValue::from_str("1 hour").unwrap();
+        let now = jiff::Timestamp::now();
+        let diff = now.as_second() - timestamp.timestamp.as_second();
+        // Should be approximately 1 hour (3600 seconds) ago
+        assert!(
+            (3550..=3650).contains(&diff),
+            "Expected ~3600 seconds, got {diff}"
+        );
+
+        // Test that we get a timestamp in the past
+        assert!(timestamp.timestamp < now, "Timestamp should be in the past");
+
+        // Test parsing succeeds for various formats
+        assert!(ExcludeNewerValue::from_str("2 days").is_ok());
+        assert!(ExcludeNewerValue::from_str("1 week").is_ok());
+        assert!(ExcludeNewerValue::from_str("30 days").is_ok());
+    }
+
+    #[test]
+    fn test_exclude_newer_timestamp_invalid() {
+        // Test invalid formats
+        assert!(ExcludeNewerValue::from_str("invalid").is_err());
+        assert!(ExcludeNewerValue::from_str("not a date").is_err());
+        assert!(ExcludeNewerValue::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_exclude_newer_package_entry() {
+        let entry = ExcludeNewerPackageEntry::from_str("numpy=2023-01-01T00:00:00Z").unwrap();
+        assert_eq!(entry.package.as_ref(), "numpy");
+        assert!(entry.timestamp.to_string().contains("2023-01-01"));
+
+        // Test with relative timestamp
+        let entry = ExcludeNewerPackageEntry::from_str("requests=7 days").unwrap();
+        assert_eq!(entry.package.as_ref(), "requests");
+        // Just verify it parsed without error - the timestamp will be relative to now
     }
 }

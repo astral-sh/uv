@@ -1028,40 +1028,12 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        let lock_exclude_newer = lock.exclude_newer();
-        let options_exclude_newer = &options.exclude_newer;
-
-        match (
-            lock_exclude_newer.is_empty(),
-            options_exclude_newer.is_empty(),
-        ) {
-            (true, true) => (),
-            (false, false) if lock_exclude_newer == *options_exclude_newer => (),
-            (false, false) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
-                    lock_exclude_newer.cyan(),
-                    options_exclude_newer.cyan()
-                );
-                return Ok(Self::Unusable(lock));
-            }
-            (false, true) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
-                    lock_exclude_newer.cyan(),
-                );
-                return Ok(Self::Unusable(lock));
-            }
-            (true, false) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
-                    options_exclude_newer.cyan()
-                );
-                return Ok(Self::Unusable(lock));
-            }
+        if let Some(change) = lock.exclude_newer().compare(&options.exclude_newer) {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to {change}",
+            );
+            return Ok(Self::Unusable(lock));
         }
 
         match upgrade {
