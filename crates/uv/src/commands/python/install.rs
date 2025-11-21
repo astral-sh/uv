@@ -248,6 +248,16 @@ pub(crate) async fn install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
         ) {
             is_unspecified_upgrade = true;
+
+            if existing_installations.is_empty() {
+                writeln!(
+                    printer.stderr(),
+                    "No Python installations found; use `{}` to install a Python version.",
+                    "uv python install".green()
+                )?;
+                return Ok(ExitStatus::Success);
+            }
+
             // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
@@ -303,12 +313,6 @@ pub(crate) async fn install(
 
     if requests.is_empty() {
         match upgrade {
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
-                writeln!(
-                    printer.stderr(),
-                    "No Python installations found; run `uv python install` to install a Python version."
-                )?;
-            }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
                 writeln!(
                     printer.stderr(),
