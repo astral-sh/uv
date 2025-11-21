@@ -1117,3 +1117,52 @@ fn venv_in_source_tree() {
       ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 }
+
+/// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
+/// entry.
+#[test]
+fn tool_uv_build_backend_without_build_backend() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        package = true
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: There are settings for `uv_build` defined in `tool.uv.build-backend`, but `uv_build` is not used by the project at: [TEMP_DIR]/pyproject.toml
+    Building wheel from source distribution...
+    warning: There are settings for `uv_build` defined in `tool.uv.build-backend`, but `uv_build` is not used by the project at: [CACHE_DIR]/sdists-v9/[TMP]/pyproject.toml
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: There are settings for `uv_build` defined in `tool.uv.build-backend`, but `uv_build` is not used by the project at: [TEMP_DIR]/pyproject.toml
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
