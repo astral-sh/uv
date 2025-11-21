@@ -1,3 +1,5 @@
+<!-- This file is generated. DO NOT EDIT -->
+
 # uv
 
 uv is a Python package and project manager.
