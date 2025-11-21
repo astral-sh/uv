@@ -1,7 +1,7 @@
 [package]
 name = "uv-cache-key"
 version = "0.0.1"
-description = "Generic functionality for caching paths, URLs, and other resources across platforms."
+description = "This is a component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }

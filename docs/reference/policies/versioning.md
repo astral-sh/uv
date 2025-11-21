@@ -12,6 +12,22 @@ uv to reach this milestone.
 
 uv's changelog can be [viewed on GitHub](https://github.com/astral-sh/uv/blob/main/CHANGELOG.md).
 
+## Crate versioning
+
+uv's crates are published to [crates.io](https://crates.io). The following crates follow the normal
+uv versioning policy:
+
+- `uv`
+- `uv-build`
+- `uv-version`
+
+The `uv` and `uv-build` crates are versioned by the binary command-line interface. The Rust
+interface of these crates does not follow semantic versioning.
+
+The remainder of uv's crates provide **no stability guarantees**. The Rust interface is considered
+internal and unstable. Consequently, they are versioned as `0.0.x`. The patch version is incremented
+on every uv release, regardless of changes to the crate.
+
 ## Cache versioning
 
 Cache versions are considered internal to uv, and so may be changed in a minor or patch release. See

@@ -10,6 +10,7 @@ use tracing::{debug, trace, warn};
 
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
+use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
@@ -23,6 +24,10 @@ use crate::{
     realm::Realm,
 };
 use crate::{Index, TextCredentialStore, TomlCredentialError};
+
+/// Cached check for whether we're running in Dependabot.
+static IS_DEPENDABOT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true"));
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -352,11 +357,15 @@ impl Middleware for AuthMiddleware {
             .is_some_and(|token_store| token_store.is_known_url(request.url()));
 
         let must_authenticate = self.only_authenticated
-            || match auth_policy {
-                AuthPolicy::Auto => is_known_url,
-                AuthPolicy::Always => true,
-                AuthPolicy::Never => false,
-            };
+            || (match auth_policy {
+                    AuthPolicy::Auto => is_known_url,
+                    AuthPolicy::Always => true,
+                    AuthPolicy::Never => false,
+                }
+                // Dependabot intercepts HTTP requests and injects credentials, which means that we
+                // cannot eagerly enforce an `AuthPolicy` as we don't know whether credentials will be
+                // added outside of uv.
+                && !*IS_DEPENDABOT);
 
         let (mut retry_request, response) = if !must_authenticate {
             let url = tracing_url(&request, credentials.as_deref());

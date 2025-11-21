@@ -65,18 +65,18 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CommentType {
     /// A comment that appears on its own line.
     OwnLine,
     /// A comment that appears at the end of a line.
-    EndOfLine,
+    EndOfLine { leading_whitespace: String },
 }
 
 #[derive(Debug, Clone)]
 struct Comment {
     text: String,
-    comment_type: CommentType,
+    kind: CommentType,
 }
 
 impl ArrayEdit {
@@ -1627,18 +1627,31 @@ fn reformat_array_multiline(deps: &mut Array) {
                 (false, false),
                 |(prev_line_was_empty, prev_line_was_comment), line| {
                     let trimmed_line = line.trim();
-                    if let Some(index) = trimmed_line.find('#') {
-                        let comment_text = trimmed_line[index..].trim().to_string();
-                        let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
+
+                    if let Some((before, comment)) = line.split_once('#') {
+                        let comment_text = format!("#{}", comment.trim_end());
+
+                        let comment_kind = if (*prev_line_was_empty) || (*prev_line_was_comment) {
                             CommentType::OwnLine
                         } else {
-                            CommentType::EndOfLine
+                            CommentType::EndOfLine {
+                                leading_whitespace: before
+                                    .chars()
+                                    .rev()
+                                    .take_while(|c| c.is_whitespace())
+                                    .collect::<String>()
+                                    .chars()
+                                    .rev()
+                                    .collect(),
+                            }
                         };
+
                         *prev_line_was_empty = trimmed_line.is_empty();
                         *prev_line_was_comment = true;
+
                         Some(Some(Comment {
                             text: comment_text,
-                            comment_type,
+                            kind: comment_kind,
                         }))
                     } else {
                         *prev_line_was_empty = trimmed_line.is_empty();
@@ -1678,12 +1691,12 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut prefix = String::new();
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            match comment.comment_type {
+            match &comment.kind {
                 CommentType::OwnLine => {
                     prefix.push_str(&indentation_prefix_str);
                 }
-                CommentType::EndOfLine => {
-                    prefix.push(' ');
+                CommentType::EndOfLine { leading_whitespace } => {
+                    prefix.push_str(leading_whitespace);
                 }
             }
             prefix.push_str(&comment.text);
@@ -1698,14 +1711,14 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut rv = String::new();
         if comments.peek().is_some() {
             for comment in comments {
-                match comment.comment_type {
+                match &comment.kind {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
                             format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
-                    CommentType::EndOfLine => {
-                        rv.push(' ');
+                    CommentType::EndOfLine { leading_whitespace } => {
+                        rv.push_str(leading_whitespace);
                     }
                 }
                 rv.push_str(&comment.text);
@@ -1737,8 +1750,9 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, split_specifiers};
+    use super::{AddBoundsKind, reformat_array_multiline, split_specifiers};
     use std::str::FromStr;
+    use toml_edit::DocumentMut;
     use uv_pep440::Version;
 
     #[test]
@@ -1758,6 +1772,56 @@ mod test {
                 "flask",
                 "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
             )
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_spacing() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",     # comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",     # comment"),
+            "inline comment spacing should be preserved:\n{serialized}"
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_without_padding() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",#comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",#comment"),
+            "inline comment spacing without padding should be preserved:\n{serialized}"
         );
     }
 

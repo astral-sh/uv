@@ -1,8 +1,8 @@
 [package]
 name = "uv-shell"
 version = "0.0.1"
+description = "This is a component crate of uv"
 edition = { workspace = true }
-description = "Utilities for detecting and manipulating shell environments"
 rust-version = { workspace = true }
 homepage = { workspace = true }
 documentation = { workspace = true }

@@ -1,8 +1,7 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.4"
-publish = false
-description = "virtualenv creation implemented in rust"
+version = "0.0.1"
+description = "This is a component crate of uv"
 keywords = ["virtualenv", "venv", "python"]
 
 edition = { workspace = true }

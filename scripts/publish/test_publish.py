@@ -58,6 +58,7 @@ Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-token/0.1
 Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 """
 
+import logging
 import os
 import re
 import shutil
@@ -166,14 +167,29 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://python.cloudsmith.io/astral-test/astral-test-1/",
         "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
     ),
+    "pyx-token": TargetConfiguration(
+        "astral-test-token",
+        "https://astral-sh-staging-api.pyx.dev/v1/upload/uv-publish-integration/main",
+        "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main/",
+    ),
 }
+
 all_targets: dict[str, TargetConfiguration] = local_targets | {
     "pypi-trusted-publishing": TargetConfiguration(
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
-    )
+    ),
+    # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
+    # "pyx-trusted-publishing": TargetConfiguration(
+    #     "astral-test-trusted-publishing",
+    #     "https://api.pyx.dev/v1/upload/astral-test/main",
+    #     "https://api.pyx.dev/simple/astral-test/main",
+    # ),
 }
+
+# Temporarily disable codeberg on CI due to unreliability.
+all_targets.pop("codeberg", None)
 
 
 def get_latest_version(target: str, client: httpx.Client) -> Version | None:
@@ -235,7 +251,8 @@ def collect_versions(url: str, client: httpx.Client) -> set[Version]:
 
 def get_filenames(url: str, client: httpx.Client) -> list[str]:
     """Get the filenames (source dists and wheels) from an index URL."""
-    response = client.get(url)
+    response = client.get(url, follow_redirects=True)
+    response.raise_for_status()
     data = response.text
     # Works for the indexes in the list
     href_text = r"<a(?:\s*[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
@@ -305,6 +322,7 @@ def wait_for_index(
     project_name: str,
     version: Version,
     uv: Path,
+    env: dict,
 ):
     """Check that the index URL was updated, wait up to 100s if necessary.
 
@@ -333,6 +351,7 @@ def wait_for_index(
             text=True,
             input=f"{project_name}",
             stdout=PIPE,
+            env=env,
         )
         # codeberg sometimes times out
         if result.returncode != 0:
@@ -368,6 +387,13 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
     """
+    # If we're publishing to pyx, we need to give the httpx client
+    # access to an appropriate credential.
+    if target == "pyx-token":
+        client.auth = httpx.BasicAuth(
+            username="__token__", password=os.environ["UV_TEST_PUBLISH_PYX_TOKEN"]
+        )
+
     project_name = all_targets[target].project_name
 
     # If a version was recently uploaded by another run of this script,
@@ -423,7 +449,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
             f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===",
             file=sys.stderr,
         )
-        wait_for_index(index_url, project_name, version, uv)
+        wait_for_index(index_url, project_name, version, uv, env)
         args = [uv, "publish", "--publish-url", publish_url, *extra_args]
         output = run(
             args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
@@ -444,7 +470,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         f"\n=== 3. Publishing {project_name} {version} again with {mode} ===",
         file=sys.stderr,
     )
-    wait_for_index(index_url, project_name, version, uv)
+    wait_for_index(index_url, project_name, version, uv, env)
     # Test twine-style and index-style uploads for different packages.
     if index := all_targets[target].index:
         args = [
@@ -487,7 +513,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         f"again with skip existing (error test) ===",
         file=sys.stderr,
     )
-    wait_for_index(index_url, project_name, version, uv)
+    wait_for_index(index_url, project_name, version, uv, env)
     args = [
         uv,
         "publish",
@@ -540,12 +566,25 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
         env = {
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
         }
+    elif target == "pyx-token":
+        extra_args = []
+        env = {
+            "UV_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
+            # So that uv accesses the right API for check-url.
+            "PYX_API_URL": "https://astral-sh-staging-api.pyx.dev",
+        }
     else:
         raise ValueError(f"Unknown target: {target}")
     return env, extra_args
 
 
 def main():
+    logging.basicConfig(
+        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.DEBUG,
+    )
+
     parser = ArgumentParser()
     target_choices = [*all_targets, "local", "all"]
     parser.add_argument("targets", choices=target_choices, nargs="+")
@@ -568,8 +607,10 @@ def main():
     else:
         targets = args.targets
 
-    with httpx.Client(timeout=120) as client:
-        for project_name in targets:
+    for project_name in targets:
+        # Each publish gets its own client, since we may need to introduce
+        # target-specific authentication.
+        with httpx.Client(timeout=120) as client:
             publish_project(project_name, uv, client)
 
 

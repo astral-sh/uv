@@ -265,13 +265,7 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
-                    match direction {
-                        Direction::Download => "Downloading",
-                        Direction::Upload => "Uploading",
-                        Direction::Extract => "Extracting",
-                    }
-                    .bold()
-                    .cyan(),
+                    direction.as_str().bold().cyan(),
                     name,
                     format!("({bytes:.1}{unit})").dimmed()
                 );
@@ -324,7 +318,11 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     " {} {}",
-                    direction.as_str().bold().green(),
+                    match direction {
+                        Direction::Download => "Downloaded",
+                        Direction::Upload => "Uploaded",
+                        Direction::Extract => "Extracted",
+                    },
                     progress.message()
                 );
             }

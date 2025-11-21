@@ -49,3 +49,4 @@ jobs:
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."
           base: "main"
+          draft: true
