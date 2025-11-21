@@ -302,7 +302,6 @@ impl SourceBuild {
             source.to_path_buf()
         };
 
-        let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
@@ -311,7 +310,6 @@ impl SourceBuild {
             locations,
             source_strategy,
             workspace_cache,
-            &default_backend,
         )
         .await
         .map_err(|err| *err)?;
@@ -383,7 +381,6 @@ impl SourceBuild {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
-                &default_backend,
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
@@ -506,13 +503,12 @@ impl SourceBuild {
     async fn get_resolved_requirements(
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements
+            if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
@@ -520,7 +516,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&default_backend.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -560,7 +556,6 @@ impl SourceBuild {
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         workspace_cache: &WorkspaceCache,
-        default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -658,7 +653,7 @@ impl SourceBuild {
                         }
                     }
 
-                    default_backend.clone()
+                    DEFAULT_BACKEND.clone()
                 };
                 Ok((backend, pyproject_toml.project))
             }
@@ -674,7 +669,7 @@ impl SourceBuild {
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                Ok((default_backend.clone(), None))
+                Ok((DEFAULT_BACKEND.clone(), None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
