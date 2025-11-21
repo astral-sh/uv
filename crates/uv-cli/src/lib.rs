@@ -1383,7 +1383,11 @@ pub struct PipCompileArgs {
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Exclude the given package names from resolution.
-    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
     pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -2058,7 +2062,11 @@ pub struct PipInstallArgs {
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Exclude the given package names from resolution.
-    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
     pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -5202,7 +5210,11 @@ pub struct ToolInstallArgs {
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Exclude the given package names from resolution.
-    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
     pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
