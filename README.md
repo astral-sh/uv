@@ -191,14 +191,12 @@ uv installs Python and allows quickly switching between versions.
 Install multiple Python versions:
 
 ```console
-$ uv python install 3.10 3.11 3.12
-Searching for Python versions matching: Python 3.10
-Searching for Python versions matching: Python 3.11
-Searching for Python versions matching: Python 3.12
-Installed 3 versions in 3.42s
- + cpython-3.10.14-macos-aarch64-none
- + cpython-3.11.9-macos-aarch64-none
- + cpython-3.12.4-macos-aarch64-none
+$ uv python install 3.12 3.13 3.14
+Installed 3 versions in 972ms
+ ~ cpython-3.12.12-macos-aarch64-none (python3.12)
+ + cpython-3.13.9-macos-aarch64-none (python3.13)
+ ~ cpython-3.14.0-macos-aarch64-none (python3.14)
+
 ```
 
 Download Python versions as needed:
