@@ -494,14 +494,39 @@ async fn do_lock(
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
-    let requirements = target.lower(requirements, index_locations, *sources)?;
-    let overrides = target.lower(overrides, index_locations, *sources)?;
-    let constraints = target.lower(constraints, index_locations, *sources)?;
-    let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
+    let requirements = target.lower(
+        requirements,
+        index_locations,
+        *sources,
+        client_builder.credentials_cache(),
+    )?;
+    let overrides = target.lower(
+        overrides,
+        index_locations,
+        *sources,
+        client_builder.credentials_cache(),
+    )?;
+    let constraints = target.lower(
+        constraints,
+        index_locations,
+        *sources,
+        client_builder.credentials_cache(),
+    )?;
+    let build_constraints = target.lower(
+        build_constraints,
+        index_locations,
+        *sources,
+        client_builder.credentials_cache(),
+    )?;
     let dependency_groups = dependency_groups
         .into_iter()
         .map(|(name, group)| {
-            let requirements = target.lower(group.requirements, index_locations, *sources)?;
+            let requirements = target.lower(
+                group.requirements,
+                index_locations,
+                *sources,
+                client_builder.credentials_cache(),
+            )?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -655,9 +680,9 @@ async fn do_lock(
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
+                client_builder.store_credentials(&root_url, credentials.clone());
             }
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            client_builder.store_credentials(index.raw_url(), credentials);
         }
     }
 
@@ -716,10 +741,11 @@ async fn do_lock(
             workspace,
             index_locations,
             *sources,
+            client.credentials_cache(),
         )?,
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_extra_build_requires((*script).into(), settings)?
+            script_extra_build_requires((*script).into(), settings, client.credentials_cache())?
         }
     }
     .into_inner();

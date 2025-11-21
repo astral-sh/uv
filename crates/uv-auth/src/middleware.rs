@@ -17,7 +17,7 @@ use crate::credentials::Authentication;
 use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
-    AccessToken, CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
+    AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
@@ -131,7 +131,8 @@ pub struct AuthMiddleware {
     netrc: NetrcMode,
     text_store: TextStoreMode,
     keyring: Option<KeyringProvider>,
-    cache: Option<CredentialsCache>,
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
+    cache: Arc<CredentialsCache>,
     /// Auth policies for specific URLs.
     indexes: Indexes,
     /// Set all endpoints as needing authentication. We never try to send an
@@ -146,13 +147,20 @@ pub struct AuthMiddleware {
     preview: Preview,
 }
 
+impl Default for AuthMiddleware {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuthMiddleware {
     pub fn new() -> Self {
         Self {
             netrc: NetrcMode::default(),
             text_store: TextStoreMode::default(),
             keyring: None,
-            cache: None,
+            // TODO(konsti): There shouldn't be a credential cache without that in the initializer.
+            cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             only_authenticated: false,
             base_client: None,
@@ -205,7 +213,14 @@ impl AuthMiddleware {
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
     pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
-        self.cache = Some(cache);
+        self.cache = Arc::new(cache);
+        self
+    }
+
+    /// Configure the [`CredentialsCache`] to use from an existing [`Arc`].
+    #[must_use]
+    pub fn with_cache_arc(mut self, cache: Arc<CredentialsCache>) -> Self {
+        self.cache = cache;
         self
     }
 
@@ -238,17 +253,9 @@ impl AuthMiddleware {
         self
     }
 
-    /// Get the configured authentication store.
-    ///
-    /// If not set, the global store is used.
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
     fn cache(&self) -> &CredentialsCache {
-        self.cache.as_ref().unwrap_or(&CREDENTIALS_CACHE)
-    }
-}
-
-impl Default for AuthMiddleware {
-    fn default() -> Self {
-        Self::new()
+        &self.cache
     }
 }
 

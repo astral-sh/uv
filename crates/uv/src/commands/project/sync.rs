@@ -239,9 +239,18 @@ pub(crate) async fn sync(
             }
 
             // Parse the requirements from the script.
-            let spec = script_specification(script.into(), &settings.resolver)?.unwrap_or_default();
-            let script_extra_build_requires =
-                script_extra_build_requires(script.into(), &settings.resolver)?.into_inner();
+            let spec = script_specification(
+                script.into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )?
+            .unwrap_or_default();
+            let script_extra_build_requires = script_extra_build_requires(
+                script.into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )?
+            .into_inner();
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -645,6 +654,7 @@ pub(super) async fn do_sync(
                 workspace,
                 index_locations,
                 sources,
+                client_builder.credentials_cache(),
             )?
         }
         InstallTarget::Script { script, .. } => {
@@ -668,7 +678,11 @@ pub(super) async fn do_sync(
                 sources,
                 upgrade: Upgrade::default(),
             };
-            script_extra_build_requires((*script).into(), &resolver_settings)?
+            script_extra_build_requires(
+                (*script).into(),
+                &resolver_settings,
+                client_builder.credentials_cache(),
+            )?
         }
     }
     .into_inner();
@@ -744,7 +758,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
-    store_credentials_from_target(target);
+    store_credentials_from_target(target, &client_builder);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -928,14 +942,14 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>) {
+fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
+                client_builder.store_credentials(&root_url, credentials.clone());
             }
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            client_builder.store_credentials(index.raw_url(), credentials);
         }
     }
 
@@ -946,7 +960,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
                 uv_git::store_credentials_from_url(git);
             }
             Source::Url { url, .. } => {
-                uv_auth::store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url);
             }
             _ => {}
         }
@@ -962,7 +976,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
                 uv_git::store_credentials_from_url(url.repository());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                uv_auth::store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url);
             }
             _ => {}
         }

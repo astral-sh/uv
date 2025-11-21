@@ -217,6 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.locations(),
                 build_dispatch.sources(),
                 build_dispatch.workspace_cache(),
+                client.credentials_cache(),
             )
             .await
             .with_context(|| {
