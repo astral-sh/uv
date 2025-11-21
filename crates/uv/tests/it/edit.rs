@@ -11405,7 +11405,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
             "idna",
-            "iniconfig", # Use iniconfig.
+            "iniconfig",  # Use iniconfig.
             # First line.
             # Second line.
         ]
@@ -11439,7 +11439,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
             "idna",
-            "iniconfig", # Use iniconfig.
+            "iniconfig",  # Use iniconfig.
             # First line.
             # Second line.
             "typing-extensions>=4.10.0",
@@ -11498,7 +11498,7 @@ fn add_preserves_trailing_depth() -> Result<()> {
         dependencies = [
           "anyio==3.7.0",
           "idna",
-          "iniconfig", # Use iniconfig.
+          "iniconfig",# Use iniconfig.
           # First line.
           # Second line.
         ]

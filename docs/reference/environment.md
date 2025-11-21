@@ -537,10 +537,11 @@ Equivalent to the
 
 Managed Python installations information is hardcoded in the `uv` binary.
 
-This variable can be set to a URL pointing to JSON to use as a list for Python installations.
-This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+This variable can be set to a local path or URL pointing to
+a JSON list of Python installations to override the hardcoded list.
 
-Note that currently, only local paths are supported.
+This allows customizing the URLs for downloads or using slightly older or newer versions
+of Python than the ones hardcoded into this build of `uv`.
 
 ### `UV_PYTHON_GRAALPY_BUILD`
 <small class="added-in">added in `0.8.14`</small>
@@ -790,6 +791,11 @@ Used to determine the name of the active Conda environment.
 
 Used to detect the path of an active Conda environment.
 
+### `DEPENDABOT`
+<small class="added-in">added in `0.9.11`</small>
+
+Used to determine if we're running in Dependabot.
+
 ### `FISH_VERSION`
 <small class="added-in">added in `0.1.28`</small>
 
@@ -1003,10 +1009,21 @@ the fact that Windows' real main thread is only 1MB. That thread has size
 
 The standard `SHELL` posix env var.
 
+### `SSL_CERT_DIR`
+<small class="added-in">added in `0.9.10`</small>
+
+Custom path for certificate bundles for SSL connections.
+Multiple entries are supported separated using a platform-specific
+delimiter (`:` on Unix, `;` on Windows).
+
+Takes precedence over `UV_NATIVE_TLS` when set.
+
 ### `SSL_CERT_FILE`
 <small class="added-in">added in `0.1.14`</small>
 
 Custom certificate bundle file path for SSL connections.
+
+Takes precedence over `UV_NATIVE_TLS` when set.
 
 ### `SSL_CLIENT_CERT`
 <small class="added-in">added in `0.2.11`</small>

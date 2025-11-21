@@ -69,6 +69,7 @@ use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
 pub(crate) use workspace::dir::dir;
+pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
 
 use crate::printer::Printer;
@@ -227,23 +228,6 @@ impl<'a> OutputWriter<'a> {
         }
     }
 
-    /// Write the given arguments to both standard output and the output buffer, if present.
-    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
-        use std::io::Write;
-
-        // Write to the buffer.
-        if self.output_file.is_some() {
-            self.buffer.write_fmt(args)?;
-        }
-
-        // Write to standard output.
-        if let Some(stdout) = &mut self.stdout {
-            write!(stdout, "{args}")?;
-        }
-
-        Ok(())
-    }
-
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
@@ -257,6 +241,30 @@ impl<'a> OutputWriter<'a> {
                 .unwrap_or(Cow::Borrowed(output_file));
             let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
             uv_fs::write_atomic(output_file, &stream).await?;
+        }
+        Ok(())
+    }
+}
+
+impl std::io::Write for OutputWriter<'_> {
+    /// Write to both standard output and the output buffer, if present.
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Write to the buffer.
+        if self.output_file.is_some() {
+            self.buffer.write_all(buf)?;
+        }
+
+        // Write to standard output.
+        if let Some(stdout) = &mut self.stdout {
+            stdout.write_all(buf)?;
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if let Some(stdout) = &mut self.stdout {
+            stdout.flush()?;
         }
         Ok(())
     }

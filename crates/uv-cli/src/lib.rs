@@ -14,8 +14,8 @@ use clap::{Args, Parser, Subcommand};
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend,
-    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -1442,7 +1442,7 @@ pub struct PipCompileArgs {
     /// uv will infer the output format from the file extension of the output file, if
     /// provided. Otherwise, defaults to `requirements.txt`.
     #[arg(long, value_enum)]
-    pub format: Option<ExportFormat>,
+    pub format: Option<PipCompileFormat>,
 
     /// Include extras in the output file.
     ///
@@ -4543,9 +4543,10 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
+    #[allow(clippy::doc_markdown)]
     /// The format to which `uv.lock` should be exported.
     ///
-    /// Supports both `requirements.txt` and `pylock.toml` (PEP 751) output formats.
+    /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.
     ///
     /// uv will infer the output format from the file extension of the output file, if
     /// provided. Otherwise, defaults to `requirements.txt`.
@@ -5750,8 +5751,6 @@ pub struct PythonListArgs {
     pub output_format: PythonListFormat,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -5848,8 +5847,6 @@ pub struct PythonInstallArgs {
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 
@@ -5952,8 +5949,6 @@ pub struct PythonUpgradeArgs {
     pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[arg(long)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6032,6 +6027,10 @@ pub struct PythonFindArgs {
     /// Show the Python version that would be used instead of the path to the interpreter.
     #[arg(long)]
     pub show_version: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -7169,6 +7168,11 @@ pub enum WorkspaceCommand {
     ///
     /// If used outside of a workspace, i.e., if a `pyproject.toml` cannot be found, uv will exit with an error.
     Dir(WorkspaceDirArgs),
+    /// List the members of a workspace.
+    ///
+    /// Displays newline separated names of workspace members.
+    #[command(hide = true)]
+    List(WorkspaceListArgs),
 }
 
 #[derive(Args, Debug)]
@@ -7179,6 +7183,13 @@ pub struct WorkspaceDirArgs {
     /// Display the path to a specific package in the workspace.
     #[arg(long)]
     pub package: Option<PackageName>,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceListArgs {
+    /// Show paths instead of names.
+    #[arg(long)]
+    pub paths: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

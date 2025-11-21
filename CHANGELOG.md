@@ -3,6 +3,66 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.11
+
+Released on 2025-11-20.
+
+### Python
+
+- Add CPython 3.15.0a2
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20251120) for details.
+
+### Enhancements
+
+- Add SBOM support to `uv export` ([#16523](https://github.com/astral-sh/uv/pull/16523))
+- Publish to `crates.io` ([#16770](https://github.com/astral-sh/uv/pull/16770))
+
+### Preview features
+
+- Add `uv workspace list --paths` ([#16776](https://github.com/astral-sh/uv/pull/16776))
+- Fix the preview warning on `uv workspace dir` ([#16775](https://github.com/astral-sh/uv/pull/16775))
+
+### Bug fixes
+
+- Fix `uv init` author serialization via `toml_edit` inline tables ([#16778](https://github.com/astral-sh/uv/pull/16778))
+- Fix status messages without TTY ([#16785](https://github.com/astral-sh/uv/pull/16785))
+- Preserve end-of-line comment whitespace when editing `pyproject.toml` ([#16734](https://github.com/astral-sh/uv/pull/16734))
+- Disable `always-authenticate` when running under Dependabot ([#16773](https://github.com/astral-sh/uv/pull/16773))
+
+### Documentation
+
+- Document the new behavior for free-threaded python versions ([#16781](https://github.com/astral-sh/uv/pull/16781))
+- Improve note about build system in publish guide ([#16788](https://github.com/astral-sh/uv/pull/16788))
+- Move do not upload publish note out of the guide into concepts ([#16789](https://github.com/astral-sh/uv/pull/16789))
+
+## 0.9.10
+
+Released on 2025-11-17.
+
+### Enhancements
+
+- Add support for `SSL_CERT_DIR` ([#16473](https://github.com/astral-sh/uv/pull/16473))
+- Enforce UTF‑8-encoded license files during `uv build` ([#16699](https://github.com/astral-sh/uv/pull/16699))
+- Error when a `project.license-files` glob matches nothing ([#16697](https://github.com/astral-sh/uv/pull/16697))
+- `pip install --target` (and `sync`) install Python if necessary ([#16694](https://github.com/astral-sh/uv/pull/16694))
+- Account for `python_downloads_json_url` in pre-release Python version warnings ([#16737](https://github.com/astral-sh/uv/pull/16737))
+- Support HTTP/HTTPS URLs in `uv python --python-downloads-json-url` ([#16542](https://github.com/astral-sh/uv/pull/16542))
+
+### Preview features
+
+- Add support for `--upgrade` in `uv python install` ([#16676](https://github.com/astral-sh/uv/pull/16676))
+- Fix handling of `python install --default` for pre-release Python versions ([#16706](https://github.com/astral-sh/uv/pull/16706))
+- Add `uv workspace list` to list workspace members ([#16691](https://github.com/astral-sh/uv/pull/16691))
+
+### Bug fixes
+
+- Don't check file URLs for ambiguously parsed credentials ([#16759](https://github.com/astral-sh/uv/pull/16759))
+
+### Documentation
+
+- Add a "storage" reference document ([#15954](https://github.com/astral-sh/uv/pull/15954))
+
 ## 0.9.9
 
 Released on 2025-11-12.
@@ -37,7 +97,6 @@ Released on 2025-11-12.
 ### Documentation
 
 - Fix `CMD` path in FastAPI Dockerfile ([#16701](https://github.com/astral-sh/uv/pull/16701))
-
 
 ## 0.9.8
 

@@ -1,7 +1,7 @@
 [package]
 name = "uv-bench"
-version = "0.0.0"
-description = "uv Micro-benchmarks"
+version = "0.0.1"
+description = "This is a component crate of uv"
 publish = false
 authors = { workspace = true }
 edition = { workspace = true }

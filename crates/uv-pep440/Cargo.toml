@@ -1,7 +1,7 @@
 [package]
 name = "uv-pep440"
-version = "0.7.0"
-description = "A library for python version numbers and specifiers, implementing PEP 440"
+version = "0.0.1"
+description = "This is a component crate of uv"
 license = "Apache-2.0 OR BSD-2-Clause"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
 edition = { workspace = true }

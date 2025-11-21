@@ -631,6 +631,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings.extra_build_dependencies,
                 &args.settings.extra_build_variables,
                 args.settings.build_options,
+                args.settings.install_mirrors,
                 args.settings.python_version,
                 args.settings.python_platform,
                 args.settings.universal,
@@ -1531,6 +1532,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_downloads_json_url,
                 globals.python_preference,
                 globals.python_downloads,
+                &client_builder,
                 &cache,
                 printer,
                 globals.preview,
@@ -1614,7 +1616,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonFindSettings::resolve(args, filesystem);
+            let args = settings::PythonFindSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
             let cache = cache.init()?;
@@ -1641,6 +1643,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     args.system,
                     globals.python_preference,
+                    args.python_downloads_json_url.as_deref(),
+                    &client_builder,
                     &cache,
                     printer,
                     globals.preview,
@@ -1741,6 +1745,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }
             WorkspaceCommand::Dir(args) => {
                 commands::dir(args.package, &project_dir, globals.preview, printer).await
+            }
+            WorkspaceCommand::List(args) => {
+                commands::list(&project_dir, args.paths, globals.preview, printer).await
             }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {

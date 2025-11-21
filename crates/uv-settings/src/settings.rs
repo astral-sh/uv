@@ -997,8 +997,6 @@ pub struct PythonInstallMirrors {
     pub pypy_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[option(
         default = "None",
         value_type = "str",

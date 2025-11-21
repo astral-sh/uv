@@ -400,10 +400,11 @@ impl EnvVars {
 
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
-    /// This variable can be set to a URL pointing to JSON to use as a list for Python installations.
-    /// This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+    /// This variable can be set to a local path or URL pointing to
+    /// a JSON list of Python installations to override the hardcoded list.
     ///
-    /// Note that currently, only local paths are supported.
+    /// This allows customizing the URLs for downloads or using slightly older or newer versions
+    /// of Python than the ones hardcoded into this build of `uv`.
     #[attr_added_in("0.6.13")]
     pub const UV_PYTHON_DOWNLOADS_JSON_URL: &'static str = "UV_PYTHON_DOWNLOADS_JSON_URL";
 
@@ -585,8 +586,18 @@ impl EnvVars {
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
     /// Custom certificate bundle file path for SSL connections.
+    ///
+    /// Takes precedence over `UV_NATIVE_TLS` when set.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
+
+    /// Custom path for certificate bundles for SSL connections.
+    /// Multiple entries are supported separated using a platform-specific
+    /// delimiter (`:` on Unix, `;` on Windows).
+    ///
+    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    #[attr_added_in("0.9.10")]
+    pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
     /// If set, uv will use this file for mTLS authentication.
     /// This should be a single file containing both the certificate and the private key in PEM format.
@@ -650,6 +661,10 @@ impl EnvVars {
     /// Used to determine the root install path of Conda.
     #[attr_added_in("0.8.18")]
     pub const CONDA_ROOT: &'static str = "_CONDA_ROOT";
+
+    /// Used to determine if we're running in Dependabot.
+    #[attr_added_in("0.9.11")]
+    pub const DEPENDABOT: &'static str = "DEPENDABOT";
 
     /// If set to `1` before a virtual environment is activated, then the
     /// virtual environment name will not be prepended to the terminal prompt.

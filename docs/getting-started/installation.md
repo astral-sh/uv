@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.9.9/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.9.11/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```pwsh-session
-    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.9.9/install.ps1 | iex"
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.9.11/install.ps1 | iex"
     ```
 
 !!! tip
@@ -260,7 +260,8 @@ If you need to remove uv from your system, follow these steps:
 
     !!! tip
 
-        Before removing the binaries, you may want to remove any data that uv has stored.
+        Before removing the binaries, you may want to remove any data that uv has stored. See the
+        [storage reference](../reference/storage.md) for details on where uv stores data.
 
 2.  Remove the uv, uvx, and uvw binaries:
 

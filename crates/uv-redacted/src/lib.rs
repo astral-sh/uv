@@ -63,43 +63,67 @@ impl DisplaySafeUrl {
     pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
         let url = Url::parse(input)?;
 
-        // Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
-        //
-        // In this case the user *probably* meant to have a username of "user/name", but both RFC
-        // 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
-        // non-percent-encoded slash or other special character.
-        //
-        // This ends up being moderately annoying to detect, since the above gets parsed into a
-        // "valid" WHATWG URL where the host is `used` and the pathname is
-        // `/name:password@domain/a/b/c` rather than causing a parse error.
-        //
-        // To detect it, we use a heuristic: if the password component is missing but the path or
-        // fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
-        if url.password().is_none()
-            && (url
-                .path()
-                .find(':')
-                .is_some_and(|pos| url.path()[pos..].contains('@'))
-                || url
-                    .fragment()
-                    .map(|fragment| {
-                        fragment
-                            .find(':')
-                            .is_some_and(|pos| fragment[pos..].contains('@'))
-                    })
-                    .unwrap_or(false))
-            // If the above is true, we should always expect to find these in the given URL
-            && let Some(col_pos) = input.find(':')
-            && let Some(at_pos) = input.rfind('@')
-        {
-            // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
-            // the error message. We somewhat aggressively replace everything between the scheme's
-            // ':' and the lastmost `@` with `***`.
-            let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
-            return Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path));
-        }
+        Self::reject_ambiguous_credentials(input, &url)?;
 
         Ok(Self(url))
+    }
+
+    /// Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
+    ///
+    /// In this case the user *probably* meant to have a username of "user/name", but both RFC
+    /// 3986 and WHATWG URL expect the userinfo (RFC 3986) or authority (WHATWG) to not contain a
+    /// non-percent-encoded slash or other special character.
+    ///
+    /// This ends up being moderately annoying to detect, since the above gets parsed into a
+    /// "valid" WHATWG URL where the host is `used` and the pathname is
+    /// `/name:password@domain/a/b/c` rather than causing a parse error.
+    ///
+    /// To detect it, we use a heuristic: if the password component is missing but the path or
+    /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
+    fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
+        // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
+        // on Windows may contain both sigils, but it's always safe, e.g.
+        // `file://C:/Users/ferris/project@home/workspace`.
+        if url.scheme() == "file" {
+            return Ok(());
+        }
+
+        if url.password().is_some() {
+            return Ok(());
+        }
+
+        // Check for the suspicious pattern.
+        if !url
+            .path()
+            .find(':')
+            .is_some_and(|pos| url.path()[pos..].contains('@'))
+            && !url
+                .fragment()
+                .map(|fragment| {
+                    fragment
+                        .find(':')
+                        .is_some_and(|pos| fragment[pos..].contains('@'))
+                })
+                .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        // If the previous check passed, we should always expect to find these in the given URL.
+        let (Some(col_pos), Some(at_pos)) = (input.find(':'), input.rfind('@')) else {
+            if cfg!(debug_assertions) {
+                unreachable!(
+                    "`:` or `@` sign missing in URL that was confirmed to contain them: {input}"
+                );
+            }
+            return Ok(());
+        };
+
+        // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
+        // the error message. We somewhat aggressively replace everything between the scheme's
+        // ':' and the lastmost `@` with `***`.
+        let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
+        Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path))
     }
 
     /// Create a new [`DisplaySafeUrl`] from a [`Url`].
@@ -451,6 +475,17 @@ mod tests {
                 }
                 DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
             }
+        }
+    }
+
+    #[test]
+    fn parse_url_not_ambiguous() {
+        #[allow(clippy::single_element_loop)]
+        for url in &[
+            // https://github.com/astral-sh/uv/issues/16756
+            "file:///C:/jenkins/ython_Environment_Manager_PR-251@2/venv%201/workspace",
+        ] {
+            DisplaySafeUrl::parse(url).unwrap();
         }
     }
 }

@@ -19,7 +19,8 @@ use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_python::downloads::{
-    self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
+    self, ArchRequest, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
+    PythonDownloadRequest,
 };
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
@@ -39,17 +40,17 @@ use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct InstallRequest {
+struct InstallRequest<'a> {
     /// The original request from the user
     request: PythonRequest,
     /// A download request corresponding to the `request` with platform information filled
     download_request: PythonDownloadRequest,
     /// A download that satisfies the request
-    download: &'static ManagedPythonDownload,
+    download: &'a ManagedPythonDownload,
 }
 
-impl InstallRequest {
-    fn new(request: PythonRequest, python_downloads_json_url: Option<&str>) -> Result<Self> {
+impl<'a> InstallRequest<'a> {
+    fn new(request: PythonRequest, download_list: &'a ManagedPythonDownloadList) -> Result<Self> {
         // Make sure the request is a valid download request and fill platform information
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
@@ -61,22 +62,20 @@ impl InstallRequest {
             .fill()?;
 
         // Find a matching download
-        let download =
-            match ManagedPythonDownload::from_request(&download_request, python_downloads_json_url)
+        let download = match download_list.find(&download_request) {
+            Ok(download) => download,
+            Err(downloads::Error::NoDownloadFound(request))
+                if request.libc().is_some_and(Libc::is_musl)
+                    && request
+                        .arch()
+                        .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
             {
-                Ok(download) => download,
-                Err(downloads::Error::NoDownloadFound(request))
-                    if request.libc().is_some_and(Libc::is_musl)
-                        && request
-                            .arch()
-                            .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
-                {
-                    return Err(anyhow::anyhow!(
-                        "uv does not yet provide musl Python distributions on aarch64."
-                    ));
-                }
-                Err(err) => return Err(err.into()),
-            };
+                return Err(anyhow::anyhow!(
+                    "uv does not yet provide musl Python distributions on aarch64."
+                ));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(Self {
             request,
@@ -94,7 +93,7 @@ impl InstallRequest {
     }
 }
 
-impl std::fmt::Display for InstallRequest {
+impl std::fmt::Display for InstallRequest<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let request = self.request.to_canonical_string();
         let download = self.download_request.to_string();
@@ -234,6 +233,12 @@ pub(crate) async fn install(
     // Resolve the requests
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
+    let retry_policy = client_builder.retry_policy();
+    // Python downloads are performing their own retries to catch stream errors, disable the
+    // default retries to avoid the middleware from performing uncontrolled retries.
+    let client = client_builder.retries(0).build();
+    let download_list =
+        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
@@ -251,10 +256,8 @@ pub(crate) async fn install(
                 let version = request.take_version().unwrap();
                 // Drop the patch and prerelease parts from the request
                 request = request.with_version(version.only_minor());
-                let install_request = InstallRequest::new(
-                    PythonRequest::Key(request),
-                    python_downloads_json_url.as_deref(),
-                )?;
+                let install_request =
+                    InstallRequest::new(PythonRequest::Key(request), &download_list)?;
                 minor_version_requests.insert(install_request);
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
@@ -287,14 +290,14 @@ pub(crate) async fn install(
                 }]
             })
             .into_iter()
-            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
+            .map(|request| InstallRequest::new(request, &download_list))
             .collect::<Result<Vec<_>>>()?
         }
     } else {
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
+            .map(|request| InstallRequest::new(request, &download_list))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -377,7 +380,7 @@ pub(crate) async fn install(
                     // Construct an install request matching the existing installation
                     match InstallRequest::new(
                         PythonRequest::Key(installation.into()),
-                        python_downloads_json_url.as_deref(),
+                        &download_list,
                     ) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key());
@@ -453,11 +456,7 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
-    let retry_policy = client_builder.retry_policy();
-    // Python downloads are performing their own retries to catch stream errors, disable the
-    // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
-
+    // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
     let mut tasks = FuturesUnordered::new();
 

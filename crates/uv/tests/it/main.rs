@@ -142,4 +142,5 @@ mod workflow;
 mod extract;
 mod workspace;
 mod workspace_dir;
+mod workspace_list;
 mod workspace_metadata;

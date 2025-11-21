@@ -20,7 +20,7 @@ pub(crate) async fn dir(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::WORKSPACE_DIR) {
+    if !preview.is_enabled(PreviewFeatures::WORKSPACE_DIR) {
         warn_user!(
             "The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeatures::WORKSPACE_DIR

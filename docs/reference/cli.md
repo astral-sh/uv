@@ -1855,12 +1855,13 @@ uv export [OPTIONS]
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul></dd><dt id="uv-export--format"><a href="#uv-export--format"><code>--format</code></a> <i>format</i></dt><dd><p>The format to which <code>uv.lock</code> should be exported.</p>
-<p>Supports both <code>requirements.txt</code> and <code>pylock.toml</code> (PEP 751) output formats.</p>
+<p>Supports <code>requirements.txt</code>, <code>pylock.toml</code> (PEP 751) and CycloneDX v1.5 JSON output formats.</p>
 <p>uv will infer the output format from the file extension of the output file, if provided. Otherwise, defaults to <code>requirements.txt</code>.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
 <li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
+<li><code>cyclonedx1.5</code>:  Export in <code>CycloneDX</code> v1.5 JSON format</li>
 </ul></dd><dt id="uv-export--frozen"><a href="#uv-export--frozen"><code>--frozen</code></a></dt><dd><p>Do not update the <code>uv.lock</code> before exporting.</p>
 <p>If a <code>uv.lock</code> does not exist, uv will exit with an error.</p>
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-export--group"><a href="#uv-export--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
@@ -3420,8 +3421,7 @@ uv python list [OPTIONS] [REQUEST]
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-list--python-downloads-json-url"><a href="#uv-python-list--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
-<p>Note that currently, only local paths are supported.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-list--python-downloads-json-url"><a href="#uv-python-list--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations</p>
 </dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-list--show-urls"><a href="#uv-python-list--show-urls"><code>--show-urls</code></a></dt><dd><p>Show the URLs of available Python downloads.</p>
@@ -3519,8 +3519,7 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-install--pypy-mirror"><a href="#uv-python-install--pypy-mirror"><code>--pypy-mirror</code></a> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
 <p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-</dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
-<p>Note that currently, only local paths are supported.</p>
+</dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations</p>
 </dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-install--reinstall"><a href="#uv-python-install--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it's already installed.</p>
@@ -3612,8 +3611,7 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-upgrade--pypy-mirror"><a href="#uv-python-upgrade--pypy-mirror"><code>--pypy-mirror</code></a> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
 <p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
-</dd><dt id="uv-python-upgrade--python-downloads-json-url"><a href="#uv-python-upgrade--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
-<p>Note that currently, only local paths are supported.</p>
+</dd><dt id="uv-python-upgrade--python-downloads-json-url"><a href="#uv-python-upgrade--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations</p>
 </dd><dt id="uv-python-upgrade--quiet"><a href="#uv-python-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-upgrade--reinstall"><a href="#uv-python-upgrade--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the latest Python patch, if it's already installed.</p>
@@ -3686,7 +3684,8 @@ uv python find [OPTIONS] [REQUEST]
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-python-find--python-downloads-json-url"><a href="#uv-python-find--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations</p>
+</dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-python-find--script"><a href="#uv-python-find--script"><code>--script</code></a> <i>script</i></dt><dd><p>Find the environment for a Python script, rather than the current project</p>
 </dd><dt id="uv-python-find--show-version"><a href="#uv-python-find--show-version"><code>--show-version</code></a></dt><dd><p>Show the Python version that would be used instead of the path to the interpreter</p>
