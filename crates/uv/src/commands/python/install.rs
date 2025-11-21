@@ -321,7 +321,7 @@ pub(crate) async fn install(
                     "No Python versions specified for upgrade; did you mean `uv python upgrade`?"
                 )?;
             }
-            PythonUpgrade::Disabled => {}
+            PythonUpgrade::Disabled | PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {}
         }
         return Ok(ExitStatus::Success);
     }
