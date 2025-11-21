@@ -19,7 +19,7 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
@@ -340,7 +340,7 @@ pub struct InstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<Reinstall>,
@@ -401,7 +401,7 @@ pub struct ResolverInstallerOptions {
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
@@ -815,7 +815,7 @@ pub struct ResolverInstallerSchema {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
     /// Accepts package-date pairs in a dictionary format.
@@ -1576,7 +1576,7 @@ pub struct PipOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
     /// Accepts package-date pairs in a dictionary format.
@@ -1958,7 +1958,7 @@ pub struct ToolOptions {
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
@@ -2074,7 +2074,7 @@ pub struct OptionsWire {
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
