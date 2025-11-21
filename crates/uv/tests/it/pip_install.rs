@@ -69,6 +69,36 @@ fn empty_requirements_txt() -> Result<()> {
 }
 
 #[test]
+fn install_with_exclude_packages() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("flask")
+        .arg("--exclude-packages")
+        .arg("werkzeug,itsdangerous")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+    warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed
+    warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed
+    "###);
+
+    context.assert_not_installed("werkzeug");
+    context.assert_not_installed("itsdangerous");
+}
+
+#[test]
 fn missing_pyproject_toml() {
     let context = TestContext::new("3.12");
 
