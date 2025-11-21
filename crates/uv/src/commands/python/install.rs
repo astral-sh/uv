@@ -306,7 +306,7 @@ pub(crate) async fn install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
                 writeln!(
                     printer.stderr(),
-                    "There are no installed versions to upgrade"
+                    "No Python installations found; run `uv python install` to install a Python version."
                 )?;
             }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
@@ -622,7 +622,7 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "There are no installed versions to upgrade"
+                "No Python installations found; run `uv python install` to install a Python version."
             )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
