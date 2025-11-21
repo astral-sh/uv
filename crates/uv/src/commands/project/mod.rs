@@ -12,14 +12,15 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    ExtrasSpecification, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    DirectorySourceDist, Dist, ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement,
+    RequiresPython, Resolution, ResolvedDist, SourceDist, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -2182,12 +2183,81 @@ impl EnvironmentUpdate {
     }
 }
 
+/// Apply an editable-mode to a resolution.
+///
+/// - `None`: leave the resolution unchanged.
+/// - `Some(EditableMode::Editable)`: convert any non-editable directory source distributions to
+///   editable.
+/// - `Some(EditableMode::NonEditable)`: convert any editable directory source distributions to
+///   non-editable.
+pub(crate) fn apply_editable_mode(
+    resolution: Resolution,
+    editable: Option<EditableMode>,
+) -> Resolution {
+    match editable {
+        None => resolution,
+        Some(EditableMode::Editable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(true),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+    }
+}
+
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
+    editable: Option<EditableMode>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2271,22 +2341,53 @@ pub(crate) async fn update_environment(
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
-                if recursive_requirements.is_empty() {
-                    debug!("No requirements to install");
+                // If an EditableMode is requested, and the installed environment
+                // contains any directory installs that don't match the requested mode, proceed
+                // with resolution and installation to correct them.
+                if let Some(mode) = editable {
+                    let mismatch = site_packages.iter().any(|dist| {
+                        if let uv_distribution_types::InstalledDistKind::Url(url_dist) = &dist.kind
+                        {
+                            if let uv_pypi_types::DirectUrl::LocalDirectory { dir_info, .. } =
+                                url_dist.direct_url.as_ref()
+                            {
+                                match mode {
+                                    EditableMode::Editable => dir_info.editable != Some(true),
+                                    EditableMode::NonEditable => dir_info.editable == Some(true),
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    });
+                    if mismatch {
+                        // Fall through to resolution to correct editable mode.
+                    } else {
+                        return Ok(EnvironmentUpdate {
+                            environment: venv,
+                            changelog: Changelog::default(),
+                        });
+                    }
                 } else {
-                    debug!(
-                        "All requirements satisfied: {}",
-                        recursive_requirements
-                            .iter()
-                            .map(ToString::to_string)
-                            .sorted()
-                            .join(" | ")
-                    );
+                    if recursive_requirements.is_empty() {
+                        debug!("No requirements to install");
+                    } else {
+                        debug!(
+                            "All requirements satisfied: {}",
+                            recursive_requirements
+                                .iter()
+                                .map(ToString::to_string)
+                                .sorted()
+                                .join(" | ")
+                        );
+                    }
+                    return Ok(EnvironmentUpdate {
+                        environment: venv,
+                        changelog: Changelog::default(),
+                    });
                 }
-                return Ok(EnvironmentUpdate {
-                    environment: venv,
-                    changelog: Changelog::default(),
-                });
             }
             SatisfiesResult::Unsatisfied(requirement) => {
                 debug!("At least one requirement is not satisfied: {requirement}");
@@ -2401,6 +2502,9 @@ pub(crate) async fn update_environment(
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => return Err(err.into()),
     };
+
+    // Apply editable mode override to the resolution, if any.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Sync the environment.
     let changelog = pip::operations::install(
