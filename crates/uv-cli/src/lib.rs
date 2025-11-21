@@ -1382,6 +1382,10 @@ pub struct PipCompileArgs {
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
+    /// Exclude the given package names from resolution.
+    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    pub exclude_packages: Vec<PackageName>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -2052,6 +2056,10 @@ pub struct PipInstallArgs {
     /// any package listed in the provided file will be omitted from all resolved environments.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
+
+    /// Exclude the given package names from resolution.
+    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -5192,6 +5200,10 @@ pub struct ToolInstallArgs {
     /// any package listed in the provided file will be omitted from all resolved environments.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
+
+    /// Exclude the given package names from resolution.
+    #[arg(long = "exclude-packages", alias = "exclude-package", value_delimiter = ',')]
+    pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
