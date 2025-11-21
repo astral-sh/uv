@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -290,6 +291,22 @@ pub(crate) async fn export(
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
+
+    if output_file
+        .as_deref()
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
+            "uv export".green(),
+            ExportFormat::value_variants()
+                .iter()
+                .filter_map(clap::ValueEnum::to_possible_value)
+                .map(|value| value.get_name().to_string())
+                .join(", ")
+        ));
+    }
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
