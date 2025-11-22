@@ -29,7 +29,6 @@ uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 fs-err = { workspace = true, features = ["tokio"] }
-nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
