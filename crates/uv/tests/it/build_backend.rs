@@ -835,15 +835,15 @@ fn license_file_must_be_utf8() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(context.temp_dir.path())
-        .current_dir(project.path()), @r###"
+        .current_dir(project.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid pyproject.toml
+    error: Invalid project metadata
       Caused by: License file `LICENSE.bin` must be UTF-8 encoded
-    "###);
+    ");
 
     Ok(())
 }
@@ -1116,4 +1116,41 @@ fn venv_in_source_tree() {
       × Failed to build `[TEMP_DIR]/`
       ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
+}
+
+#[test]
+fn invalid_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = 1
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.9,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/child`
+      ├─▶ Invalid metadata format in: child/pyproject.toml
+      ╰─▶ TOML parse error at line 2, column 8
+            |
+          2 | name = 1
+            |        ^
+          invalid type: integer `1`, expected a string
+    ");
+
+    Ok(())
 }
