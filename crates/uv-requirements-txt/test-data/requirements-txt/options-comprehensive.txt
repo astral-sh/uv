@@ -1,0 +1,25 @@
+# Options with markers (space before semicolon).
+--index-url https://pypi.org/simple/ ; python_version > "3.8"
+
+# Options with markers (no space before semicolon).
+--extra-index-url=https://download.pytorch.org/whl/cpu; sys_platform == "linux"
+
+# Options with quoted values containing spaces.
+--find-links "file:///path/with spaces/packages"
+
+# Options with quoted values and markers.
+--find-links="https://example.com/simple" ; python_version >= "3.9"
+
+# Options with escaped quotes.
+--extra-index-url='https://example.com/simple'
+
+# Options with equals sign vs. space separator.
+--no-binary :all:
+--only-binary=numpy
+
+# Options with markers on `--no-binary` and `--only-binary`.
+--no-binary :all:; sys_platform == "win32"
+--only-binary scipy; python_version < "3.10"
+
+# Options with comments after them (not markers).
+--extra-index-url https://test.pypi.org/simple/  # Test PyPI
