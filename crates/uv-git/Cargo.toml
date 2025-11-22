@@ -23,6 +23,7 @@ uv-git-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
+uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }

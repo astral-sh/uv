@@ -317,7 +317,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io,native-auth,apple-native \
+            --features python,python-managed,pypi,git,git-lfs,performance,crates-io,native-auth,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 

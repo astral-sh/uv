@@ -142,6 +142,12 @@ Or even a specific commit:
 $ uvx --from git+https://github.com/httpie/cli@2843b87 httpie
 ```
 
+Or with [Git LFS](https://git-lfs.com) support:
+
+```console
+$ uvx --lfs --from git+https://github.com/astral-sh/lfs-cowsay lfs-cowsay
+```
+
 ## Commands with plugins
 
 Additional dependencies can be included, e.g., to include `mkdocs-material` when running `mkdocs`:
@@ -205,6 +211,12 @@ And, similarly, for package sources:
 
 ```console
 $ uv tool install git+https://github.com/httpie/cli
+```
+
+Or package sources with [Git LFS](https://git-lfs.com):
+
+```console
+$ uv tool install --lfs git+https://github.com/astral-sh/lfs-cowsay
 ```
 
 As with `uvx`, installations can include additional packages:

@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-redacted = { workspace = true }
+uv-static = { workspace = true }
 
 serde = { workspace = true }
 thiserror = { workspace = true }
