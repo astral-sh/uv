@@ -127,8 +127,7 @@ cache is designed to be thread-safe and append-only, and thus robust to multiple
 and writers. uv applies a file-based lock to the target virtual environment when installing, to
 avoid concurrent modifications across processes.
 
-Note that it's _not_ safe to modify the uv cache (e.g., `uv cache clean`) while other uv commands
-are running, and _never_ safe to modify the cache directly (e.g., by removing a file or directory).
+Note that it's _never_ safe to modify the cache directly (e.g., by removing a file or directory).
 
 ## Clearing the cache
 
@@ -140,6 +139,12 @@ uv provides a few different mechanisms for removing entries from the cache:
 - `uv cache prune` removes all _unused_ cache entries. For example, the cache directory may contain
   entries created in previous uv versions that are no longer necessary and can be safely removed.
   `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+
+uv blocks cache-modifying operations while other uv commands are running. By default, those
+`uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid
+deadlocks. This timeout can be changed with
+[`UV_LOCK_TIMEOUT`](../reference/environment.md#uv_lock_timeout). In cases where it is known that no
+other uv processes are reading or writing from the cache, `--force` can be used to ignore the lock.
 
 ## Caching in continuous integration
 

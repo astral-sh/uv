@@ -1210,4 +1210,10 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
+
+    /// The time in seconds uv waits for a file lock to become available.
+    ///
+    /// Defaults to 300s (5 min).
+    #[attr_added_in("0.9.4")]
+    pub const UV_LOCK_TIMEOUT: &'static str = "UV_LOCK_TIMEOUT";
 }
