@@ -248,6 +248,18 @@ pub(crate) async fn install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
         ) {
             is_unspecified_upgrade = true;
+
+            if existing_installations.is_empty() {
+                writeln!(
+                    printer.stderr(),
+                    "No Python installations found.\n{}{} Use `{}` to install a Python version.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    "uv python install".green()
+                )?;
+                return Ok(ExitStatus::Success);
+            }
+
             // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
@@ -303,19 +315,13 @@ pub(crate) async fn install(
 
     if requests.is_empty() {
         match upgrade {
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
-                writeln!(
-                    printer.stderr(),
-                    "There are no installed versions to upgrade"
-                )?;
-            }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
                 writeln!(
                     printer.stderr(),
                     "No Python versions specified for upgrade; did you mean `uv python upgrade`?"
                 )?;
             }
-            PythonUpgrade::Disabled => {}
+            PythonUpgrade::Disabled | PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {}
         }
         return Ok(ExitStatus::Success);
     }
@@ -615,15 +621,6 @@ pub(crate) async fn install(
                     "Python is already installed. Use `uv python install <request>` to install another version.",
                 )?;
             }
-        } else if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) && requests.is_empty()
-        {
-            writeln!(
-                printer.stderr(),
-                "There are no installed versions to upgrade"
-            )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
             let request = &request.request;
