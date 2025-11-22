@@ -12,7 +12,7 @@ use tracing::{debug, trace, warn};
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
-use uv_pypi_types::ResolutionMetadata;
+use uv_pypi_types::{HashDigest, ResolutionMetadata};
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveId, ArchiveVersion, LATEST};
 
 mod archive;
 mod by_timestamp;
@@ -298,8 +298,11 @@ impl Cache {
     }
 
     /// Return the path to an archive in the cache.
-    pub fn archive(&self, id: &ArchiveId) -> PathBuf {
-        self.bucket(CacheBucket::Archive).join(id)
+    pub fn archive(&self, id: &ArchiveId, version: ArchiveVersion) -> PathBuf {
+        // TODO(charlie): Reuse `CacheBucket::Archive`.
+        self.root
+            .join(format!("archive-v{version}"))
+            .join(id.to_path_buf(version))
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -384,12 +387,17 @@ impl Cache {
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
-        id: ArchiveId,
+        hash: HashDigest,
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
-        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
-        fs_err::create_dir_all(archive_entry.dir())?;
-        match uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await {
+        let id = ArchiveId::from(hash);
+        let archive_entry = self
+            .bucket(CacheBucket::Archive)
+            .join(id.to_path_buf(LATEST));
+        if let Some(parent) = archive_entry.parent() {
+            fs_err::create_dir_all(parent)?;
+        }
+        match uv_fs::rename_with_retry(temp_dir.as_ref(), &archive_entry).await {
             Ok(()) => {}
             Err(err)
                 if err.kind() == io::ErrorKind::AlreadyExists
@@ -397,7 +405,7 @@ impl Cache {
             {
                 debug!(
                     "Archive already exists at {}; skipping extraction",
-                    archive_entry.path().display()
+                    archive_entry.display()
                 );
                 fs_err::tokio::remove_dir_all(temp_dir.as_ref()).await?;
             }
@@ -829,7 +837,7 @@ impl Cache {
         }
 
         // Reconstruct the path.
-        let path = self.archive(&link.id);
+        let path = self.archive(&link.id, link.version);
         path.canonicalize()
     }
 
@@ -842,7 +850,7 @@ impl Cache {
         let dst = dst.as_ref();
         let dst_parent = dst.parent().expect("Cache entry to have parent");
         // Construct the relative link target.
-        let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
+        let src = uv_fs::relative_to(self.archive(id, ArchiveVersion::V1), dst_parent)?;
 
         // Attempt to create the symlink directly.
         match fs_err::os::unix::fs::symlink(&src, dst) {
@@ -878,7 +886,7 @@ struct Link {
     /// The unique ID of the entry in the archive bucket.
     id: ArchiveId,
     /// The version of the archive bucket.
-    version: u8,
+    version: ArchiveVersion,
 }
 
 #[allow(unused)]
@@ -887,7 +895,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ARCHIVE_VERSION,
+            version: ArchiveVersion::V1,
         }
     }
 }
@@ -916,10 +924,10 @@ impl FromStr for Link {
         let version = version
             .strip_prefix("archive-v")
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
-        let version = u8::from_str(version).map_err(|err| {
+        let version = ArchiveVersion::from_str(version).map_err(|()| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("failed to parse version: {err}"),
+                format!("failed to parse version: {version}"),
             )
         })?;
 
@@ -1453,15 +1461,20 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use crate::ArchiveId;
+    use std::str::FromStr;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
+    use uv_small_str::SmallString;
 
     use super::Link;
 
     #[test]
     fn test_link_round_trip() {
-        let id = ArchiveId::from_sha256("a".repeat(64).as_str());
+        let digest = HashDigest {
+            algorithm: HashAlgorithm::Sha256,
+            digest: SmallString::from("a".repeat(64)),
+        };
+        let id = ArchiveId::from(digest);
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();
