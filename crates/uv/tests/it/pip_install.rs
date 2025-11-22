@@ -13121,7 +13121,6 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
 #[test]
 fn install_with_system_interpreter() {
     let context = TestContext::new_with_versions(&[])
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_python_keys();
 
@@ -13151,9 +13150,7 @@ fn install_with_system_interpreter() {
 #[test]
 fn install_missing_python_no_target() {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = TestContext::new("3.11").with_managed_python_dirs();
 
     // Request Python 3.12; which should fail
     uv_snapshot!(context.filters(), context.pip_install()
@@ -13174,9 +13171,7 @@ fn install_missing_python_no_target() {
 #[test]
 fn install_missing_python_with_target() {
     // Create a context with no installed python interpreters.
-    let context = TestContext::new_with_versions(&[])
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = TestContext::new_with_versions(&[]).with_managed_python_dirs();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13203,9 +13198,7 @@ fn install_missing_python_with_target() {
 #[test]
 fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = TestContext::new("3.11").with_managed_python_dirs();
 
     let target_dir = context.temp_dir.child("target-dir");
 
