@@ -621,15 +621,6 @@ pub(crate) async fn install(
                     "Python is already installed. Use `uv python install <request>` to install another version.",
                 )?;
             }
-        } else if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) && requests.is_empty()
-        {
-            writeln!(
-                printer.stderr(),
-                "No Python installations found; run `uv python install` to install a Python version."
-            )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
             let request = &request.request;
