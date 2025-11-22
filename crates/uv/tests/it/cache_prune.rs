@@ -139,7 +139,7 @@ fn prune_cached_env() {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v1/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 }
@@ -184,7 +184,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v1/[ENTRY]
     Removed 44 files ([SIZE])
     ");
 
@@ -413,7 +413,6 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 

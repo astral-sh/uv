@@ -40,12 +40,15 @@ impl HashPolicy<'_> {
     }
 
     /// Return the algorithms used in the hash policy.
+    ///
+    /// SHA256 is always included to support content-addressed archive IDs.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
-            Self::None => vec![],
+            Self::None => vec![HashAlgorithm::Sha256],
             Self::Generate(_) => vec![HashAlgorithm::Sha256],
             Self::Any(hashes) | Self::All(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
+                algorithms.push(HashAlgorithm::Sha256);
                 algorithms.sort();
                 algorithms.dedup();
                 algorithms
@@ -144,7 +147,7 @@ impl Hashed for &[HashDigest] {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
 
     use super::HashPolicy;
 
@@ -187,5 +190,14 @@ mod tests {
         let policy = HashPolicy::Any(&[sha256.clone(), sha512]);
         assert!(policy.matches(&[sha256]));
         assert!(!policy.matches(&[wrong_sha512]));
+    }
+
+    #[test]
+    fn algorithms_always_include_sha256() {
+        assert_eq!(HashPolicy::None.algorithms(), vec![HashAlgorithm::Sha256]);
+        assert_eq!(
+            HashPolicy::Generate(crate::HashGeneration::Url).algorithms(),
+            vec![HashAlgorithm::Sha256]
+        );
     }
 }

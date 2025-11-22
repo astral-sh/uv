@@ -4,21 +4,19 @@ use std::str::FromStr;
 
 /// A unique identifier for an archive (unzipped wheel) in the cache.
 ///
-/// Note: for compatibility with the existing `archive-v0` bucket, this is a newtype
-/// around a `String` instead of a newtype around `uv_fastid::Id`. In the future,
-/// we may want to bump to `archive-v1` and switch to using `uv_fastid::Id` directly.
+/// Note: this remains a newtype around a [`String`] for compatibility with existing cache links
+/// and serialized metadata.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(String);
 
-impl Default for ArchiveId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ArchiveId {
-    /// Generate a new unique identifier for an archive.
-    pub fn new() -> Self {
+    /// Create a content-addressed identifier for an archive from a SHA256 digest.
+    pub fn from_sha256(digest: &str) -> Self {
+        Self(digest.to_string())
+    }
+
+    /// Create a random identifier for an archive.
+    pub fn nanoid() -> Self {
         Self(uv_fastid::Id::insecure().to_string())
     }
 }
