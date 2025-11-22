@@ -53,10 +53,10 @@ Collecting numpy==1.19.5
 ERROR: Exception:
 Traceback (most recent call last):
   ...
-  File "/Users/example/.cache/uv/archive-v1/3783IbOdglemN3ieOULx2/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_impl.py", line 321, in _call_hook
+  File "/Users/example/.cache/uv/archive-v0/97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_impl.py", line 321, in _call_hook
     raise BackendUnavailable(data.get('traceback', ''))
 pip._vendor.pyproject_hooks._impl.BackendUnavailable: Traceback (most recent call last):
-  File "/Users/example/.cache/uv/archive-v1/3783IbOdglemN3ieOULx2/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 77, in _build_backend
+  File "/Users/example/.cache/uv/archive-v0/97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 77, in _build_backend
     obj = import_module(mod_path)
   File "/Users/example/.local/share/uv/python/cpython-3.13.0-macos-aarch64-none/lib/python3.13/importlib/__init__.py", line 88, in import_module
     return _bootstrap._gcd_import(name[level:], package, level)

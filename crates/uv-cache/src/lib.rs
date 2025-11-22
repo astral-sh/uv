@@ -294,7 +294,7 @@ impl Cache {
 
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
-        self.bucket(CacheBucket::Archive).join(id.to_path_buf())
+        self.bucket(CacheBucket::Archive).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -383,7 +383,7 @@ impl Cache {
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let id = ArchiveId::from(hash);
-        let archive_entry = self.bucket(CacheBucket::Archive).join(id.to_path_buf());
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
         if let Some(parent) = archive_entry.parent() {
             fs_err::create_dir_all(parent)?;
         }
