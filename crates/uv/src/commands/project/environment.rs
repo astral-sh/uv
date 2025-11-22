@@ -8,7 +8,7 @@ use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{
-    BuiltDist, Dist, Identifier, Name, Node, Resolution, ResolvedDist, SourceDist,
+    BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::PythonExt;
@@ -254,7 +254,7 @@ impl CachedEnvironment {
         let id = cache
             .persist(temp_dir.keep(), cache_entry.path(), sha256)
             .await?;
-        let root = cache.archive(&id, LATEST);
+        let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
