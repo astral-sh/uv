@@ -5,17 +5,17 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(String);
 
-impl Default for ArchiveId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ArchiveId {
-    /// Generate a new unique identifier for an archive.
-    pub fn new() -> Self {
+    /// Create a content-addressed identifier for an archive from a SHA256 digest.
+    pub fn from_sha256(digest: &str) -> Self {
+        Self(digest.to_string())
+    }
+
+    /// Create a random content-addressed identifier for an archive.
+    pub fn nanoid() -> Self {
         Self(nanoid::nanoid!())
     }
+
 }
 
 impl AsRef<Path> for ArchiveId {
