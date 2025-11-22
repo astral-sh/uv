@@ -33,7 +33,7 @@ mod wheel;
 /// The version of the archive bucket.
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
-pub const ARCHIVE_VERSION: u8 = 0;
+pub const ARCHIVE_VERSION: u8 = 1;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -346,19 +346,32 @@ impl Cache {
     }
 
     /// Persist a temporary directory to the artifact store, returning its unique ID.
+    ///
+    /// The archive is content-addressed using the provided ID. If an archive with this ID
+    /// already exists, the temporary directory is discarded and the existing archive is used.
     pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
+        id: ArchiveId,
     ) -> io::Result<ArchiveId> {
-        // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
-        let id = ArchiveId::new();
-
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
-        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+        match uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await {
+            Ok(()) => {}
+            Err(err)
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    || err.kind() == io::ErrorKind::DirectoryNotEmpty =>
+            {
+                debug!(
+                    "Archive already exists at {}; skipping extraction",
+                    archive_entry.path().display()
+                );
+                fs_err::tokio::remove_dir_all(temp_dir.as_ref()).await?;
+            }
+            Err(err) => return Err(err),
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -1114,7 +1127,7 @@ impl CacheBucket {
             Self::Wheels => "wheels-v5",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
-            Self::Archive => "archive-v0",
+            Self::Archive => "archive-v1",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1363,7 +1376,7 @@ mod tests {
 
     #[test]
     fn test_link_round_trip() {
-        let id = ArchiveId::new();
+        let id = ArchiveId::from_sha256("a".repeat(64).as_str());
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();
@@ -1373,9 +1386,10 @@ mod tests {
 
     #[test]
     fn test_link_deserialize() {
-        assert!(Link::from_str("archive-v0/foo").is_ok());
+        assert!(Link::from_str("archive-v1/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
-        assert!(Link::from_str("archive-v0/").is_err());
+        assert!(Link::from_str("archive-v1/").is_err());
+        assert!(Link::from_str("archive-v0/foo").is_ok());
     }
 }

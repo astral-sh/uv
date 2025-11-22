@@ -136,7 +136,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Acquired lock for `[CACHE_DIR]/`
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v1/[ENTRY]
     Removed [N] files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
@@ -215,7 +215,7 @@ fn clean_package_index() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Acquired lock for `[CACHE_DIR]/`
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v1/[ENTRY]
     Removed [N] files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");

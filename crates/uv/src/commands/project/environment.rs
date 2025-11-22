@@ -10,7 +10,7 @@ use crate::commands::project::{
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::{ArchiveId, Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
@@ -212,7 +212,9 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
-        let id = cache.persist(temp_dir.keep(), cache_entry.path()).await?;
+        let id = cache
+            .persist(temp_dir.keep(), cache_entry.path(), ArchiveId::nanoid())
+            .await?;
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))

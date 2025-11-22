@@ -5698,6 +5698,7 @@ dependencies = [
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-small-str",
  "uv-static",
  "walkdir",
 ]

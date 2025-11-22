@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
-use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -26,7 +25,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 
@@ -638,11 +637,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     hasher.finish().await.map_err(Error::HashExhaustion)?;
                 }
 
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+
+                // Extract the SHA256 hash for content-addressing
+                let sha256 = hash_digests
+                    .iter()
+                    .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
+                    .expect("SHA256 hash must be present");
+
                 // Persist the temporary directory to the directory store.
-                let id = self
-                    .build_context
+                self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(
+                        temp_dir.keep(),
+                        wheel_entry.path(),
+                        ArchiveId::from_sha256(&sha256.digest),
+                    )
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -650,11 +660,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    id,
-                    hashers.into_iter().map(HashDigest::from).collect(),
-                    filename.clone(),
-                ))
+                Ok(Archive::new(hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -800,58 +806,43 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, parallelize the unzip operation.
-                let hashes = if hashes.is_none() {
-                    let file = file.into_std().await;
-                    tokio::task::spawn_blocking({
-                        let target = temp_dir.path().to_owned();
-                        move || -> Result<(), uv_extract::Error> {
-                            // Unzip the wheel into a temporary directory.
-                            match extension {
-                                WheelExtension::Whl => {
-                                    uv_extract::unzip(file, &target)?;
-                                }
-                                WheelExtension::WhlZst => {
-                                    uv_extract::stream::untar_zst_file(file, &target)?;
-                                }
-                            }
-                            Ok(())
-                        }
-                    })
-                    .await?
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                // Create a hasher for each hash algorithm.
+                let algorithms = hashes.algorithms();
+                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
-                    HashDigests::empty()
-                } else {
-                    // Create a hasher for each hash algorithm.
-                    let algorithms = hashes.algorithms();
-                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-                    match extension {
-                        WheelExtension::Whl => {
-                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
+                match extension {
+                    WheelExtension::Whl => {
+                        uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
                     }
+                    WheelExtension::WhlZst => {
+                        uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                    }
+                }
 
-                    // If necessary, exhaust the reader to compute the hash.
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-                    hashers.into_iter().map(HashDigest::from).collect()
-                };
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+
+                // Extract the SHA256 hash for content-addressing
+                let sha256 = hash_digests
+                    .iter()
+                    .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
+                    .expect("SHA256 hash must be present");
 
                 // Persist the temporary directory to the directory store.
-                let id = self
-                    .build_context
+                self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(
+                        temp_dir.keep(),
+                        wheel_entry.path(),
+                        ArchiveId::from_sha256(&sha256.digest),
+                    )
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -859,7 +850,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes, filename.clone()))
+                Ok(Archive::new(hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -977,42 +968,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 cache: CacheInfo::from_timestamp(modified),
                 build: None,
             })
-        } else if hashes.is_none() {
-            // Otherwise, unzip the wheel.
-            let archive = Archive::new(
-                self.unzip_wheel(path, wheel_entry.path()).await?,
-                HashDigests::empty(),
-                filename.clone(),
-            );
-
-            // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
-                timestamp: modified,
-                archive: archive.clone(),
-            };
-            pointer.write_to(&pointer_entry).await?;
-
-            Ok(LocalWheel {
-                dist: Dist::Built(dist.clone()),
-                archive: self
-                    .build_context
-                    .cache()
-                    .archive(&archive.id)
-                    .into_boxed_path(),
-                hashes: archive.hashes,
-                filename: filename.clone(),
-                cache: CacheInfo::from_timestamp(modified),
-                build: None,
-            })
         } else {
-            // If necessary, compute the hashes of the wheel.
+            // Otherwise, unzip the wheel and compute hashes (always including SHA256).
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
             let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                 .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm.
+            // Create a hasher for each hash algorithm (always includes SHA256).
             let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
@@ -1034,18 +998,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-            let hashes = hashers.into_iter().map(HashDigest::from).collect();
+            let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+
+            // Extract the SHA256 hash for content-addressing
+            let sha256 = hash_digests
+                .iter()
+                .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
+                .expect("SHA256 hash must be present");
 
             // Persist the temporary directory to the directory store.
-            let id = self
-                .build_context
+            self.build_context
                 .cache()
-                .persist(temp_dir.keep(), wheel_entry.path())
+                .persist(
+                    temp_dir.keep(),
+                    wheel_entry.path(),
+                    ArchiveId::from_sha256(&sha256.digest),
+                )
                 .await
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone());
+            let archive = Archive::new(hash_digests, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
@@ -1071,25 +1044,39 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
     async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
-        let temp_dir = tokio::task::spawn_blocking({
-            let path = path.to_owned();
-            let root = self.build_context.cache().root().to_path_buf();
-            move || -> Result<TempDir, Error> {
-                // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
-                let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                uv_extract::unzip(reader, temp_dir.path())
-                    .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-                Ok(temp_dir)
-            }
-        })
-        .await??;
+        // Open the wheel file for hashing
+        let file = fs_err::tokio::File::open(path)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        // Create a temporary directory for unzipping
+        let temp_dir =
+            tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
+
+        // Create a hasher to content-address the wheel.
+        let mut hashers = vec![Hasher::from(HashAlgorithm::Sha256)];
+        let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
+
+        // Unzip the wheel while computing the hash
+        uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
+
+        // Exhaust the reader to complete the hash computation
+        hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+        // Extract the digest.
+        let hash_digest = HashDigest::from(hashers.into_iter().next().expect("SHA256 hasher"));
 
         // Persist the temporary directory to the directory store.
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.keep(), target)
+            .persist(
+                temp_dir.keep(),
+                target,
+                ArchiveId::from_sha256(&hash_digest.digest),
+            )
             .await
             .map_err(Error::CacheWrite)?;
 
