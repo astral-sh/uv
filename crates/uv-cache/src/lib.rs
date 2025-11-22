@@ -263,7 +263,7 @@ impl Cache {
 
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
-        self.bucket(CacheBucket::Archive).join(id.to_path_buf())
+        self.bucket(CacheBucket::Archive).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -352,7 +352,7 @@ impl Cache {
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let id = ArchiveId::from(hash);
-        let archive_entry = self.bucket(CacheBucket::Archive).join(id.to_path_buf());
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
         if let Some(parent) = archive_entry.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -621,34 +621,34 @@ impl Cache {
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
-
                     let entry = entry?;
 
                     // If two hex characters, it's a prefix; recurse.
-                    if entry
-                        .file_name()
-                        .to_str()
-                        .is_some_and(|name| name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit()))
-                    {
+                    if entry.file_name().to_str().is_some_and(|name| {
+                        name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit())
+                    }) {
                         match fs_err::read_dir(entry.path()) {
                             Ok(subentries) => {
                                 for subentry in subentries {
                                     let subentry = subentry?;
 
                                     // If two hex characters, it's a prefix; recurse.
-                                    if subentry
-                                        .file_name()
-                                        .to_str()
-                                        .is_some_and(|name| name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit()))
-                                    {
+                                    if subentry.file_name().to_str().is_some_and(|name| {
+                                        name.len() == 2
+                                            && name.chars().all(|c| c.is_ascii_hexdigit())
+                                    }) {
                                         match fs_err::read_dir(subentry.path()) {
                                             Ok(subsubentries) => {
                                                 for subsubentry in subsubentries {
                                                     let subsubentry = subsubentry?;
 
-                                                    let path = fs_err::canonicalize(subsubentry.path())?;
+                                                    let path =
+                                                        fs_err::canonicalize(subsubentry.path())?;
                                                     if !references.contains_key(&path) {
-                                                        debug!("Removing dangling cache archive: {}", path.display());
+                                                        debug!(
+                                                            "Removing dangling cache archive: {}",
+                                                            path.display()
+                                                        );
                                                         summary += rm_rf(path)?;
                                                     }
                                                 }
@@ -659,7 +659,10 @@ impl Cache {
                                     } else {
                                         let path = fs_err::canonicalize(subentry.path())?;
                                         if !references.contains_key(&path) {
-                                            debug!("Removing dangling cache archive: {}", path.display());
+                                            debug!(
+                                                "Removing dangling cache archive: {}",
+                                                path.display()
+                                            );
                                             summary += rm_rf(path)?;
                                         }
                                     }

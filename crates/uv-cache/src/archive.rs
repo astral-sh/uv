@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::str::FromStr;
 
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -35,20 +35,9 @@ impl FromStr for ArchiveVersion {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(SmallString);
 
-impl ArchiveId {
-    /// Return the content-addressed path for the [`ArchiveId`].
-    pub fn to_path_buf(&self) -> PathBuf {
-        if self.0.len() == 21 {
-            // A 21-digit NanoID.
-            PathBuf::from(self.0.as_ref())
-        } else {
-            // A SHA256 hex digest, split into three segments.
-            let mut path = PathBuf::new();
-            path.push(&self.0[0..2]);
-            path.push(&self.0[2..4]);
-            path.push(&self.0[4..]);
-            path
-        }
+impl AsRef<Path> for ArchiveId {
+    fn as_ref(&self) -> &Path {
+        self.0.as_ref().as_ref()
     }
 }
 
