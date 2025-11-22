@@ -621,11 +621,59 @@ impl Cache {
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
+
                     let entry = entry?;
-                    let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains_key(&path) {
-                        debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
+
+                    // If two hex characters, it's a prefix; recurse.
+                    if entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit()))
+                    {
+                        match fs_err::read_dir(entry.path()) {
+                            Ok(subentries) => {
+                                for subentry in subentries {
+                                    let subentry = subentry?;
+
+                                    // If two hex characters, it's a prefix; recurse.
+                                    if subentry
+                                        .file_name()
+                                        .to_str()
+                                        .is_some_and(|name| name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit()))
+                                    {
+                                        match fs_err::read_dir(subentry.path()) {
+                                            Ok(subsubentries) => {
+                                                for subsubentry in subsubentries {
+                                                    let subsubentry = subsubentry?;
+
+                                                    let path = fs_err::canonicalize(subsubentry.path())?;
+                                                    if !references.contains_key(&path) {
+                                                        debug!("Removing dangling cache archive: {}", path.display());
+                                                        summary += rm_rf(path)?;
+                                                    }
+                                                }
+                                            }
+                                            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                                            Err(err) => return Err(err),
+                                        }
+                                    } else {
+                                        let path = fs_err::canonicalize(subentry.path())?;
+                                        if !references.contains_key(&path) {
+                                            debug!("Removing dangling cache archive: {}", path.display());
+                                            summary += rm_rf(path)?;
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                            Err(err) => return Err(err),
+                        }
+                    } else {
+                        let path = fs_err::canonicalize(entry.path())?;
+                        if !references.contains_key(&path) {
+                            debug!("Removing dangling cache archive: {}", path.display());
+                            summary += rm_rf(path)?;
+                        }
                     }
                 }
             }

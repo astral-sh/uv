@@ -3762,7 +3762,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3776,8 +3776,9 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
             sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
           Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
             sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
-    "###
+    "
     );
 
     Ok(())
@@ -4463,7 +4464,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes")
-        .arg("--reinstall"), @r###"
+        .arg("--reinstall"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4478,7 +4479,8 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
           Computed:
             md5:420d85e19168705cdf0223621b18831a
-    "###
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "
     );
 
     Ok(())
