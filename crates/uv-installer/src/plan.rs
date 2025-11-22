@@ -463,9 +463,7 @@ impl<'a> Planner<'a> {
                                     hashes: archive.hashes,
                                     cache_info,
                                     build_info,
-                                    path: cache
-                                        .archive(&archive.id, archive.version)
-                                        .into_boxed_path(),
+                                    path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
                                 debug!("URL wheel requirement already cached: {cached_dist}");
@@ -534,9 +532,7 @@ impl<'a> Planner<'a> {
                                             hashes: archive.hashes,
                                             cache_info,
                                             build_info,
-                                            path: cache
-                                                .archive(&archive.id, archive.version)
-                                                .into_boxed_path(),
+                                            path: cache.archive(&archive.id).into_boxed_path(),
                                         };
                                         debug!(
                                             "Path wheel requirement already cached: {cached_dist}"
@@ -600,9 +596,7 @@ impl<'a> Planner<'a> {
                                     hashes: archive.hashes,
                                     cache_info,
                                     build_info,
-                                    path: cache
-                                        .archive(&archive.id, archive.version)
-                                        .into_boxed_path(),
+                                    path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
                                 debug!("Git wheel requirement already cached: {cached_dist}");

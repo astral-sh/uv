@@ -234,7 +234,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self
                             .build_context
                             .cache()
-                            .archive(&archive.id, archive.version)
+                            .archive(&archive.id)
                             .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -272,7 +272,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self
                                 .build_context
                                 .cache()
-                                .archive(&archive.id, archive.version)
+                                .archive(&archive.id)
                                 .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -311,7 +311,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self
                             .build_context
                             .cache()
-                            .archive(&archive.id, archive.version)
+                            .archive(&archive.id)
                             .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -348,7 +348,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self
                                 .build_context
                                 .cache()
-                                .archive(&archive.id, archive.version)
+                                .archive(&archive.id)
                                 .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -547,11 +547,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
-            archive: self
-                .build_context
-                .cache()
-                .archive(&id, LATEST)
-                .into_boxed_path(),
+            archive: self.build_context.cache().archive(&id).into_boxed_path(),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
@@ -828,7 +824,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -847,7 +843,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.version == LATEST)
+            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1021,7 +1018,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -1040,7 +1037,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.version == LATEST)
+            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1103,7 +1101,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self
                     .build_context
                     .cache()
-                    .archive(&archive.id, archive.version)
+                    .archive(&archive.id)
                     .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
@@ -1175,7 +1173,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self
                     .build_context
                     .cache()
-                    .archive(&archive.id, archive.version)
+                    .archive(&archive.id)
                     .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),

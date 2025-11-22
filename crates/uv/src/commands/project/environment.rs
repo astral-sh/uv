@@ -255,7 +255,7 @@ impl CachedEnvironment {
         let id = cache
             .persist(temp_dir.keep(), cache_entry.path(), sha256)
             .await?;
-        let root = cache.archive(&id, LATEST);
+        let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }

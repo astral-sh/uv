@@ -96,7 +96,7 @@ fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Er
         "interpreter-v2",
         "simple-v12",
         "wheels-v1",
-        "archive-v1",
+        "archive-v0",
         "builds-v0",
         "environments-v1",
     ] {

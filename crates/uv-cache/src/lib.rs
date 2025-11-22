@@ -298,11 +298,8 @@ impl Cache {
     }
 
     /// Return the path to an archive in the cache.
-    pub fn archive(&self, id: &ArchiveId, version: ArchiveVersion) -> PathBuf {
-        // TODO(charlie): Reuse `CacheBucket::Archive`.
-        self.root
-            .join(format!("archive-v{version}"))
-            .join(id.to_path_buf(version))
+    pub fn archive(&self, id: &ArchiveId) -> PathBuf {
+        self.bucket(CacheBucket::Archive).join(id.to_path_buf())
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -391,9 +388,7 @@ impl Cache {
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let id = ArchiveId::from(hash);
-        let archive_entry = self
-            .bucket(CacheBucket::Archive)
-            .join(id.to_path_buf(LATEST));
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.to_path_buf());
         if let Some(parent) = archive_entry.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -829,7 +824,7 @@ impl Cache {
         let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
-        if link.version != ARCHIVE_VERSION {
+        if link.version != LATEST {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "The link target does not exist.",
@@ -837,7 +832,7 @@ impl Cache {
         }
 
         // Reconstruct the path.
-        let path = self.archive(&link.id, link.version);
+        let path = self.archive(&link.id);
         path.canonicalize()
     }
 
@@ -850,7 +845,7 @@ impl Cache {
         let dst = dst.as_ref();
         let dst_parent = dst.parent().expect("Cache entry to have parent");
         // Construct the relative link target.
-        let src = uv_fs::relative_to(self.archive(id, ArchiveVersion::V1), dst_parent)?;
+        let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
         // Attempt to create the symlink directly.
         match fs_err::os::unix::fs::symlink(&src, dst) {
@@ -895,7 +890,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ArchiveVersion::V1,
+            version: ArchiveVersion::V0,
         }
     }
 }
@@ -1221,7 +1216,7 @@ impl CacheBucket {
             Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
-            Self::Archive => "archive-v1",
+            Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1484,10 +1479,8 @@ mod tests {
 
     #[test]
     fn test_link_deserialize() {
-        assert!(Link::from_str("archive-v1/foo").is_ok());
+        assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
-        assert!(Link::from_str("archive-v1/").is_err());
-        assert!(Link::from_str("archive-v0/foo").is_ok());
     }
 }
