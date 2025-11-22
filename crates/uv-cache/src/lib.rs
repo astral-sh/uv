@@ -262,11 +262,8 @@ impl Cache {
     }
 
     /// Return the path to an archive in the cache.
-    pub fn archive(&self, id: &ArchiveId, version: ArchiveVersion) -> PathBuf {
-        // TODO(charlie): Reuse `CacheBucket::Archive`.
-        self.root
-            .join(format!("archive-v{version}"))
-            .join(id.to_path_buf(version))
+    pub fn archive(&self, id: &ArchiveId) -> PathBuf {
+        self.bucket(CacheBucket::Archive).join(id.to_path_buf())
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -355,9 +352,7 @@ impl Cache {
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let id = ArchiveId::from(hash);
-        let archive_entry = self
-            .bucket(CacheBucket::Archive)
-            .join(id.to_path_buf(LATEST));
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.to_path_buf());
         if let Some(parent) = archive_entry.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -744,7 +739,7 @@ impl Cache {
         let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
-        if link.version != ARCHIVE_VERSION {
+        if link.version != LATEST {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "The link target does not exist.",
@@ -763,7 +758,7 @@ impl Cache {
     #[cfg(unix)]
     pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Construct the link target.
-        let src = self.archive(id, ArchiveVersion::V1);
+        let src = self.archive(id);
         let dst = dst.as_ref();
 
         // Attempt to create the symlink directly.
@@ -809,7 +804,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ArchiveVersion::V1,
+            version: ArchiveVersion::V0,
         }
     }
 }
@@ -1130,7 +1125,7 @@ impl CacheBucket {
             Self::Wheels => "wheels-v5",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
-            Self::Archive => "archive-v1",
+            Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1394,10 +1389,8 @@ mod tests {
 
     #[test]
     fn test_link_deserialize() {
-        assert!(Link::from_str("archive-v1/foo").is_ok());
+        assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
-        assert!(Link::from_str("archive-v1/").is_err());
-        assert!(Link::from_str("archive-v0/foo").is_ok());
     }
 }

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use uv_cache::{Cache, CacheEntry};
+use uv_cache::{Cache, CacheEntry, LATEST};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -82,9 +82,14 @@ impl CachedWheel {
             hashes,
             ..
         } = archive;
-        let path = cache.archive(&id, version);
+
+        // Ignore out-of-date versions.
+        if version != LATEST {
+            return None;
+        }
 
         // Ignore stale pointers.
+        let path = cache.archive(&id);
         if !path.exists() {
             return None;
         }
@@ -114,9 +119,14 @@ impl CachedWheel {
             hashes,
             ..
         } = archive;
-        let path = cache.archive(&id, version);
+
+        // Ignore out-of-date versions.
+        if version != LATEST {
+            return None;
+        }
 
         // Ignore stale pointers.
+        let path = cache.archive(&id);
         if !path.exists() {
             return None;
         }

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tracing::debug;
 
-use uv_cache::{Cache, CacheBucket, LATEST};
+use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
@@ -225,7 +225,7 @@ impl CachedEnvironment {
         let id = cache
             .persist(temp_dir.keep(), cache_entry.path(), sha256)
             .await?;
-        let root = cache.archive(&id, LATEST);
+        let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }

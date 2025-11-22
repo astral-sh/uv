@@ -142,7 +142,7 @@ fn prune_cached_env() {
     DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v1/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
@@ -188,7 +188,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v1/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
@@ -409,7 +409,7 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG Acquired lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v1/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");

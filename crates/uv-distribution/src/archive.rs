@@ -1,4 +1,4 @@
-use uv_cache::{ArchiveId, ArchiveVersion, Cache, LATEST};
+use uv_cache::{ArchiveId, ArchiveVersion, LATEST};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests};
@@ -33,11 +33,6 @@ impl Archive {
             filename,
             version: LATEST,
         }
-    }
-
-    /// Returns `true` if the archive exists in the cache.
-    pub(crate) fn exists(&self, cache: &Cache) -> bool {
-        cache.archive(&self.id, self.version).exists()
     }
 }
 

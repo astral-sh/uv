@@ -246,7 +246,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/archive-v1/[HASH]/[BIN]/uv
+    [CACHE_DIR]/archive-v0/[HASH]/[BIN]/uv
 
     ----- stderr -----
     Resolved 1 package in [TIME]
