@@ -5683,7 +5683,6 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "fs-err",
- "nanoid",
  "rmp-serde",
  "rustc-hash",
  "same-file",

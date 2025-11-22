@@ -12,7 +12,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, LATEST, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -227,7 +227,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self
                             .build_context
                             .cache()
-                            .archive(&archive.id)
+                            .archive(&archive.id, archive.version)
                             .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -265,7 +265,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self
                                 .build_context
                                 .cache()
-                                .archive(&archive.id)
+                                .archive(&archive.id, archive.version)
                                 .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -304,7 +304,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self
                             .build_context
                             .cache()
-                            .archive(&archive.id)
+                            .archive(&archive.id, archive.version)
                             .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -335,7 +335,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self
                                 .build_context
                                 .cache()
-                                .archive(&archive.id)
+                                .archive(&archive.id, archive.version)
                                 .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -421,7 +421,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
-            archive: self.build_context.cache().archive(&id).into_boxed_path(),
+            archive: self
+                .build_context
+                .cache()
+                .archive(&id, LATEST)
+                .into_boxed_path(),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
@@ -648,11 +652,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Persist the temporary directory to the directory store.
                 self.build_context
                     .cache()
-                    .persist(
-                        temp_dir.keep(),
-                        wheel_entry.path(),
-                        ArchiveId::from_sha256(&sha256.digest),
-                    )
+                    .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -838,11 +838,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Persist the temporary directory to the directory store.
                 self.build_context
                     .cache()
-                    .persist(
-                        temp_dir.keep(),
-                        wheel_entry.path(),
-                        ArchiveId::from_sha256(&sha256.digest),
-                    )
+                    .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -961,7 +957,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self
                     .build_context
                     .cache()
-                    .archive(&archive.id)
+                    .archive(&archive.id, archive.version)
                     .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
@@ -1009,11 +1005,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Persist the temporary directory to the directory store.
             self.build_context
                 .cache()
-                .persist(
-                    temp_dir.keep(),
-                    wheel_entry.path(),
-                    ArchiveId::from_sha256(&sha256.digest),
-                )
+                .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
                 .await
                 .map_err(Error::CacheWrite)?;
 
@@ -1032,7 +1024,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self
                     .build_context
                     .cache()
-                    .archive(&archive.id)
+                    .archive(&archive.id, archive.version)
                     .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
@@ -1066,17 +1058,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Extract the digest.
-        let hash_digest = HashDigest::from(hashers.into_iter().next().expect("SHA256 hasher"));
+        let sha256 = HashDigest::from(hashers.into_iter().next().expect("SHA256 hasher"));
 
         // Persist the temporary directory to the directory store.
         let id = self
             .build_context
             .cache()
-            .persist(
-                temp_dir.keep(),
-                target,
-                ArchiveId::from_sha256(&hash_digest.digest),
-            )
+            .persist(temp_dir.keep(), target, sha256.clone())
             .await
             .map_err(Error::CacheWrite)?;
 

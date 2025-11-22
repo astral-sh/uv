@@ -2,6 +2,17 @@ use std::path::Path;
 
 use tracing::debug;
 
+use uv_cache::{Cache, CacheBucket, LATEST};
+use uv_cache_key::{cache_digest, hash_digest};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, Constraints, TargetTriple};
+use uv_distribution_types::{Name, Resolution};
+use uv_extract::hash::Hasher;
+use uv_fs::PythonExt;
+use uv_preview::Preview;
+use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
@@ -9,15 +20,6 @@ use crate::commands::project::{
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-
-use uv_cache::{ArchiveId, Cache, CacheBucket};
-use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, TargetTriple};
-use uv_distribution_types::{Name, Resolution};
-use uv_fs::PythonExt;
-use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
@@ -172,7 +174,11 @@ impl CachedEnvironment {
             cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(
+            CacheBucket::Environments,
+            &interpreter_hash,
+            &resolution_hash,
+        );
 
         if let Ok(root) = cache.resolve_link(cache_entry.path()) {
             if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
@@ -212,10 +218,14 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
+        let mut hasher = Hasher::from(HashAlgorithm::Sha256);
+        hasher.update(interpreter_hash.as_bytes());
+        hasher.update(resolution_hash.as_bytes());
+        let sha256 = HashDigest::from(hasher);
         let id = cache
-            .persist(temp_dir.keep(), cache_entry.path(), ArchiveId::nanoid())
+            .persist(temp_dir.keep(), cache_entry.path(), sha256)
             .await?;
-        let root = cache.archive(&id);
+        let root = cache.archive(&id, LATEST);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
