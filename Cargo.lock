@@ -6039,6 +6039,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "temp-env",
  "thiserror 2.0.17",
  "toml",
  "tracing",
