@@ -371,6 +371,180 @@ impl RequiresPython {
         marker.complexify_python_versions(lower.as_ref(), upper.as_ref())
     }
 
+    /// Extract the Python version requirement from a wheel's tags.
+    ///
+    /// Returns a [`VersionSpecifiers`] indicating the required Python version range based on the
+    /// wheel's tags. Returns `None` if no Python version requirement can be determined or if the
+    /// wheel uses Python 2.
+    ///
+    /// This is similar to the logic in `implied_python_markers` (from `prioritized_distribution`)
+    /// but returns version specifiers instead of a marker tree.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use uv_distribution_filename::WheelFilename;
+    /// use uv_distribution_types::RequiresPython;
+    ///
+    /// // Implementation-specific tags indicate exact Python versions
+    /// let wheel = WheelFilename::from_str("black-24.4.2-cp310-cp310-win_amd64.whl").unwrap();
+    /// let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+    /// assert_eq!(specifiers.to_string(), "==3.10.*");
+    ///
+    /// // Generic Python tags indicate lower bounds
+    /// let wheel = WheelFilename::from_str("package-1.0-py3-none-any.whl").unwrap();
+    /// let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+    /// assert_eq!(specifiers.to_string(), ">=3");
+    ///
+    /// // Python 2 wheels return None
+    /// let wheel = WheelFilename::from_str("old_package-1.0-py27-none-any.whl").unwrap();
+    /// assert_eq!(RequiresPython::from_wheel(&wheel), None);
+    /// ```
+    pub fn from_wheel(wheel: &WheelFilename) -> Option<VersionSpecifiers> {
+        let mut lower_bound: Option<Version> = None;
+        let mut upper_bound: Option<Version> = None;
+
+        for python_tag in wheel.python_tags() {
+            match python_tag {
+                // Reject Python 2 wheels
+                LanguageTag::Python { major: 2, .. }
+                | LanguageTag::CPython {
+                    python_version: (2, ..),
+                }
+                | LanguageTag::PyPy {
+                    python_version: (2, ..),
+                }
+                | LanguageTag::GraalPy {
+                    python_version: (2, ..),
+                }
+                | LanguageTag::Pyston {
+                    python_version: (2, ..),
+                } => {
+                    return None;
+                }
+                // Generic Python tag with just major version (e.g., py3)
+                LanguageTag::Python {
+                    major: 3,
+                    minor: None,
+                } => {
+                    // py3 means >=3.0
+                    lower_bound = Some(Version::new([3]));
+                }
+                // Generic Python tag with major.minor (e.g., py310)
+                // These represent lower bounds: py310 means >=3.10
+                LanguageTag::Python {
+                    major: 3,
+                    minor: Some(minor),
+                } => {
+                    let version = Version::new([3, u64::from(*minor)]);
+                    lower_bound = Some(match &lower_bound {
+                        Some(existing) if existing < &version => existing.clone(),
+                        _ => version,
+                    });
+                }
+                // Implementation-specific tags (e.g., cp310, pp39)
+                // These represent exact minor versions: cp310 means ==3.10.*
+                LanguageTag::CPython {
+                    python_version: (3, minor),
+                }
+                | LanguageTag::PyPy {
+                    python_version: (3, minor),
+                }
+                | LanguageTag::GraalPy {
+                    python_version: (3, minor),
+                }
+                | LanguageTag::Pyston {
+                    python_version: (3, minor),
+                } => {
+                    let version = Version::new([3, u64::from(*minor)]);
+                    lower_bound = Some(match &lower_bound {
+                        Some(existing) if existing < &version => existing.clone(),
+                        _ => version.clone(),
+                    });
+                    upper_bound = Some(match &upper_bound {
+                        Some(existing) if existing > &version => existing.clone(),
+                        _ => version,
+                    });
+                }
+                _ => {
+                    // Unknown or None tags
+                }
+            }
+        }
+
+        // Also check ABI tags for version information
+        for abi_tag in wheel.abi_tags() {
+            match abi_tag {
+                // Reject Python 2 ABI tags
+                AbiTag::CPython {
+                    python_version: (2, ..),
+                    ..
+                }
+                | AbiTag::PyPy {
+                    python_version: Some((2, ..)),
+                    ..
+                }
+                | AbiTag::GraalPy {
+                    python_version: (2, ..),
+                    ..
+                } => {
+                    return None;
+                }
+                // Python 3 ABI tags indicate exact versions
+                AbiTag::CPython {
+                    python_version: (3, minor),
+                    ..
+                }
+                | AbiTag::PyPy {
+                    python_version: Some((3, minor)),
+                    ..
+                }
+                | AbiTag::GraalPy {
+                    python_version: (3, minor),
+                    ..
+                } => {
+                    let version = Version::new([3, u64::from(*minor)]);
+                    lower_bound = Some(match &lower_bound {
+                        Some(existing) if existing < &version => existing.clone(),
+                        _ => version.clone(),
+                    });
+                    upper_bound = Some(match &upper_bound {
+                        Some(existing) if existing > &version => existing.clone(),
+                        _ => version,
+                    });
+                }
+                _ => {
+                    // abi3, None, or other tags don't provide version constraints
+                }
+            }
+        }
+
+        // Build the version specifiers based on the bounds we found
+        match (lower_bound, upper_bound) {
+            (Some(lower), Some(upper)) if lower == upper => {
+                // Exact version match: ==3.X.*
+                Some(VersionSpecifiers::from(
+                    VersionSpecifier::equals_star_version(lower),
+                ))
+            }
+            (Some(lower), Some(upper)) if lower < upper => {
+                // Multiple exact versions: >=3.X, <=3.Y
+                Some(VersionSpecifiers::from_iter([
+                    VersionSpecifier::greater_than_equal_version(lower),
+                    VersionSpecifier::less_than_equal_version(upper),
+                ]))
+            }
+            (Some(lower), None) => {
+                // Just a lower bound: >=3.X
+                Some(VersionSpecifiers::from(
+                    VersionSpecifier::greater_than_equal_version(lower),
+                ))
+            }
+            _ => None,
+        }
+    }
+
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version
     /// range.
     ///
@@ -772,6 +946,52 @@ mod tests {
             let requires_python = RequiresPython::from_specifiers(&version_specifiers);
             assert_eq!(requires_python.is_exact_without_patch(), expected);
         }
+    }
+
+    #[test]
+    fn from_wheel_tags() {
+        // Test implementation-specific tags (exact versions)
+        let wheel = WheelFilename::from_str("black-24.4.2-cp310-cp310-win_amd64.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), "==3.10.*");
+
+        let wheel = WheelFilename::from_str("dearpygui-1.11.1-cp312-cp312-win_amd64.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), "==3.12.*");
+
+        // Test generic Python tags (lower bounds)
+        let wheel = WheelFilename::from_str("cbor2-5.6.4-py3-none-any.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), ">=3");
+
+        let wheel = WheelFilename::from_str("example-1.0-py310-none-any.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), ">=3.10");
+
+        // Test abi3 wheels
+        let wheel =
+            WheelFilename::from_str("bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), "==3.7.*");
+
+        // Test PyPy tags
+        let wheel =
+            WheelFilename::from_str("watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl")
+                .unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), "==3.10.*");
+
+        // Test multiple python tags (should create a range)
+        let wheel = WheelFilename::from_str("example-1.0-cp310.cp311-none-any.whl").unwrap();
+        let specifiers = RequiresPython::from_wheel(&wheel).unwrap();
+        assert_eq!(specifiers.to_string(), ">=3.10, <=3.11");
+
+        // Test Python 2 wheels (should return None)
+        let wheel = WheelFilename::from_str("PySocks-1.7.1-py27-none-any.whl").unwrap();
+        assert_eq!(RequiresPython::from_wheel(&wheel), None);
+
+        let wheel = WheelFilename::from_str("psutil-6.0.0-cp27-none-win32.whl").unwrap();
+        assert_eq!(RequiresPython::from_wheel(&wheel), None);
     }
 
     #[test]

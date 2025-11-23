@@ -243,18 +243,37 @@ impl PubGrubRequirement {
             }
         };
 
+        let package = PubGrubPackage::from_package(
+            requirement.name.clone(),
+            extra,
+            group,
+            requirement.marker,
+        );
+        let url = VerbatimParsedUrl {
+            parsed_url,
+            verbatim: verbatim_url.clone(),
+        };
+
+        // In theory this can help a little bit because... we know the exact version, so if we visit
+        // some other distribution earlier, we have this information earlier to narrow our choices.
+        // TODO(charlie): We can just do this with the filename, though -- we don't need to do `Dist::from_url`.
+        // TODO(charlie): Does this mean that we'd then have a problem if the filename and the
+        // metadata don't match?
+        // let version = if let Ok(Dist::Built(dist)) = Dist::from_url(requirement.name.clone(), url.clone()) {
+        //     let version = match dist {
+        //         BuiltDist::DirectUrl(dist) => dist.filename.version,
+        //         BuiltDist::Path(dist) => dist.filename.version,
+        //         BuiltDist::Registry(..) => unreachable!()
+        //     };
+        //     Ranges::singleton(version)
+        // } else {
+        //     Ranges::full()
+        // };
+
         Self {
-            package: PubGrubPackage::from_package(
-                requirement.name.clone(),
-                extra,
-                group,
-                requirement.marker,
-            ),
+            package,
             version: Ranges::full(),
-            url: Some(VerbatimParsedUrl {
-                parsed_url,
-                verbatim: verbatim_url.clone(),
-            }),
+            url: Some(url),
         }
     }
 

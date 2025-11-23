@@ -1,0 +1,11 @@
+version = 1
+revision = 3
+requires-python = ">=3.14.0"
+
+[[package]]
+name = "foo"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.metadata]
+requires-dist = [{ name = "triton", path = "../../../Downloads/triton-3.3.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }]
