@@ -611,6 +611,9 @@ namespace = true
 
 Glob expressions which files and directories to exclude from the source distribution.
 
+These excludes are also applied to wheel builds to avoid source tree to wheel builds
+including more files than source tree to source distribution to wheel build.
+
 **Default value**: `[]`
 
 **Type**: `list[str]`
