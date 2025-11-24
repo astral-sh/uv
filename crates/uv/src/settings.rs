@@ -3774,6 +3774,7 @@ pub(crate) struct PublishSettings {
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
     pub(crate) dry_run: bool,
+    pub(crate) no_attestations: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -3819,6 +3820,7 @@ impl PublishSettings {
             username,
             password,
             dry_run: args.dry_run,
+            no_attestations: args.no_attestations,
             publish_url: args
                 .publish_url
                 .combine(publish_url)

@@ -49,6 +49,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+fastrand = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

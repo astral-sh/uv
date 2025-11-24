@@ -466,6 +466,12 @@ Don't upload a file if it already exists on the index. The value is the URL of t
 Equivalent to the `--index` command-line argument in `uv publish`. If
 set, uv the index with this name in the configuration for publishing.
 
+### `UV_PUBLISH_NO_ATTESTATIONS`
+<small class="added-in">added in `next release`</small>
+
+Equivalent to the `--no-attestations` command-line argument in `uv publish`. If set,
+uv will skip uploading any collected attestations for the published distributions.
+
 ### `UV_PUBLISH_PASSWORD`
 <small class="added-in">added in `0.4.16`</small>
 

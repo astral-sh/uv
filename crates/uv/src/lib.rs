@@ -1713,6 +1713,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 username,
                 password,
                 dry_run,
+                no_attestations,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -1734,6 +1735,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index,
                 index_locations,
                 dry_run,
+                no_attestations,
                 &cache,
                 printer,
             )
