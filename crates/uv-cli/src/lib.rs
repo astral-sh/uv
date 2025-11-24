@@ -7040,8 +7040,8 @@ pub struct DisplayTreeArgs {
 pub struct PublishArgs {
     /// Paths to the files to upload. Accepts glob expressions.
     ///
-    /// Defaults to the `dist` directory. Selects only wheels and source distributions, while
-    /// ignoring other files.
+    /// Defaults to the `dist` directory. Selects only wheels and source distributions
+    /// and their attestations, while ignoring other files.
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
@@ -7147,6 +7147,13 @@ pub struct PublishArgs {
     /// and will perform validation against the index if supported, but will not upload any files.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Do not upload attestations for the published files.
+    ///
+    /// By default, uv attempts to upload matching PEP 740 attestations with each distribution
+    /// that is published.
+    #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
+    pub no_attestations: bool,
 }
 
 #[derive(Args)]

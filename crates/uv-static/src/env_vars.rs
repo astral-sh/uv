@@ -297,6 +297,11 @@ impl EnvVars {
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
 
+    /// Equivalent to the `--no-attestations` command-line argument in `uv publish`. If set,
+    /// uv will skip uploading any collected attestations for the published distributions.
+    #[attr_added_in("next release")]
+    pub const UV_PUBLISH_NO_ATTESTATIONS: &'static str = "UV_PUBLISH_NO_ATTESTATIONS";
+
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
     /// the environment.
     #[attr_added_in("0.4.18")]

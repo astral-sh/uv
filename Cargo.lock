@@ -6432,6 +6432,7 @@ dependencies = [
  "astral-tokio-tar",
  "async-compression",
  "base64 0.22.1",
+ "fastrand",
  "fs-err",
  "futures",
  "glob",

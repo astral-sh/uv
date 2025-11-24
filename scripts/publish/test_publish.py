@@ -3,6 +3,8 @@
 # dependencies = [
 #     "httpx>=0.28.1,<0.29",
 #     "packaging>=24.1,<25",
+#     "pypi-attestations==0.0.28",
+#     "sigstore==4.1.0",
 # ]
 # ///
 
@@ -78,6 +80,10 @@ from packaging.utils import (
     parse_wheel_filename,
 )
 from packaging.version import Version
+from pypi_attestations import Attestation, Distribution
+from sigstore import oidc
+from sigstore.models import ClientTrustConfig
+from sigstore.sign import SigningContext
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
@@ -115,6 +121,7 @@ class TargetConfiguration:
     publish_url: str
     index_url: str
     index: str | None = None
+    attestations: bool = False
 
     def index_declaration(self) -> str | None:
         if not self.index:
@@ -179,6 +186,8 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
+        index=None,
+        attestations=True,
     ),
     # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
     # "pyx-trusted-publishing": TargetConfiguration(
@@ -257,6 +266,36 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
     # Works for the indexes in the list
     href_text = r"<a(?:\s*[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
     return [m.group(1) for m in re.finditer(href_text, data)]
+
+
+def check_index_for_provenance(
+    index_url: str,
+    project_name: str,
+    version: Version,
+    client: httpx.Client,
+):
+    """Check that the index serves a provenance attribute on each of the
+    distributions for the given project and version.
+
+    This uses the PEP 691 JSON API for convenience. There shouldn't be
+    any PEP 740 implementations out there that don't also implement PEP 691.
+    """
+
+    url = index_url + project_name + "/"
+    response = client.get(
+        url,
+        follow_redirects=True,
+        headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    for file in data["files"]:
+        if str(version) in file["filename"] and not file.get("provenance"):
+            raise RuntimeError(
+                f"Missing provenance for {project_name} {version} "
+                f"file {file['filename']}"
+            )
 
 
 def build_project_at_version(
@@ -383,9 +422,11 @@ def wait_for_index(
 def publish_project(target: str, uv: Path, client: httpx.Client):
     """Test that:
 
-    1. An upload with a fresh version succeeds.
+    1. An upload with a fresh version succeeds. If the upload includes attestations,
+       we confirm that the index accepts and serves them.
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
+    4. Uploading modified files at the same version fails.
     """
     # If we're publishing to pyx, we need to give the httpx client
     # access to an appropriate credential.
@@ -421,6 +462,33 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         # Ignore our test file
         expected_filenames.remove(".DS_Store")
 
+        if all_targets[target].attestations:
+            trust = ClientTrustConfig.production()
+            identity = oidc.detect_credential()
+
+            if not identity:
+                raise RuntimeError("Failed to detect OIDC credential for signing")
+
+            identity_token = oidc.IdentityToken(identity)
+            context = SigningContext.from_trust_config(trust)
+
+            with context.signer(identity_token=identity_token) as signer:
+                for dist_name in expected_filenames:
+                    if not (
+                        dist_name.endswith(".tar.gz") or dist_name.endswith(".whl")
+                    ):
+                        continue
+
+                    dist_path = project_dir / "dist" / dist_name
+
+                    dist = Distribution.from_file(dist_path)
+                    attestation = Attestation.sign(signer, dist)
+
+                    attestation_path = dist_path.with_suffix(
+                        dist_path.suffix + ".publish.attestation"
+                    )
+                    attestation_path.write_text(attestation.model_dump_json())
+
         print(
             f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
             file=sys.stderr,
@@ -442,6 +510,10 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         else:
             # Raise the error after three failures
             result.check_returncode()
+
+    if all_targets[target].attestations:
+        wait_for_index(index_url, project_name, version, uv, env)
+        check_index_for_provenance(index_url, project_name, version, client)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
