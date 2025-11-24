@@ -45,7 +45,7 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
 
 The `uv version` command provides conveniences for updating the version of your package before you
 publish it.
-[See the project docs for reading your package's version](./projects.md#managing-version).
+[See the project docs for reading your package's version](./projects.md#viewing-your-version).
 
 To update to an exact version, provide it as a positional argument:
 
