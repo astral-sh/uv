@@ -8,9 +8,8 @@ description: Exporting a lockfile to different formats
 uv can export a lockfile to different formats for integration with other tools and workflows. The
 `uv export` command supports multiple output formats, each suited to different use cases.
 
-For more details on lockfiles and how they're created, see the
-[project layout](../concepts/projects/layout.md) and
-[locking and syncing](../concepts/projects/sync.md) documentation.
+For more details on lockfiles and how they're created, see the [project layout](./layout.md) and
+[locking and syncing](./sync.md) documentation.
 
 ## Overview of export formats
 
@@ -81,7 +80,7 @@ which is useful for security auditing, compliance, and supply chain transparency
 
 !!! important
 
-    Support for exporting to CycloneDX is in [preview](../concepts/preview.md), and may change in any future release.
+    Support for exporting to CycloneDX is in [preview](../preview.md), and may change in any future release.
 
 ### What is CycloneDX?
 
@@ -111,8 +110,8 @@ following custom properties on components:
 
 ## Next steps
 
-To learn more about lockfiles and exporting, see the
-[locking and syncing](../concepts/projects/sync.md) documentation and the
-[command reference](../reference/cli.md#uv-export).
+To learn more about lockfiles and exporting, see the [locking and syncing](./sync.md) documentation
+and the [command reference](../../reference/cli.md#uv-export).
 
-Or, read on to learn how to [build and publish your project to a package index](./package.md).
+Or, read on to learn how to
+[build and publish your project to a package index](../../guides/package.md).

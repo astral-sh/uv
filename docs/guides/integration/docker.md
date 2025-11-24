@@ -215,8 +215,8 @@ RUN uv run some_script.py
 
 ### Using installed tools
 
-To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
-is on the path:
+To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#tool-executables) is
+on the path:
 
 ```dockerfile title="Dockerfile"
 ENV PATH=/root/.local/bin:$PATH
