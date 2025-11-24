@@ -309,6 +309,7 @@ impl SourceBuild {
             &source_tree,
             install_path,
             fallback_package_name,
+            fallback_package_version,
             locations,
             source_strategy,
             workspace_cache,
@@ -555,6 +556,7 @@ impl SourceBuild {
         source_tree: &Path,
         install_path: &Path,
         package_name: Option<&PackageName>,
+        package_version: Option<&Version>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         workspace_cache: &WorkspaceCache,
@@ -578,7 +580,7 @@ impl SourceBuild {
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                return Ok((default_backend.clone(), None));
+                return Ok((DEFAULT_BACKEND.clone(), None));
             }
             Err(err) => return Err(Box::new(err.into())),
         };
@@ -595,11 +597,18 @@ impl SourceBuild {
                 .as_ref()
                 .and_then(|build_backend| build_backend.build_backend.as_deref())
                 != Some("uv_build")
+            && let Some(package_name) =
+                package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))
+            && let Some(package_version) = package_version.or(pyproject_toml
+                .project
+                .as_ref()
+                .and_then(|project| project.version.as_ref()))
         {
+            // Show name/version where available to avoid showing a (duplicate) warning with
+            // a temporary path.
             warn_user_once!(
-                "There are settings for `uv_build` defined in \
-                `tool.uv.build-backend`, but `uv_build` is not used by the project at: {}",
-                source_tree.join("pyproject.toml").simplified_display()
+                "`pyproject.toml` of {package_name}=={package_version} defines settings for \
+                `uv_build` in `tool.uv.build-backend`, but does not use `uv_build`",
             );
         }
 
