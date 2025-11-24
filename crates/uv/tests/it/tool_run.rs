@@ -2646,8 +2646,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
 fn tool_run_with_dependencies_from_script() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
-    let script = context.temp_dir.child("script.py");
-    script.write_str(indoc! {r#"
+    let script_contents = indoc! {r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -2656,7 +2655,13 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         # ///
 
         import anyio
-    "#})?;
+    "#};
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(script_contents)?;
+
+    let script_without_extension = context.temp_dir.child("script-no-ext");
+    script_without_extension.write_str(script_contents)?;
 
     // script dependencies (anyio) are now installed.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2684,6 +2689,20 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script-no-ext")
+        .arg("black")
+        .arg("script-no-ext")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
     // Error when the script is not a valid PEP723 script.
     let script = context.temp_dir.child("not_pep723_script.py");
     script.write_str("import anyio")?;
@@ -2700,8 +2719,18 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     error: `not_pep723_script.py` does not contain inline script metadata
     ");
 
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // The error message is different on Windows.
+            "The system cannot find the file specified.",
+            "No such file or directory",
+        )])
+        .collect::<Vec<_>>();
+
     // Error when the script doesn't exist.
-    uv_snapshot!(context.filters(), context.tool_run()
+    uv_snapshot!(filters, context.tool_run()
         .arg("--with-requirements")
         .arg("missing_file.py")
         .arg("black"), @r"
@@ -2710,7 +2739,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `missing_file.py` (not found)
+    error: failed to read from file `missing_file.py`: No such file or directory (os error 2)
     ");
 
     Ok(())
