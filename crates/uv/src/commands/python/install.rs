@@ -248,7 +248,6 @@ pub(crate) async fn install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
         ) {
             is_unspecified_upgrade = true;
-            
             // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
