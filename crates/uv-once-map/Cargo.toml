@@ -1,6 +1,6 @@
 [package]
 name = "uv-once-map"
-version = "0.0.1"
+version = "0.0.2"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }

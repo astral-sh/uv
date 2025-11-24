@@ -299,7 +299,7 @@ impl EnvVars {
 
     /// Equivalent to the `--no-attestations` command-line argument in `uv publish`. If set,
     /// uv will skip uploading any collected attestations for the published distributions.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.12")]
     pub const UV_PUBLISH_NO_ATTESTATIONS: &'static str = "UV_PUBLISH_NO_ATTESTATIONS";
 
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
