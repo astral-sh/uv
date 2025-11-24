@@ -248,18 +248,7 @@ pub(crate) async fn install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
         ) {
             is_unspecified_upgrade = true;
-
-            if existing_installations.is_empty() {
-                writeln!(
-                    printer.stderr(),
-                    "No Python installations found.\n{}{} Use `{}` to install a Python version.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    "uv python install".green()
-                )?;
-                return Ok(ExitStatus::Success);
-            }
-
+            
             // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
@@ -315,13 +304,22 @@ pub(crate) async fn install(
 
     if requests.is_empty() {
         match upgrade {
+            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
+                writeln!(
+                    printer.stderr(),
+                    "No managed Python installations found\n\n{}{} Use `{}` to install a new Python version",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    "uv python install".green()
+                )?;
+            }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
                 writeln!(
                     printer.stderr(),
                     "No Python versions specified for upgrade; did you mean `uv python upgrade`?"
                 )?;
             }
-            PythonUpgrade::Disabled | PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {}
+            PythonUpgrade::Disabled => {}
         }
         return Ok(ExitStatus::Success);
     }
