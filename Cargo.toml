@@ -140,7 +140,7 @@ percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
-pubgrub = { version = "0.3.2" , package = "astral-pubgrub" }
+pubgrub = { version = "0.3.3" , package = "astral-pubgrub" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
