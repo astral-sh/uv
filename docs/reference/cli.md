@@ -5833,7 +5833,7 @@ uv publish [OPTIONS] [FILES]...
 <h3 class="cli-reference">Arguments</h3>
 
 <dl class="cli-reference"><dt id="uv-publish--files"><a href="#uv-publish--files"<code>FILES</code></a></dt><dd><p>Paths to the files to upload. Accepts glob expressions.</p>
-<p>Defaults to the <code>dist</code> directory. Selects only wheels and source distributions, while ignoring other files.</p>
+<p>Defaults to the <code>dist</code> directory. Selects only wheels and source distributions and their attestations, while ignoring other files.</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>

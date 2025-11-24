@@ -7040,8 +7040,8 @@ pub struct DisplayTreeArgs {
 pub struct PublishArgs {
     /// Paths to the files to upload. Accepts glob expressions.
     ///
-    /// Defaults to the `dist` directory. Selects only wheels and source distributions, while
-    /// ignoring other files.
+    /// Defaults to the `dist` directory. Selects only wheels and source distributions
+    /// and their attestations, while ignoring other files.
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
