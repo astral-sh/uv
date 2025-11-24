@@ -1,6 +1,6 @@
 # Versioning
 
-uv is widely used in production and is considered stable software.
+uv is widely used in production and is stable software.
 
 uv uses a custom versioning scheme in which the minor version number is bumped for breaking changes,
 and the patch version number is bumped for bug fixes, enhancements, and other non-breaking changes.
