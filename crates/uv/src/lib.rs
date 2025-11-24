@@ -1242,7 +1242,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     source.update_instructions().green(),
                     base = BASE_MESSAGE
                 ),
-                None => format!("{BASE_MESSAGE} Please use your package manager to update uv.")
+                None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
             };
 
             anyhow::bail!(message);
