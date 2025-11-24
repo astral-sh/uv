@@ -432,7 +432,7 @@ _contents_ are not copied into the image until the final `uv sync` command.
 If you're using a [workspace](../../concepts/projects/workspaces.md), then a couple changes are
 needed:
 
-- Copy all of the workspace member `pyproject.toml` files
+- Use `--frozen` instead of `--locked` during the initially sync.
 - Use the `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
 ```dockerfile title="Dockerfile"
@@ -445,9 +445,7 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=foo/pyproject.toml,target=foo/pyproject.toml \
-    --mount=type=bind,source=bar/pyproject.toml,target=bar/pyproject.toml \
-    uv sync --locked --no-install-workspace
+    uv sync --frozen --no-install-workspace
 
 ADD . /app
 
@@ -455,11 +453,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 ```
 
-!!! tip
-
-    Copying the workspace member `pyproject.toml` files is needed for `--locked` to assert that
-    the lockfile matches the contents of the `pyproject.toml`. The member `pyproject.toml` files can
-    be skipped by using `--frozen` during the workspace sync instead.
+uv cannot assert that the `uv.lock` file is up-to-date without each of the workspace member
+`pyproject.toml` files, so we use `--frozen` instead of `--locked` to skip the check during the
+initial sync. The next sync, after all the workspace members have been copied, can still use
+`--locked` and will validate that the lockfile is correct for all workspace members.
 
 ### Non-editable installs
 
