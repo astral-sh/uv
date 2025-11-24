@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.12
+
+Released on 2025-11-24.
+
+### Enhancements
+
+- Allow `--with-requirements` to load extensionless inline-metadata scripts ([#16744](https://github.com/astral-sh/uv/pull/16744))
+- Collect and upload PEP 740 attestations during `uv publish` ([#16731](https://github.com/astral-sh/uv/pull/16731))
+- Prevent `uv export` from overwriting `pyproject.toml` ([#16745](https://github.com/astral-sh/uv/pull/16745))
+
+### Documentation
+
+- Add a crates.io README for uv ([#16809](https://github.com/astral-sh/uv/pull/16809))
+- Add documentation for intermediate Docker layers in a workspace ([#16787](https://github.com/astral-sh/uv/pull/16787))
+- Enumerate workspace members in the uv crate README ([#16811](https://github.com/astral-sh/uv/pull/16811))
+- Fix documentation links for crates ([#16801](https://github.com/astral-sh/uv/pull/16801))
+- Generate a crates.io README for uv workspace members ([#16812](https://github.com/astral-sh/uv/pull/16812))
+- Move the "Export" guide to the projects concept section ([#16835](https://github.com/astral-sh/uv/pull/16835))
+- Update the cargo install recommendation to use crates ([#16800](https://github.com/astral-sh/uv/pull/16800))
+- Use the word "internal" in crate descriptions ([#16810](https://github.com/astral-sh/uv/pull/16810))
+
 ## 0.9.11
 
 Released on 2025-11-20.
