@@ -37,7 +37,7 @@ MEMBER_TEMPLATE = """
 
 # {name}
 
-This crate is an internal component of [uv](https://crates.io/uv). The Rust API exposed here is
+This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here is
 unstable and will have frequent breaking changes.
 
 See uv's [crate versioning
