@@ -2120,7 +2120,7 @@ pub struct OptionsWire {
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
 
-    // NOTE: These fields should be kept in-sync with `ToolUv` in
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     conflicts: Option<serde::de::IgnoredAny>,
