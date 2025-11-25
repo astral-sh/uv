@@ -13,7 +13,6 @@ considered public interface.
 The following uv workspace members are also available:
 
 - [uv-auth](https://crates.io/crates/uv-auth)
-- [uv-bench](https://crates.io/crates/uv-bench)
 - [uv-bin-install](https://crates.io/crates/uv-bin-install)
 - [uv-build](https://crates.io/crates/uv-build)
 - [uv-build-backend](https://crates.io/crates/uv-build-backend)
@@ -25,7 +24,6 @@ The following uv workspace members are also available:
 - [uv-client](https://crates.io/crates/uv-client)
 - [uv-configuration](https://crates.io/crates/uv-configuration)
 - [uv-console](https://crates.io/crates/uv-console)
-- [uv-dev](https://crates.io/crates/uv-dev)
 - [uv-dirs](https://crates.io/crates/uv-dirs)
 - [uv-dispatch](https://crates.io/crates/uv-dispatch)
 - [uv-distribution](https://crates.io/crates/uv-distribution)

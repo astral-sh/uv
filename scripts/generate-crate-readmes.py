@@ -61,9 +61,15 @@ def main() -> None:
 
     workspace_members = []
     for workspace_member in content["workspace_members"]:
-        name = packages[workspace_member]["name"]
-        if name != "uv":
-            workspace_members.append(name)
+        package = packages[workspace_member]
+        name = package["name"]
+        # Skip the main uv crate
+        if name == "uv":
+            continue
+        # Skip crates with publish = false
+        if package.get("publish") == []:
+            continue
+        workspace_members.append(name)
 
     workspace_members.sort()
 
