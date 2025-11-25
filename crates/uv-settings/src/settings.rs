@@ -139,8 +139,11 @@ pub struct Options {
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub workspace: Option<serde::de::IgnoredAny>,
 
+    // NOTE: Unlike other fields above, `sources` is allowed in both `pyproject.toml`
+    // and `uv.toml` files to support local development overrides without modifying
+    // the committed configuration.
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub sources: Option<serde::de::IgnoredAny>,
+    pub sources: Option<uv_workspace::pyproject::ToolUvSources>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub dev_dependencies: Option<serde::de::IgnoredAny>,
@@ -2117,12 +2120,15 @@ pub struct OptionsWire {
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
 
-    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // NOTE: These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     conflicts: Option<serde::de::IgnoredAny>,
     workspace: Option<serde::de::IgnoredAny>,
-    sources: Option<serde::de::IgnoredAny>,
+    // NOTE: Unlike other fields above, `sources` is allowed in both `pyproject.toml`
+    // and `uv.toml` files to support local development overrides without modifying
+    // the committed configuration.
+    sources: Option<uv_workspace::pyproject::ToolUvSources>,
     managed: Option<serde::de::IgnoredAny>,
     r#package: Option<serde::de::IgnoredAny>,
     default_groups: Option<serde::de::IgnoredAny>,

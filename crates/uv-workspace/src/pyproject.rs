@@ -731,6 +731,12 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     }
 }
 
+impl FromIterator<(PackageName, Sources)> for ToolUvSources {
+    fn from_iter<T: IntoIterator<Item = (PackageName, Sources)>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
