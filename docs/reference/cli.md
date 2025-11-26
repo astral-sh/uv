@@ -507,7 +507,8 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--no-sources"><a href="#uv-run--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 <p>May also be set with the <code>UV_NO_SOURCES</code> environment variable.</p></dd><dt id="uv-run--no-sync"><a href="#uv-run--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment.</p>
 <p>Implies <code>--frozen</code>, as the project dependencies will be ignored (i.e., the lockfile will not be updated, since the environment will not be synced regardless).</p>
-<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-run--offline"><a href="#uv-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-run--no-wait"><a href="#uv-run--no-wait"><code>--no-wait</code></a></dt><dd><p>Run the command and exit without waiting for the spawned process to finish</p>
+<p>May also be set with the <code>UV_NO_WAIT</code> environment variable.</p></dd><dt id="uv-run--offline"><a href="#uv-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-run--only-dev"><a href="#uv-run--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>

@@ -1942,6 +1942,7 @@ async fn run_project(
                 args.env_file,
                 globals.preview,
                 args.max_recursion_depth,
+                args.no_wait,
             ))
             .await
         }
