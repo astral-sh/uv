@@ -589,6 +589,7 @@ pub struct EnvironmentOptions {
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
+    pub compile_bytecode_timeout: Option<Duration>,
     pub http_timeout: Duration,
     pub http_retries: u32,
     pub upload_http_timeout: Duration,
@@ -613,6 +614,10 @@ impl EnvironmentOptions {
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
+            compile_bytecode_timeout: parse_integer_environment_variable(
+                EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
+            )?
+            .map(Duration::from_secs),
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,

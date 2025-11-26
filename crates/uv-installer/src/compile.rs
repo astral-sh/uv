@@ -2,7 +2,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use std::{env, io, panic};
+use std::{io, panic};
 
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
@@ -73,6 +73,7 @@ pub enum CompileError {
 pub async fn compile_tree(
     dir: &Path,
     python_executable: &Path,
+    compile_bytecode_timeout: Option<Duration>,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
@@ -90,21 +91,16 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
-    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => match value.as_str() {
-            "0" => None,
-            _ => match value.parse::<u64>().map(Duration::from_secs) {
-                Ok(duration) => Some(duration),
-                Err(_) => {
-                    return Err(CompileError::EnvironmentError {
-                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
-                        message: format!("Expected an integer number of seconds, got \"{value}\""),
-                    });
-                }
-            },
-        },
-        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
+    let timeout = if let Some(timeout) = compile_bytecode_timeout {
+        if timeout.is_zero() {
+            None
+        } else {
+            Some(timeout)
+        }
+    } else {
+        Some(DEFAULT_COMPILE_TIMEOUT)
     };
+
     if let Some(duration) = timeout {
         debug!(
             "Using bytecode compilation timeout of {}s",
