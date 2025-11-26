@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.13
+
+Released on 2025-11-26.
+
+### Bug fixes
+
+- Revert "Allow `--with-requirements` to load extensionless inline-metadata scripts" to fix reading of requirements files from streams ([#16861](https://github.com/astral-sh/uv/pull/16861))
+- Validate URL wheel tags against `Requires-Python` and required environments ([#16824](https://github.com/astral-sh/uv/pull/16824))
+
+### Documentation
+
+- Drop unpublished crates from the uv crates.io README ([#16847](https://github.com/astral-sh/uv/pull/16847))
+- Fix the links to uv in crates.io member READMEs ([#16848](https://github.com/astral-sh/uv/pull/16848))
+
 ## 0.9.12
 
 Released on 2025-11-24.
