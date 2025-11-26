@@ -431,8 +431,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     # If we're publishing to pyx, we need to give the httpx client
     # access to an appropriate credential.
     if target == "pyx-token":
-        client.auth = httpx.BasicAuth(
-            username="__token__", password=os.environ["UV_TEST_PUBLISH_PYX_TOKEN"]
+        client.headers.update(
+            {"Authorization": f"Bearer {os.environ['UV_TEST_PUBLISH_PYX_TOKEN']}"}
         )
 
     project_name = all_targets[target].project_name
