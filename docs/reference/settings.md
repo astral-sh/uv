@@ -466,7 +466,7 @@ data files are included by placing them in the Python module instead of using da
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-data = { headers = "include/headers", scripts = "bin" }
+data = { "headers": "include/headers", "scripts": "bin" }
 ```
 
 ---
