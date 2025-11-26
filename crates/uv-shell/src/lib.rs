@@ -188,12 +188,11 @@ impl Shell {
                     if zshenv.is_file() {
                         return vec![zshenv];
                     }
-                } else {
-                    // If `ZDOTDIR` is _not_ set, and `~/.zshenv` exists, then we update that file.
-                    let zshenv = home_dir.join(".zshenv");
-                    if zshenv.is_file() {
-                        return vec![zshenv];
-                    }
+                }
+                // Whether `ZDOTDIR` is set or not, if `~/.zshenv` exists then we update that file.
+                let zshenv = home_dir.join(".zshenv");
+                if zshenv.is_file() {
+                    return vec![zshenv];
                 }
 
                 if let Some(zsh_dot_dir) = zsh_dot_dir.as_ref() {
