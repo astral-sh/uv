@@ -555,7 +555,7 @@ fn install_requirements_txt() -> Result<()> {
 
     context.assert_command("import flask").success();
 
-    // Install Jinja2 (which should already be installed, but shouldn't remove other packages).
+    // Install iniconfig (which shouldn't remove other packages).
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
@@ -573,6 +573,81 @@ fn install_requirements_txt() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` passed via `-r -` into a virtual environment.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("-")
+        .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` passed via `-r /dev/stdin` into a virtual environment.
+#[test]
+#[cfg(not(windows))]
+#[allow(clippy::disallowed_types)]
+fn install_from_dev_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("/dev/stdin")
+        .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();

@@ -65,7 +65,7 @@ impl RequirementsSource {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
         {
             Ok(Self::RequirementsTxt(path))
-        } else if path == Path::new("-") {
+        } else if path == Path::new("-") || path == Path::new("/dev/stdin") {
             // If the path is `-`, treat it as a requirements.txt file from stdin.
             Ok(Self::RequirementsTxt(path))
         } else if path.extension().is_none() {
