@@ -32,7 +32,7 @@ pub enum RequirementsSource {
 
 impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PathBuf`]. The file type is determined by the file
-    /// extension.
+    /// extension and, in some cases, the file contents.
     pub fn from_requirements_file(path: PathBuf) -> Result<Self> {
         if path.ends_with("pyproject.toml") {
             Ok(Self::PyprojectToml(path))
@@ -65,12 +65,13 @@ impl RequirementsSource {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
         {
             Ok(Self::RequirementsTxt(path))
-        } else if path == Path::new("-") || path == Path::new("/dev/stdin") {
-            // If the path is `-`, treat it as a requirements.txt file from stdin.
-            Ok(Self::RequirementsTxt(path))
-        } else if path.extension().is_none() {
+        } else if path.extension().is_none() && path.is_file() {
             // If we don't have an extension, attempt to detect a PEP 723 script, and
-            // fall back to `requirements.txt` format if not.
+            // fall back to `requirements.txt` format if not. (If the path isn't a file,
+            // we assume it's a readable file-like object in `requirements.txt` format, e.g.,
+            // `-r <( cat requirements.lock | grep -v nvidia | grep -v torch==)` or similar, in
+            // which case, reading the input would consume the stream, and only `requirements.txt`
+            // format is supported anyway.)
             match Pep723Script::read_sync(&path) {
                 Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
                     path, script,
