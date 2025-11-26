@@ -228,9 +228,9 @@ impl Combine for ExcludeNewer {
             if self.package.is_empty() {
                 self.package = other.package;
             } else {
-                // Merge package-specific timestamps, with self taking precedence
-                for (pkg, timestamp) in &other.package {
-                    self.package.entry(pkg.clone()).or_insert(*timestamp);
+                // Merge package-specific settings, with self taking precedence
+                for (pkg, setting) in &other.package {
+                    self.package.entry(pkg.clone()).or_insert(*setting);
                 }
             }
         }

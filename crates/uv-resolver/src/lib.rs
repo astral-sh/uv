@@ -2,6 +2,7 @@ pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::{
     ExcludeNewer, ExcludeNewerPackage, ExcludeNewerPackageEntry, ExcludeNewerTimestamp,
+    PackageExcludeNewer,
 };
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
