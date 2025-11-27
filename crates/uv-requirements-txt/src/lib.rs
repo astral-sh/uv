@@ -350,6 +350,16 @@ impl RequirementsTxt {
                     end,
                 } => {
                     let filename = expand_env_vars(&filename);
+
+                    // Skip remote constraints when in offline mode. This is primarily for reading
+                    // lockfiles for preferences, where constraints aren't used anyway. When doing
+                    // a real compile in offline mode, remote constraints would fail during resolution.
+                    if (filename.starts_with("http://") || filename.starts_with("https://"))
+                        && client_builder.is_offline()
+                    {
+                        continue;
+                    }
+
                     let sub_file =
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
