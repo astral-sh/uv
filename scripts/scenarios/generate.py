@@ -163,6 +163,10 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
     for scenario in data["scenarios"]:
         resolver_options = scenario["resolver_options"] or {}
+        # Avoid writing the empty `required-environments = []`
+        resolver_options["has_required_environments"] = bool(
+            resolver_options["required_environments"]
+        )
         if resolver_options.get("universal"):
             lock_scenarios.append(scenario)
         elif resolver_options.get("python") is not None:
