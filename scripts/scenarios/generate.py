@@ -77,7 +77,9 @@ except ImportError:
     exit(1)
 
 
-def main(scenarios: list[Path], snapshot_update: bool = True):
+def main(
+    scenarios: list[Path], templates: list[str] | None, snapshot_update: bool = True
+):
     # Fetch packse version
     packse_version = importlib.metadata.version("packse")
 
@@ -163,6 +165,10 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
     for scenario in data["scenarios"]:
         resolver_options = scenario["resolver_options"] or {}
+        # Avoid writing the empty `required-environments = []`
+        resolver_options["has_required_environments"] = bool(
+            resolver_options["required_environments"]
+        )
         if resolver_options.get("universal"):
             lock_scenarios.append(scenario)
         elif resolver_options.get("python") is not None:
@@ -170,11 +176,14 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         else:
             install_scenarios.append(scenario)
 
-    for template, tests, scenarios in [
-        (INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
-        (COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
-        (LOCK_TEMPLATE, LOCK_TESTS, lock_scenarios),
+    for template_name, template, tests, scenarios in [
+        ("install", INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
+        ("compile", COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
+        ("lock", LOCK_TEMPLATE, LOCK_TESTS, lock_scenarios),
     ]:
+        if templates and template_name not in templates:
+            continue
+
         data = {"scenarios": scenarios}
 
         ref = "HEAD" if packse_version == "0.0.0" else packse_version
@@ -292,6 +301,12 @@ if __name__ == "__main__":
         help="The scenario files to use",
     )
     parser.add_argument(
+        "--templates",
+        type=str,
+        nargs="*",
+        help="The templates to render. By default, all templates are rendered",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -320,4 +335,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=log_level, format="%(message)s")
 
-    main(args.scenarios, snapshot_update=not args.no_snapshot_update)
+    main(args.scenarios, args.templates, snapshot_update=not args.no_snapshot_update)
