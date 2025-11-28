@@ -110,6 +110,7 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         context.filters(),
         name,
         Some(common::WindowsFilters::Platform),
+        None,
     );
 
     let lock = context.read("uv.lock");

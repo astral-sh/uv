@@ -3,9 +3,10 @@
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
+use std::io::Write as _;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
 use uv_python::downloads::ManagedPythonDownloadList;
@@ -1457,6 +1458,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv auth credential-helper` command.
+    pub fn auth_credential_helper(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("credential-helper");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv auth token` command.
     pub fn auth_token(&self) -> Command {
         let mut command = Self::new_command();
@@ -1656,6 +1665,7 @@ impl TestContext {
             self.filters(),
             "diff_lock",
             Some(WindowsFilters::Platform),
+            None,
         );
         assert!(status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
@@ -1839,9 +1849,10 @@ pub fn run_and_format<T: AsRef<str>>(
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
+    input: Option<&str>,
 ) -> (String, Output) {
     let (snapshot, output, _) =
-        run_and_format_with_status(command, filters, function_name, windows_filters);
+        run_and_format_with_status(command, filters, function_name, windows_filters, input);
     (snapshot, output)
 }
 
@@ -1854,6 +1865,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
+    input: Option<&str>,
 ) -> (String, Output, ExitStatus) {
     let program = command
         .borrow_mut()
@@ -1873,10 +1885,30 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         );
     }
 
-    let output = command
-        .borrow_mut()
-        .output()
-        .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
+    let output = if let Some(input) = input {
+        let mut child = command
+            .borrow_mut()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
+        child
+            .stdin
+            .as_mut()
+            .expect("Failed to open stdin")
+            .write_all(input.as_bytes())
+            .expect("Failed to write to stdin");
+
+        child
+            .wait_with_output()
+            .unwrap_or_else(|err| panic!("Failed to read output from {program}: {err}"))
+    } else {
+        command
+            .borrow_mut()
+            .output()
+            .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
+    };
 
     eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     eprintln!(
@@ -2075,19 +2107,25 @@ macro_rules! uv_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform));
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform), None);
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, $spawnable:expr, input=$input:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform), Some($input));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), None);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), None, None);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Universal));
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Universal), None);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

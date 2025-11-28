@@ -1,3 +1,4 @@
+pub(crate) mod credential_helper;
 pub(crate) mod dir;
 pub(crate) mod login;
 pub(crate) mod logout;

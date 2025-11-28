@@ -1925,3 +1925,161 @@ fn native_auth_host_fallback() -> Result<()> {
 
     Ok(())
 }
+
+/// Test credential helper with basic auth credentials
+#[test]
+fn credential_helper_basic_auth() {
+    let context = TestContext::new("3.12").with_filter((
+        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
+        r#""Basic [REDACTED]""#.to_owned(),
+    ));
+
+    // Store credentials
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("testuser")
+        .arg("--password").arg("testpass"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://test.example.com/
+    "###);
+
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input=r#"{"uri":"https://test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+
+    ----- stderr -----
+    "#
+    );
+}
+
+/// Test credential helper with token credentials
+#[test]
+fn credential_helper_token() {
+    let context = TestContext::new("3.12").with_filter((
+        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
+        r#""Basic [REDACTED]""#.to_owned(),
+    ));
+
+    // Store token
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://api.example.com")
+        .arg("--token").arg("mytoken123"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://api.example.com/
+    "###);
+
+    // Test credential helper - tokens are stored as Basic auth with __token__ username
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input=r#"{"uri":"https://api.example.com/v1/endpoint"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+
+    ----- stderr -----
+    "#
+    );
+}
+
+/// Test credential helper with no credentials found
+#[test]
+fn credential_helper_no_credentials() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input=r#"{"uri":"https://unknown.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
+
+    ----- stderr -----
+    "#
+    );
+}
+
+/// Test credential helper with invalid JSON input
+#[test]
+fn credential_helper_invalid_json() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input="not json",
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse credential request as JSON
+      Caused by: expected ident at line 1 column 2
+    "
+    );
+}
+
+/// Test credential helper with invalid URI
+#[test]
+fn credential_helper_invalid_uri() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input=r#"{"uri":"not a url"}"#,
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid URI in credential request
+      Caused by: relative URL without a base
+    "
+    );
+}
+
+/// Test credential helper with username in URI
+#[test]
+fn credential_helper_username_in_uri() {
+    let context = TestContext::new("3.12").with_filter((
+        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
+        r#""Basic [REDACTED]""#.to_owned(),
+    ));
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    "###);
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+        input=r#"{"uri":"https://specificuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+
+    ----- stderr -----
+    "#
+    );
+}

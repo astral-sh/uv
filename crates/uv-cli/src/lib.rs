@@ -4934,6 +4934,14 @@ pub enum AuthCommand {
     /// Credentials are only stored in this directory when the plaintext backend is used, as
     /// opposed to the native backend, which uses the system keyring.
     Dir(AuthDirArgs),
+    /// Act as a credential helper for external tools.
+    ///
+    /// Implements the Bazel credential helper protocol to provide credentials
+    /// to external tools via JSON over stdin/stdout.
+    ///
+    /// This command is typically invoked by external tools, not directly by users.
+    #[command(hide = true)]
+    CredentialHelper(AuthCredentialHelperArgs),
 }
 
 #[derive(Args)]
@@ -6214,6 +6222,9 @@ pub struct AuthDirArgs {
     /// The domain or URL of the service to lookup.
     pub service: Option<Service>,
 }
+
+#[derive(Args)]
+pub struct AuthCredentialHelperArgs;
 
 #[derive(Args)]
 pub struct GenerateShellCompletionArgs {
