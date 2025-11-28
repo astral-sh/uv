@@ -162,11 +162,13 @@ ADD https://astral.sh/uv/0.9.13/install.sh /uv-installer.sh
 If you're using uv to manage your project, you can copy it into the image and install it:
 
 ```dockerfile title="Dockerfile"
+# Change the working directory to the `app` directory
+WORKDIR /app
+
 # Copy the project into the image
-ADD . /app
+COPY . .
 
 # Sync the project into a new environment, asserting the lockfile is up to date
-WORKDIR /app
 RUN uv sync --locked
 ```
 
@@ -412,7 +414,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project
 
 # Copy the project into the image
-ADD . /app
+COPY . .
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -447,7 +449,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-workspace
 
-ADD . /app
+COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
@@ -487,7 +489,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable
 
 # Copy the project into the intermediate image
-ADD . /app
+COPY . .
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
