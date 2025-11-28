@@ -744,7 +744,7 @@
           "default": false
         },
         "source-exclude": {
-          "description": "Glob expressions which files and directories to exclude from the source distribution.\n\nThese excludes are also applied to wheel builds to avoid source tree to wheel builds\nincluding more files than source tree to source distribution to wheel build.",
+          "description": "Glob expressions which files and directories to exclude from the source distribution.\n\nThese exclusions are also applied to wheels to ensure that a wheel built from a source tree\nis consistent with a wheel built from a source distribution.",
           "type": "array",
           "default": [],
           "items": {
