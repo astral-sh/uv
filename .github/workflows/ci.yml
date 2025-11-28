@@ -564,15 +564,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build --profile fast-build
+        run: cargo build --profile no-debug
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
-            ./target/fast-build/uv
-            ./target/fast-build/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-linux-aarch64:
@@ -591,15 +591,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build --profile fast-build
+        run: cargo build --profile no-debug
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
-            ./target/fast-build/uv
-            ./target/fast-build/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-linux-musl:
@@ -623,15 +623,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build --profile fast-build --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
-            ./target/x86_64-unknown-linux-musl/fast-build/uv
-            ./target/x86_64-unknown-linux-musl/fast-build/uvx
+            ./target/x86_64-unknown-linux-musl/no-debug/uv
+            ./target/x86_64-unknown-linux-musl/no-debug/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -649,15 +649,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: "Build"
-        run: cargo build --profile fast-build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
-            ./target/fast-build/uv
-            ./target/fast-build/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -675,15 +675,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: "Build"
-        run: cargo build --profile fast-build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/fast-build/uv
-            ./target/fast-build/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
@@ -711,15 +711,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile fast-build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/fast-build/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/fast-build/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
@@ -751,15 +751,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile fast-build --target aarch64-pc-windows-msvc
+        run: cargo build --profile no-debug --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/fast-build/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/fast-build/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-msrv:
@@ -784,10 +784,10 @@ jobs:
       - name: "Install mold"
         uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-      - run: cargo +${MSRV} build --profile fast-build
+      - run: cargo +${MSRV} build --profile no-debug
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - run: ./target/fast-build/uv --version
+      - run: ./target/no-debug/uv --version
 
   build-binary-freebsd:
     needs: determine_changes
@@ -808,7 +808,7 @@ jobs:
           chmod +x cross
           mv cross /usr/local/bin/cross
 
-          cross build --target x86_64-unknown-freebsd --profile fast-build
+          cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
         uses: acj/freebsd-firecracker-action@a5a3fc1709c5b5368141a5699f10259aca3cd965 # v0.6.0
@@ -822,8 +822,8 @@ jobs:
             cat <<EOF > $include_path
             target
             target/x86_64-unknown-freebsd
-            target/x86_64-unknown-freebsd/fast-build
-            target/x86_64-unknown-freebsd/fast-build/uv
+            target/x86_64-unknown-freebsd/no-debug
+            target/x86_64-unknown-freebsd/no-debug/uv
             EOF
 
             rsync -r -e "ssh" \
@@ -833,7 +833,7 @@ jobs:
               --exclude "*" \
               . firecracker:
           run-in-vm: |
-            mv target/x86_64-unknown-freebsd/fast-build/uv uv
+            mv target/x86_64-unknown-freebsd/no-debug/uv uv
             chmod +x uv
             ./uv --version
 
