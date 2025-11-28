@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_fs::Simplified;
@@ -209,6 +209,7 @@ impl GitRepository {
     }
 
     /// Verifies LFS artifacts have been initialized for a given `refname`.
+    #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
     fn lfs_fsck_objects(&self, refname: &str) -> bool {
         let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
             lfs.clone()
