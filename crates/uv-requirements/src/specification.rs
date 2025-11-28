@@ -45,7 +45,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
-use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
+use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_warnings::warn_user;
 
@@ -92,6 +92,16 @@ impl RequirementsSpecification {
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
+        Self::from_source_with_cache(source, client_builder, &mut SourceCache::default()).await
+    }
+
+    /// Read the requirements and constraints from a source, using a cache for file contents.
+    #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
+    pub async fn from_source_with_cache(
+        source: &RequirementsSource,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &mut SourceCache,
+    ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(requirement) => Self {
                 requirements: vec![UnresolvedRequirementSpecification::from(
@@ -114,7 +124,8 @@ impl RequirementsSpecification {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
-                let requirements_txt = RequirementsTxt::parse(path, &*CWD, client_builder).await?;
+                let requirements_txt =
+                    RequirementsTxt::parse_with_cache(path, &*CWD, client_builder, cache).await?;
 
                 if requirements_txt == RequirementsTxt::default() {
                     if path == Path::new("-") {
@@ -352,6 +363,7 @@ impl RequirementsSpecification {
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
+        let mut cache = SourceCache::default();
 
         // Disallow `pylock.toml` files as constraints.
         if let Some(pylock_toml) = constraints.iter().find_map(|source| {
@@ -489,7 +501,7 @@ impl RequirementsSpecification {
         // Resolve sources into specifications so we know their `source_tree`.
         let mut requirement_sources = Vec::new();
         for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             requirement_sources.push(source);
         }
 
@@ -540,7 +552,7 @@ impl RequirementsSpecification {
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         // Overrides are ignored.
         for source in constraints {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             for entry in source.requirements {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => {
@@ -578,7 +590,7 @@ impl RequirementsSpecification {
         // Read all overrides, treating both requirements _and_ overrides as overrides.
         // Constraints are ignored.
         for source in overrides {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
 
@@ -601,7 +613,7 @@ impl RequirementsSpecification {
 
         // Collect excludes.
         for source in excludes {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             for req_spec in source.requirements {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
