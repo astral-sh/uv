@@ -24,7 +24,8 @@
 
 [data-md-color-scheme="astral-light"] {
   --md-default-bg-color--dark: var(--black);
-  --md-default-fg-color--lightest: rgba(0, 0, 0, 0.14);
+  --md-default-bg-color--light: var(--white);
+  --md-default-fg-color--lightest: var(--white);
   --md-primary-fg-color: var(--galaxy);
   --md-typeset-a-color: var(--flare);
   --md-accent-fg-color: var(--cosmic);
@@ -32,10 +33,11 @@
 
 [data-md-color-scheme="astral-dark"] {
   --md-default-bg-color: var(--galaxy);
+  --md-default-bg-color--light: var(--galaxy);
   --md-default-fg-color: var(--white);
   --md-default-fg-color--light: var(--white);
   --md-default-fg-color--lighter: var(--white);
-  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.5);
+  --md-default-fg-color--lightest: var(--black);
   --md-primary-fg-color: var(--space);
   --md-primary-bg-color: var(--white);
   --md-accent-fg-color: var(--cosmic);
@@ -114,6 +116,44 @@ This is a consequence of the reduced nav spacing below. */
   box-shadow: none;
 }
 
+/* Branding text styling - displayed next to logo on larger screens */
+.md-header__branding {
+  display: none;
+  align-items: center;
+  margin-left: 0.25rem; /* Even tighter spacing */
+  white-space: nowrap;
+}
+
+.md-header__branding-text {
+  font-size: 0.8125rem; /* Slightly smaller */
+  font-weight: 400;
+  color: var(--md-default-fg-color);
+  white-space: nowrap;
+}
+
+.md-header__branding-name {
+  font-weight: 700; /* Bold for "uv" */
+  margin-right: 0.2rem;
+}
+
+/* Show branding text only on larger screens */
+@media screen and (min-width: 76.25em) {
+  .md-header__branding {
+    display: flex;
+  }
+}
+
+/* Fix border color for footer */
+.md-footer {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+/* Add a border to separate the meta footer from the other
+We do this because the background color is the same but the theme expects it to differ */
+.md-footer-meta {
+  border-top: .05rem solid rgba(0, 0, 0, 0.08);
+}
+
+
 /* Omits the nav title "uv" entirely unless on a small screen, in which case
 the nav title is needed for backwards navigation in the collapsible
 nav variant.
@@ -125,7 +165,6 @@ See https://github.com/astral-sh/uv/issues/5130 */
   }
 }
 
-
 /* Always take the full screen for content, require scrolling to see the footer
 This stops the size of the nav from jumping around when you visit a page without
 a lot of content (i.e., an overview page). We don't apply this to sma screens
@@ -135,54 +174,6 @@ because the nav is in a hamburger menu anyway
   .md-main {
     min-height: 100vh;
   }
-}
-
-/* Tweak the formatting of the primary nav on a large screen */
-@media screen and (min-width: 76.25em) {
-  .md-nav--primary .md-nav {
-    font-size: 0.75rem;
-  }
-  /* Remove the bold from the section headings, use a larger font instead */
-  .md-nav__item--section > .md-nav__link {
-      font-weight: normal;
-      font-size: 0.85rem;
-  }
-  /* Reducing spacing between nav items to fit more content
-  First, disable `nav__link` spacing then use `nav__item` to enforce margins this reduces inconsistencies in the spacing. */
-  .md-nav--primary .md-nav__link {
-    margin: 0;
-  }
-  .md-nav--primary .md-nav__item {
-    margin-top: 0.35em;
-  }
-  /* Use larger spacing for the sections headings */
-  .md-nav--primary .md-nav__item--section {
-    margin-bottom: 0.75em;
-    margin-top: 1em;
-  }
-  /* Decrease the font size of items in a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list {
-    font-size: 0.725rem;
-  }
-  /* Increase top margin on the first item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:first-of-type {
-    margin-top: 0.5em;
-  }
-  /* Increase bottom margin on the last item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:last-of-type {
-    margin-bottom: 0.575em;
-  }
-  /* Increase the size of the first nav item to match the sections
-  It has no children, so it is not considered a section */
-  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
-    font-size: 0.85rem;
-    margin-bottom: 0.75em;
-  }
-}
-
-/* Bold the active nav link for accessibility */
-.md-nav__link--active {
-  font-weight: bold;
 }
 
 /* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
@@ -224,6 +215,17 @@ h3 + p:has(> small.added-in) {
   color: var(--md-accent-fg-color) !important;
 }
 
+/* Remove underlines from heading links */
+.md-typeset h1 a,
+.md-typeset h2 a,
+.md-typeset h3 a,
+.md-typeset h4 a,
+.md-typeset h5 a,
+.md-typeset h6 a {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
 /* Omit the first breadcrumb item, which is the "Introduction" */
 .md-path__list > .md-path__item:first-of-type {
   display: none;
@@ -236,4 +238,458 @@ h3 + p:has(> small.added-in) {
 modifications */
 .md-source-file__fact {
   visibility: hidden;
+}
+
+/* Custom header navigation links styling */
+.md-header__nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Reduced space between buttons */
+  flex-shrink: 0;
+}
+
+/* Tweak the formatting of the primary nav on a large screen */
+@media screen and (min-width: 76.25em) {
+  /* Increase the font size of the section headings */
+  .md-nav__item--section > .md-nav__link {
+      font-size: 0.85rem;
+  }
+  /* Increase the size of the first nav item to match the sections
+  It has no children, so it is not considered a section */
+  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
+    font-size: 0.85rem;
+    margin-bottom: 0.25em;
+    font-weight: bold;
+  }
+}
+
+/* Bold the active nav link for accessibility */
+.md-nav--primary .md-nav__item .md-nav__link--active {
+  font-weight: bold;
+}
+
+/* Styling for the custom header */
+
+/* Discord icon-only button */
+.md-header__nav-link--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.75rem;
+  padding: 0;
+  background-color: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.md-header__nav-link--icon:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.md-header__nav-link--icon svg {
+  width: 16px;
+  height: 16px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.md-header__nav-link--icon:hover svg {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+/* GitHub icon-only button with colored background */
+.md-header__nav-link--github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.75rem;
+  padding: 0;
+  background-color: var(--flare);
+  border: none;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.md-header__nav-link--github:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.md-header__nav-link--github svg {
+  width: 16px;
+  height: 16px;
+  color: white;
+  flex-shrink: 0;
+}
+
+/* Responsive adjustments for navigation links */
+@media screen and (max-width: 59.99em) {
+  .md-header__nav-links {
+    gap: 0.75rem;
+  }
+}
+
+/* Adjust header layout for better spacing */
+.md-header__inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Make header title less prominent to emphasize navigation */
+.md-header__title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Improve search button visibility */
+.md-header__button.md-icon[for="__search"] {
+  margin-left: auto;
+}
+
+/* Better spacing for color palette toggle */
+.md-header__option {
+  margin-left: 0.4rem;
+}
+
+/* Ensure proper stacking of header elements */
+.md-header__source:first-of-type {
+  order: 1;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+
+/* Make search field more prominent and centered */
+@media screen and (min-width: 60em) {
+  .md-search__form {
+    background-color: var(--md-default-bg-color);
+    border: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+  }
+
+  .md-search__form:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    border-color: var(--md-primary-fg-color);
+  }
+
+  .md-search__form:focus-within {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    border-color: var(--md-accent-fg-color);
+  }
+
+  .md-search__input {
+    background-color: transparent;
+    font-size: 0.9rem;
+  }
+
+  .md-search__input::placeholder {
+    color: var(--md-default-fg-color--light);
+    opacity: 0.7;
+  }
+}
+
+/* Improve header responsiveness */
+@media screen and (max-width: 76.24em) {
+  .md-header__title {
+    flex-shrink: 1;
+  }
+}
+
+/* Dark mode adjustments for search */
+[data-md-color-scheme="astral-dark"] .md-search__form {
+  background-color: var(--md-code-bg-color);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-md-color-scheme="astral-dark"] .md-search__form:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-md-color-scheme="astral-dark"] .md-search__form:focus-within {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode adjustments for Discord icon button */
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--icon {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--icon:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--icon svg {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--icon:hover svg {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Dark mode GitHub button */
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--github {
+  background-color: var(--flare);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--github:hover {
+  opacity: 0.85;
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__nav-link--github svg {
+  color: white;
+}
+
+/* Prominent centered search bar styling */
+.md-header__search-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: none;
+  order: 5;
+}
+
+.md-header__search-input {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  height: 1.875rem; /* 30px - even smaller */
+  padding: 0 0.75rem;
+  background-color: var(--md-default-bg-color);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.md-header__search-input:hover {
+  border-color: rgba(0, 0, 0, 0.12);
+  background-color: var(--md-default-bg-color);
+}
+
+.md-header__search-input svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.md-header__search-placeholder {
+  flex: 1;
+  font-size: 0.75rem; /* Even smaller - 12px */
+  line-height: 1.25rem;
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 400;
+}
+
+.md-header__search-shortcut {
+  flex-shrink: 0;
+  padding: 0 0.25rem;
+  font-size: 0.625rem; /* Much smaller - 10px */
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+  /* No background - cleaner look */
+}
+
+/* Hide the default search modal trigger and modal positioning */
+.md-search {
+  position: fixed;
+}
+
+/* Dark mode search bar */
+[data-md-color-scheme="astral-dark"] .md-header__search-input {
+  background-color: var(--md-code-bg-color);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__search-input:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__search-input svg {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__search-placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+[data-md-color-scheme="astral-dark"] .md-header__search-shortcut {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Header styling and border */
+.md-header {
+  box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.025); /* Very subtle shadow line */
+  border-bottom: none;
+  height: 3.5rem; /* Reduced header height */
+}
+
+.md-header nav {
+  height: 100%;
+}
+
+.md-header__inner {
+  height: 100%;
+  align-items: center;
+}
+
+[data-md-color-scheme="astral-dark"] .md-header {
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.025);
+}
+
+@media screen and (min-width: 76.25em) {
+
+  /* Hide the search modal's button that appears in the header */
+  .md-search__button {
+    display: none;
+  }
+
+  .md-header__inner {
+    gap: 0.5rem;
+    padding: 0 1.5rem;
+  }
+
+  /* Hide the default title when we have custom centered search */
+  .md-header__title {
+    display: none;
+  }
+
+  /* Hide default search button - we have our custom centered one */
+  .md-header__button.md-icon[for="__search"] {
+    display: none;
+  }
+
+  /* Logo and branding - compact and left */
+  .md-header__button.md-logo {
+    flex-shrink: 0;
+    order: 1;
+    margin-right: 0;
+  }
+
+  .md-header__branding {
+    flex-shrink: 0;
+    margin-left: 0.4rem;
+    order: 2;
+  }
+
+  /* Search container - centered with max width */
+  .md-header__search-container {
+    order: 5;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    margin: 0 2rem;
+  }
+
+  .md-header__search-input {
+    max-width: 500px; /* Limit search bar width */
+  }
+
+  /* Nav links aligned to the right */
+  .md-header__nav-links {
+    margin-left: auto;
+    order: 10;
+    flex-shrink: 0;
+  }
+
+  /* Position color palette toggle */
+  .md-header__option {
+    order: 11;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Hide GitHub source component - we have it as a text link */
+  .md-header__source {
+    display: none;
+  }
+}
+
+/* Mobile layout adjustments */
+@media screen and (max-width: 76.24em) {
+  .md-header__search-container {
+    display: none;
+  }
+
+  /* Remove gaps, we'll space these manually next */
+  .md-header__inner {
+    gap: 0rem;
+  }  
+
+  /* Nav links aligned to the right */
+  .md-header__nav-links {
+    margin-left: auto;
+    order: 10;
+    flex-shrink: 0;
+  }
+
+  /* Position color palette toggle */
+  .md-header__option {
+    order: 11;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Show and style mobile search button */
+  .md-header__button.md-icon[for="__search"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.75rem;
+    padding: 0;
+    background-color: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0.5rem;
+    order: 9;
+    margin-left: 0.5rem;
+    margin-right: 0.75rem; /* Extra spacing from Discord/GitHub */
+    transition: all 0.15s ease;
+  }
+
+  .md-header__button.md-icon[for="__search"]:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+
+  .md-header__button.md-icon[for="__search"] svg {
+    width: 16px;
+    height: 16px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .md-header__button.md-icon[for="__search"]:hover svg {
+    color: rgba(0, 0, 0, 0.85);
+  }
+
+  /* Dark mode mobile search button */
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"] {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"]:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"] svg {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  [data-md-color-scheme="astral-dark"] .md-header__button.md-icon[for="__search"]:hover svg {
+    color: rgba(255, 255, 255, 0.85);
+  }
 }
