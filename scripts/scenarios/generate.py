@@ -41,20 +41,16 @@ import re
 import subprocess
 import sys
 import textwrap
+from enum import StrEnum, auto
 from pathlib import Path
+from typing import Any
 
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
-INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
-COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
-LOCK_TEMPLATE = TEMPLATES / "lock.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "pylock.toml"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
-INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
-COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
-LOCK_TESTS = TESTS / "lock_scenarios.rs"
 TESTS_COMMON_MOD_RS = TESTS / "common" / "mod.rs"
 
 try:
@@ -77,8 +73,30 @@ except ImportError:
     exit(1)
 
 
+class TemplateKind(StrEnum):
+    install = auto()
+    compile = auto()
+    lock = auto()
+
+    def template_file(self) -> Path:
+        return TEMPLATES / f"{self.name}.mustache"
+
+    def test_file(self) -> Path:
+        match self.value:
+            case TemplateKind.install:
+                return TESTS / "pip_install_scenarios.rs"
+            case TemplateKind.compile:
+                return TESTS / "pip_compile_scenarios.rs"
+            case TemplateKind.lock:
+                return TESTS / "lock_scenarios.rs"
+            case _:
+                raise NotImplementedError()
+
+
 def main(
-    scenarios: list[Path], templates: list[str] | None, snapshot_update: bool = True
+    scenarios: list[Path],
+    template_kinds: list[TemplateKind],
+    snapshot_update: bool = True,
 ):
     # Fetch packse version
     packse_version = importlib.metadata.version("packse")
@@ -176,12 +194,13 @@ def main(
         else:
             install_scenarios.append(scenario)
 
-    for template_name, template, tests, scenarios in [
-        ("install", INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
-        ("compile", COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
-        ("lock", LOCK_TEMPLATE, LOCK_TESTS, lock_scenarios),
-    ]:
-        if templates and template_name not in templates:
+    template_kinds_and_scenarios: list[tuple[TemplateKind, list[Any]]] = [
+        (TemplateKind.install, install_scenarios),
+        (TemplateKind.compile, compile_scenarios),
+        (TemplateKind.lock, lock_scenarios),
+    ]
+    for template_kind, scenarios in template_kinds_and_scenarios:
+        if template_kind not in template_kinds:
             continue
 
         data = {"scenarios": scenarios}
@@ -206,16 +225,19 @@ def main(
         )
 
         # Render the template
-        logging.info(f"Rendering template {template.name}")
+        logging.info(f"Rendering template {template_kind.name}")
         output = chevron_blue.render(
-            template=template.read_text(), data=data, no_escape=True, warn=True
+            template=template_kind.template_file().read_text(),
+            data=data,
+            no_escape=True,
+            warn=True,
         )
 
         # Update the test files
         logging.info(
-            f"Updating test file at `{tests.relative_to(PROJECT_ROOT)}`...",
+            f"Updating test file at `{template_kind.test_file().relative_to(PROJECT_ROOT)}`...",
         )
-        with open(tests, "w") as test_file:
+        with open(template_kind.test_file(), "w") as test_file:
             test_file.write(output)
 
         # Format
@@ -223,7 +245,7 @@ def main(
             "Formatting test file...",
         )
         subprocess.check_call(
-            ["rustfmt", str(tests)],
+            ["rustfmt", template_kind.test_file()],
             stderr=subprocess.STDOUT,
             stdout=sys.stderr if debug else subprocess.DEVNULL,
         )
@@ -244,7 +266,7 @@ def main(
                 "--test",
                 "it",
                 "--",
-                tests.with_suffix("").name,
+                template_kind.test_file().with_suffix("").name,
             ]
             logging.debug(f"Running {' '.join(command)}")
             exit_code = subprocess.call(
@@ -302,7 +324,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--templates",
-        type=str,
+        type=TemplateKind,
+        choices=list(TemplateKind),
+        default=list(TemplateKind),
         nargs="*",
         help="The templates to render. By default, all templates are rendered",
     )
