@@ -5379,6 +5379,223 @@ fn add_requirements_file() -> Result<()> {
     Ok(())
 }
 
+/// Add a path dependency from a requirements file, respecting the lack of a `-e` flag.
+#[test]
+fn add_requirements_file_non_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Without `-e`, the package should not be listed as editable.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add a path dependency from a requirements file, respecting `-e` for editable.
+#[test]
+fn add_requirements_file_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // With `-e`, the package should be listed as editable.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child", editable = true }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add a path dependency from a requirements file, overriding the `-e` flag.
+#[test]
+fn add_requirements_file_editable_override() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // With `-e`, the package should be listed as editable, but the `--no-editable` flag should
+    // override it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace").arg("--no-editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child", editable = false }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Add requirements from a file with a marker flag.
 ///
 /// We test that:

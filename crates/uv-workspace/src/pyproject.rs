@@ -1697,9 +1697,25 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Self::Path {
-                editable,
+            RequirementSource::Path { install_path, .. } => Self::Path {
+                editable: None,
+                package: None,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
+                ),
+                marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable: is_editable,
+                ..
+            } => Self::Path {
+                editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
