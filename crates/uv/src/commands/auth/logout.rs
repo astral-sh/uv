@@ -27,7 +27,7 @@ pub(crate) async fn logout(
         return pyx_logout(&pyx_store, network_settings, printer, preview).await;
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
 
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
     let url = service.url().clone();

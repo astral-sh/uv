@@ -267,6 +267,13 @@ a link mode.
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
+### `UV_LOCK_TIMEOUT`
+<small class="added-in">added in `0.9.4`</small>
+
+The time in seconds uv waits for a file lock to become available.
+
+Defaults to 300s (5 min).
+
 ### `UV_LOG_CONTEXT`
 <small class="added-in">added in `0.6.4`</small>
 
