@@ -140,7 +140,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::RequirementsTxt(path) => {
+            RequirementsSource::Extensionless(path) => {
                 if path == Path::new("-") {
                     requirements_from_stdin = true;
                 }

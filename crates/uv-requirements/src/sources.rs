@@ -27,6 +27,9 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
+    /// An extensionless file that could be either a PEP 723 script or a requirements.txt file.
+    /// We detect the format when reading the file.
+    Extensionless(PathBuf),
 }
 
 impl RequirementsSource {
@@ -50,7 +53,6 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
-            // TODO(blueraft): Support scripts without an extension.
             Ok(Self::Pep723Script(path))
         } else if path
             .extension()
@@ -60,6 +62,17 @@ impl RequirementsSource {
                 "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
                 path.user_display(),
             ))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
+            || path.starts_with("http://")
+            || path.starts_with("https://")
+        {
+            Ok(Self::RequirementsTxt(path))
+        } else if path.extension().is_none() {
+            // If we don't have an extension, mark it as extensionless so we can detect
+            // the format later (either a PEP 723 script or a requirements.txt file).
+            Ok(Self::Extensionless(path))
         } else {
             Ok(Self::RequirementsTxt(path))
         }
@@ -302,7 +315,8 @@ impl std::fmt::Display for RequirementsSource {
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::EnvironmentYml(path) => {
+            | Self::EnvironmentYml(path)
+            | Self::Extensionless(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }

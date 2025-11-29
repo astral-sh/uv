@@ -138,6 +138,7 @@ pub(crate) async fn add(
             RequirementsSource::Package(_)
             | RequirementsSource::Editable(_)
             | RequirementsSource::RequirementsTxt(_)
+            | RequirementsSource::Extensionless(_)
             | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
