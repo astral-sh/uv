@@ -60,7 +60,7 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
-    PrereleaseMode, ResolutionMode, ResolverOutput,
+    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -1066,8 +1066,15 @@ impl Lock {
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, timestamp) in &exclude_newer.package {
-                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    for (name, setting) in &exclude_newer.package {
+                        match setting {
+                            PackageExcludeNewer::Timestamp(timestamp) => {
+                                package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                            }
+                            PackageExcludeNewer::Disabled => {
+                                package_table.insert(name.as_ref(), value(false));
+                            }
+                        }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
                 }
