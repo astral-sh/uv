@@ -6770,6 +6770,7 @@ dependencies = [
  "fs-err",
  "nix",
  "same-file",
+ "temp-env",
  "tempfile",
  "tracing",
  "uv-fs",
