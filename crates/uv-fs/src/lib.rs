@@ -825,7 +825,7 @@ impl LockedFile {
             return Ok(file);
         }
 
-        // Otherwise, create a temporary file with 777 permissions. We must set
+        // Otherwise, create a temporary file with 666 permissions. We must set
         // permissions _after_ creating the file, to override the `umask`.
         let file = if let Some(parent) = path.as_ref().parent() {
             NamedTempFile::new_in(parent)?
@@ -834,7 +834,7 @@ impl LockedFile {
         };
         if let Err(err) = file
             .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o777))
+            .set_permissions(std::fs::Permissions::from_mode(0o666))
         {
             warn!("Failed to set permissions on temporary file: {err}");
         }
