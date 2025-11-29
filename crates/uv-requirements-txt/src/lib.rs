@@ -40,7 +40,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
@@ -65,6 +65,9 @@ use crate::shquote::unquote;
 
 mod requirement;
 mod shquote;
+
+/// A cache of file contents, keyed by path, to avoid re-reading files from disk.
+pub type SourceCache = FxHashMap<PathBuf, String>;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -172,11 +175,38 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self, RequirementsTxtFileError> {
+        Self::parse_with_cache(
+            requirements_txt,
+            working_dir,
+            client_builder,
+            &mut SourceCache::default(),
+        )
+        .await
+    }
+
+    /// Parse a `requirements.txt` file, using the given cache to avoid re-reading files from disk.
+    #[instrument(
+        skip_all,
+        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
+    )]
+    pub async fn parse_with_cache(
+        requirements_txt: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &mut SourceCache,
+    ) -> Result<Self, RequirementsTxtFileError> {
         let mut visited = VisitedFiles::Requirements {
             requirements: &mut FxHashSet::default(),
             constraints: &mut FxHashSet::default(),
         };
-        Self::parse_impl(requirements_txt, working_dir, client_builder, &mut visited).await
+        Self::parse_impl(
+            requirements_txt,
+            working_dir,
+            client_builder,
+            &mut visited,
+            cache,
+        )
+        .await
     }
 
     /// See module level documentation
@@ -189,49 +219,64 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
         visited: &mut VisitedFiles<'_>,
+        cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
-        let content =
-            if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://") {
-                #[cfg(not(feature = "http"))]
-                {
+        let content = if let Some(content) = cache.get(requirements_txt) {
+            // Use cached content if available.
+            content.clone()
+        } else if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://")
+        {
+            #[cfg(not(feature = "http"))]
+            {
+                return Err(RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Remote file not supported without `http` feature",
+                    )),
+                });
+            }
+
+            #[cfg(feature = "http")]
+            {
+                // Avoid constructing a client if network is disabled already
+                if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "Remote file not supported without `http` feature",
+                            format!(
+                                "Network connectivity is disabled, but a remote requirements file was requested: {}",
+                                requirements_txt.display()
+                            ),
                         )),
                     });
                 }
 
-                #[cfg(feature = "http")]
-                {
-                    // Avoid constructing a client if network is disabled already
-                    if client_builder.is_offline() {
-                        return Err(RequirementsTxtFileError {
-                            file: requirements_txt.to_path_buf(),
-                            error: RequirementsTxtParserError::Io(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
-                            )),
-                        });
-                    }
-
-                    let client = client_builder.build();
-                    read_url_to_string(&requirements_txt, client).await
-                }
-            } else {
-                // Ex) `file:///home/ferris/project/requirements.txt`
-                uv_fs::read_to_string_transcode(&requirements_txt)
+                let client = client_builder.build();
+                let content = read_url_to_string(&requirements_txt, client)
                     .await
-                    .map_err(RequirementsTxtParserError::Io)
+                    .map_err(|err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: err,
+                    })?;
+                cache.insert(requirements_txt.to_path_buf(), content.clone());
+                content
             }
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.to_path_buf(),
-                error: err,
-            })?;
+        } else {
+            // Ex) `file:///home/ferris/project/requirements.txt`
+            let content = uv_fs::read_to_string_transcode(&requirements_txt)
+                .await
+                .map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::Io(err),
+                })?;
+            cache.insert(requirements_txt.to_path_buf(), content.clone());
+            content
+        };
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(
@@ -241,6 +286,7 @@ impl RequirementsTxt {
             client_builder,
             requirements_txt,
             visited,
+            cache,
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
@@ -264,6 +310,7 @@ impl RequirementsTxt {
         client_builder: &BaseClientBuilder<'_>,
         requirements_txt: &Path,
         visited: &mut VisitedFiles<'_>,
+        cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -318,6 +365,7 @@ impl RequirementsTxt {
                         working_dir,
                         client_builder,
                         visited,
+                        cache,
                     ))
                     .await
                     .map_err(|err| RequirementsTxtParserError::Subfile {
@@ -394,6 +442,7 @@ impl RequirementsTxt {
                         working_dir,
                         client_builder,
                         &mut visited,
+                        cache,
                     ))
                     .await
                     .map_err(|err| RequirementsTxtParserError::Subfile {
