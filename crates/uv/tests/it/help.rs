@@ -66,7 +66,7 @@ fn help() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -147,7 +147,7 @@ fn help_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -227,7 +227,7 @@ fn help_short_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -416,7 +416,7 @@ fn help_subcommand() {
               
               See `--project` to only change the project root directory.
               
-              [env: UV_WORKING_DIRECTORY=]
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -689,7 +689,7 @@ fn help_subsubcommand() {
               
               See `--project` to only change the project root directory.
               
-              [env: UV_WORKING_DIRECTORY=]
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
               Run the command within the given project directory.
@@ -781,7 +781,7 @@ fn help_flag_subcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -862,7 +862,7 @@ fn help_flag_subsubcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -1024,7 +1024,7 @@ fn help_with_global_option() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
@@ -1147,7 +1147,7 @@ fn help_with_no_pager() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
