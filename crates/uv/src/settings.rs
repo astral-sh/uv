@@ -139,13 +139,48 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                flag(args.preview, args.no_preview, "preview")
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: {
+                // Start with command line features (highest precedence)
+                let mut all_preview_features = args.preview_features.clone();
+
+                // Add environment variable features if no command line features were specified
+                if all_preview_features.is_empty() {
+                    if let Ok(env_value) = std::env::var(EnvVars::UV_PREVIEW_FEATURES) {
+                        let env_features = env_value
+                            .split(',')
+                            .map(|feature| feature.trim().to_string())
+                            .filter(|feature| !feature.is_empty())
+                            .collect::<Vec<_>>();
+
+                        for feature in env_features {
+                            if let Ok(parsed) = feature.parse::<uv_preview::PreviewFeatures>() {
+                                all_preview_features.push(parsed);
+                            }
+                        }
+                    }
+                }
+
+                // Add configuration features if no command line or environment features were specified
+                if all_preview_features.is_empty() {
+                    if let Some(config_features) =
+                        workspace.and_then(|workspace| workspace.globals.preview_features.as_ref())
+                    {
+                        for feature in config_features {
+                            if let Ok(parsed) = feature.parse::<uv_preview::PreviewFeatures>() {
+                                all_preview_features.push(parsed);
+                            }
+                        }
+                    }
+                }
+
+                Preview::from_args(
+                    flag(args.preview, args.no_preview, "preview")
+                        .combine(workspace.and_then(|workspace| workspace.globals.preview))
+                        .unwrap_or(false),
+                    args.no_preview,
+                    &all_preview_features,
+                )
+            },
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
