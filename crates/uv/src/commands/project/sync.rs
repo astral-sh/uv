@@ -1,7 +1,6 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
@@ -18,9 +17,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
-};
+use uv_distribution_types::{Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -40,6 +37,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
+use crate::commands::project::apply_editable_mode;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
@@ -266,6 +264,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
+                editable,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -856,70 +855,6 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 
         !dist.r#virtual.unwrap_or(false)
     })
-}
-
-/// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
-    match editable {
-        // No modifications are necessary for editable mode; retain any editable distributions.
-        None => resolution,
-
-        // Filter out any non-editable distributions.
-        Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(false),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(true),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-
-        // Filter out any editable distributions.
-        Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(true),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(false),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-    }
 }
 
 /// Extract any credentials that are defined on the workspace dependencies themselves. While we
