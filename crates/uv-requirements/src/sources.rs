@@ -65,8 +65,6 @@ impl RequirementsSource {
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
-            || path.starts_with("http://")
-            || path.starts_with("https://")
         {
             Ok(Self::RequirementsTxt(path))
         } else if path.extension().is_none() {
