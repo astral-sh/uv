@@ -59,7 +59,7 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
     PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
@@ -1059,8 +1059,12 @@ impl Lock {
             let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
-                if let Some(global) = exclude_newer.global {
+                if let Some(global) = &exclude_newer.global {
                     options_table.insert("exclude-newer", value(global.to_string()));
+                    // Serialize the original span if present
+                    if let Some(span) = global.span() {
+                        options_table.insert("exclude-newer-span", value(span.to_string()));
+                    }
                 }
 
                 // Serialize package-specific exclusions as a separate field
@@ -2130,7 +2134,7 @@ struct ResolverOptions {
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
 }
