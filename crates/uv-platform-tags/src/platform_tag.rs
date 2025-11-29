@@ -148,6 +148,18 @@ impl PlatformTag {
         matches!(self, Self::Macos { .. })
     }
 
+    /// Return the major and minor version associated with the tag, if present.
+    pub fn major_minor(&self) -> Option<(u16, u16)> {
+        match self {
+            Self::Manylinux { major, minor, .. }
+            | Self::Musllinux { major, minor, .. }
+            | Self::Macos { major, minor, .. }
+            | Self::Pyodide { major, minor }
+            | Self::Ios { major, minor, .. } => Some((*major, *minor)),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if the platform is Android-only.
     pub fn is_android(&self) -> bool {
         matches!(self, Self::Android { .. })
