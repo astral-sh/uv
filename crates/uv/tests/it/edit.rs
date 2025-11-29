@@ -16,7 +16,7 @@ use insta::assert_snapshot;
 use std::path::Path;
 use url::Url;
 use uv_fs::Simplified;
-use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
 use uv_static::EnvVars;
 
@@ -7149,6 +7149,83 @@ fn add_extensionless_script() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+/// Add from a remote PEP 723 script via `-r`.
+#[tokio::test]
+async fn add_requirements_from_remote_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a mock server that serves a PEP 723 script.
+    let server = MockServer::start().await;
+    let script_content = indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "anyio>=4",
+        #     "rich",
+        # ]
+        # ///
+        import anyio
+        from rich.pretty import pprint
+        pprint("Hello, world!")
+    "#};
+
+    Mock::given(method("GET"))
+        .and(path("/script"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(script_content))
+        .mount(&server)
+        .await;
+
+    let script_url = format!("{}/script", server.uri());
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg(&script_url), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + pygments==2.17.2
+     + rich==13.7.1
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4",
+            "rich>=13.7.1",
+        ]
+        "###
+        );
+    });
+
     Ok(())
 }
 
