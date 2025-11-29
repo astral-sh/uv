@@ -37,6 +37,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
+use uv_git::{GIT_LFS, GitError};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -1561,6 +1562,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            if GIT_LFS.is_err() {
+                return Err(Error::MissingGitLfsArtifacts(
+                    resource.url.to_url(),
+                    GitError::GitLfsNotFound,
+                ));
+            }
+            return Err(Error::MissingGitLfsArtifacts(
+                resource.url.to_url(),
+                GitError::GitLfsNotConfigured,
+            ));
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1759,6 +1774,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.to_path_buf(),
                 ));
             }
+        }
+
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            if GIT_LFS.is_err() {
+                return Err(Error::MissingGitLfsArtifacts(
+                    resource.url.to_url(),
+                    GitError::GitLfsNotFound,
+                ));
+            }
+            return Err(Error::MissingGitLfsArtifacts(
+                resource.url.to_url(),
+                GitError::GitLfsNotConfigured,
+            ));
         }
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");

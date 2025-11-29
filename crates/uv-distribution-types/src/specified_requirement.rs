@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
-use uv_git_types::GitReference;
+use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
 use uv_pypi_types::{Hashes, ParsedUrl};
@@ -75,6 +75,7 @@ impl UnresolvedRequirement {
         rev: Option<&str>,
         tag: Option<&str>,
         branch: Option<&str>,
+        lfs: Option<bool>,
         marker: Option<MarkerTree>,
     ) -> Self {
         #[allow(clippy::manual_map)]
@@ -107,6 +108,11 @@ impl UnresolvedRequirement {
                         } else {
                             git
                         };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
                         RequirementSource::Git {
                             git,
                             subdirectory,
@@ -128,6 +134,9 @@ impl UnresolvedRequirement {
                     ParsedUrl::Git(mut git) => {
                         if let Some(git_reference) = git_reference {
                             git.url = git.url.with_reference(git_reference);
+                        }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
                         }
                         VerbatimParsedUrl {
                             parsed_url: ParsedUrl::Git(git),

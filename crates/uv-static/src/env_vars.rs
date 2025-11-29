@@ -558,6 +558,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
+    /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
+
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
@@ -808,6 +813,16 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.6.4")]
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
+
+    /// Skip Smudge LFS Filter.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
+
+    /// Used in tests to set the user global git config location.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_CONFIG_GLOBAL: &'static str = "GIT_CONFIG_GLOBAL";
 
     /// Used in tests for better git isolation.
     ///
