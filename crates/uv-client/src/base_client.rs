@@ -986,6 +986,16 @@ pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
+        if let Err(err) = res {
+            if contains_ssl_error(err) {
+                trace!(
+                    "Cannot retry SSL certificate error for {}",
+                    err.url().map(Url::as_str).unwrap_or("unknown URL")
+                );
+                return Some(Retryable::Fatal);
+            }
+        }
+
         // Use the default strategy and check for additional transient error cases.
         let retryable = match DefaultRetryableStrategy.handle(res) {
             None | Some(Retryable::Fatal)
@@ -1043,7 +1053,9 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
         if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
             has_known_error = true;
             if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
-                if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+                if is_ssl_request_error(reqwest_err) {
+                    trace!("Cannot retry nested reqwest middleware SSL error");
+                } else if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                     trace!("Retrying nested reqwest middleware error");
                     return true;
                 }
@@ -1056,7 +1068,9 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             trace!("Cannot retry nested reqwest middleware error");
         } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
             has_known_error = true;
-            if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
+            if is_ssl_request_error(reqwest_err) {
+                trace!("Cannot retry nested reqwest SSL error");
+            } else if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Retrying nested reqwest error");
                 return true;
             }
@@ -1101,6 +1115,45 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
 
     if !has_known_error {
         trace!("Cannot retry error: Neither an IO error nor a reqwest error");
+    }
+    false
+}
+
+fn contains_ssl_error(err: &(dyn Error + 'static)) -> bool {
+    if let Some(middleware_err) = err.downcast_ref::<reqwest_middleware::Error>() {
+        if let reqwest_middleware::Error::Reqwest(reqwest_err) = middleware_err {
+            if is_ssl_request_error(reqwest_err) {
+                return true;
+            }
+        } else if let reqwest_middleware::Error::Middleware(inner) = middleware_err {
+            if contains_ssl_error(inner.as_ref()) {
+                return true;
+            }
+        }
+    }
+
+    let mut current: Option<&(dyn Error + 'static)> = Some(err);
+    while let Some(error) = current {
+        if let Some(reqwest_err) = error.downcast_ref::<reqwest::Error>() {
+            if is_ssl_request_error(reqwest_err) {
+                return true;
+            }
+        }
+        current = error.source();
+    }
+    false
+}
+
+fn is_ssl_request_error(reqwest_err: &reqwest::Error) -> bool {
+    if !reqwest_err.is_connect() {
+        return false;
+    }
+    let mut current = reqwest_err.source();
+    while let Some(err) = current {
+        if err.to_string().starts_with("invalid peer certificate: ") {
+            return true;
+        }
+        current = err.source();
     }
     false
 }
