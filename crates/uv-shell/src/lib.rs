@@ -343,7 +343,7 @@ fn backtick_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
+    use fs_err::File;
     use temp_env::with_vars;
     use tempfile::tempdir;
 
