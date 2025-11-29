@@ -30542,7 +30542,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
 
         [[tool.uv.index]]
