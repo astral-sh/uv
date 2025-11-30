@@ -1154,7 +1154,7 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
 ///
 /// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
 /// See <https://github.com/hyperium/h2/issues/862>
-fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
+pub fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     let mut cause = orig.source();
     while let Some(err) = cause {
         if let Some(concrete_err) = err.downcast_ref() {
