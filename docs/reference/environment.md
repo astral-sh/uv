@@ -701,10 +701,11 @@ created by `uv venv`.
 
 Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
 
-### `UV_WORKING_DIRECTORY`
-<small class="added-in">added in `0.9.1`</small>
+### `UV_WORKING_DIR`
+<small class="added-in">added in `next version`</small>
 
-Equivalent to the `--directory` command-line argument.
+Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
+v0.9.1) is also supported for backwards compatibility.
 
 
 

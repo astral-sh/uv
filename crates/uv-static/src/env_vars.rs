@@ -1124,7 +1124,13 @@ impl EnvVars {
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
+    /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
+    /// v0.9.1) is also supported for backwards compatibility.
+    #[attr_added_in("next version")]
+    pub const UV_WORKING_DIR: &'static str = "UV_WORKING_DIR";
+
     /// Equivalent to the `--directory` command-line argument.
+    #[attr_hidden]
     #[attr_added_in("0.9.1")]
     pub const UV_WORKING_DIRECTORY: &'static str = "UV_WORKING_DIRECTORY";
 

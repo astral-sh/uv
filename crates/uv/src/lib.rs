@@ -72,8 +72,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         uv_warnings::enable();
     }
 
+    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
+    let directory =
+        cli.top_level.global_args.directory.clone().or_else(|| {
+            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
+        });
+
     // Switch directories as early as possible.
-    if let Some(directory) = cli.top_level.global_args.directory.as_ref() {
+    if let Some(directory) = directory.as_ref() {
         std::env::set_current_dir(directory)?;
     }
 
