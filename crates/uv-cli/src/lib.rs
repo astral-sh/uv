@@ -5148,8 +5148,8 @@ pub struct ToolInstallArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
-    /// Install the target package in editable mode, such that changes in the package's source
-    /// directory are reflected without reinstallation.
+    /// Install the target package and workspace dependencies in editable mode, such that changes in their source
+    /// directories are reflected without reinstallation.
     #[arg(short, long)]
     pub editable: bool,
 

@@ -392,6 +392,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
+            None,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,
