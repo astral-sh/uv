@@ -2504,7 +2504,7 @@ fn install_git_private_https_pat_at_ref() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_and_username() {
-    let context = TestContext::new(DEFAULT_PYTHON_VERSION).with_git_credential_helper_blocked();
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION).with_unset_git_credential_helper();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 

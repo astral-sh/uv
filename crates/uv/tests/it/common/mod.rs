@@ -3,7 +3,6 @@
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
-use std::io::Write;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
@@ -13,10 +12,13 @@ use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
+use assert_fs::fixture::{
+    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
+};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::formatdoc;
+use indoc::indoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
@@ -565,16 +567,14 @@ impl TestContext {
     }
 
     // Unsets the git credential helper using temp home gitconfig
-    pub fn with_git_credential_helper_blocked(self) -> Self {
-        let path = self.home_dir.join(".gitconfig");
-        let mut file = fs_err::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .expect("Failed to open gitconfig file");
-
-        writeln!(file, "[credential]\n\thelper =\n")
-            .expect("Failed to write credential helper to gitconfig");
+    pub fn with_unset_git_credential_helper(self) -> Self {
+        let git_config = self.home_dir.child(".gitconfig");
+        git_config
+            .write_str(indoc! {r"
+                [credential]
+                    helper =
+            "})
+            .expect("Failed to unset git credential helper");
 
         self
     }
