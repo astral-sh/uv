@@ -3,12 +3,12 @@
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
+use std::io::Write;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::str::FromStr;
 use std::{env, io};
-use std::io::Write;
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
@@ -566,14 +566,13 @@ impl TestContext {
 
     // Unsets the git credential helper using temp home gitconfig
     pub fn with_git_credential_helper_blocked(self) -> Self {
-
         let path = self.home_dir.join(".gitconfig");
         let mut file = fs_err::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
             .expect("Failed to open gitconfig file");
-        
+
         writeln!(file, "[credential]\n\thelper =\n")
             .expect("Failed to write credential helper to gitconfig");
 
