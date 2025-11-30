@@ -334,7 +334,7 @@ async fn ssl_env_vars() -> Result<()> {
     // The server closes the connection during handshake, so the client sees a
     // generic connection error (e.g., "Connection refused"), not a TLS certificate error
     let Err(reqwest_middleware::Error::Middleware(_middleware_error)) = res else {
-        panic!("expected middleware error, got: {:?}", res);
+        panic!("expected middleware error, got: {res:?}");
     };
     // For mTLS, just verify we got an error - the server error below confirms it's TLS-related
 
