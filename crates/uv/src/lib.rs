@@ -199,7 +199,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.preview,
                 settings.network_settings.timeout,
                 settings.network_settings.retries,
-            );
+            )
+            .http_proxy(settings.network_settings.http_proxy)
+            .https_proxy(settings.network_settings.https_proxy)
+            .no_proxy(settings.network_settings.no_proxy);
             Some(
                 RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
                     .await?,
@@ -472,7 +475,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.preview,
         globals.network_settings.timeout,
         globals.network_settings.retries,
-    );
+    )
+    .http_proxy(globals.network_settings.http_proxy.clone())
+    .https_proxy(globals.network_settings.https_proxy.clone())
+    .no_proxy(globals.network_settings.no_proxy.clone());
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
