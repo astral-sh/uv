@@ -128,9 +128,9 @@ struct Pager {
 }
 
 impl PagerKind {
-    fn default_args(&self, prompt: String) -> Vec<String> {
+    fn default_args(&self) -> Vec<String> {
         match self {
-            Self::Less => vec!["-R".to_string(), "-P".to_string(), prompt],
+            Self::Less => vec!["-R".to_string()],
             Self::More => vec![],
             Self::Other(_) => vec![],
         }
@@ -180,7 +180,7 @@ impl FromStr for Pager {
 
 impl Pager {
     /// Display `contents` using the pager.
-    fn spawn(self, prompt: String, contents: impl Display) -> Result<()> {
+    fn spawn(self, heading: String, contents: impl Display) -> Result<()> {
         use std::io::Write;
 
         let command = self
@@ -190,7 +190,7 @@ impl Pager {
             .unwrap_or(OsString::from(self.kind.to_string()));
 
         let args = if self.args.is_empty() {
-            self.kind.default_args(prompt)
+            self.kind.default_args()
         } else {
             self.args
         };
@@ -206,7 +206,10 @@ impl Pager {
             .ok_or_else(|| anyhow!("Failed to take child process stdin"))?;
 
         let contents = contents.to_string();
-        let writer = std::thread::spawn(move || stdin.write_all(contents.as_bytes()));
+        let writer = std::thread::spawn(move || {
+            let _ = write!(stdin, "{heading}\n\n");
+            let _ = stdin.write_all(contents.as_bytes());
+        });
 
         drop(child.wait());
         drop(writer.join());
