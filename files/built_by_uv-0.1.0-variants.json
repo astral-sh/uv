@@ -19,6 +19,13 @@
       }
     }
   },
+  "static-properties": {
+    "mathlib": {
+      "kind": [
+        "very_fast_lib"
+      ]
+    }
+  },
   "providers": {
     "cpu_level": {
       "enable-if": "platform_machine == 'x86_64' or platform_machine == 'AMD64'",
@@ -26,6 +33,9 @@
       "requires": [
         "cpu_level_provider >= 0.1, <0.2"
       ]
+    },
+    "mathlib": {
+      "install-time": false
     }
   },
   "variants": {
@@ -34,12 +44,22 @@
         "x86_64_level": [
           "v1"
         ]
+      },
+      "mathlib": {
+        "kind": [
+          "very_fast_lib"
+        ]
       }
     },
     "cpu2": {
       "cpu_level": {
         "x86_64_level": [
           "v2"
+        ]
+      },
+      "mathlib": {
+        "kind": [
+          "very_fast_lib"
         ]
       }
     },
@@ -48,12 +68,22 @@
         "x86_64_level": [
           "v3"
         ]
+      },
+      "mathlib": {
+        "kind": [
+          "very_fast_lib"
+        ]
       }
     },
     "cpu4": {
       "cpu_level": {
         "x86_64_level": [
           "v4"
+        ]
+      },
+      "mathlib": {
+        "kind": [
+          "very_fast_lib"
         ]
       }
     }

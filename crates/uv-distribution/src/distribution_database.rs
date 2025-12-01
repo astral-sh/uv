@@ -628,7 +628,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let mut disabled_namespaces = FxHashSet::default();
         let mut resolved_namespaces: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
-                provider.plugin_use.unwrap_or_default().run_on_install()
+                provider.install_time.unwrap_or(true)
+                    && !provider.optional
                     && provider
                         .enable_if
                         .evaluate(marker_env, &MarkerVariantsUniversal, &[])
@@ -641,22 +642,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .try_collect()
             .await?;
 
-        // "Query" the non-install time providers, whose properties are all in the priorities
+        // "Query" the static providers
         for (namespace, provider) in &variants_json.providers {
             // Track disabled namespaces for consistency checks.
             if !provider
                 .enable_if
                 .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                || provider.optional
             {
                 disabled_namespaces.insert(namespace.clone());
                 continue;
             }
 
-            if provider.plugin_use.unwrap_or_default().run_on_install() {
+            if provider.install_time.unwrap_or(true) {
                 continue;
             }
 
-            let Some(features) = variants_json.default_priorities.property.get(namespace) else {
+            let Some(features) = variants_json
+                .static_properties
+                .as_ref()
+                .and_then(|static_properties| static_properties.get(namespace))
+            else {
                 warn!(
                     "Missing namespace {namespace} in default properties for {}=={}",
                     debug_filename.name, debug_filename.version

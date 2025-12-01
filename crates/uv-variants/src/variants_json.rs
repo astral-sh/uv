@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::Deref;
 
 use rustc_hash::FxHashMap;
@@ -13,7 +14,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 /// Mapping of namespaces in a variant
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Variant(FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>);
+pub struct Variant(BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>);
 
 impl MarkerVariantsEnvironment for Variant {
     fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
@@ -74,7 +75,7 @@ impl MarkerVariantsEnvironment for Variant {
 }
 
 impl Deref for Variant {
-    type Target = FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>;
+    type Target = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -87,11 +88,13 @@ impl Deref for Variant {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct VariantsJsonContent {
-    /// Default provider priorities
+    /// Default provider priorities.
     pub default_priorities: DefaultPriorities,
-    /// Mapping of namespaces to provider information
+    /// Mapping of namespaces to provider information.
     pub providers: FxHashMap<VariantNamespace, Provider>,
-    /// Mapping of variant labels to properties
+    /// The supported, ordered properties for `AoT` providers.
+    pub static_properties: Option<Variant>,
+    /// Mapping of variant labels to properties.
     pub variants: FxHashMap<VariantLabel, Variant>,
 }
 
@@ -123,10 +126,10 @@ pub struct DefaultPriorities {
     pub namespace: Vec<VariantNamespace>,
     /// Default feature priorities
     #[serde(default)]
-    pub feature: FxHashMap<VariantNamespace, Vec<VariantFeature>>,
+    pub feature: BTreeMap<VariantNamespace, Vec<VariantFeature>>,
     /// Default property priorities
     #[serde(default)]
-    pub property: FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>,
+    pub property: BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>,
 }
 
 /// A `namespace :: feature :: property` entry.
@@ -138,47 +141,30 @@ pub struct VariantPropertyType {
     pub value: VariantValue,
 }
 
-/// The stages at which a plugin is run.
-///
-/// Specifically captures whether it needs to be run at install time.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PluginUse {
-    /// The plugin is never run, it is only static.
-    None,
-    /// The plugin is run at build time, the install time evaluation is static.
-    Build,
-    /// The plugin is run both at build time and at install time.
-    #[default]
-    All,
-}
-
-impl PluginUse {
-    /// Whether to run this plugin on installation, `false` for plugins evaluated from
-    /// default priorities.
-    pub fn run_on_install(self) -> bool {
-        match self {
-            Self::All => true,
-            Self::None | Self::Build => false,
-        }
-    }
-}
-
 /// Provider information
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Provider {
-    /// Object reference to plugin class
-    pub plugin_api: Option<String>,
-    /// Environment marker specifying when to enable the plugin
+    /// Environment marker specifying when to enable the plugin.
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
         default
     )]
     pub enable_if: MarkerTree,
+    /// Whether this is an install-time provider. `false` means that it is an `AoT` provider instead.
+    ///
+    /// Defaults to `true`
+    pub install_time: Option<bool>,
+    /// Whether this is an optional provider.
+    ///
+    /// If it is `true`, the provider is not used unless the user opts in to it.
+    ///
+    /// Defaults to `false`
+    #[serde(default)]
+    pub optional: bool,
+    /// Object reference to plugin class
+    pub plugin_api: Option<String>,
     /// Dependency specifiers for how to install the plugin
     pub requires: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    /// Whether this plugin is run at install time.
-    pub plugin_use: Option<PluginUse>,
 }
