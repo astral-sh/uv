@@ -7,6 +7,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_configuration::Concurrency;
 use uv_preview::Preview;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_settings::EnvironmentOptions;
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -19,7 +20,7 @@ pub(crate) struct CompileArgs {
 
 pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
-
+    let environment = EnvironmentOptions::new()?;
     let interpreter = if let Some(python) = args.python {
         python
     } else {
@@ -37,6 +38,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let files = uv_installer::compile_tree(
         &fs_err::canonicalize(args.root)?,
         &interpreter,
+        environment.compile_bytecode_timeout,
         &Concurrency::default(),
         cache.root(),
     )

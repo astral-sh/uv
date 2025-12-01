@@ -1,6 +1,6 @@
 use std::path::PathBuf;
+use std::time::Duration;
 use std::{collections::BTreeMap, num::NonZeroUsize};
-
 use url::Url;
 
 use uv_configuration::{
@@ -113,6 +113,7 @@ impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);
 impl_combine_or!(bool);
+impl_combine_or!(Duration);
 
 impl<T> Combine for Option<Vec<T>> {
     /// Combine two vectors by extending the vector in `self` with the vector in `other`, if they're
