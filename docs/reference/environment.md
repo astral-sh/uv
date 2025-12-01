@@ -410,6 +410,11 @@ the environment.
 Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
 `requirements.txt` files.
 
+### `UV_NO_WAIT`
+<small class="added-in">added in `0.10.0`</small>
+
+
+
 ### `UV_NO_WRAP`
 <small class="added-in">added in `0.0.5`</small>
 
