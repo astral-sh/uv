@@ -270,7 +270,7 @@ jobs:
           # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
       - name: Attest
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2
+        uses: actions/attest-build-provenance@ca0aaa1889e301c8331fbdb338d9475431b75b13
         with:
           subject-path: |
             artifacts/*.json
