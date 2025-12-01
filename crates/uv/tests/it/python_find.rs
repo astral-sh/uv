@@ -1264,7 +1264,6 @@ fn python_find_freethreaded_313() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1303,7 +1302,6 @@ fn python_find_freethreaded_314() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1380,7 +1378,6 @@ fn python_find_prerelease_version_specifiers() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1479,7 +1476,6 @@ fn python_find_prerelease_with_patch_request() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();

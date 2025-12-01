@@ -511,17 +511,24 @@ impl TestContext {
 
     /// Use a shared global cache for Python downloads.
     #[must_use]
-    pub fn with_python_download_cache(mut self) -> Self {
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_CACHE_DIR.into(),
-            // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
-            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                uv_cache::Cache::from_settings(false, None)
-                    .unwrap()
-                    .bucket(CacheBucket::Python)
-                    .into()
-            }),
-        ));
+    fn with_python_download_cache(mut self) -> Self {
+        let key: OsString = EnvVars::UV_PYTHON_CACHE_DIR.into();
+        self.extra_env.retain(|(existing, _)| existing != &key);
+        let value = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
+            uv_cache::Cache::from_settings(false, None)
+                .unwrap()
+                .bucket(CacheBucket::Python)
+                .into()
+        });
+        self.extra_env.push((key, value));
+        self
+    }
+
+    /// Disable the shared global cache for Python downloads.
+    #[must_use]
+    pub fn without_python_download_cache(mut self) -> Self {
+        let key: OsString = EnvVars::UV_PYTHON_CACHE_DIR.into();
+        self.extra_env.retain(|(existing, _)| existing != &key);
         self
     }
 
@@ -538,6 +545,8 @@ impl TestContext {
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
         let managed = self.temp_dir.join("managed");
+
+        self = self.with_python_download_cache();
 
         self.extra_env.push((
             EnvVars::UV_PYTHON_BIN_DIR.into(),
