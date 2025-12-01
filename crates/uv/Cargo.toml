@@ -121,6 +121,11 @@ arrayvec = { workspace = true }
 self-replace = { workspace = true }
 windows = { workspace = true }
 
+[build-dependencies]
+uv-version = { workspace = true }
+
+embed-manifest = { workspace = true }
+
 [dev-dependencies]
 uv-publish = { workspace = true, features = ["test"] }
 
