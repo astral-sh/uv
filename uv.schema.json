@@ -2648,6 +2648,11 @@
           "const": "cu80"
         },
         {
+          "description": "Use the PyTorch index for ROCm 6.4.",
+          "type": "string",
+          "const": "rocm6.4"
+        },
+        {
           "description": "Use the PyTorch index for ROCm 6.3.",
           "type": "string",
           "const": "rocm6.3"

@@ -4301,6 +4301,7 @@ by <code>--python-version</code>.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.4</code>:  Use the PyTorch index for ROCm 6.4</li>
 <li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
 <li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
 <li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
@@ -4586,6 +4587,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.4</code>:  Use the PyTorch index for ROCm 6.4</li>
 <li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
 <li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
 <li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
@@ -4899,6 +4901,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.4</code>:  Use the PyTorch index for ROCm 6.4</li>
 <li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
 <li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
 <li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
