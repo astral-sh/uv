@@ -2501,14 +2501,10 @@ fn install_git_private_https_pat_at_ref() {
 
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
-///
-/// TODO(charlie): This test modifies the user's keyring.
-/// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
-#[ignore = "Modifies the user's keyring"]
 fn install_git_private_https_pat_and_username() {
-    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION).with_unset_git_credential_helper();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
@@ -2522,7 +2518,7 @@ fn install_git_private_https_pat_and_username() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");

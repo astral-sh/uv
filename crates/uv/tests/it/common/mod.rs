@@ -12,10 +12,13 @@ use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
+use assert_fs::fixture::{
+    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
+};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::formatdoc;
+use indoc::indoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
@@ -560,6 +563,19 @@ impl TestContext {
     /// Add a custom filter to the `TestContext`.
     pub fn with_filter(mut self, filter: (String, String)) -> Self {
         self.filters.push(filter);
+        self
+    }
+
+    // Unsets the git credential helper using temp home gitconfig
+    pub fn with_unset_git_credential_helper(self) -> Self {
+        let git_config = self.home_dir.child(".gitconfig");
+        git_config
+            .write_str(indoc! {r"
+                [credential]
+                    helper =
+            "})
+            .expect("Failed to unset git credential helper");
+
         self
     }
 
