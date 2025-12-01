@@ -46,7 +46,7 @@ def update_schemastore(schemastore: Path, *, root: Path) -> None:
     )
 
     # Run npm install
-    check_call(["npm", "install"], cwd=schemastore)
+    check_call(["npm", "ci", "--ignore-scripts"], cwd=schemastore)
 
     src = schemastore.joinpath("src")
 
