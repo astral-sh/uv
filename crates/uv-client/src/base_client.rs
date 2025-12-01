@@ -89,6 +89,8 @@ pub struct BaseClientBuilder<'a> {
     cross_origin_credential_policy: CrossOriginCredentialsPolicy,
     /// Optional custom reqwest client to use instead of creating a new one.
     custom_client: Option<Client>,
+    /// uv subcommand in which this client is being used
+    subcommand: Option<Vec<String>>,
 }
 
 /// The policy for handling HTTP redirects.
@@ -143,6 +145,7 @@ impl Default for BaseClientBuilder<'_> {
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
+            subcommand: None,
         }
     }
 }
@@ -276,6 +279,12 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn subcommand(mut self, subcommand: Vec<String>) -> Self {
+        self.subcommand = Some(subcommand);
+        self
+    }
+
     pub fn is_native_tls(&self) -> bool {
         self.native_tls
     }
@@ -358,7 +367,7 @@ impl<'a> BaseClientBuilder<'a> {
         let mut user_agent_string = format!("uv/{}", version());
 
         // Add linehaul metadata.
-        let linehaul = LineHaul::new(self.markers, self.platform);
+        let linehaul = LineHaul::new(self.markers, self.platform, self.subcommand.clone());
         if let Ok(output) = serde_json::to_string(&linehaul) {
             let _ = write!(user_agent_string, " {output}");
         }
