@@ -61,7 +61,7 @@ async fn https_proxy() -> Result<()> {
     // Start an HTTPS server to act as the target.
     let (target_server_handle, addr) =
         http_util::start_https_user_agent_server(&server_cert).await?;
-    let target_uri = format!("https://{}", addr);
+    let target_uri = format!("https://{addr}");
 
     // Start a TCP listener to act as the proxy.
     let proxy_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -91,7 +91,7 @@ async fn https_proxy() -> Result<()> {
         std::time::Duration::from_secs(30),
         3,
     )
-    .https_proxy(Some(format!("http://{}", proxy_addr)))
+    .https_proxy(Some(format!("http://{proxy_addr}")))
     .build();
 
     // Make a request to the target.
