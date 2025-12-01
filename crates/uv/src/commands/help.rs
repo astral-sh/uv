@@ -6,7 +6,7 @@ use std::{fmt::Display, fmt::Write};
 use anstream::{ColorChoice, stream::IsTerminal};
 use anyhow::{Result, anyhow};
 use clap::CommandFactory;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use which::which;
 
@@ -70,9 +70,9 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
         .render_long_help()
     };
 
-    let help_ansi = match anstream::Stdout::choice(&std::io::stdout()) {
-        ColorChoice::Always | ColorChoice::AlwaysAnsi => Either::Left(help.ansi()),
-        ColorChoice::Never => Either::Right(help.clone()),
+    let want_color = match anstream::Stdout::choice(&std::io::stdout()) {
+        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
+        ColorChoice::Never => false,
         // We just asked anstream for a choice, that can't be auto
         ColorChoice::Auto => unreachable!(),
     };
@@ -80,22 +80,19 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     let is_terminal = std::io::stdout().is_terminal();
     let should_page = !no_pager && !is_root && is_terminal;
 
-    if should_page {
-        if let Some(pager) = Pager::try_from_env() {
-            let content = if pager.supports_colors() {
-                help_ansi
-            } else {
-                Either::Right(help.clone())
-            };
-            pager.spawn(
-                format!("{}: {}", "uv help".bold(), query.join(" ")),
-                &content,
-            )?;
+    if should_page && let Some(pager) = Pager::try_from_env() {
+        let query = query.join(" ");
+        if want_color && pager.supports_colors() {
+            pager.spawn(format!("{}: {query}", "uv help".bold()), help.ansi())?;
         } else {
-            writeln!(printer.stdout(), "{help_ansi}")?;
+            pager.spawn(format!("uv help: {query}"), help)?;
         }
     } else {
-        writeln!(printer.stdout(), "{help_ansi}")?;
+        if want_color {
+            writeln!(printer.stdout(), "{}", help.ansi())?;
+        } else {
+            writeln!(printer.stdout(), "{help}")?;
+        }
     }
 
     Ok(ExitStatus::Success)
