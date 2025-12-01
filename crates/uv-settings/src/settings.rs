@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
@@ -311,6 +311,36 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// The URL of the HTTP proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            http-proxy = "http://proxy.example.com"
+        "#
+    )]
+    pub http_proxy: Option<ProxyUrl>,
+    /// The URL of the HTTPS proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            https-proxy = "https://proxy.example.com"
+        "#
+    )]
+    pub https_proxy: Option<ProxyUrl>,
+    /// A list of hosts to exclude from proxying.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        uv_toml_only = true,
+        example = r#"
+            no-proxy = ["localhost", "127.0.0.1"]
+        "#
+    )]
+    pub no_proxy: Option<Vec<String>>,
     /// Allow insecure connections to host.
     ///
     /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
@@ -2101,6 +2131,9 @@ pub struct OptionsWire {
     find_links: Option<Vec<PipFindLinks>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
@@ -2196,6 +2229,9 @@ impl From<OptionsWire> for Options {
             find_links,
             index_strategy,
             keyring_provider,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             resolution,
             prerelease,
@@ -2258,6 +2294,9 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                http_proxy,
+                https_proxy,
+                no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
             },
