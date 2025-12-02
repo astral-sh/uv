@@ -238,8 +238,12 @@ fn prune_redundant_modules_warn(names: &[String]) -> Vec<String> {
     let pruned = prune_redundant_modules(names.to_vec());
     if names.len() != pruned.len() {
         let mut pruned: HashSet<_> = pruned.iter().collect();
-        let ignored = names.iter().filter(|name| !pruned.remove(name)).join(" ");
-        warn_user_once!("Ignoring redundant module name(s): {ignored}");
+        let ignored: Vec<_> = names.iter().filter(|name| !pruned.remove(name)).collect();
+        let s = if ignored.len() == 1 { "" } else { "s" };
+        warn_user_once!(
+            "Ignoring redundant module name{s}: {}",
+            ignored.into_iter().join(" ")
+        );
     }
     pruned
 }

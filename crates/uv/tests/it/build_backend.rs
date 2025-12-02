@@ -1162,7 +1162,7 @@ fn warn_on_redundant_module_names() -> Result<()> {
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-    warning: Ignoring redundant module name(s): foo.bar foo foo.bar.baz foobar.baz
+    warning: Ignoring redundant module names: foo.bar foo foo.bar.baz foobar.baz
     Building wheel from source distribution (uv build backend)...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
