@@ -3,6 +3,36 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.15
+
+Released on 2025-12-02.
+
+### Python
+
+- Add CPython 3.14.1
+- Add CPython 3.13.10
+
+### Enhancements
+
+- Add ROCm 6.4 to `--torch-backend=auto` ([#16919](https://github.com/astral-sh/uv/pull/16919))
+- Add a Windows manifest to uv binaries ([#16894](https://github.com/astral-sh/uv/pull/16894))
+- Add LFS toggle to Git sources ([#16143](https://github.com/astral-sh/uv/pull/16143))
+- Cache source reads during resolution ([#16888](https://github.com/astral-sh/uv/pull/16888))
+- Include PEP 740 attestations when publishing uv to PyPI ([#16910](https://github.com/astral-sh/uv/pull/16910))
+- Allow reading requirements from scripts without an extension ([#16923](https://github.com/astral-sh/uv/pull/16923))
+- Allow reading requirements from scripts with HTTP(S) paths ([#16891](https://github.com/astral-sh/uv/pull/16891))
+
+### Bug fixes
+
+- Fix `uv-trampoline-builder` builds from crates.io by moving bundled executables ([#16922](https://github.com/astral-sh/uv/pull/16922))
+- Respect `NO_COLOR` and always show the command as a header when paging `uv help` output ([#16908](https://github.com/astral-sh/uv/pull/16908))
+- Use `0o666` permissions for flock files instead of `0o777` ([#16845](https://github.com/astral-sh/uv/pull/16845))
+- Revert "Bump `astral-tl` to v0.7.10 (#16887)" to narrow down a regression causing hangs in metadata retrieval ([#16938](https://github.com/astral-sh/uv/pull/16938))
+
+### Documentation
+
+- Link to the uv version in crates.io member READMEs ([#16939](https://github.com/astral-sh/uv/pull/16939))
+
 ## 0.9.14
 
 Released on 2025-12-01.
@@ -370,25 +400,25 @@ There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts
 ### Breaking changes
 
 - **Python 3.14 is now the default stable version**
-
+  
   The default Python version has changed from 3.13 to 3.14. This applies to Python version installation when no Python version is requested, e.g., `uv python install`. By default, uv will use the system Python version if present, so this may not cause changes to general use of uv. For example, if Python 3.13 is installed already, then `uv venv` will use that version. If no Python versions are installed on a machine and automatic downloads are enabled, uv will now use 3.14 instead of 3.13, e.g., for `uv venv` or `uvx python`. This change will not affect users who are using a `.python-version` file to pin to a specific Python version.
 - **Allow use of free-threaded variants in Python 3.14+ without explicit opt-in** ([#16142](https://github.com/astral-sh/uv/pull/16142))
-
+  
   Previously, free-threaded variants of Python were considered experimental and required explicit opt-in (i.e., with `3.14t`) for usage. Now uv will allow use of free-threaded Python 3.14+ interpreters without explicit selection. The GIL-enabled build of Python will still be preferred, e.g., when performing an installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes before a GIL-enabled build on the `PATH`, it will be used. This change does not apply to free-threaded Python 3.13 interpreters, which will continue to require opt-in.
 - **Use Python 3.14 stable Docker images** ([#16150](https://github.com/astral-sh/uv/pull/16150))
-
+  
   Previously, the Python 3.14 images had an `-rc` suffix, e.g., `python:3.14-rc-alpine` or
 `python:3.14-rc-trixie`. Now, the `-rc` suffix has been removed to match the stable
 [upstream images](https://hub.docker.com/_/python). The `-rc` images tags will no longer be
 updated. This change should not break existing workflows.
 - **Upgrade Alpine Docker image to Alpine 3.22**
-
+  
   Previously, the `uv:alpine` Docker image was based on Alpine 3.21. Now, this image is based on Alpine 3.22. The previous image can be recovered with `uv:alpine3.21` and will continue to be updated until a future release.
 - **Upgrade Debian Docker images to Debian 13 "Trixie"**
-
+  
   Previously, the `uv:debian` and `uv:debian-slim` Docker images were based on Debian 12 "Bookworm". Now, these images are based on Debian 13 "Trixie". The previous images can be recovered with `uv:bookworm` and `uv:bookworm-slim` and will continue to be updated until a future release.
 - **Fix incorrect output path when a trailing `/` is used in `uv build`** ([#15133](https://github.com/astral-sh/uv/pull/15133))
-
+  
   When using `uv build` in a workspace, the artifacts are intended to be written to a `dist` directory in the workspace root. A bug caused workspace root determination to fail when the input path included a trailing `/` causing the `dist` directory to be placed in the child directory. This bug has been fixed in this release. For example, `uv build child/` is used, the output path will now be in `<workspace root>/dist/` rather than `<workspace root>/child/dist/`.
 
 ### Python
@@ -444,3 +474,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
