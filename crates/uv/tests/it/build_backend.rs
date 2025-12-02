@@ -1154,6 +1154,7 @@ fn warn_on_redundant_module_names() -> Result<()> {
     bar_module.create_dir_all()?;
     bar_module.child("__init__.py").touch()?;
 
+    // Warnings should be printed when invoking `uv build`
     uv_snapshot!(context.filters(), context.build(), @r"
     success: true
     exit_code: 0
@@ -1162,6 +1163,21 @@ fn warn_on_redundant_module_names() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
     warning: Ignoring redundant module names: foo.bar foo foo.bar.baz foobar.baz
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    // But warnings shouldn't be printed in cases when the user might not
+    // control the thing being built. Sources being enabled is a workable proxy
+    // for this.
+    uv_snapshot!(context.filters(), context.build().arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
     Building wheel from source distribution (uv build backend)...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
