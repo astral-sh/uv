@@ -280,7 +280,7 @@ jobs:
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
   cargo-test-macos:
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: determine_changes
     # Only run macOS tests on main without opt-in
     if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
