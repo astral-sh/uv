@@ -56,12 +56,12 @@ cargo +nightly-2025-06-23 xwin build --release --target aarch64-pc-windows-msvc
 After building the trampolines for all supported architectures:
 
 ```shell
-cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-aarch64-console.exe
-cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-aarch64-gui.exe
-cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-x86_64-console.exe
-cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-x86_64-gui.exe
-cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-i686-console.exe
-cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-i686-gui.exe
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-aarch64-console.exe
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-aarch64-gui.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-x86_64-console.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-x86_64-gui.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-i686-console.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-i686-gui.exe
 ```
 
 ### Testing the trampolines
