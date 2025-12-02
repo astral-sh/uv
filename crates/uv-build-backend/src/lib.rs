@@ -233,7 +233,7 @@ fn prune_redundant_modules(mut names: Vec<String>) -> Vec<String> {
     pruned
 }
 
-/// Wraps `prune_redundant_modules` with a warning when modules are ignored
+/// Wraps [`prune_redundant_modules`] with a warning when modules are ignored
 fn prune_redundant_modules_warn(names: &[String]) -> Vec<String> {
     let pruned = prune_redundant_modules(names.to_vec());
     if names.len() != pruned.len() {
