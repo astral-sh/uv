@@ -560,7 +560,7 @@ impl EnvVars {
 
     /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
 
     /// Path to system-level configuration directory on Unix systems.
@@ -816,12 +816,12 @@ impl EnvVars {
 
     /// Skip Smudge LFS Filter.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.15")]
     pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
 
     /// Used in tests to set the user global git config location.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.15")]
     pub const GIT_CONFIG_GLOBAL: &'static str = "GIT_CONFIG_GLOBAL";
 
     /// Used in tests for better git isolation.
