@@ -27,8 +27,9 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
-static VARIANT_URL: LazyLock<DisplaySafeUrl> =
-    LazyLock::new(|| DisplaySafeUrl::parse("https://wheelnext.github.io/variants-index/v0.0.2").unwrap());
+static VARIANT_URL: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
+    DisplaySafeUrl::parse("https://wheelnext.github.io/variants-index/v0.0.3").unwrap()
+});
 
 static VARIANT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_extra_index_url(IndexUrl::Url(Arc::new(VerbatimUrl::from_url(
