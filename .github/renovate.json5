@@ -3,7 +3,7 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
