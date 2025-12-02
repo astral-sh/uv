@@ -27,9 +27,9 @@ use uv_cache_info::Timestamp;
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
-    compat::CompatArgs,
+    CredentialHelperCommand, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
+    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -52,9 +52,9 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
-    CacheSettings, GlobalSettings, NetworkSettings, PipCheckSettings, PipCompileSettings,
-    PipFreezeSettings, PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings,
-    PipUninstallSettings, PublishSettings,
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    PublishSettings,
 };
 
 pub(crate) mod child;
@@ -543,15 +543,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::CredentialHelper(_args),
-        }) => {
-            let network_settings = NetworkSettings::resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
-            commands::credential_helper(globals.preview, &network_settings, printer).await
-        }
+            command: AuthCommand::CredentialHelper(args),
+        }) => match args.command {
+            CredentialHelperCommand::Get => {
+                commands::credential_helper(globals.preview, &globals.network_settings, printer)
+                    .await
+            }
+        },
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,

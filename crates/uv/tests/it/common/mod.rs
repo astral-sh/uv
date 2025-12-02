@@ -1458,10 +1458,10 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv auth credential-helper` command.
+    /// Create a `uv auth credential-helper get` command.
     pub fn auth_credential_helper(&self) -> Command {
         let mut command = Self::new_command();
-        command.arg("auth").arg("credential-helper");
+        command.arg("auth").arg("credential-helper").arg("get");
         self.add_shared_options(&mut command, false);
         command
     }

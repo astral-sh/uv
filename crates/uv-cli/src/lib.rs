@@ -6224,7 +6224,16 @@ pub struct AuthDirArgs {
 }
 
 #[derive(Args)]
-pub struct AuthCredentialHelperArgs;
+pub struct AuthCredentialHelperArgs {
+    #[command(subcommand)]
+    pub command: CredentialHelperCommand,
+}
+
+#[derive(Subcommand)]
+pub enum CredentialHelperCommand {
+    /// Retrieve credentials for a URI
+    Get,
+}
 
 #[derive(Args)]
 pub struct GenerateShellCompletionArgs {
