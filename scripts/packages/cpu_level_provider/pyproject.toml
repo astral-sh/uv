@@ -1,0 +1,17 @@
+[project]
+name = "cpu-level-provider"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "konstin", email = "konstin@mailbox.org" }
+]
+requires-python = ">=3.13.2"
+dependencies = []
+
+[project.scripts]
+cpu-level-provider = "cpu_level_provider:main"
+
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8"]
+build-backend = "uv_build"

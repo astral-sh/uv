@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::path::PathBuf;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_types::VariantsJsonFilename;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
@@ -278,6 +279,10 @@ pub enum ErrorKind {
     #[error("Package `{0}` was not found in the local index")]
     LocalPackageNotFound(PackageName),
 
+    /// The `variants.json` file was not found in the local (file-based) index.
+    #[error("Variants JSON file `{0}` was not found in the local index")]
+    VariantsJsonNotFile(VariantsJsonFilename),
+
     /// The root was not found in the local (file-based) index.
     #[error("Local index not found at: `{}`", _0.display())]
     LocalIndexNotFound(PathBuf),
@@ -368,6 +373,9 @@ pub enum ErrorKind {
 
     #[error("Invalid cache control header: `{0}`")]
     InvalidCacheControl(String),
+
+    #[error("Invalid variants.json format: {0}")]
+    VariantsJsonFormat(DisplaySafeUrl, #[source] serde_json::Error),
 }
 
 impl ErrorKind {

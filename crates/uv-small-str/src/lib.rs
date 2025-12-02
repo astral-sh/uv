@@ -3,6 +3,8 @@ use std::cmp::PartialEq;
 use std::ops::Deref;
 
 /// An optimized type for immutable identifiers. Represented as an [`arcstr::ArcStr`] internally.
+///
+/// This type is one pointer wide.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmallString(arcstr::ArcStr);
 
@@ -157,5 +159,15 @@ impl schemars::JsonSchema for SmallString {
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         String::json_schema(generator)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_str_size() {
+        assert_eq!(size_of::<SmallString>(), size_of::<usize>());
     }
 }

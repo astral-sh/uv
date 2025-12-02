@@ -9,6 +9,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::prune;
+pub use variants::{PackageVariantCache, resolve_variants};
 
 mod archive;
 mod distribution_database;
@@ -18,3 +19,4 @@ mod index;
 mod metadata;
 mod reporter;
 mod source;
+mod variants;

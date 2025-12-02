@@ -2,11 +2,12 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
+
+use crate::IndexUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).
@@ -66,6 +67,25 @@ impl Display for VersionId {
             Self::NameVersion(name, version) => write!(f, "{name}-{version}"),
             Self::Url(url) => write!(f, "{url}"),
         }
+    }
+}
+
+/// A unique identifier for a package version at a specific index (e.g., `black==23.10.0 @ https://pypi.org/simple`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct GlobalVersionId {
+    version: VersionId,
+    index: IndexUrl,
+}
+
+impl GlobalVersionId {
+    pub fn new(version: VersionId, index: IndexUrl) -> Self {
+        Self { version, index }
+    }
+}
+
+impl Display for GlobalVersionId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} @ {}", self.version, self.index)
     }
 }
 

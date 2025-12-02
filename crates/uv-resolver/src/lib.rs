@@ -23,7 +23,7 @@ pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
-    ResolverProvider, VersionsResponse, WheelMetadataResult,
+    ResolverProvider, VariantProviderResult, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use version_map::VersionMap;

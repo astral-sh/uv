@@ -1,0 +1,19 @@
+[project]
+name = "cpu-user"
+version = "0.1.0"
+description = "A package using a dependency with variants"
+authors = [
+    { name = "konstin", email = "konstin@mailbox.org" }
+]
+requires-python = ">=3.13.2"
+dependencies = ["built_by_uv", "sniffio"]
+
+[[tool.uv.index]]
+name = "files"
+url = "../../../files"
+format = "flat"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.9"]
+build-backend = "uv_build"
