@@ -3,7 +3,7 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
@@ -11,7 +11,6 @@
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
-  prHourlyLimit: 10,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy

@@ -3530,6 +3530,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        lfs: None,
         python: None,
         python_platform: None,
         refresh: None(

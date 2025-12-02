@@ -56,6 +56,7 @@ pub(crate) async fn install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
+    lfs: Option<bool>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -148,6 +149,7 @@ pub(crate) async fn install(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?
             .pop()
@@ -274,6 +276,7 @@ pub(crate) async fn install(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -299,6 +302,7 @@ pub(crate) async fn install(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 

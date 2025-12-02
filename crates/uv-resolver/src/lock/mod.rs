@@ -33,7 +33,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
@@ -2758,8 +2758,12 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url =
-                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
+                let git_url = GitUrl::from_commit(
+                    url,
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                    git.lfs,
+                )?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = DisplaySafeUrl::from(ParsedGitUrl {
@@ -3621,6 +3625,7 @@ impl Source {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: git_dist.subdirectory.clone(),
+                lfs: git_dist.git.lfs(),
             },
         )
     }
@@ -3936,6 +3941,7 @@ struct GitSource {
     precise: GitOid,
     subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
+    lfs: GitLfs,
 }
 
 /// An error that occurs when a source string could not be parsed.
@@ -3951,15 +3957,18 @@ impl GitSource {
     fn from_url(url: &Url) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
+        let mut lfs = GitLfs::Disabled;
         for (key, val) in url.query_pairs() {
             match &*key {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
+                "lfs" => lfs = GitLfs::from(val.eq_ignore_ascii_case("true")),
                 _ => {}
             }
         }
+
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
@@ -3967,6 +3976,7 @@ impl GitSource {
             precise,
             subdirectory,
             kind,
+            lfs,
         })
     }
 }
@@ -4353,6 +4363,11 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     {
         url.query_pairs_mut()
             .append_pair("subdirectory", &subdirectory);
+    }
+
+    // Put lfs=true in the package source git url only when explicitly enabled.
+    if git_dist.git.lfs().enabled() {
+        url.query_pairs_mut().append_pair("lfs", "true");
     }
 
     // Put the requested reference in the query.
@@ -5105,7 +5120,12 @@ fn normalize_requirement(
                 repository.set_fragment(None);
                 repository.set_query(None);
 
-                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.

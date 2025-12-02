@@ -63,6 +63,8 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {
+        let lfs_requested = self.git.lfs().enabled();
+
         // Compute the canonical URL for the repository.
         let canonical = RepositoryUrl::new(self.git.repository());
 
@@ -85,24 +87,37 @@ impl GitSource {
 
             // If we have a locked revision, and we have a pre-existing database which has that
             // revision, then no update needs to happen.
+            // When requested, we also check if LFS artifacts have been fetched and validated.
             if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) {
+                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
                     debug!("Using existing Git source `{}`", self.git.repository());
-                    return Ok((maybe_db.unwrap(), rev, None));
+                    return Ok((
+                        maybe_db
+                            .unwrap()
+                            .with_lfs_ready(lfs_requested.then_some(true)),
+                        rev,
+                        None,
+                    ));
                 }
             }
 
             // If the revision isn't locked, but it looks like it might be an exact commit hash,
             // and we do have a pre-existing database, then check whether it is, in fact, a commit
             // hash. If so, treat it like it's locked.
+            // When requested, we also check if LFS artifacts have been fetched and validated.
             if let Some(db) = &maybe_db {
                 if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
                     if let Ok(oid) = maybe_commit.parse::<GitOid>() {
-                        if db.contains(oid) {
-                            // This reference is an exact commit. Treat it like it's
-                            // locked.
+                        if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
+                            // This reference is an exact commit. Treat it like it's locked.
                             debug!("Using existing Git source `{}`", self.git.repository());
-                            return Ok((maybe_db.unwrap(), oid, None));
+                            return Ok((
+                                maybe_db
+                                    .unwrap()
+                                    .with_lfs_ready(lfs_requested.then_some(true)),
+                                oid,
+                                None,
+                            ));
                         }
                     }
                 }
@@ -125,6 +140,7 @@ impl GitSource {
                 self.git.precise(),
                 self.disable_ssl,
                 self.offline,
+                lfs_requested,
             )?;
 
             Ok((db, actual_rev, task))
@@ -134,16 +150,25 @@ impl GitSource {
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
-        // Check out `actual_rev` from the database to a scoped location on the
-        // filesystem. This will use hard links and such to ideally make the
-        // checkout operation here pretty fast.
+        // Compute the canonical URL for the repository checkout.
+        let canonical = canonical.with_lfs(Some(lfs_requested));
+        // Recompute the checkout hash when Git LFS is enabled as we want
+        // to distinctly differentiate between LFS vs non-LFS source trees.
+        let ident = if lfs_requested {
+            cache_digest(&canonical)
+        } else {
+            ident
+        };
         let checkout_path = self
             .cache
             .join("checkouts")
             .join(&ident)
             .join(short_id.as_str());
 
-        db.copy_to(actual_rev, &checkout_path)?;
+        // Check out `actual_rev` from the database to a scoped location on the
+        // filesystem. This will use hard links and such to ideally make the
+        // checkout operation here pretty fast.
+        let checkout = db.copy_to(actual_rev, &checkout_path)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
@@ -155,6 +180,7 @@ impl GitSource {
         Ok(Fetch {
             git: self.git.with_precise(actual_rev),
             path: checkout_path,
+            lfs_ready: checkout.lfs_ready().unwrap_or(false),
         })
     }
 }
@@ -164,6 +190,8 @@ pub struct Fetch {
     git: GitUrl,
     /// The path to the checked out repository.
     path: PathBuf,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: bool,
 }
 
 impl Fetch {
@@ -173,6 +201,10 @@ impl Fetch {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn lfs_ready(&self) -> &bool {
+        &self.lfs_ready
     }
 
     pub fn into_git(self) -> GitUrl {
