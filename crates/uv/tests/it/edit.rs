@@ -63,7 +63,7 @@ fn add_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -213,8 +213,8 @@ fn add_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
-            "uv-public-pypackage",
+          "anyio==3.7.0",
+          "uv-public-pypackage",
         ]
 
         [tool.uv.sources]
@@ -345,7 +345,7 @@ fn add_git_private_source() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-private-pypackage",
+          "uv-private-pypackage",
         ]
 
         [tool.uv.sources]
@@ -443,7 +443,7 @@ fn add_git_private_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-private-pypackage @ git+https://***@github.com/astral-test/uv-private-pypackage",
+          "uv-private-pypackage @ git+https://***@github.com/astral-test/uv-private-pypackage",
         ]
         "#
         );
@@ -965,8 +965,8 @@ fn add_git_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
-            "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1",
+          "anyio==3.7.0",
+          "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1",
         ]
         "###
         );
@@ -1257,7 +1257,7 @@ fn add_unnamed() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-public-pypackage",
+          "uv-public-pypackage",
         ]
 
         [tool.uv.sources]
@@ -1355,7 +1355,7 @@ fn add_remove_dev() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -1562,7 +1562,7 @@ fn add_remove_optional() -> Result<()> {
 
         [project.optional-dependencies]
         io = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -1767,7 +1767,7 @@ fn add_remove_inline_optional() -> Result<()> {
         optional-dependencies = { io = [
             "anyio==3.7.0",
         ], types = [
-            "typing-extensions>=4.10.0",
+          "typing-extensions>=4.10.0",
         ] }
         "###
         );
@@ -1908,7 +1908,7 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child2",
+          "child2",
         ]
 
         [build-system]
@@ -2103,7 +2103,7 @@ fn update_existing_dev() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
 
         [dependency-groups]
@@ -2163,7 +2163,7 @@ fn add_existing_dev() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -2220,7 +2220,7 @@ fn update_existing_dev_group() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -2279,7 +2279,7 @@ fn add_existing_dev_group() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -2527,7 +2527,7 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child2",
+          "child2",
         ]
 
         [build-system]
@@ -2570,7 +2570,7 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child2",
+          "child2",
         ]
 
         [build-system]
@@ -2703,7 +2703,7 @@ fn add_workspace_path() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child",
+          "child",
         ]
 
         [tool.uv.workspace]
@@ -2829,12 +2829,12 @@ fn add_path_implicit_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child",
+          "child",
         ]
 
         [tool.uv.workspace]
         members = [
-            "packages/child",
+          "packages/child",
         ]
 
         [tool.uv.sources]
@@ -2956,7 +2956,7 @@ fn add_path_no_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "child",
+          "child",
         ]
 
         [tool.uv.sources]
@@ -3070,7 +3070,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "dependency",
+          "dependency",
         ]
 
         [tool.uv.sources]
@@ -3178,7 +3178,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security]==2.31.0",
+          "requests[security]==2.31.0",
         ]
         "###
         );
@@ -3210,8 +3210,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security]==2.31.0",
-            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
+          "requests[security]==2.31.0",
+          "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -3245,8 +3245,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security]==2.31.0",
-            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
+          "requests[security]==2.31.0",
+          "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -3448,8 +3448,8 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
-            "requests>=2.30; python_version >= '3.11'",
+          "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+          "requests>=2.30; python_version >= '3.11'",
         ]
         "###
         );
@@ -3479,8 +3479,8 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
-            "requests>=2.30; python_version >= '3.11'",
+          "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+          "requests>=2.30; python_version >= '3.11'",
         ]
         "###
         );
@@ -3510,9 +3510,9 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
-            "requests>=2.30; python_version >= '3.11'",
-            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+          "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+          "requests>=2.30; python_version >= '3.11'",
+          "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
         "###
         );
@@ -3543,10 +3543,10 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
-            "requests>=2.10 ; sys_platform == 'win32'",
-            "requests>=2.30; python_version >= '3.11'",
-            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+          "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+          "requests>=2.10 ; sys_platform == 'win32'",
+          "requests>=2.30; python_version >= '3.11'",
+          "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
         "###
         );
@@ -3600,7 +3600,7 @@ fn update_source_replace_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security] @ https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl"
+          "requests[security] @ https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl"
         ]
     "#})?;
 
@@ -3633,7 +3633,7 @@ fn update_source_replace_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security]",
+          "requests[security]",
         ]
 
         [tool.uv.sources]
@@ -3669,7 +3669,7 @@ fn update_source_replace_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security]",
+          "requests[security]",
         ]
 
         [tool.uv.sources]
@@ -3695,7 +3695,7 @@ fn add_non_normalized_source() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-public-pypackage"
+          "uv-public-pypackage"
         ]
 
         [tool.uv.sources]
@@ -3726,7 +3726,7 @@ fn add_non_normalized_source() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-public-pypackage",
+          "uv-public-pypackage",
         ]
 
         [tool.uv.sources]
@@ -3912,7 +3912,7 @@ fn remove_non_normalized_source() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "uv-public-pypackage"
+          "uv-public-pypackage"
         ]
 
         [tool.uv.sources]
@@ -4017,7 +4017,7 @@ fn add_inexact() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
         "###
         );
@@ -4196,7 +4196,9 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+        ]
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
@@ -4281,8 +4283,8 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
-            "requests==2.31.0",
+          "anyio==3.7.0",
+          "requests==2.31.0",
         ]
         "###
         );
@@ -4328,7 +4330,7 @@ fn add_frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -4379,7 +4381,7 @@ fn add_no_sync() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
         );
@@ -4574,7 +4576,7 @@ fn add_lower_bound() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
         "###
         );
@@ -4625,7 +4627,7 @@ fn add_lower_bound_existing() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio",
+          "anyio",
         ]
         "###
         );
@@ -4675,7 +4677,7 @@ fn add_lower_bound_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio",
+          "anyio",
         ]
         "###
         );
@@ -4728,7 +4730,7 @@ fn add_lower_bound_dev() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
         "###
         );
@@ -4781,7 +4783,7 @@ fn add_lower_bound_optional() -> Result<()> {
 
         [project.optional-dependencies]
         io = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
         "###
         );
@@ -4891,7 +4893,7 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "local-simple-a>=1.2.3",
+          "local-simple-a>=1.2.3",
         ]
 
         [[tool.uv.index]]
@@ -4996,7 +4998,7 @@ fn add_non_project() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
         "###
         );
@@ -5099,7 +5101,7 @@ fn add_virtual_empty() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "sortedcontainers>=2.4.0",
+          "sortedcontainers>=2.4.0",
         ]
         "#
         );
@@ -5150,8 +5152,8 @@ fn add_virtual_dependency_group() -> Result<()> {
         foo = ["sortedcontainers"]
         bar = ["iniconfig"]
         dev = [
-            "sniffio",
-            "sortedcontainers>=2.4.0",
+          "sniffio",
+          "sortedcontainers>=2.4.0",
         ]
         "#
         );
@@ -5182,11 +5184,11 @@ fn add_virtual_dependency_group() -> Result<()> {
         foo = ["sortedcontainers"]
         bar = ["iniconfig"]
         dev = [
-            "sniffio",
-            "sortedcontainers>=2.4.0",
+          "sniffio",
+          "sortedcontainers>=2.4.0",
         ]
         baz = [
-            "sortedcontainers>=2.4.0",
+          "sortedcontainers>=2.4.0",
         ]
         "#
         );
@@ -5482,7 +5484,7 @@ fn add_repeat() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
         "###
         );
@@ -5510,7 +5512,7 @@ fn add_repeat() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio>=4.3.0",
+          "anyio>=4.3.0",
         ]
         "###
         );
@@ -5571,8 +5573,8 @@ fn add_requirements_file() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio",
-            "flask==2.3.2",
+          "anyio",
+          "flask==2.3.2",
         ]
 
         [tool.uv.sources]
@@ -5881,9 +5883,9 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio>=2.31.0 ; python_full_version == '3.11.*'",
-        "iniconfig>=2 ; python_full_version == '3.11.*' and sys_platform != 'fantasy_os'",
-        "numpy>1.9 ; python_full_version == '3.11.*' and sys_platform == 'fantasy_os'",
+      "anyio>=2.31.0 ; python_full_version == '3.11.*'",
+      "iniconfig>=2 ; python_full_version == '3.11.*' and sys_platform != 'fantasy_os'",
+      "numpy>1.9 ; python_full_version == '3.11.*' and sys_platform == 'fantasy_os'",
     ]
     "#
     );
@@ -5916,9 +5918,9 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio>=2.31.0 ; python_full_version == '3.12.*'",
-        "iniconfig>=2 ; python_full_version == '3.12.*' and sys_platform != 'fantasy_os'",
-        "numpy>1.9 ; python_full_version == '3.12.*' and sys_platform == 'fantasy_os'",
+      "anyio>=2.31.0 ; python_full_version == '3.12.*'",
+      "iniconfig>=2 ; python_full_version == '3.12.*' and sys_platform != 'fantasy_os'",
+      "numpy>1.9 ; python_full_version == '3.12.*' and sys_platform == 'fantasy_os'",
     ]
     "#
     );
@@ -6016,8 +6018,8 @@ fn add_requirements_file_constraints() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio>=3.7.1",
-            "flask>=1.1.4",
+          "anyio>=3.7.1",
+          "flask>=1.1.4",
         ]
         "#
         );
@@ -6210,7 +6212,7 @@ fn add_group() -> Result<()> {
 
         [dependency-groups]
         test = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
     );
@@ -6241,8 +6243,8 @@ fn add_group() -> Result<()> {
 
         [dependency-groups]
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         "###
     );
@@ -6268,11 +6270,11 @@ fn add_group() -> Result<()> {
 
         [dependency-groups]
         second = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         "#
     );
@@ -6298,14 +6300,14 @@ fn add_group() -> Result<()> {
 
         [dependency-groups]
         alpha = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         second = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         "#
     );
@@ -6477,12 +6479,12 @@ fn add_group_before_commented_groups() -> Result<()> {
         [dependency-groups]
         # This is our dev group
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         # This is our test group
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
     "#})?;
 
@@ -6513,16 +6515,16 @@ fn add_group_before_commented_groups() -> Result<()> {
 
         [dependency-groups]
         alpha = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         # This is our dev group
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         # This is our test group
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         "#
     );
@@ -6546,12 +6548,12 @@ fn add_group_between_commented_groups() -> Result<()> {
         [dependency-groups]
         # This is our dev group
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         # This is our test group
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
     "#})?;
 
@@ -6583,15 +6585,15 @@ fn add_group_between_commented_groups() -> Result<()> {
         [dependency-groups]
         # This is our dev group
         dev = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         eta = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         # This is our test group
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         "#
     );
@@ -6615,11 +6617,11 @@ fn add_group_to_unsorted() -> Result<()> {
 
         [dependency-groups]
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         second = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
     "#})?;
 
@@ -6648,14 +6650,14 @@ fn add_group_to_unsorted() -> Result<()> {
 
         [dependency-groups]
         test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
+          "anyio==3.7.0",
+          "requests>=2.31.0",
         ]
         second = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         alpha = [
-            "anyio==3.7.0",
+          "anyio==3.7.0",
         ]
         "###
     );
@@ -6873,7 +6875,7 @@ fn add_script_relative_path() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "project",
+        #   "project",
         # ]
         #
         # [tool.uv.sources]
@@ -7161,8 +7163,8 @@ fn add_script_without_metadata_table() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "requests<3",
-        #     "rich",
+        #   "requests<3",
+        #   "rich",
         # ]
         # ///
         import requests
@@ -7213,8 +7215,8 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "requests<3",
-        #     "rich",
+        #   "requests<3",
+        #   "rich",
         # ]
         # ///
         import requests
@@ -7269,8 +7271,8 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "requests<3",
-        #     "rich",
+        #   "requests<3",
+        #   "rich",
         # ]
         # ///
         import requests
@@ -7320,8 +7322,8 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "requests<3",
-        #     "rich",
+        #   "requests<3",
+        #   "rich",
         # ]
         # ///
         """This is a script."""
@@ -8328,7 +8330,7 @@ fn add_include_default_groups() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "typing-extensions>=4.10.0",
+          "typing-extensions>=4.10.0",
         ]
 
         [dependency-groups]
@@ -8582,7 +8584,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
         "###
         );
@@ -9574,7 +9576,7 @@ fn add_warn_index_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "idna>=3.6",
+          "idna>=3.6",
         ]
         "###
         );
@@ -9674,7 +9676,7 @@ fn add_no_warn_index_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
         [tool.uv]
         index-url = "https://test.pypi.org/simple"
@@ -9763,7 +9765,7 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         [tool.uv]
@@ -9841,8 +9843,8 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
-            "jinja2>=3.1.4",
+          "iniconfig==2.0.0",
+          "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -9953,8 +9955,8 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
-            "jinja2>=3.1.4",
+          "iniconfig==2.0.0",
+          "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -10072,9 +10074,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
-            "jinja2>=3.1.4",
-            "typing-extensions>=4.12.2",
+          "iniconfig==2.0.0",
+          "jinja2>=3.1.4",
+          "typing-extensions>=4.12.2",
         ]
 
         [tool.uv]
@@ -10201,9 +10203,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
-            "jinja2>=3.1.4",
-            "typing-extensions>=4.12.2",
+          "iniconfig==2.0.0",
+          "jinja2>=3.1.4",
+          "typing-extensions>=4.12.2",
         ]
 
         [tool.uv]
@@ -10348,7 +10350,7 @@ fn add_default_index_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -10420,8 +10422,8 @@ fn add_default_index_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
-            "typing-extensions>=4.10.0",
+          "iniconfig>=2.0.0",
+          "typing-extensions>=4.10.0",
         ]
 
         [[tool.uv.index]]
@@ -10522,7 +10524,7 @@ fn add_index_credentials() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -10616,7 +10618,7 @@ fn existing_index_credentials() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         # Set an internal index as the default, without credentials.
@@ -10709,7 +10711,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         [tool.uv]
@@ -10805,7 +10807,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         [tool.uv]
@@ -11216,7 +11218,7 @@ fn add_index_comments() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig==2.0.0",
+          "iniconfig==2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -11331,7 +11333,7 @@ fn add_self() -> Result<()> {
         [project.optional-dependencies]
         types = ["typing-extensions>=4"]
         all = [
-            "anyio[types]",
+          "anyio[types]",
         ]
 
         [tool.uv.sources]
@@ -11367,7 +11369,7 @@ fn add_self() -> Result<()> {
         [project.optional-dependencies]
         types = ["typing-extensions>=4"]
         all = [
-            "anyio[types]",
+          "anyio[types]",
         ]
 
         [tool.uv.sources]
@@ -11375,7 +11377,7 @@ fn add_self() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "anyio[types]",
+          "anyio[types]",
         ]
         "#
         );
@@ -11538,7 +11540,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "root",
+          "root",
         ]
 
         [tool.uv.sources]
@@ -11671,7 +11673,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root",
+          "root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root",
         ]
         "###
         );
@@ -12163,8 +12165,8 @@ fn add_no_indent() -> Result<()> {
                 version = "0.1.0"
                 requires-python = ">=3.12"
                 dependencies = [
-            "charset-normalizer>=3.3.2",
-            "sniffio==1.3.1",
+          "charset-normalizer>=3.3.2",
+          "sniffio==1.3.1",
         ]
         "###
         );
@@ -12256,8 +12258,8 @@ fn remove_all_with_comments() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            # foo
-            # bar
+          # foo
+          # bar
         ]
         "###
         );
@@ -12313,7 +12315,7 @@ fn multiple_index_cli() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests>=2.5.4.1",
+          "requests>=2.5.4.1",
         ]
 
         [[tool.uv.index]]
@@ -12426,7 +12428,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -12533,7 +12535,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -12643,7 +12645,7 @@ fn repeated_index_cli() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -12753,7 +12755,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [[tool.uv.index]]
@@ -13995,7 +13997,7 @@ fn add_bounds() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "idna==3.6",
+      "idna==3.6",
     ]
     "#
     );
@@ -14036,7 +14038,7 @@ fn add_bounds() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio>=4.3.0,<5.0.0",
+      "anyio>=4.3.0,<5.0.0",
     ]
 
     [tool.uv]
@@ -14063,7 +14065,7 @@ fn add_bounds() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio>=4.3.0,<5.0.0",
+      "anyio>=4.3.0,<5.0.0",
     ]
 
     [tool.uv]
@@ -14094,8 +14096,8 @@ fn add_bounds() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio==4.2",
-        "idna>=3.6,<3.7",
+      "anyio==4.2",
+      "idna>=3.6,<3.7",
     ]
 
     [tool.uv]
@@ -14122,9 +14124,9 @@ fn add_bounds() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio==4.2",
-        "idna>=3.6,<3.7",
-        "sniffio>=1.3.1,<1.4.0",
+      "anyio==4.2",
+      "idna>=3.6,<3.7",
+      "sniffio>=1.3.1,<1.4.0",
     ]
 
     [tool.uv]
@@ -14176,8 +14178,8 @@ fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "anyio==4.2",
-        "idna>=3.6,<3.7",
+      "anyio==4.2",
+      "idna>=3.6,<3.7",
     ]
     "#
     );
@@ -14256,8 +14258,8 @@ fn add_path_with_existing_workspace() -> Result<()> {
 
     [tool.uv.workspace]
     members = [
-        "project",
-        "dep",
+      "project",
+      "dep",
     ]
     "#
     );
@@ -14270,7 +14272,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.sources]
@@ -14333,12 +14335,12 @@ fn add_path_with_workspace() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.workspace]
     members = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.sources]
@@ -14401,12 +14403,12 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.workspace]
     members = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.sources]
@@ -14468,7 +14470,7 @@ fn add_path_with_no_workspace() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.workspace]
@@ -14541,7 +14543,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     version = "0.1.0"
     requires-python = ">=3.12"
     dependencies = [
-        "dep",
+      "dep",
     ]
 
     [tool.uv.workspace]
@@ -14599,9 +14601,9 @@ fn add_multiline_indentation() -> Result<()> {
 
         [dependency-groups]
         dev = [
-            "iniconfig>=2.0.0",
-            "ruff",
-            "typing-extensions",
+          "iniconfig>=2.0.0",
+          "ruff",
+          "typing-extensions",
         ]
         "#
         );
@@ -14659,7 +14661,7 @@ fn add_no_install_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "iniconfig>=2.0.0",
+          "iniconfig>=2.0.0",
         ]
 
         [build-system]

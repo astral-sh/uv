@@ -1684,7 +1684,7 @@ fn reformat_array_multiline(deps: &mut Array) {
         indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
     }
 
-    let indentation_prefix_str = format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
+    let indentation_prefix_str = format!("\n{}", indentation_prefix.as_deref().unwrap_or("  "));
 
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
@@ -1714,7 +1714,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                 match &comment.kind {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
-                            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
+                            format!("\n{}", indentation_prefix.as_deref().unwrap_or("  "));
                         rv.push_str(&indentation_prefix_str);
                     }
                     CommentType::EndOfLine { leading_whitespace } => {
