@@ -2907,7 +2907,9 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
 
 #[test]
 fn tool_run_with_dependencies_from_script() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_missing_file_error();
 
     let script_contents = indoc! {r#"
         # /// script
@@ -2992,7 +2994,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `missing_file.py`: No such file or directory (os error 2)
+    error: failed to read from file `missing_file.py`: [OS ERROR 2]
     ");
 
     Ok(())
