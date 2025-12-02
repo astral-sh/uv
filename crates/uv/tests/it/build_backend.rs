@@ -1135,7 +1135,6 @@ fn warn_on_redundant_module_names() -> Result<()> {
         build-backend = "uv_build"
 
         [tool.uv.build-backend]
-        namespace = true
         module-name = ["foo", "foo.bar", "foo", "foo.bar.baz", "foobar", "bar", "foobar.baz", "baz.bar"]
     "#})?;
 
