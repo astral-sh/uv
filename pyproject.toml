@@ -50,7 +50,7 @@ include = [
     { path = "rust-toolchain.toml", format = ["sdist", "wheel"] },
     # this one isn't discovered by maturin because it's behind a feature flag
     { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
-    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" },
+    { path = "crates/uv-trampoline-builder/trampolines/*", format = "sdist" },
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]

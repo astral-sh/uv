@@ -9,6 +9,7 @@ homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
+include = ["src/**/*", "trampolines/*.exe", "Cargo.toml", "README.md"]
 
 [features]
 default = ["production"]

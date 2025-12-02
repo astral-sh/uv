@@ -6,28 +6,25 @@ use fs_err::File;
 use thiserror::Error;
 
 #[cfg(all(windows, target_arch = "x86"))]
-const LAUNCHER_I686_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
+const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-i686-console.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
-const LAUNCHER_X86_64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
+const LAUNCHER_X86_64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-x86_64-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-x86_64-console.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
-const LAUNCHER_AARCH64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-gui.exe");
+const LAUNCHER_AARCH64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-aarch64-gui.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-aarch64-console.exe");
 
 // https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
 #[cfg(windows)]
