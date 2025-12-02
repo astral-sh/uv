@@ -6138,6 +6138,7 @@ dependencies = [
  "cargo-util",
  "dashmap",
  "fs-err",
+ "owo-colors",
  "reqwest",
  "thiserror 2.0.17",
  "tokio",
@@ -6150,6 +6151,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-version",
+ "uv-warnings",
  "which",
 ]
 
@@ -6162,6 +6164,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-redacted",
+ "uv-static",
 ]
 
 [[package]]
