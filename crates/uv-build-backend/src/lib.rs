@@ -1,3 +1,4 @@
+use itertools::Itertools;
 mod metadata;
 mod serde_verbatim;
 mod settings;
@@ -7,8 +8,10 @@ mod wheel;
 pub use metadata::{PyProjectToml, check_direct_build};
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
+use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -191,6 +194,56 @@ fn check_metadata_directory(
     Ok(())
 }
 
+/// Returns the list of module names without names which would be included twice
+///
+/// In normal cases it should do nothing:
+///
+/// * `["aaa"] -> ["aaa"]`
+/// * `["aaa", "bbb"] -> ["aaa", "bbb"]`
+///
+/// Duplicate elements are removed:
+///
+/// * `["aaa", "aaa"] -> ["aaa"]`
+/// * `["bbb", "aaa", "bbb"] -> ["aaa", "bbb"]`
+///
+/// Names with more specific paths are removed in favour of more general paths:
+///
+/// * `["aaa.foo", "aaa"] -> ["aaa"]`
+/// * `["bbb", "aaa", "bbb.foo", "ccc.foo", "ccc.foo.bar", "aaa"] -> ["aaa", "bbb.foo", "ccc.foo"]`
+///
+/// This does not preserve the order of the elements.
+fn prune_redundant_modules(mut names: Vec<String>) -> Vec<String> {
+    names.sort();
+    let mut pruned = Vec::with_capacity(names.len());
+    for name in names {
+        if let Some(last) = pruned.last() {
+            if name == *last {
+                continue;
+            }
+            // This is a more specific (narrow) module name than what came before
+            if name
+                .strip_prefix(last)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+            {
+                continue;
+            }
+        }
+        pruned.push(name);
+    }
+    pruned
+}
+
+/// Wraps `prune_redundant_modules` with a warning when modules are ignored
+fn prune_redundant_modules_warn(names: &[String]) -> Vec<String> {
+    let pruned = prune_redundant_modules(names.to_vec());
+    if names.len() != pruned.len() {
+        let mut pruned: HashSet<_> = pruned.iter().collect();
+        let ignored = names.iter().filter(|name| !pruned.remove(name)).join(" ");
+        warn_user_once!("Ignoring redundant module name(s): {ignored}");
+    }
+    pruned
+}
+
 /// Returns the source root and the module path(s) with the `__init__.py[i]`  below to it while
 /// checking the project layout and names.
 ///
@@ -231,8 +284,8 @@ fn find_roots(
                 ModuleName::Name(name) => {
                     vec![name.split('.').collect::<PathBuf>()]
                 }
-                ModuleName::Names(names) => names
-                    .iter()
+                ModuleName::Names(names) => prune_redundant_modules_warn(names)
+                    .into_iter()
                     .map(|name| name.split('.').collect::<PathBuf>())
                     .collect(),
             }
@@ -250,9 +303,9 @@ fn find_roots(
     let modules_relative = if let Some(module_name) = module_name {
         match module_name {
             ModuleName::Name(name) => vec![module_path_from_module_name(&src_root, name)?],
-            ModuleName::Names(names) => names
-                .iter()
-                .map(|name| module_path_from_module_name(&src_root, name))
+            ModuleName::Names(names) => prune_redundant_modules_warn(names)
+                .into_iter()
+                .map(|name| module_path_from_module_name(&src_root, &name))
                 .collect::<Result<_, _>>()?,
         }
     } else {
@@ -1412,6 +1465,116 @@ mod tests {
         simple_namespace_part-1.0.0.dist-info/METADATA
         simple_namespace_part-1.0.0.dist-info/RECORD
         simple_namespace_part-1.0.0.dist-info/WHEEL
+        ");
+    }
+
+    /// `prune_redundant_modules` should remove modules which are already
+    /// included (either directly or via their parent)
+    #[test]
+    fn test_prune_redundant_modules() {
+        fn check(input: &[&str], expect: &[&str]) {
+            let input = input.iter().map(|s| (*s).to_string()).collect();
+            let expect: Vec<_> = expect.iter().map(|s| (*s).to_string()).collect();
+            assert_eq!(prune_redundant_modules(input), expect);
+        }
+
+        // Basic cases
+        check(&[], &[]);
+        check(&["foo"], &["foo"]);
+        check(&["foo", "bar"], &["bar", "foo"]);
+
+        // Deshadowing
+        check(&["foo", "foo.bar"], &["foo"]);
+        check(&["foo.bar", "foo"], &["foo"]);
+        check(
+            &["foo.bar.a", "foo.bar.b", "foo.bar", "foo", "foo.bar.a.c"],
+            &["foo"],
+        );
+        check(
+            &["bar.one", "bar.two", "baz", "bar", "baz.one"],
+            &["bar", "baz"],
+        );
+
+        // Potential false positives
+        check(&["foo", "foobar"], &["foo", "foobar"]);
+        check(
+            &["foo", "foobar", "foo.bar", "foobar.baz"],
+            &["foo", "foobar"],
+        );
+        check(&["foo.bar", "foo.baz"], &["foo.bar", "foo.baz"]);
+        check(&["foo", "foo", "foo.bar", "foo.bar"], &["foo"]);
+
+        // Everything
+        check(
+            &[
+                "foo.inner",
+                "foo.inner.deeper",
+                "foo",
+                "bar",
+                "bar.sub",
+                "bar.sub.deep",
+                "foobar",
+                "baz.baz.bar",
+                "baz.baz",
+                "qux",
+            ],
+            &["bar", "baz.baz", "foo", "foobar", "qux"],
+        );
+    }
+
+    /// A package with duplicate module names.
+    #[test]
+    fn duplicate_module_names() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "duplicate"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = ["foo", "foo", "bar.baz", "bar.baz.submodule"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("foo")).unwrap();
+        File::create(src.path().join("src").join("foo").join("__init__.py")).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("bar").join("baz")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("bar")
+                .join("baz")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        duplicate-1.0.0/
+        duplicate-1.0.0/PKG-INFO
+        duplicate-1.0.0/pyproject.toml
+        duplicate-1.0.0/src
+        duplicate-1.0.0/src/bar
+        duplicate-1.0.0/src/bar/baz
+        duplicate-1.0.0/src/bar/baz/__init__.py
+        duplicate-1.0.0/src/foo
+        duplicate-1.0.0/src/foo/__init__.py
+        ");
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        bar/
+        bar/baz/
+        bar/baz/__init__.py
+        duplicate-1.0.0.dist-info/
+        duplicate-1.0.0.dist-info/METADATA
+        duplicate-1.0.0.dist-info/RECORD
+        duplicate-1.0.0.dist-info/WHEEL
+        foo/
+        foo/__init__.py
         ");
     }
 }

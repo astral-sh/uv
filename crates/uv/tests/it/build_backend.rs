@@ -1117,3 +1117,56 @@ fn venv_in_source_tree() {
       ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 }
+
+/// Show a warning when the build backend is passed redundant module names
+#[test]
+fn warn_on_redundant_module_names() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        namespace = true
+        module-name = ["foo", "foo.bar", "foo", "foo.bar.baz", "foobar", "bar", "foobar.baz", "baz.bar"]
+    "#})?;
+
+    let foo_module = context.temp_dir.child("src/foo");
+    foo_module.create_dir_all()?;
+    foo_module.child("__init__.py").touch()?;
+
+    let foobar_module = context.temp_dir.child("src/foobar");
+    foobar_module.create_dir_all()?;
+    foobar_module.child("__init__.py").touch()?;
+
+    let bazbar_module = context.temp_dir.child("src/baz/bar");
+    bazbar_module.create_dir_all()?;
+    bazbar_module.child("__init__.py").touch()?;
+
+    let bar_module = context.temp_dir.child("src/bar");
+    bar_module.create_dir_all()?;
+    bar_module.child("__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    warning: Ignoring redundant module name(s): foo.bar foo foo.bar.baz foobar.baz
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
