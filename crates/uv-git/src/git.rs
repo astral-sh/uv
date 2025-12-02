@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
+use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 use url::Url;
 
@@ -27,7 +28,7 @@ pub enum GitError {
     GitNotFound,
     #[error("Git LFS extension not found. Ensure that Git LFS is installed and available.")]
     GitLfsNotFound,
-    #[error("Is Git LFS configured? You may need to run `git lfs install`.")]
+    #[error("Is Git LFS configured? Run `{}` to initialize Git LFS.", "git lfs install".green())]
     GitLfsNotConfigured,
     #[error(transparent)]
     Other(#[from] which::Error),

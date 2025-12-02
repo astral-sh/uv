@@ -350,8 +350,8 @@ dependencies = ["langchain"]
 langchain = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/langchain" }
 ```
 
-Support for [Git LFS](https://git-lfs.com) is also configurable per source. Git LFS objects will not
-be fetched by default unless otherwise specified.
+Support for [Git LFS](https://git-lfs.com) is also configurable per source. By default, Git LFS
+objects will not be fetched.
 
 ```console
 $ uv add --lfs git+https://github.com/astral-sh/lfs-cowsay
@@ -365,9 +365,9 @@ dependencies = ["lfs-cowsay"]
 lfs-cowsay = { git = "https://github.com/astral-sh/lfs-cowsay", lfs = true }
 ```
 
-- When `lfs = true`, uv will always fetch LFS objects for this git source.
-- When `lfs = false`, uv will never fetch LFS objects for this git source.
-- When omitted, `UV_GIT_LFS` environment variable takes precedence for all git sources without an
+- When `lfs = true`, uv will always fetch LFS objects for this Git source.
+- When `lfs = false`, uv will never fetch LFS objects for this Git source.
+- When omitted, the `UV_GIT_LFS` environment variable is used for all Git sources without an
   explicit `lfs` configuration.
 
 !!! important

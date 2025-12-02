@@ -6138,6 +6138,7 @@ dependencies = [
  "cargo-util",
  "dashmap",
  "fs-err",
+ "owo-colors",
  "reqwest",
  "thiserror 2.0.17",
  "tokio",
