@@ -504,6 +504,7 @@ impl BuildContext for BuildDispatch<'_> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         output_dir: &'data Path,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
@@ -532,6 +533,7 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         None,
                         uv_version::version(),
+                        sources == SourceStrategy::Enabled,
                     )?;
                     DistFilename::WheelFilename(wheel)
                 }
@@ -540,6 +542,7 @@ impl BuildContext for BuildDispatch<'_> {
                         &source_tree,
                         &output_dir,
                         uv_version::version(),
+                        sources == SourceStrategy::Enabled,
                     )?;
                     DistFilename::SourceDistFilename(source_dist)
                 }
@@ -549,6 +552,7 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         None,
                         uv_version::version(),
+                        sources == SourceStrategy::Enabled,
                     )?;
                     DistFilename::WheelFilename(wheel)
                 }

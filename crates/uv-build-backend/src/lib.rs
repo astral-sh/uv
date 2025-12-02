@@ -233,10 +233,10 @@ fn prune_redundant_modules(mut names: Vec<String>) -> Vec<String> {
     pruned
 }
 
-/// Wraps [`prune_redundant_modules`] with a warning when modules are ignored
-fn prune_redundant_modules_warn(names: &[String]) -> Vec<String> {
+/// Wraps [`prune_redundant_modules`] with a conditional warning when modules are ignored
+fn prune_redundant_modules_warn(names: &[String], show_warnings: bool) -> Vec<String> {
     let pruned = prune_redundant_modules(names.to_vec());
-    if names.len() != pruned.len() {
+    if show_warnings && names.len() != pruned.len() {
         let mut pruned: HashSet<_> = pruned.iter().collect();
         let ignored: Vec<_> = names.iter().filter(|name| !pruned.remove(name)).collect();
         let s = if ignored.len() == 1 { "" } else { "s" };
@@ -270,6 +270,7 @@ fn find_roots(
     relative_module_root: &Path,
     module_name: Option<&ModuleName>,
     namespace: bool,
+    show_warnings: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
     // Check that even if a path contains `..`, we only include files below the module root.
@@ -288,7 +289,7 @@ fn find_roots(
                 ModuleName::Name(name) => {
                     vec![name.split('.').collect::<PathBuf>()]
                 }
-                ModuleName::Names(names) => prune_redundant_modules_warn(names)
+                ModuleName::Names(names) => prune_redundant_modules_warn(names, show_warnings)
                     .into_iter()
                     .map(|name| name.split('.').collect::<PathBuf>())
                     .collect(),
@@ -307,7 +308,7 @@ fn find_roots(
     let modules_relative = if let Some(module_name) = module_name {
         match module_name {
             ModuleName::Name(name) => vec![module_path_from_module_name(&src_root, name)?],
-            ModuleName::Names(names) => prune_redundant_modules_warn(names)
+            ModuleName::Names(names) => prune_redundant_modules_warn(names, show_warnings)
                 .into_iter()
                 .map(|name| module_path_from_module_name(&src_root, &name))
                 .collect::<Result<_, _>>()?,
@@ -477,19 +478,20 @@ mod tests {
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
-        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION)?;
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION, false)?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
         fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) = list_source_dist(source_root, MOCK_UV_VERSION)?;
+        let (_name, source_dist_list_files) =
+            list_source_dist(source_root, MOCK_UV_VERSION, false)?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION)?;
+        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
+        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -503,7 +505,13 @@ mod tests {
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, MOCK_UV_VERSION)?;
+        let wheel_filename = build_wheel(
+            &sdist_top_level_directory,
+            dist,
+            None,
+            MOCK_UV_VERSION,
+            false,
+        )?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -813,7 +821,7 @@ mod tests {
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15").unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
@@ -824,6 +832,7 @@ mod tests {
             output_dir.path(),
             None,
             "0.5.15",
+            false,
         )
         .unwrap();
         let wheel = output_dir
@@ -888,6 +897,7 @@ mod tests {
             output_dir.path(),
             Some(&metadata_dir.path().join(&dist_info_dir)),
             "0.5.15",
+            false,
         )
         .unwrap();
         let wheel = output_dir

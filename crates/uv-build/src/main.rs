@@ -44,6 +44,7 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &sdist_directory,
                 uv_version::version(),
+                false,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -56,6 +57,7 @@ fn main() -> Result<()> {
                 &wheel_directory,
                 metadata_directory.as_deref(),
                 uv_version::version(),
+                false,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -68,6 +70,7 @@ fn main() -> Result<()> {
                 &wheel_directory,
                 metadata_directory.as_deref(),
                 uv_version::version(),
+                false,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
