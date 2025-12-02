@@ -122,6 +122,7 @@ self-replace = { workspace = true }
 windows = { workspace = true }
 
 [build-dependencies]
+uv-static = { workspace = true }
 uv-version = { workspace = true }
 
 embed-manifest = { workspace = true }

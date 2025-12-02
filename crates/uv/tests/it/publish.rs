@@ -483,8 +483,8 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg(&wheel)
         .arg("--index")
         .arg("private-index")
-        .env("UV_INDEX_PRIVATE_INDEX_USERNAME", "username")
-        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret")
+        .env(EnvVars::index_username("PRIVATE_INDEX"), "username")
+        .env(EnvVars::index_password("PRIVATE_INDEX"), "secret")
         .arg("--trusted-publishing")
         .arg("never"),
         @r"
@@ -540,7 +540,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
         .env(EnvVars::GITLAB_CI, "true")
         .env_remove(EnvVars::GITHUB_ACTIONS)
-        .env("PYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -595,7 +595,7 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
         .env_remove(EnvVars::GITHUB_ACTIONS)
-        .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+        .env(EnvVars::TESTPYPI_ID_TOKEN, "gitlab-oidc-jwt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

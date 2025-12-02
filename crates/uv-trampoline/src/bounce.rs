@@ -30,6 +30,8 @@ use windows::Win32::{
 };
 use windows::core::{BOOL, PSTR, s};
 
+use uv_static::EnvVars;
+
 use crate::{error, format, warn};
 
 // https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
@@ -146,7 +148,7 @@ fn make_child_cmdline() -> CString {
                 // the approach taken by CPython for Python Launchers
                 // (in `launcher.c`). This allows virtual environments to
                 // be correctly detected when using trampolines.
-                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+                std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
                 // If this is not a virtual environment and `PYTHONHOME` has
                 // not been set, then set `PYTHONHOME` to the parent directory of
@@ -154,10 +156,10 @@ fn make_child_cmdline() -> CString {
                 // directories are added to `sys.path` when running with a junction
                 // trampoline.
                 let python_home_set =
-                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                    std::env::var(EnvVars::PYTHONHOME).is_ok_and(|home| !home.is_empty());
                 if !is_virtualenv(python_exe.as_path()) && !python_home_set {
                     std::env::set_var(
-                        "PYTHONHOME",
+                        EnvVars::PYTHONHOME,
                         python_exe
                             .parent()
                             .expect("Python executable should have a parent directory"),

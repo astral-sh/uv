@@ -17834,8 +17834,8 @@ fn credentials_from_subdirectory() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("foo/pyproject.toml")
-        .env("UV_INDEX_INTERNAL_USERNAME", "public")
-        .env("UV_INDEX_INTERNAL_PASSWORD", "heron"), @r"
+        .env(EnvVars::index_username("INTERNAL"), "public")
+        .env(EnvVars::index_password("INTERNAL"), "heron"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
