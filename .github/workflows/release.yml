@@ -203,7 +203,6 @@ jobs:
     if: ${{ always() && needs.host.result == 'success' }}
     runs-on: "depot-ubuntu-latest-4"
     permissions:
-      "attestations": "write"
       "contents": "write"
       "id-token": "write"
     env:
@@ -224,15 +223,6 @@ jobs:
         run: |
           # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
-      - name: Attest
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2
-        with:
-          subject-path: |
-            artifacts/*.json
-            artifacts/*.sh
-            artifacts/*.ps1
-            artifacts/*.zip
-            artifacts/*.tar.gz
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(needs.host.outputs.val).announcement_is_prerelease && '--prerelease' || '' }}"
