@@ -1117,3 +1117,71 @@ fn venv_in_source_tree() {
       ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 }
+
+/// Show a warning when the build backend is passed redundant module names
+#[test]
+fn warn_on_redundant_module_names() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-name = ["foo", "foo.bar", "foo", "foo.bar.baz", "foobar", "bar", "foobar.baz", "baz.bar"]
+    "#})?;
+
+    let foo_module = context.temp_dir.child("src/foo");
+    foo_module.create_dir_all()?;
+    foo_module.child("__init__.py").touch()?;
+
+    let foobar_module = context.temp_dir.child("src/foobar");
+    foobar_module.create_dir_all()?;
+    foobar_module.child("__init__.py").touch()?;
+
+    let bazbar_module = context.temp_dir.child("src/baz/bar");
+    bazbar_module.create_dir_all()?;
+    bazbar_module.child("__init__.py").touch()?;
+
+    let bar_module = context.temp_dir.child("src/bar");
+    bar_module.create_dir_all()?;
+    bar_module.child("__init__.py").touch()?;
+
+    // Warnings should be printed when invoking `uv build`
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    warning: Ignoring redundant module names in `tool.uv.build-backend.module-name`: `foo.bar`, `foo`, `foo.bar.baz`, `foobar.baz`
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    // But warnings shouldn't be printed in cases when the user might not
+    // control the thing being built. Sources being enabled is a workable proxy
+    // for this.
+    uv_snapshot!(context.filters(), context.build().arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}

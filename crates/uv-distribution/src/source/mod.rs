@@ -2435,6 +2435,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 temp_dir.path(),
+                source_strategy,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {

@@ -24,6 +24,7 @@ pub fn build_source_dist(
     source_tree: &Path,
     source_dist_directory: &Path,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -34,7 +35,7 @@ pub fn build_source_dist(
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
     let writer = TarGzWriter::new(&source_dist_path)?;
-    write_source_dist(source_tree, writer, uv_version)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     Ok(filename)
 }
 
@@ -42,6 +43,7 @@ pub fn build_source_dist(
 pub fn list_source_dist(
     source_tree: &Path,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<(SourceDistFilename, FileList), Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -52,7 +54,7 @@ pub fn list_source_dist(
     };
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_source_dist(source_tree, writer, uv_version)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     Ok((filename, files))
 }
 
@@ -61,6 +63,7 @@ fn source_dist_matcher(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
+    show_warnings: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
@@ -75,6 +78,7 @@ fn source_dist_matcher(
         &settings.module_root,
         settings.module_name.as_ref(),
         settings.namespace,
+        show_warnings,
     )?;
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
@@ -182,6 +186,7 @@ fn write_source_dist(
     source_tree: &Path,
     mut writer: impl DirectoryWriter,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -218,7 +223,7 @@ fn write_source_dist(
     )?;
 
     let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings)?;
+        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
     for entry in WalkDir::new(source_tree)

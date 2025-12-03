@@ -29,6 +29,7 @@ pub fn build_wheel(
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -58,6 +59,7 @@ pub fn build_wheel(
         &filename,
         uv_version,
         wheel_writer,
+        show_warnings,
     )?;
 
     Ok(filename)
@@ -67,6 +69,7 @@ pub fn build_wheel(
 pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -87,7 +90,14 @@ pub fn list_wheel(
 
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
+    write_wheel(
+        source_tree,
+        &pyproject_toml,
+        &filename,
+        uv_version,
+        writer,
+        show_warnings,
+    )?;
     Ok((filename, files))
 }
 
@@ -97,6 +107,7 @@ fn write_wheel(
     filename: &WheelFilename,
     uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
+    show_warnings: bool,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
         .settings()
@@ -132,6 +143,7 @@ fn write_wheel(
         &settings.module_root,
         settings.module_name.as_ref(),
         settings.namespace,
+        show_warnings,
     )?;
 
     let mut files_visited = 0;
@@ -259,6 +271,7 @@ pub fn build_editable(
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -295,6 +308,7 @@ pub fn build_editable(
         &settings.module_root,
         settings.module_name.as_ref(),
         settings.namespace,
+        show_warnings,
     )?;
 
     wheel_writer.write_bytes(

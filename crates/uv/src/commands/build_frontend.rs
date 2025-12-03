@@ -908,7 +908,11 @@ async fn build_sdist(
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
+                uv_build_backend::list_source_dist(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources == SourceStrategy::Enabled,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -937,6 +941,7 @@ async fn build_sdist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
+                    sources == SourceStrategy::Enabled,
                 )
             })
             .await??
@@ -1013,7 +1018,11 @@ async fn build_wheel(
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(&source_tree_, uv_version::version())
+                uv_build_backend::list_wheel(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources == SourceStrategy::Enabled,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -1043,6 +1052,7 @@ async fn build_wheel(
                     &output_dir_,
                     None,
                     uv_version::version(),
+                    sources == SourceStrategy::Enabled,
                 )
             })
             .await??;
