@@ -2575,7 +2575,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .await
         .map_err(Error::CacheWrite)?;
 
-        debug!("Finished building: {source}");
+        debug!("Built `{source}` into `{disk_filename}`");
         Ok((disk_filename, filename, metadata))
     }
 
