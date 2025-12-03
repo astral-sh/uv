@@ -78,7 +78,7 @@ pub enum Error {
     },
     /// This shouldn't happen, it's a bug in the build backend.
     #[error(
-        "The wheel `{}` built from a source distribution is not compatible with the current Python {}.{} on {} {}",
+        "The built wheel `{}` is not compatible with the current Python {}.{} on {} {}",
         filename,
         python_version.0,
         python_version.1,
@@ -93,7 +93,7 @@ pub enum Error {
     /// This may happen when trying to cross-install native dependencies without their build backend
     /// being aware that the target is a cross-install.
     #[error(
-        "The wheel `{}` built from a source distribution is not compatible with the target Python {}.{} on {} {}. Consider using `--no-build` to disable building wheels.",
+        "The built wheel `{}` is not compatible with the target Python {}.{} on {} {}. Consider using `--no-build` to disable building wheels.",
         filename,
         python_version.0,
         python_version.1,

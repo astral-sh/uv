@@ -13307,11 +13307,9 @@ fn install_missing_python_version_with_target() {
 /// runs on the host, not the target, we accept wheel platforms for the host.
 #[test]
 fn build_backend_wrong_wheel_platform() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.13"]);
-
-    let mut filters = context.filters();
-    filters.push((r" on [^ ]+ [^ ]+\.", " on [ARCH] [OS]."));
-    filters.push((r" on [^ ]+ [^ ]+$", " on [ARCH] [OS]"));
+    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+        .with_filter((r" on [^ ]+ [^ ]+\.", " on [ARCH] [OS]."))
+        .with_filter((r" on [^ ]+ [^ ]+$", " on [ARCH] [OS]"));
 
     let py313 = context.temp_dir.child("child");
     py313.create_dir_all()?;
@@ -13358,7 +13356,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     // A Python 3.13 host with a 3.13 implicit target works.
     context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13372,7 +13370,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     // A Python 3.13 host with a 3.12 explicit target fails.
     context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13380,12 +13378,12 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The wheel `py313-0.1.0-py313-none-any.whl` built from a source distribution is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
     ");
 
     // A python 3.12 host with a 3.13 explicit target works.
     context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13400,7 +13398,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     // A Python 3.13 host with a 3.12 explicit target fails.
     context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13408,7 +13406,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The wheel `py313-0.1.0-py313-none-any.whl` built from a source distribution is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
     ");
 
     // Create a project that will resolve to a non-latest version of `anyio`
@@ -13421,10 +13419,10 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "py313 @ {py313}"]
+        requires = ["hatchling", "py313 @ file://{py313}"]
         build-backend = "hatchling.build"
         "#,
-        py313 = py313.path().display()
+        py313 = py313.path().portable_display()
     })?;
     context
         .temp_dir
@@ -13435,7 +13433,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     // A build host of 3.13 works.
     context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13449,7 +13447,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     // A build host of 3.12 fails.
     context.venv().arg("-p").arg("3.12").assert().success();
-    uv_snapshot!(filters, context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13459,7 +13457,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
       × Failed to build `parent @ file://[TEMP_DIR]/`
       ├─▶ Failed to install requirements from `build-system.requires`
       ├─▶ Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The wheel `py313-0.1.0-py313-none-any.whl` built from a source distribution is not compatible with the current Python 3.12 on [ARCH] [OS]
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
     ");
 
     Ok(())

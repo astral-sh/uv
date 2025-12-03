@@ -560,8 +560,8 @@ impl TestContext {
     }
 
     /// Add a custom filter to the `TestContext`.
-    pub fn with_filter(mut self, filter: (String, String)) -> Self {
-        self.filters.push(filter);
+    pub fn with_filter(mut self, filter: (impl Into<String>, impl Into<String>)) -> Self {
+        self.filters.push((filter.0.into(), filter.1.into()));
         self
     }
 
