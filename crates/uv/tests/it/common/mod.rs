@@ -1458,10 +1458,15 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv auth helper get` command.
+    /// Create a `uv auth helper --protocol bazel get` command.
     pub fn auth_helper(&self) -> Command {
         let mut command = Self::new_command();
-        command.arg("auth").arg("helper").arg("get");
+        command
+            .arg("auth")
+            .arg("helper")
+            .arg("--protocol")
+            .arg("bazel")
+            .arg("get");
         self.add_shared_options(&mut command, false);
         command
     }

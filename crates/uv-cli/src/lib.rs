@@ -6226,11 +6226,23 @@ pub struct AuthDirArgs {
 #[derive(Args)]
 pub struct AuthHelperArgs {
     #[command(subcommand)]
-    pub command: HelperCommand,
+    pub command: AuthHelperCommand,
+
+    /// The credential helper protocol to use
+    #[arg(long, value_enum, required = true)]
+    pub protocol: AuthHelperProtocol,
+}
+
+/// Credential helper protocols supported by uv
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+pub enum AuthHelperProtocol {
+    /// Bazel credential helper protocol as described in [the
+    /// spec](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
+    Bazel,
 }
 
 #[derive(Subcommand)]
-pub enum HelperCommand {
+pub enum AuthHelperCommand {
     /// Retrieve credentials for a URI
     Get,
 }
