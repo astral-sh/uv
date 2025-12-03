@@ -162,13 +162,11 @@ ADD https://astral.sh/uv/0.9.13/install.sh /uv-installer.sh
 If you're using uv to manage your project, you can copy it into the image and install it:
 
 ```dockerfile title="Dockerfile"
-# Change the working directory to the `app` directory
-WORKDIR /app
-
 # Copy the project into the image
 COPY . /app
 
 # Sync the project into a new environment, asserting the lockfile is up to date
+WORKDIR /app
 RUN uv sync --locked
 ```
 
