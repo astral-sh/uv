@@ -1180,6 +1180,102 @@ fn build_no_build_logs() -> Result<()> {
     Ok(())
 }
 
+/// Test that `UV_HIDE_BUILD_OUTPUT` suppresses build output.
+#[test]
+fn build_hide_build_output_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    uv_snapshot!(&context.filters(), context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    Ok(())
+}
+
+/// Test that `UV_HIDE_BUILD_OUTPUT` hides build output even on failure.
+#[test]
+fn build_hide_build_output_on_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Create a `setup.py` that prints an environment variable before failing.
+    project.child("setup.py").write_str(indoc! {r#"
+        import os
+        import sys
+        print("FOO=" + os.environ.get("FOO", "not-set"), file=sys.stderr)
+        sys.stderr.flush()
+        raise Exception("Build failed intentionally!")
+        "#})?;
+
+    // With `UV_HIDE_BUILD_OUTPUT`, the output is hidden even on failure.
+    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn build_tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");

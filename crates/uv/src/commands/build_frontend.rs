@@ -663,7 +663,7 @@ async fn build_package(
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
-            if build_logs {
+            if build_logs && !uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
                 BuildOutput::Stderr
             } else {
                 BuildOutput::Quiet

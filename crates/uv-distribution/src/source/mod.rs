@@ -2503,7 +2503,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         } else {
                             BuildKind::Wheel
                         },
-                        BuildOutput::Debug,
+                        if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                            BuildOutput::Quiet
+                        } else {
+                            BuildOutput::Debug
+                        },
                         self.build_stack.cloned().unwrap_or_default(),
                     )
                     .await
@@ -2604,7 +2608,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source.as_dist(),
                 source_strategy,
                 build_kind,
-                BuildOutput::Debug,
+                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                    BuildOutput::Quiet
+                } else {
+                    BuildOutput::Debug
+                },
                 self.build_stack.cloned().unwrap_or_default(),
             )
             .await

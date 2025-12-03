@@ -5994,6 +5994,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-extract",
+ "uv-flags",
  "uv-fs",
  "uv-git",
  "uv-git-types",

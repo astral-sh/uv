@@ -150,6 +150,12 @@ Equivalent to the `--token` argument for self update. A GitHub token for authent
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.
 
+### `UV_HIDE_BUILD_OUTPUT`
+<small class="added-in">added in `0.9.14`</small>
+
+Suppress output from the build backend when building source distributions, even in the event
+of build failures.
+
 ### `UV_HTTP_RETRIES`
 <small class="added-in">added in `0.7.21`</small>
 

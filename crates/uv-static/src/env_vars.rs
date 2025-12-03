@@ -1236,4 +1236,9 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
+
+    /// Suppress output from the build backend when building source distributions, even in the event
+    /// of build failures.
+    #[attr_added_in("0.9.14")]
+    pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
 }
