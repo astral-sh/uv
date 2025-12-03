@@ -1104,6 +1104,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `pip debug` command for testing.
+    pub fn pip_debug(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("pip").arg("debug");
+        self.add_shared_options(&mut command, true);
+        command
+    }
+
     /// Create a `uv help` command with options shared across scenarios.
     #[allow(clippy::unused_self)]
     pub fn help(&self) -> Command {

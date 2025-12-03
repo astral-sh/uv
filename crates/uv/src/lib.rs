@@ -12,7 +12,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -1054,6 +1054,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.preview,
             )
         }
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Debug(_),
+        }) => Err(anyhow!(
+            "pip's `debug` is unsupported (consider using `uvx pip debug` instead)"
+        )),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
