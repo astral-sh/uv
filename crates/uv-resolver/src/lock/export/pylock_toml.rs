@@ -330,10 +330,16 @@ struct PylockTomlAttestationIdentity {
 
 impl<'lock> PylockToml {
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
+    ///
+    /// If `tags` is provided, only wheels compatible with the given tags will be included.
+    /// If `build_options` is provided, packages marked as `--only-binary` will not include
+    /// source distributions.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         omit: &[PackageName],
         install_path: &Path,
+        tags: Option<&Tags>,
+        build_options: &BuildOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // The lock version is always `1.0` at time of writing.
         let lock_version = Version::new([1, 0]);
@@ -417,71 +423,93 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Built(BuiltDist::Registry(dist)) => {
-                    package.wheels = Some(
-                        dist.wheels
+                    // Filter wheels based on build options (--no-binary).
+                    let no_binary = build_options.no_binary_package(dist.name());
+
+                    if !no_binary {
+                        // Filter wheels based on tag compatibility.
+                        let wheels: Vec<_> = dist
+                            .wheels
                             .iter()
-                            .map(|wheel| {
-                                let url = wheel
-                                    .file
-                                    .url
-                                    .to_url()
-                                    .map_err(PylockTomlErrorKind::ToUrl)?;
-                                Ok(PylockTomlWheel {
-                                    // Optional "when the last component of path/ url would be the same value".
-                                    name: if url
-                                        .filename()
-                                        .is_ok_and(|filename| filename == *wheel.file.filename)
-                                    {
-                                        None
-                                    } else {
-                                        Some(wheel.filename.clone())
-                                    },
-                                    upload_time: wheel
-                                        .file
-                                        .upload_time_utc_ms
-                                        .map(Timestamp::from_millisecond)
-                                        .transpose()?,
-                                    url: Some(
-                                        wheel
+                            .filter(|wheel| {
+                                tags.is_none_or(|tags| {
+                                    wheel.filename.compatibility(tags).is_compatible()
+                                })
+                            })
+                            .collect();
+
+                        if !wheels.is_empty() {
+                            package.wheels = Some(
+                                wheels
+                                    .into_iter()
+                                    .map(|wheel| {
+                                        let url = wheel
                                             .file
                                             .url
                                             .to_url()
-                                            .map_err(PylockTomlErrorKind::ToUrl)?,
-                                    ),
-                                    path: None,
-                                    size: wheel.file.size,
-                                    hashes: Hashes::from(wheel.file.hashes.clone()),
-                                })
-                            })
-                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
-                    );
+                                            .map_err(PylockTomlErrorKind::ToUrl)?;
+                                        Ok(PylockTomlWheel {
+                                            // Optional "when the last component of path/ url would be the same value".
+                                            name: if url.filename().is_ok_and(|filename| {
+                                                filename == *wheel.file.filename
+                                            }) {
+                                                None
+                                            } else {
+                                                Some(wheel.filename.clone())
+                                            },
+                                            upload_time: wheel
+                                                .file
+                                                .upload_time_utc_ms
+                                                .map(Timestamp::from_millisecond)
+                                                .transpose()?,
+                                            url: Some(
+                                                wheel
+                                                    .file
+                                                    .url
+                                                    .to_url()
+                                                    .map_err(PylockTomlErrorKind::ToUrl)?,
+                                            ),
+                                            path: None,
+                                            size: wheel.file.size,
+                                            hashes: Hashes::from(wheel.file.hashes.clone()),
+                                        })
+                                    })
+                                    .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
+                            );
+                        }
+                    }
 
-                    if let Some(sdist) = dist.sdist.as_ref() {
-                        let url = sdist
-                            .file
-                            .url
-                            .to_url()
-                            .map_err(PylockTomlErrorKind::ToUrl)?;
-                        package.sdist = Some(PylockTomlSdist {
-                            // Optional "when the last component of path/ url would be the same value".
-                            name: if url
-                                .filename()
-                                .is_ok_and(|filename| filename == *sdist.file.filename)
-                            {
-                                None
-                            } else {
-                                Some(sdist.file.filename.clone())
-                            },
-                            upload_time: sdist
+                    // Filter sdist based on build options (--only-binary).
+                    let no_build = build_options.no_build_package(dist.name());
+
+                    if !no_build {
+                        if let Some(sdist) = dist.sdist.as_ref() {
+                            let url = sdist
                                 .file
-                                .upload_time_utc_ms
-                                .map(Timestamp::from_millisecond)
-                                .transpose()?,
-                            url: Some(url),
-                            path: None,
-                            size: sdist.file.size,
-                            hashes: Hashes::from(sdist.file.hashes.clone()),
-                        });
+                                .url
+                                .to_url()
+                                .map_err(PylockTomlErrorKind::ToUrl)?;
+                            package.sdist = Some(PylockTomlSdist {
+                                // Optional "when the last component of path/ url would be the same value".
+                                name: if url
+                                    .filename()
+                                    .is_ok_and(|filename| filename == *sdist.file.filename)
+                                {
+                                    None
+                                } else {
+                                    Some(sdist.file.filename.clone())
+                                },
+                                upload_time: sdist
+                                    .file
+                                    .upload_time_utc_ms
+                                    .map(Timestamp::from_millisecond)
+                                    .transpose()?,
+                                url: Some(url),
+                                path: None,
+                                size: sdist.file.size,
+                                hashes: Hashes::from(sdist.file.hashes.clone()),
+                            });
+                        }
                     }
                 }
                 Dist::Source(SourceDist::DirectUrl(dist)) => {
@@ -530,66 +558,88 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Source(SourceDist::Registry(dist)) => {
-                    package.wheels = Some(
-                        dist.wheels
+                    // Filter wheels based on build options (--no-binary).
+                    let no_binary = build_options.no_binary_package(&dist.name);
+
+                    if !no_binary {
+                        // Filter wheels based on tag compatibility.
+                        let wheels: Vec<_> = dist
+                            .wheels
                             .iter()
-                            .map(|wheel| {
-                                let url = wheel
-                                    .file
-                                    .url
-                                    .to_url()
-                                    .map_err(PylockTomlErrorKind::ToUrl)?;
-                                Ok(PylockTomlWheel {
-                                    // Optional "when the last component of path/ url would be the same value".
-                                    name: if url
-                                        .filename()
-                                        .is_ok_and(|filename| filename == *wheel.file.filename)
-                                    {
-                                        None
-                                    } else {
-                                        Some(wheel.filename.clone())
-                                    },
-                                    upload_time: wheel
-                                        .file
-                                        .upload_time_utc_ms
-                                        .map(Timestamp::from_millisecond)
-                                        .transpose()?,
-                                    url: Some(
-                                        wheel
+                            .filter(|wheel| {
+                                tags.is_none_or(|tags| {
+                                    wheel.filename.compatibility(tags).is_compatible()
+                                })
+                            })
+                            .collect();
+
+                        if !wheels.is_empty() {
+                            package.wheels = Some(
+                                wheels
+                                    .into_iter()
+                                    .map(|wheel| {
+                                        let url = wheel
                                             .file
                                             .url
                                             .to_url()
-                                            .map_err(PylockTomlErrorKind::ToUrl)?,
-                                    ),
-                                    path: None,
-                                    size: wheel.file.size,
-                                    hashes: Hashes::from(wheel.file.hashes.clone()),
-                                })
-                            })
-                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
-                    );
+                                            .map_err(PylockTomlErrorKind::ToUrl)?;
+                                        Ok(PylockTomlWheel {
+                                            // Optional "when the last component of path/ url would be the same value".
+                                            name: if url.filename().is_ok_and(|filename| {
+                                                filename == *wheel.file.filename
+                                            }) {
+                                                None
+                                            } else {
+                                                Some(wheel.filename.clone())
+                                            },
+                                            upload_time: wheel
+                                                .file
+                                                .upload_time_utc_ms
+                                                .map(Timestamp::from_millisecond)
+                                                .transpose()?,
+                                            url: Some(
+                                                wheel
+                                                    .file
+                                                    .url
+                                                    .to_url()
+                                                    .map_err(PylockTomlErrorKind::ToUrl)?,
+                                            ),
+                                            path: None,
+                                            size: wheel.file.size,
+                                            hashes: Hashes::from(wheel.file.hashes.clone()),
+                                        })
+                                    })
+                                    .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
+                            );
+                        }
+                    }
 
-                    let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
-                    package.sdist = Some(PylockTomlSdist {
-                        // Optional "when the last component of path/ url would be the same value".
-                        name: if url
-                            .filename()
-                            .is_ok_and(|filename| filename == *dist.file.filename)
-                        {
-                            None
-                        } else {
-                            Some(dist.file.filename.clone())
-                        },
-                        upload_time: dist
-                            .file
-                            .upload_time_utc_ms
-                            .map(Timestamp::from_millisecond)
-                            .transpose()?,
-                        url: Some(url),
-                        path: None,
-                        size: dist.file.size,
-                        hashes: Hashes::from(dist.file.hashes.clone()),
-                    });
+                    // Filter sdist based on build options (--only-binary).
+                    let no_build = build_options.no_build_package(&dist.name);
+
+                    if !no_build {
+                        let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
+                        package.sdist = Some(PylockTomlSdist {
+                            // Optional "when the last component of path/ url would be the same value".
+                            name: if url
+                                .filename()
+                                .is_ok_and(|filename| filename == *dist.file.filename)
+                            {
+                                None
+                            } else {
+                                Some(dist.file.filename.clone())
+                            },
+                            upload_time: dist
+                                .file
+                                .upload_time_utc_ms
+                                .map(Timestamp::from_millisecond)
+                                .transpose()?,
+                            url: Some(url),
+                            path: None,
+                            size: dist.file.size,
+                            hashes: Hashes::from(dist.file.hashes.clone()),
+                        });
+                    }
                 }
             }
 
