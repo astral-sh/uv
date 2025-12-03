@@ -3830,14 +3830,14 @@ fn add_update_git_reference_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("https://github.com/astral-test/uv-public-pypackage.git"),
-        @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Updated `script.py`
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let script_content = context.read("script.py");
@@ -3863,14 +3863,14 @@ fn add_update_git_reference_script() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("uv-public-pypackage").arg("--branch=test-branch"),
-        @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Updated `script.py`
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let script_content = context.read("script.py");
@@ -6795,14 +6795,14 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 11 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6810,11 +6810,11 @@ fn add_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "anyio",
+        #   "anyio>=4.3.0",
         #   "requests<3",
         #   "rich",
         # ]
@@ -6826,6 +6826,52 @@ fn add_script() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "#
+        );
+    });
+
+    // Adding to a script without a lockfile shouldn't create a lockfile.
+    assert!(!context.temp_dir.join("script.py.lock").exists());
+
+    Ok(())
+}
+
+/// Test that `--bounds` is respected when adding to a script without a lockfile.
+#[test]
+fn add_script_bounds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        print("Hello, world!")
+    "#})?;
+
+    // Add `anyio` with `--bounds minor` to the script.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
+    Resolved 3 packages in [TIME]
+    ");
+
+    let script_content = context.read("script.py");
+
+    // The script should have bounds with minor version constraint (e.g., `>=4.3.0,<4.4.0`).
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "anyio>=4.3.0,<4.4.0",
+        # ]
+        # ///
+        print("Hello, world!")
         "###
         );
     });
@@ -6854,14 +6900,14 @@ fn add_script_relative_path() -> Result<()> {
         print("Hello, world!")
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 1 package in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7084,14 +7130,14 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 11 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7099,11 +7145,11 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r##"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "anyio",
+        #   "anyio>=4.3.0",
         #   "requests<3",
         #   "rich",
         # ]
@@ -7117,7 +7163,7 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "##
+        "#
         );
     });
 
@@ -7142,14 +7188,14 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7157,12 +7203,12 @@ fn add_script_without_metadata_table() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -7171,7 +7217,7 @@ fn add_script_without_metadata_table() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7193,14 +7239,14 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7208,13 +7254,13 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         #!/usr/bin/env python3
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -7223,7 +7269,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7249,14 +7295,14 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7264,13 +7310,13 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         #!/usr/bin/env python3
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -7279,7 +7325,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7301,14 +7347,14 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7316,12 +7362,12 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         """This is a script."""
@@ -7331,7 +7377,7 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7357,14 +7403,14 @@ fn add_extensionless_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script");
 
@@ -7372,13 +7418,13 @@ fn add_extensionless_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         #!/usr/bin/env python3
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -7387,7 +7433,7 @@ fn add_extensionless_script() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -8317,14 +8363,14 @@ fn add_git_to_script() -> Result<()> {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--tag=0.0.1")
         .arg("--script")
-        .arg("script.py"), @r###"
+        .arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 4 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
