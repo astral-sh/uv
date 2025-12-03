@@ -8,7 +8,8 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
-    Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
+    PathHint, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
+    looks_like_git_repository,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
@@ -80,10 +81,25 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Self::Err> {
+        Self::parse_path_with_hint(path, working_dir, None)
+    }
+
+    fn parse_path_with_hint(
+        path: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        hint: Option<PathHint>,
+    ) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::from_path(&path, &working_dir)?;
         let verbatim_path = verbatim.as_path()?;
         let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
             metadata.is_dir()
+        } else if DistExtension::from_path(&path).is_ok() {
+            // If the path has a recognized distribution extension (like `.whl` or `.tar.gz`),
+            // treat it as a file regardless of the hint.
+            false
+        } else if let Some(hint) = hint {
+            // Use the hint for ambiguous paths (paths with unrecognized extensions like `.bar`).
+            hint == PathHint::Directory
         } else {
             verbatim_path.extension().is_none()
         };
@@ -112,10 +128,24 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
+        Self::parse_absolute_path_with_hint(path, None)
+    }
+
+    fn parse_absolute_path_with_hint(
+        path: impl AsRef<Path>,
+        hint: Option<PathHint>,
+    ) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::from_absolute_path(&path)?;
         let verbatim_path = verbatim.as_path()?;
         let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
             metadata.is_dir()
+        } else if DistExtension::from_path(&path).is_ok() {
+            // If the path has a recognized distribution extension (like `.whl` or `.tar.gz`),
+            // treat it as a file regardless of the hint.
+            false
+        } else if let Some(hint) = hint {
+            // Use the hint for ambiguous paths (paths with unrecognized extensions like `.bar`).
+            hint == PathHint::Directory
         } else {
             verbatim_path.extension().is_none()
         };

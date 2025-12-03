@@ -1643,6 +1643,10 @@ mod test {
     #[cfg(unix)]
     #[test_case(Path::new("bare-url.txt"))]
     #[test_case(Path::new("editable.txt"))]
+    // Note: `semicolon.txt` contains a syntax error (missing whitespace before `;`), but since
+    // it's an editable requirement, we parse it as a directory path. The error will occur later
+    // when the path doesn't exist.
+    #[test_case(Path::new("semicolon.txt"))]
     #[tokio::test]
     async fn parse_unix(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
@@ -1662,7 +1666,6 @@ mod test {
     }
 
     #[cfg(unix)]
-    #[test_case(Path::new("semicolon.txt"))]
     #[test_case(Path::new("hash.txt"))]
     #[tokio::test]
     async fn parse_err(path: &Path) {
