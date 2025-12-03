@@ -1009,6 +1009,9 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Check(PipCheckArgs),
+    /// Display debug information (unsupported)
+    #[command(hide = true)]
+    Debug(PipDebugArgs),
 }
 
 #[derive(Subcommand)]
@@ -2754,6 +2757,21 @@ pub struct PipTreeArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
+}
+
+#[derive(Args)]
+pub struct PipDebugArgs {
+    #[arg(long, hide = true)]
+    pub platform: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub python_version: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub implementation: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub abi: Option<String>,
 }
 
 #[derive(Args)]
