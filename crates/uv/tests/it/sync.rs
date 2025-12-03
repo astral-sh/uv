@@ -3549,7 +3549,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("foo")
         .arg("--group").arg("bar")
-        .env("UV_NO_GROUP", "bar"), @r"
+        .env(EnvVars::UV_NO_GROUP, "bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3569,7 +3569,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
         .arg("--group").arg("foo")
         .arg("--group").arg("bar")
         .arg("--group").arg("baz")
-        .env("UV_NO_GROUP", "bar baz"), @r"
+        .env(EnvVars::UV_NO_GROUP, "bar baz"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3586,7 +3586,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
         .arg("--group").arg("bar")
         .arg("--group").arg("baz")
         .arg("--no-group").arg("bar")
-        .env("UV_NO_GROUP", "baz"), @r"
+        .env(EnvVars::UV_NO_GROUP, "baz"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

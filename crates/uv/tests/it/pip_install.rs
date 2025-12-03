@@ -10710,7 +10710,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
     .arg("--upgrade")
     .arg(".")
-    .env("UV_NO_SOURCES", "true"), @r###"
+    .env(EnvVars::UV_NO_SOURCES, "true"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10730,7 +10730,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--upgrade")
         .arg(".")
-        .env("UV_NO_SOURCES", "false"), @r###"
+        .env(EnvVars::UV_NO_SOURCES, "false"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10751,7 +10751,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .arg("--upgrade")
         .arg("--no-sources")
         .arg(".")
-        .env("UV_NO_SOURCES", "False"), @r"
+        .env(EnvVars::UV_NO_SOURCES, "False"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

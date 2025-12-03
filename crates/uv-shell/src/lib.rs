@@ -348,7 +348,11 @@ mod tests {
     use tempfile::tempdir;
 
     // First option used by std::env::home_dir.
-    const HOME_DIR_ENV_VAR: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    const HOME_DIR_ENV_VAR: &str = if cfg!(windows) {
+        EnvVars::USERPROFILE
+    } else {
+        EnvVars::HOME
+    };
 
     #[test]
     fn configuration_files_zsh_no_existing_zshenv() {
@@ -357,7 +361,7 @@ mod tests {
 
         with_vars(
             [
-                ("ZDOTDIR", None),
+                (EnvVars::ZDOTDIR, None),
                 (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
             ],
             || {
@@ -370,7 +374,7 @@ mod tests {
 
         with_vars(
             [
-                ("ZDOTDIR", tmp_zdotdir.path().to_str()),
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
                 (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
             ],
             || {
@@ -391,7 +395,7 @@ mod tests {
 
         with_vars(
             [
-                ("ZDOTDIR", None),
+                (EnvVars::ZDOTDIR, None),
                 (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
             ],
             || {
@@ -404,7 +408,7 @@ mod tests {
 
         with_vars(
             [
-                ("ZDOTDIR", tmp_zdotdir.path().to_str()),
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
                 (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
             ],
             || {
@@ -425,7 +429,7 @@ mod tests {
 
         with_vars(
             [
-                ("ZDOTDIR", tmp_zdotdir.path().to_str()),
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
                 (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
             ],
             || {

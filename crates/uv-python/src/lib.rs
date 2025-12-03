@@ -224,7 +224,7 @@ mod tests {
                     Some(self.installations.root().as_os_str()),
                 ),
                 // Set a working directory
-                ("PWD", Some(self.workdir.path().as_os_str())),
+                (EnvVars::PWD, Some(self.workdir.path().as_os_str())),
             ];
             for (key, value) in vars {
                 run_vars.push((key, *value));

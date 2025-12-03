@@ -850,6 +850,16 @@ impl EnvVars {
     #[attr_added_in("0.8.18")]
     pub const GITLAB_CI: &'static str = "GITLAB_CI";
 
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const PYPI_ID_TOKEN: &'static str = "PYPI_ID_TOKEN";
+
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const TESTPYPI_ID_TOKEN: &'static str = "TESTPYPI_ID_TOKEN";
+
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
     #[attr_added_in("0.4.18")]
@@ -868,6 +878,16 @@ impl EnvVars {
     /// Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
     #[attr_added_in("0.1.22")]
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
+
+    /// Used to set the location of Python stdlib when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+
+    /// Used to correctly detect virtual environments when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYVENV_LAUNCHER: &'static str = "__PYVENV_LAUNCHER__";
 
     /// Used in tests to enforce a consistent locale setting.
     #[attr_hidden]
@@ -988,6 +1008,16 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.0.5")]
     pub const CARGO_TARGET_DIR: &'static str = "CARGO_TARGET_DIR";
+
+    /// Set by cargo when compiling for Windows-like platforms.
+    #[attr_hidden]
+    #[attr_added_in("0.0.5")]
+    pub const CARGO_CFG_WINDOWS: &'static str = "CARGO_CFG_WINDOWS";
+
+    /// Specifies the directory where Cargo stores intermediate build artifacts.
+    #[attr_hidden]
+    #[attr_added_in("0.8.25")]
+    pub const OUT_DIR: &'static str = "OUT_DIR";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
     #[attr_hidden]
@@ -1239,6 +1269,6 @@ impl EnvVars {
 
     /// Suppress output from the build backend when building source distributions, even in the event
     /// of build failures.
-    #[attr_added_in("0.9.14")]
+    #[attr_added_in("0.9.15")]
     pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
 }
