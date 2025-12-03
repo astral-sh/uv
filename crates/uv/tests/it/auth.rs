@@ -1928,7 +1928,7 @@ fn native_auth_host_fallback() -> Result<()> {
 
 /// Test credential helper with basic auth credentials
 #[test]
-fn credential_helper_basic_auth() {
+fn helper_basic_auth() {
     let context = TestContext::new("3.12").with_filter((
         r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
         r#""Basic [REDACTED]""#.to_owned(),
@@ -1947,7 +1947,7 @@ fn credential_helper_basic_auth() {
     Stored credentials for testuser@https://test.example.com/
     "###);
 
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"https://test.example.com/path"}"#,
         @r#"
     success: true
@@ -1962,7 +1962,7 @@ fn credential_helper_basic_auth() {
 
 /// Test credential helper with token credentials
 #[test]
-fn credential_helper_token() {
+fn helper_token() {
     let context = TestContext::new("3.12").with_filter((
         r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
         r#""Basic [REDACTED]""#.to_owned(),
@@ -1981,7 +1981,7 @@ fn credential_helper_token() {
     "###);
 
     // Test credential helper - tokens are stored as Basic auth with __token__ username
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"https://api.example.com/v1/endpoint"}"#,
         @r#"
     success: true
@@ -1996,9 +1996,9 @@ fn credential_helper_token() {
 
 /// Test credential helper with no credentials found
 #[test]
-fn credential_helper_no_credentials() {
+fn helper_no_credentials() {
     let context = TestContext::new("3.12");
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"https://unknown.example.com/path"}"#,
         @r#"
     success: true
@@ -2013,10 +2013,10 @@ fn credential_helper_no_credentials() {
 
 /// Test credential helper with invalid JSON input
 #[test]
-fn credential_helper_invalid_json() {
+fn helper_invalid_json() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input="not json",
         @r"
     success: false
@@ -2032,10 +2032,10 @@ fn credential_helper_invalid_json() {
 
 /// Test credential helper with invalid URI
 #[test]
-fn credential_helper_invalid_uri() {
+fn helper_invalid_uri() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"not a url"}"#,
         @r"
     success: false
@@ -2051,7 +2051,7 @@ fn credential_helper_invalid_uri() {
 
 /// Test credential helper with username in URI
 #[test]
-fn credential_helper_username_in_uri() {
+fn helper_username_in_uri() {
     let context = TestContext::new("3.12").with_filter((
         r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
         r#""Basic [REDACTED]""#.to_owned(),
@@ -2071,7 +2071,7 @@ fn credential_helper_username_in_uri() {
     "###);
 
     // Test with username in URI
-    uv_snapshot!(context.filters(), context.auth_credential_helper(),
+    uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"https://specificuser@test.example.com/path"}"#,
         @r#"
     success: true

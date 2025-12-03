@@ -27,8 +27,8 @@ use uv_cache_info::Timestamp;
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    CredentialHelperCommand, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
-    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    HelperCommand, PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace,
+    SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
@@ -543,10 +543,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::CredentialHelper(args),
+            command: AuthCommand::Helper(args),
         }) => match args.command {
-            CredentialHelperCommand::Get => {
-                commands::credential_helper(globals.preview, &globals.network_settings, printer)
+            HelperCommand::Get => {
+                commands::auth_helper(globals.preview, &globals.network_settings, printer)
                     .await
             }
         },

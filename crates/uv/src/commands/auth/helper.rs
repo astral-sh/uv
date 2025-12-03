@@ -85,7 +85,7 @@ async fn credentials_for_url(
 /// - Errors: Written to stderr with non-zero exit code
 ///
 /// Full spec is [available here](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
-pub(crate) async fn credential_helper(
+pub(crate) async fn helper(
     preview: Preview,
     network_settings: &NetworkSettings,
     printer: Printer,

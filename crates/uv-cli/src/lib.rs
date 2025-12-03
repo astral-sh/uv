@@ -4941,7 +4941,7 @@ pub enum AuthCommand {
     ///
     /// This command is typically invoked by external tools, not directly by users.
     #[command(hide = true)]
-    CredentialHelper(AuthCredentialHelperArgs),
+    Helper(AuthHelperArgs),
 }
 
 #[derive(Args)]
@@ -6224,13 +6224,13 @@ pub struct AuthDirArgs {
 }
 
 #[derive(Args)]
-pub struct AuthCredentialHelperArgs {
+pub struct AuthHelperArgs {
     #[command(subcommand)]
-    pub command: CredentialHelperCommand,
+    pub command: HelperCommand,
 }
 
 #[derive(Subcommand)]
-pub enum CredentialHelperCommand {
+pub enum HelperCommand {
     /// Retrieve credentials for a URI
     Get,
 }
