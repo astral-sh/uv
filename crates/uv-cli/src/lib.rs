@@ -2482,6 +2482,14 @@ pub struct PipFreezeArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with_all = ["prefix", "paths"])]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with_all = ["target", "paths"])]
+    pub prefix: Option<PathBuf>,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2556,6 +2564,14 @@ pub struct PipListArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipListCompatArgs,
@@ -2671,6 +2687,14 @@ pub struct PipShowArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// Show a package from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// Show a package from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,

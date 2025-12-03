@@ -5,6 +5,7 @@ use fs_err::File;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use tracing::debug;
 
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, Name};
@@ -13,7 +14,9 @@ use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -25,6 +28,8 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
     files: bool,
     cache: &Cache,
     printer: Printer,
@@ -51,6 +56,23 @@ pub(crate) fn pip_show(
         cache,
         preview,
     )?;
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
 
     report_target_environment(&environment, cache, printer)?;
 

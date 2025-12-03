@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
@@ -787,4 +788,100 @@ fn list_ignores_quiet_flag_format_freeze() {
     ----- stderr -----
     "###
     );
+}
+
+#[test]
+fn list_target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let target = context.temp_dir.child("target");
+
+    // Install packages to a target directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+
+    // List packages in the target directory.
+    uv_snapshot!(context.filters(), context.pip_list()
+        .arg("--target")
+        .arg(target.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.3
+    tomli      2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --target, the packages should not be visible.
+    uv_snapshot!(context.pip_list(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--prefix")
+        .arg(prefix.path())
+        .assert()
+        .success();
+
+    // List packages in the prefix directory.
+    uv_snapshot!(context.filters(), context.pip_list()
+        .arg("--prefix")
+        .arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.3
+    tomli      2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --prefix, the packages should not be visible.
+    uv_snapshot!(context.pip_list(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
 }
