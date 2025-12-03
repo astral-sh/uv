@@ -47,7 +47,7 @@ dispatch-releases = true
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
 # Whether to enable GitHub Attestations
-github-attestations = true
+github-attestations = false
 # When to generate GitHub Attestations
 github-attestations-phase = "announce"
 # Patterns to attest when creating attestations for release artifacts
