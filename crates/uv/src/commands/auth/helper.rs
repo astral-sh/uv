@@ -15,14 +15,51 @@ use crate::{commands::ExitStatus, printer::Printer, settings::NetworkSettings};
 
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]
-struct CredentialRequest {
+struct BazelCredentialRequest {
     uri: String,
 }
 
+impl BazelCredentialRequest {
+    fn from_str(s: &str) -> Result<Self> {
+        serde_json::from_str(s).context("Failed to parse credential request as JSON")
+    }
+
+    fn from_stdin() -> Result<Self> {
+        let mut buffer = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buffer)
+            .context("Failed to read from stdin")?;
+
+        Self::from_str(&buffer)
+    }
+}
+
 /// Response format for the Bazel credential helper protocol.
-#[derive(Debug, Serialize)]
-struct CredentialResponse {
+#[derive(Debug, Serialize, Default)]
+struct BazelCredentialResponse {
     headers: HashMap<String, Vec<String>>,
+}
+
+impl TryFrom<Credentials> for BazelCredentialResponse {
+    fn try_from(creds: Credentials) -> Result<Self> {
+        let mut headers = HashMap::new();
+        // Only include the Authorization header if credentials are authenticated
+        // (i.e., not just a username without password)
+        if creds.is_authenticated() {
+            let header_value = creds.to_header_value();
+
+            // Convert HeaderValue to String
+            let header_str = header_value
+                .to_str()
+                .context("Failed to convert header value to string")?
+                .to_string();
+
+            headers.insert("Authorization".to_string(), vec![header_str]);
+        }
+        Ok(Self { headers })
+    }
+
+    type Error = anyhow::Error;
 }
 
 async fn credentials_for_url(
@@ -90,41 +127,21 @@ pub(crate) async fn helper(
     network_settings: &NetworkSettings,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Read CredentialRequest from stdin
-    let mut buffer = String::new();
-    std::io::stdin()
-        .read_to_string(&mut buffer)
-        .context("Failed to read from stdin")?;
+    let request = BazelCredentialRequest::from_stdin()?;
 
-    let request: CredentialRequest =
-        serde_json::from_str(&buffer).context("Failed to parse credential request as JSON")?;
-
+    // TODO: make this logic generic over the protocol by providing `request.uri` from a
+    // trait - that should help with adding new protocols
     let url = Url::parse(&request.uri).context("Invalid URI in credential request")?;
     let safe_url = DisplaySafeUrl::from_url(url);
 
-    // Convert credentials to HTTP headers
-    let mut headers = HashMap::new();
-
     let credentials = credentials_for_url(&safe_url, preview, network_settings).await?;
 
-    if let Some(creds) = credentials {
-        // Only include the Authorization header if credentials are authenticated
-        // (i.e., not just a username without password)
-        if creds.is_authenticated() {
-            let header_value = creds.to_header_value();
-
-            // Convert HeaderValue to String
-            let header_str = header_value
-                .to_str()
-                .context("Failed to convert header value to string")?
-                .to_string();
-
-            headers.insert("Authorization".to_string(), vec![header_str]);
-        }
-    }
-
-    let response = serde_json::to_string(&CredentialResponse { headers })
-        .context("Failed to serialize response as JSON")?;
+    let response = serde_json::to_string(
+        &credentials
+            .map(BazelCredentialResponse::try_from)
+            .unwrap_or_else(|| Ok(BazelCredentialResponse::default()))?,
+    )
+    .context("Failed to serialize response as JSON")?;
     writeln!(printer.stdout(), "{response}")?;
     Ok(ExitStatus::Success)
 }
