@@ -23,7 +23,7 @@ Released on 2025-12-02.
 
 ### Configuration
 
-- Add `UV_HIDE_BUILD_OUTPUT` to omit build logs ([#16855](https://github.com/astral-sh/uv/pull/16855))
+- Add `UV_HIDE_BUILD_OUTPUT` to omit build logs ([#16885](https://github.com/astral-sh/uv/pull/16885))
 
 ### Bug fixes
 
