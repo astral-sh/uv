@@ -103,6 +103,15 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     explicit = true
     ```
 
+=== "CUDA 13.0"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "pytorch-cu130"
+    url = "https://download.pytorch.org/whl/cu130"
+    explicit = true
+    ```
+
 === "ROCm6"
 
     ```toml
@@ -181,6 +190,21 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ]
     torchvision = [
       { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    ]
+    ```
+
+=== "CUDA 13.0"
+
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
+    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    ]
+    torchvision = [
+      { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
