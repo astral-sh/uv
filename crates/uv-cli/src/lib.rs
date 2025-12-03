@@ -345,7 +345,7 @@ pub struct GlobalArgs {
     #[arg(global = true, long, env = EnvVars::UV_WORKING_DIR)]
     pub directory: Option<PathBuf>,
 
-    /// Run the command within the given project directory.
+    /// Discover a project in the given directory.
     ///
     /// All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
     /// up the directory tree from the project root, as will the project's virtual environment
