@@ -18,9 +18,12 @@ Released on 2025-12-02.
 - Add a Windows manifest to uv binaries ([#16894](https://github.com/astral-sh/uv/pull/16894))
 - Add LFS toggle to Git sources ([#16143](https://github.com/astral-sh/uv/pull/16143))
 - Cache source reads during resolution ([#16888](https://github.com/astral-sh/uv/pull/16888))
-- Include PEP 740 attestations when publishing uv to PyPI ([#16910](https://github.com/astral-sh/uv/pull/16910))
 - Allow reading requirements from scripts without an extension ([#16923](https://github.com/astral-sh/uv/pull/16923))
 - Allow reading requirements from scripts with HTTP(S) paths ([#16891](https://github.com/astral-sh/uv/pull/16891))
+
+### Configuration
+
+- Add `UV_HIDE_BUILD_OUTPUT` to omit build logs ([#16855](https://github.com/astral-sh/uv/pull/16855))
 
 ### Bug fixes
 
