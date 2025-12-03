@@ -166,7 +166,7 @@ If you're using uv to manage your project, you can copy it into the image and in
 WORKDIR /app
 
 # Copy the project into the image
-COPY . .
+COPY . /app
 
 # Sync the project into a new environment, asserting the lockfile is up to date
 RUN uv sync --locked
@@ -414,7 +414,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project
 
 # Copy the project into the image
-COPY . .
+COPY . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -449,7 +449,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-workspace
 
-COPY . .
+COPY . /app
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
@@ -489,7 +489,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable
 
 # Copy the project into the intermediate image
-COPY . .
+COPY . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
