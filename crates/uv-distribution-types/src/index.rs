@@ -6,6 +6,8 @@ use thiserror::Error;
 use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
+// Avoid importing `uv_static` here as it's not a dependency of this crate. We construct the
+// environment variable names directly using the same pattern as `uv_static::EnvVars`.
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -346,15 +348,54 @@ impl Index {
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Option<Credentials> {
-        // If the index is named, and credentials are provided via the environment, prefer those.
+        // Extract credentials from the index URL, if any.
+        let url_credentials = Credentials::from_url(self.url.url());
+
+        // If the index is named, and credentials are provided via the environment, we should
+        // prefer any provided environment variable values. Specifically, environment variables
+        // should override the username in the index URL. We also merge values when possible,
+        // such that an environment-provided password can be combined with a URL-provided
+        // username (and vice-versa), while environment-provided values take precedence.
         if let Some(name) = self.name.as_ref() {
-            if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
+            let name_env = name.to_env_var();
+            let username_env_key = format!("UV_INDEX_{name_env}_USERNAME");
+            let password_env_key = format!("UV_INDEX_{name_env}_PASSWORD");
+
+            let username_present = std::env::var_os(&username_env_key).is_some();
+            let password_present = std::env::var_os(&password_env_key).is_some();
+
+            if username_present || password_present {
+                // Read the actual environment values (may be empty string).
+                let username_env = std::env::var(&username_env_key).ok();
+                let password_env = std::env::var(&password_env_key).ok();
+
+                // If the environment provided a username, use that. Otherwise, if the URL
+                // provided a username, use the URL's username. If neither provided one, the
+                // username is None.
+                let username = if username_present {
+                    username_env
+                } else {
+                    url_credentials
+                        .as_ref()
+                        .and_then(|creds| creds.username().map(ToString::to_string))
+                };
+
+                // If the environment provided a password, use that. Otherwise, if the URL
+                // provided a password, use the URL's password.
+                let password = if password_present {
+                    password_env
+                } else {
+                    url_credentials
+                        .as_ref()
+                        .and_then(|creds| creds.password().map(ToString::to_string))
+                };
+
+                return Some(Credentials::basic(username, password));
             }
         }
 
         // Otherwise, extract the credentials from the URL.
-        Credentials::from_url(self.url.url())
+        url_credentials
     }
 
     /// Resolve the index relative to the given root directory.
@@ -602,5 +643,70 @@ mod tests {
         let cache_control = index.cache_control.as_ref().unwrap();
         assert_eq!(cache_control.api.as_deref(), Some("max-age=300"));
         assert_eq!(cache_control.files, None);
+    }
+
+    #[test]
+    fn test_index_credentials_env_username_overrides_url_username() {
+        use crate::IndexUrl;
+        use temp_env::with_vars;
+        const USERNAME_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_USERNAME";
+        const PASSWORD_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_PASSWORD";
+
+        // Set env var username and clear password env var using with_vars to ensure safe testing
+        with_vars(
+            vec![(USERNAME_ENV, Some("envuser")), (PASSWORD_ENV, None)],
+            || {
+                // Index URL includes credentials
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
+
+                let creds = index.credentials().unwrap();
+                assert_eq!(creds.username(), Some("envuser"));
+                assert_eq!(creds.password(), Some("pass"));
+            },
+        );
+    }
+
+    #[test]
+    fn test_index_credentials_env_password_merges_with_url_username() {
+        use crate::IndexUrl;
+        use temp_env::with_vars;
+        const USERNAME_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_USERNAME";
+        const PASSWORD_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_PASSWORD";
+
+        with_vars(
+            vec![(USERNAME_ENV, None), (PASSWORD_ENV, Some("envpass"))],
+            || {
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
+
+                let creds = index.credentials().unwrap();
+                assert_eq!(creds.username(), Some("urluser"));
+                assert_eq!(creds.password(), Some("envpass"));
+            },
+        );
+    }
+
+    #[test]
+    fn test_index_credentials_env_username_empty_string_overrides_url_username() {
+        use crate::IndexUrl;
+        use temp_env::with_vars;
+        const USERNAME_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_USERNAME";
+        const PASSWORD_ENV: &str = "UV_INDEX_PRIVATE_REGISTRY_PASSWORD";
+
+        with_vars(
+            vec![(USERNAME_ENV, Some("")), (PASSWORD_ENV, Some("envtoken"))],
+            || {
+                let url = IndexUrl::from_str("https://urluser:pass@example.com/simple").unwrap();
+                let mut index = Index::from(url);
+                index.name = Some(IndexName::new("private-registry").unwrap());
+
+                let creds = index.credentials().unwrap();
+                assert_eq!(creds.username(), None);
+                assert_eq!(creds.password(), Some("envtoken"));
+            },
+        );
     }
 }
