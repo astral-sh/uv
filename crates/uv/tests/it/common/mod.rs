@@ -1790,7 +1790,7 @@ pub fn python_installations_for_versions(
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {
-                panic!("Could not find Python {python_version} for test");
+                panic!("Could not find Python {python_version} for test\nTry `cargo run python install` first, or refer to CONTRIBUTING.md");
             }
         })
         .collect::<Vec<_>>();
