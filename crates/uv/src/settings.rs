@@ -2771,6 +2771,8 @@ impl PipFreezeSettings {
             paths,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2782,6 +2784,8 @@ impl PipFreezeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2821,6 +2825,8 @@ impl PipListSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2834,6 +2840,8 @@ impl PipListSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -2866,6 +2874,8 @@ impl PipShowSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2877,6 +2887,8 @@ impl PipShowSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,

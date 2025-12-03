@@ -5062,6 +5062,7 @@ uv pip freeze [OPTIONS]
 </dd><dt id="uv-pip-freeze--offline"><a href="#uv-pip-freeze--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-freeze--path"><a href="#uv-pip-freeze--path"><code>--path</code></a> <i>paths</i></dt><dd><p>Restrict to the specified installation path for listing packages (can be used multiple times)</p>
+</dd><dt id="uv-pip-freeze--prefix"><a href="#uv-pip-freeze--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>List packages from the specified <code>--prefix</code> directory</p>
 </dd><dt id="uv-pip-freeze--project"><a href="#uv-pip-freeze--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -5077,7 +5078,8 @@ Python environment if no virtual environment is found.</p>
 </dd><dt id="uv-pip-freeze--system"><a href="#uv-pip-freeze--system"><code>--system</code></a></dt><dd><p>List packages in the system Python environment.</p>
 <p>Disables discovery of virtual environments.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery.</p>
-<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-freeze--verbose"><a href="#uv-pip-freeze--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-freeze--target"><a href="#uv-pip-freeze--target"><code>--target</code></a> <i>target</i></dt><dd><p>List packages from the specified <code>--target</code> directory</p>
+</dd><dt id="uv-pip-freeze--verbose"><a href="#uv-pip-freeze--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
@@ -5172,6 +5174,7 @@ uv pip list [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-list--outdated"><a href="#uv-pip-list--outdated"><code>--outdated</code></a></dt><dd><p>List outdated packages.</p>
 <p>The latest version of each package will be shown alongside the installed version. Up-to-date packages will be omitted from the output.</p>
+</dd><dt id="uv-pip-list--prefix"><a href="#uv-pip-list--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>List packages from the specified <code>--prefix</code> directory</p>
 </dd><dt id="uv-pip-list--project"><a href="#uv-pip-list--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -5187,7 +5190,8 @@ Python environment if no virtual environment is found.</p>
 </dd><dt id="uv-pip-list--system"><a href="#uv-pip-list--system"><code>--system</code></a></dt><dd><p>List packages in the system Python environment.</p>
 <p>Disables discovery of virtual environments.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery.</p>
-<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-list--verbose"><a href="#uv-pip-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-list--target"><a href="#uv-pip-list--target"><code>--target</code></a> <i>target</i></dt><dd><p>List packages from the specified <code>--target</code> directory</p>
+</dd><dt id="uv-pip-list--verbose"><a href="#uv-pip-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
@@ -5244,7 +5248,8 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-show--no-python-downloads"><a href="#uv-pip-show--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-show--offline"><a href="#uv-pip-show--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-show--project"><a href="#uv-pip-show--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-show--prefix"><a href="#uv-pip-show--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Show a package from the specified <code>--prefix</code> directory</p>
+</dd><dt id="uv-pip-show--project"><a href="#uv-pip-show--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5259,7 +5264,8 @@ system Python environment if no virtual environment is found.</p>
 </dd><dt id="uv-pip-show--system"><a href="#uv-pip-show--system"><code>--system</code></a></dt><dd><p>Show a package in the system Python environment.</p>
 <p>Disables discovery of virtual environments.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery.</p>
-<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-show--verbose"><a href="#uv-pip-show--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p></dd><dt id="uv-pip-show--target"><a href="#uv-pip-show--target"><code>--target</code></a> <i>target</i></dt><dd><p>Show a package from the specified <code>--target</code> directory</p>
+</dd><dt id="uv-pip-show--verbose"><a href="#uv-pip-show--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
