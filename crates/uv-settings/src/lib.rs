@@ -607,7 +607,10 @@ impl EnvironmentOptions {
                 EnvVars::UV_REQUEST_TIMEOUT,
                 true,
             )?)
-            .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT, true)?)
+            .or(parse_integer_environment_variable(
+                EnvVars::HTTP_TIMEOUT,
+                true,
+            )?)
             .map(Duration::from_secs);
 
         Ok(Self {
@@ -619,9 +622,15 @@ impl EnvironmentOptions {
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
             concurrency: Concurrency {
-                downloads: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_DOWNLOADS, false)?,
+                downloads: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_DOWNLOADS,
+                    false,
+                )?,
                 builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, false)?,
-                installs: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_INSTALLS, false)?,
+                installs: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_INSTALLS,
+                    false,
+                )?,
             },
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: parse_string_environment_variable(
@@ -652,7 +661,6 @@ impl EnvironmentOptions {
         })
     }
 }
-
 
 /// Parse a boolean environment variable.
 ///
@@ -728,11 +736,14 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
 }
 
 /// Parse an integer environment variable.
-/// 
+///
 /// If `is_duration` is `true`, this function will check if the value ends with "s" and provide
 /// a helpful error message, as duration environment variables expect an integer value in seconds
 /// (not a string like "60s").
-fn parse_integer_environment_variable<T>(name: &'static str, is_duration: bool) -> Result<Option<T>, Error>
+fn parse_integer_environment_variable<T>(
+    name: &'static str,
+    is_duration: bool,
+) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr + Copy,
     <T as std::str::FromStr>::Err: std::fmt::Display,
@@ -759,9 +770,7 @@ where
         return Err(Error::InvalidEnvironmentVariable {
             name: name.to_string(),
             value: value.clone(),
-            err: format!(
-                "expected an integer value in seconds (e.g., 30), not a string with units (e.g., 30s)"
-            ),
+            err: "expected an integer value in seconds (e.g., 30), not a string with units (e.g., 30s)".to_string(),
         });
     }
 
