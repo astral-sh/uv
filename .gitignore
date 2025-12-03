@@ -37,6 +37,11 @@ profile.json.gz
 # MkDocs
 /site
 
+# Generated reference docs (use `cargo dev generate-all` to regenerate)
+/docs/reference/cli.md
+/docs/reference/environment.md
+/docs/reference/settings.md
+
 # macOS
 **/.DS_Store
 
