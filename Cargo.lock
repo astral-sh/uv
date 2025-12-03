@@ -5666,6 +5666,7 @@ dependencies = [
  "tokio",
  "toml_edit 0.23.7",
  "tracing",
+ "uv-auth",
  "uv-cache-key",
  "uv-configuration",
  "uv-distribution",

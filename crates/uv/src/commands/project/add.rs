@@ -442,6 +442,7 @@ pub(crate) async fn add(
                     project.workspace(),
                     &settings.resolver.index_locations,
                     settings.resolver.sources,
+                    client.credentials_cache(),
                 )?
             } else {
                 LoweredExtraBuildDependencies::from_non_lowered(

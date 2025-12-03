@@ -28,7 +28,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
@@ -292,6 +292,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        credentials_cache: &CredentialsCache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
@@ -310,6 +311,7 @@ impl SourceBuild {
             locations,
             source_strategy,
             workspace_cache,
+            credentials_cache,
         )
         .await
         .map_err(|err| *err)?;
@@ -452,6 +454,7 @@ impl SourceBuild {
                 &environment_variables,
                 &modified_path,
                 &temp_dir,
+                credentials_cache,
             )
             .await?;
         }
@@ -556,6 +559,7 @@ impl SourceBuild {
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -584,6 +588,7 @@ impl SourceBuild {
                                     locations,
                                     source_strategy,
                                     workspace_cache,
+                                    credentials_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -956,6 +961,7 @@ async fn create_pep517_build_environment(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
     temp_dir: &TempDir,
+    credentials_cache: &CredentialsCache,
 ) -> Result<(), Error> {
     // Write the hook output to a file so that we can read it back reliably.
     let outfile = temp_dir
@@ -1050,6 +1056,7 @@ async fn create_pep517_build_environment(
                 locations,
                 source_strategy,
                 workspace_cache,
+                credentials_cache,
             )
             .await
             .map_err(Error::Lowering)?;
