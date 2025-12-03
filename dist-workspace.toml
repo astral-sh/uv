@@ -57,7 +57,7 @@ build-local-artifacts = false
 # Local artifacts jobs to run in CI
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
-publish-jobs = ["./publish-pypi"]
+publish-jobs = ["./publish-pypi", "./publish-crates"]
 # Post-announce jobs to run in CI
 post-announce-jobs = ["./publish-docs"]
 # Custom permissions for GitHub Jobs
