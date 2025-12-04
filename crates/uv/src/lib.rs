@@ -28,10 +28,10 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
-    compat::CompatArgs,
+    AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
+    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
+    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -545,6 +545,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::auth_dir(args.service.as_ref(), printer)?;
             Ok(ExitStatus::Success)
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Helper(args),
+        }) => {
+            use uv_cli::AuthHelperProtocol;
+
+            // Validate protocol (currently only Bazel is supported)
+            match args.protocol {
+                AuthHelperProtocol::Bazel => {}
+            }
+
+            match args.command {
+                AuthHelperCommand::Get => {
+                    commands::auth_helper(globals.preview, &globals.network_settings, printer).await
+                }
+            }
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
