@@ -4939,7 +4939,7 @@ pub enum AuthCommand {
     /// Implements the Bazel credential helper protocol to provide credentials
     /// to external tools via JSON over stdin/stdout.
     ///
-    /// This command is typically invoked by external tools, not directly by users.
+    /// This command is typically invoked by external tools.
     #[command(hide = true)]
     Helper(AuthHelperArgs),
 }

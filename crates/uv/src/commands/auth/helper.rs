@@ -94,11 +94,11 @@ async fn credentials_for_url(
         )
         .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
         .build();
-        let maybe_token = pyx_store
+        let token = pyx_store
             .access_token(client.for_host(pyx_store.api()).raw_client(), 0)
             .await
-            .context("Authentication failure")?;
-        let token = maybe_token.context("No access token found")?;
+            .context("Authentication failure")?
+            .context("No access token found")?;
         return Ok(Some(Credentials::bearer(token.into_bytes())));
     }
     let backend = AuthBackend::from_settings(preview).await?;
