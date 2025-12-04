@@ -194,9 +194,9 @@ Install multiple Python versions:
 ```console
 $ uv python install 3.12 3.13 3.14
 Installed 3 versions in 972ms
- ~ cpython-3.12.12-macos-aarch64-none (python3.12)
+ + cpython-3.12.12-macos-aarch64-none (python3.12)
  + cpython-3.13.9-macos-aarch64-none (python3.13)
- ~ cpython-3.14.0-macos-aarch64-none (python3.14)
+ + cpython-3.14.0-macos-aarch64-none (python3.14)
 
 ```
 
