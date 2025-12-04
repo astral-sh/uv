@@ -1232,14 +1232,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             let message = match InstallSource::detect() {
                 Some(source) => format!(
-                    concat!(
-                        "{base}",
-                        "\n",
-                        "\n",
-                        "hint: You installed uv using {}. To update uv, run:\n  `{}`"
-                    ),
+                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
                     source.description(),
                     source.update_instructions().green(),
+                    hint = "hint".bold().cyan(),
+                    colon = ":".bold(),
                     base = BASE_MESSAGE
                 ),
                 None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
