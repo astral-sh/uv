@@ -9,7 +9,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use uv_static::EnvVars;
 
-use crate::Simplified;
+use crate::{Simplified, is_known_already_locked_error};
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
@@ -61,13 +61,16 @@ pub enum LockedFileError {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
+    #[cfg(feature = "tokio")]
     JoinError(#[from] tokio::task::JoinError),
 }
 
 impl LockedFileError {
     pub fn as_io_error(&self) -> Option<&io::Error> {
         match self {
-            Self::Timeout { .. } | Self::JoinError(_) => None,
+            Self::Timeout { .. } => None,
+            #[cfg(feature = "tokio")]
+            Self::JoinError(_) => None,
             Self::Lock { source, .. } => Some(source),
             Self::Io(err) => Some(err),
         }
@@ -221,6 +224,7 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
         use std::os::unix::fs::PermissionsExt;
+        use tempfile::NamedTempFile;
 
         // If path already exists, return it.
         if let Ok(file) = fs_err::OpenOptions::new()

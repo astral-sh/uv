@@ -19,7 +19,7 @@ pub(crate) async fn list_packages(
     args: ListPackagesArgs,
     environment: EnvironmentOptions,
 ) -> Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init()?;
+    let cache = Cache::try_from(args.cache_args)?.init().await?;
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default().timeout(environment.http_timeout),
         cache,

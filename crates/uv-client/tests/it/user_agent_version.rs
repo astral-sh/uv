@@ -75,7 +75,7 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
     let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default().subcommand(vec!["foo".to_owned(), "bar".to_owned()]),
         cache,
