@@ -29,6 +29,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -1310,9 +1311,9 @@ impl SyncReport {
 #[derive(Serialize, Debug, Clone)]
 struct PackageChangeReport {
     /// The normalized package name.
-    name: String,
+    name: PackageName,
     /// The resolved version of the package.
-    version: String,
+    version: uv_pep440::Version,
     /// The source for URL-based requirements.
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<PackageChangeSourceReport>,
@@ -1353,13 +1354,11 @@ impl PackageChangeReport {
         let installed_version = dist.installed_version();
 
         Self {
-            name: dist.name().to_string(),
-            version: installed_version.version().to_string(),
+            name: dist.name().clone(),
+            version: installed_version.version().clone(),
             source: installed_version
                 .url()
-                .map(|url| PackageChangeSourceReport {
-                    url: url.to_string(),
-                }),
+                .map(|url| PackageChangeSourceReport { url: url.clone() }),
             action,
         }
     }
@@ -1377,7 +1376,7 @@ enum PackageChangeAction {
 /// The source for a package change, when it originated from a URL requirement.
 #[derive(Serialize, Debug, Clone)]
 struct PackageChangeSourceReport {
-    url: String,
+    url: DisplaySafeUrl,
 }
 
 /// The report for a lock operation.
