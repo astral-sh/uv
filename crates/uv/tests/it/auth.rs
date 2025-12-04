@@ -1929,10 +1929,7 @@ fn native_auth_host_fallback() -> Result<()> {
 /// Test credential helper with basic auth credentials
 #[test]
 fn helper_basic_auth() {
-    let context = TestContext::new("3.12").with_filter((
-        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
-        r#""Basic [REDACTED]""#.to_owned(),
-    ));
+    let context = TestContext::new("3.12");
 
     // Store credentials
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1953,7 +1950,7 @@ fn helper_basic_auth() {
     success: true
     exit_code: 0
     ----- stdout -----
-    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+    {"headers":{"Authorization":["Basic dGVzdHVzZXI6dGVzdHBhc3M="]}}
 
     ----- stderr -----
     "#
@@ -1963,10 +1960,7 @@ fn helper_basic_auth() {
 /// Test credential helper with token credentials
 #[test]
 fn helper_token() {
-    let context = TestContext::new("3.12").with_filter((
-        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
-        r#""Basic [REDACTED]""#.to_owned(),
-    ));
+    let context = TestContext::new("3.12");
 
     // Store token
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1987,7 +1981,7 @@ fn helper_token() {
     success: true
     exit_code: 0
     ----- stdout -----
-    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+    {"headers":{"Authorization":["Basic X190b2tlbl9fOm15dG9rZW4xMjM="]}}
 
     ----- stderr -----
     "#
@@ -2037,25 +2031,22 @@ fn helper_invalid_uri() {
 
     uv_snapshot!(context.filters(), context.auth_helper(),
         input=r#"{"uri":"not a url"}"#,
-        @r"
+        @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid URI in credential request
-      Caused by: relative URL without a base
-    "
+    error: Failed to parse credential request as JSON
+      Caused by: relative URL without a base: "not a url" at line 1 column 18
+    "#
     );
 }
 
 /// Test credential helper with username in URI
 #[test]
 fn helper_username_in_uri() {
-    let context = TestContext::new("3.12").with_filter((
-        r#""Basic [a-zA-Z0-9+/=]+""#.to_owned(),
-        r#""Basic [REDACTED]""#.to_owned(),
-    ));
+    let context = TestContext::new("3.12");
 
     // Store credentials with specific username
     uv_snapshot!(context.filters(), context.auth_login()
@@ -2077,7 +2068,39 @@ fn helper_username_in_uri() {
     success: true
     exit_code: 0
     ----- stdout -----
-    {"headers":{"Authorization":["Basic [REDACTED]"]}}
+    {"headers":{"Authorization":["Basic c3BlY2lmaWN1c2VyOnNwZWNpZmljcGFzcw=="]}}
+
+    ----- stderr -----
+    "#
+    );
+}
+
+/// Test credential helper with unknown username in URI
+#[test]
+fn helper_unknown_username_in_uri() {
+    let context = TestContext::new("3.12");
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    "###);
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_helper(),
+        input=r#"{"uri":"https://differentuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
 
     ----- stderr -----
     "#

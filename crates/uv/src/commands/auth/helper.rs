@@ -4,7 +4,7 @@ use std::io::Read;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use url::Url;
+use tracing::debug;
 
 use uv_auth::{AuthBackend, Credentials, PyxTokenStore};
 use uv_client::BaseClientBuilder;
@@ -16,7 +16,7 @@ use crate::{commands::ExitStatus, printer::Printer, settings::NetworkSettings};
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]
 struct BazelCredentialRequest {
-    uri: String,
+    uri: DisplaySafeUrl,
 }
 
 impl BazelCredentialRequest {
@@ -42,21 +42,16 @@ struct BazelCredentialResponse {
 
 impl TryFrom<Credentials> for BazelCredentialResponse {
     fn try_from(creds: Credentials) -> Result<Self> {
-        let mut headers = HashMap::new();
-        // Only include the Authorization header if credentials are authenticated
-        // (i.e., not just a username without password)
-        if creds.is_authenticated() {
-            let header_value = creds.to_header_value();
+        let header_str = creds
+            .to_header_value()
+            .to_str()
+            // TODO: this is infallible in practice
+            .context("Failed to convert header value to string")?
+            .to_owned();
 
-            // Convert HeaderValue to String
-            let header_str = header_value
-                .to_str()
-                .context("Failed to convert header value to string")?
-                .to_string();
-
-            headers.insert("Authorization".to_string(), vec![header_str]);
-        }
-        Ok(Self { headers })
+        Ok(Self {
+            headers: HashMap::from([("Authorization".to_owned(), vec![header_str])]),
+        })
     }
 
     type Error = anyhow::Error;
@@ -71,8 +66,14 @@ async fn credentials_for_url(
 
     // Use only the username from the URL, if present - discarding the password
     let url_credentials = Credentials::from_url(url);
-    let url_username = url_credentials.as_ref().and_then(|c| c.username());
-    let username = url_username.map(ToString::to_string);
+    let username = url_credentials.as_ref().and_then(|c| c.username());
+    if url_credentials
+        .as_ref()
+        .map(|c| c.password().is_some())
+        .unwrap_or(false)
+    {
+        debug!("URL '{url}' contain a password; ignoring");
+    }
 
     if pyx_store.is_known_domain(url) {
         if username.is_some() {
@@ -80,7 +81,7 @@ async fn credentials_for_url(
                 "Cannot specify a username for URLs under {}",
                 url.host()
                     .map(|host| host.to_string())
-                    .unwrap_or("this host".to_owned())
+                    .unwrap_or(url.to_string())
             );
         }
         let client = BaseClientBuilder::new(
@@ -97,15 +98,13 @@ async fn credentials_for_url(
             .access_token(client.for_host(pyx_store.api()).raw_client(), 0)
             .await
             .context("Authentication failure")?;
-        let token = maybe_token.ok_or_else(|| anyhow::anyhow!("No access token found"))?;
+        let token = maybe_token.context("No access token found")?;
         return Ok(Some(Credentials::bearer(token.into_bytes())));
     }
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
     let credentials = match &backend {
-        AuthBackend::System(provider) => provider.fetch(url, username.as_deref()).await,
-        AuthBackend::TextStore(store, _lock) => {
-            store.get_credentials(url, username.as_deref()).cloned()
-        }
+        AuthBackend::System(provider) => provider.fetch(url, username).await,
+        AuthBackend::TextStore(store, _lock) => store.get_credentials(url, username).cloned(),
     };
     Ok(credentials)
 }
@@ -131,10 +130,7 @@ pub(crate) async fn helper(
 
     // TODO: make this logic generic over the protocol by providing `request.uri` from a
     // trait - that should help with adding new protocols
-    let url = Url::parse(&request.uri).context("Invalid URI in credential request")?;
-    let safe_url = DisplaySafeUrl::from_url(url);
-
-    let credentials = credentials_for_url(&safe_url, preview, network_settings).await?;
+    let credentials = credentials_for_url(&request.uri, preview, network_settings).await?;
 
     let response = serde_json::to_string(
         &credentials
@@ -142,6 +138,6 @@ pub(crate) async fn helper(
             .unwrap_or_else(|| Ok(BazelCredentialResponse::default()))?,
     )
     .context("Failed to serialize response as JSON")?;
-    writeln!(printer.stdout(), "{response}")?;
+    writeln!(printer.stdout_important(), "{response}")?;
     Ok(ExitStatus::Success)
 }
