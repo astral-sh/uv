@@ -2,8 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
@@ -19,8 +20,9 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
+    NameRequirementSpecification, Requirement, ResolutionDiagnostic, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
@@ -381,28 +383,106 @@ pub(crate) enum Modifications {
     Exact,
 }
 
+/// A distribution which was changed
+#[derive(Debug, Clone, Eq)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ChangedDist {
+    Local(LocalDist),
+    Remote(Arc<Dist>),
+}
+
+impl Hash for ChangedDist {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name().hash(state);
+        // TODO(tk): Use canonical
+        self.installed_version().hash(state);
+    }
+}
+
+impl PartialEq for ChangedDist {
+    fn eq(&self, other: &Self) -> bool {
+        // TODO(tk): Use canonical
+        self.name() == other.name() && self.installed_version() == other.installed_version()
+    }
+}
+
+impl From<LocalDist> for ChangedDist {
+    fn from(dist: LocalDist) -> Self {
+        Self::Local(dist)
+    }
+}
+
+impl From<InstalledDist> for ChangedDist {
+    fn from(dist: InstalledDist) -> Self {
+        Self::from(LocalDist::from(dist))
+    }
+}
+
+impl From<CachedDist> for ChangedDist {
+    fn from(dist: CachedDist) -> Self {
+        Self::from(LocalDist::from(dist))
+    }
+}
+
+impl From<Arc<Dist>> for ChangedDist {
+    fn from(dist: Arc<Dist>) -> Self {
+        Self::Remote(dist)
+    }
+}
+
+impl Name for ChangedDist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Local(dist) => dist.name(),
+            Self::Remote(dist) => dist.name(),
+        }
+    }
+}
+
+/// Zero version number
+static ZERO_VERSION: LazyLock<uv_pep440::Version> = LazyLock::new(|| uv_pep440::Version::new([0]));
+
+// This is a dirty hack to allow ChangedDist to be smuggled through a
+// ChangeEvent
+impl InstalledMetadata for ChangedDist {
+    fn installed_version(&self) -> InstalledVersion<'_> {
+        self.installed_version()
+            .unwrap_or(InstalledVersion::Version(&ZERO_VERSION))
+    }
+}
+
+impl ChangedDist {
+    /// Returns the version of the distribution, if it is known.
+    pub(crate) fn installed_version(&self) -> Option<InstalledVersion<'_>> {
+        match self {
+            Self::Local(dist) => Some(dist.installed_version()),
+            Self::Remote(dist) => dist.version().map(InstalledVersion::Version),
+        }
+    }
+}
+
 /// A summary of the changes made to the environment during an installation.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Changelog {
     /// The distributions that were installed.
-    pub(crate) installed: HashSet<LocalDist>,
+    pub(crate) installed: HashSet<ChangedDist>,
     /// The distributions that were uninstalled.
-    pub(crate) uninstalled: HashSet<LocalDist>,
+    pub(crate) uninstalled: HashSet<ChangedDist>,
     /// The distributions that were reinstalled.
-    pub(crate) reinstalled: HashSet<LocalDist>,
+    pub(crate) reinstalled: HashSet<ChangedDist>,
 }
 
 impl Changelog {
     /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
     pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
-        // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
-        // the inner `kind`, and omits the types that rely on internal mutability.
+        // SAFETY: This is allowed because `CachedDist` implements `Hash` and
+        // `Eq` based solely on immutable attributes
         #[allow(clippy::mutable_key_type)]
-        let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
+        let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(ChangedDist::from).collect();
 
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
             .into_iter()
-            .map(LocalDist::from)
+            .map(ChangedDist::from)
             .partition(|dist| uninstalled.contains(dist));
 
         uninstalled.retain(|dist| !reinstalled.contains(dist));
@@ -417,9 +497,36 @@ impl Changelog {
     /// Create a [`Changelog`] from a list of installed distributions.
     pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
         Self {
-            installed: installed.into_iter().map(LocalDist::from).collect(),
+            installed: installed.into_iter().map(ChangedDist::from).collect(),
             uninstalled: HashSet::default(),
             reinstalled: HashSet::default(),
+        }
+    }
+
+    pub(crate) fn from_plan(plan: Plan) -> Self {
+        // SAFETY: This is allowed because `CachedDist` implements `Hash` and
+        // `Eq` based solely on immutable attributes
+        #[allow(clippy::mutable_key_type)]
+        let mut uninstalled: HashSet<_> = plan
+            .extraneous
+            .into_iter()
+            .chain(plan.reinstalls)
+            .map(ChangedDist::from)
+            .collect();
+
+        let (reinstalled, installed): (HashSet<_>, HashSet<_>) = plan
+            .remote
+            .into_iter()
+            .map(ChangedDist::from)
+            .chain(plan.cached.into_iter().map(ChangedDist::from))
+            .partition(|dist| uninstalled.contains(dist));
+
+        uninstalled.retain(|dist| !reinstalled.contains(dist));
+
+        Self {
+            installed,
+            uninstalled,
+            reinstalled,
         }
     }
 
@@ -485,8 +592,7 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run.enabled() {
-        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
-        return Ok(Changelog::default());
+        return report_dry_run(dry_run, resolution, plan, modifications, start, printer);
     }
 
     let Plan {
@@ -841,7 +947,7 @@ fn report_dry_run(
     modifications: Modifications,
     start: std::time::Instant,
     printer: Printer,
-) -> Result<(), Error> {
+) -> Result<Changelog, Error> {
     let Plan {
         cached,
         remote,
@@ -859,7 +965,7 @@ fn report_dry_run(
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
         writeln!(printer.stderr(), "Would make no changes")?;
-        return Ok(());
+        return Ok(Changelog::default());
     }
 
     // Download, build, and unzip any missing distributions.
@@ -889,7 +995,7 @@ fn report_dry_run(
             "{}",
             format!(
                 "Would uninstall {}",
-                format!("{uninstalls} package{s}").bold(),
+                format!("{uninstalls} package{s}").bold()
             )
             .dimmed()
         )?;
@@ -909,19 +1015,19 @@ fn report_dry_run(
 
     // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
-        .into_iter()
-        .chain(extraneous.into_iter())
+        .iter()
+        .chain(extraneous.iter())
         .map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.installed_version().to_string(),
             kind: ChangeEventKind::Removed,
         })
-        .chain(wheels.into_iter().map(|distribution| DryRunEvent {
+        .chain(wheels.iter().map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.version_or_url().to_string(),
             kind: ChangeEventKind::Added,
         }))
-        .chain(cached.into_iter().map(|distribution| DryRunEvent {
+        .chain(cached.iter().map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.installed_version().to_string(),
             kind: ChangeEventKind::Added,
@@ -963,7 +1069,12 @@ fn report_dry_run(
         return Err(Error::OutdatedEnvironment);
     }
 
-    Ok(())
+    Ok(Changelog::from_plan(Plan {
+        cached,
+        remote: wheels,
+        reinstalls,
+        extraneous,
+    }))
 }
 
 /// Report any diagnostics on resolved distributions.

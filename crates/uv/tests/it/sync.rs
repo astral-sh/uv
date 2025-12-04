@@ -640,7 +640,13 @@ fn sync_dry_json() -> Result<()> {
           }
         },
         "action": "create",
-        "packages": []
+        "packages": [
+          {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "action": "added"
+          }
+        ]
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",

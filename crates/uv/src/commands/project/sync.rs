@@ -19,8 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
-    ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -39,7 +38,7 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::{Changelog, Modifications};
+use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
@@ -1313,7 +1312,7 @@ struct PackageChangeReport {
     /// The normalized package name.
     name: PackageName,
     /// The resolved version of the package.
-    version: uv_pep440::Version,
+    version: Option<uv_pep440::Version>,
     /// The source for URL-based requirements.
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<PackageChangeSourceReport>,
@@ -1350,15 +1349,16 @@ impl PackageChangeReport {
         changes
     }
 
-    fn from_dist(dist: &LocalDist, action: PackageChangeAction) -> Self {
-        let installed_version = dist.installed_version();
+    fn from_dist(dist: &ChangedDist, action: PackageChangeAction) -> Self {
+        let (version, url) = match dist.installed_version() {
+            Some(version) => (Some(version.version().clone()), version.url().cloned()),
+            None => (None, None),
+        };
 
         Self {
             name: dist.name().clone(),
-            version: installed_version.version().clone(),
-            source: installed_version
-                .url()
-                .map(|url| PackageChangeSourceReport { url: url.clone() }),
+            version,
+            source: url.map(|url| PackageChangeSourceReport { url: url.clone() }),
             action,
         }
     }

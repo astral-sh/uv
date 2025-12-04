@@ -6,7 +6,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use uv_distribution_types::{InstalledMetadata, Name};
+use uv_distribution_types::Name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -157,6 +157,11 @@ impl InstallLogger for DefaultInstallLogger {
                     .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
             })
         {
+            let version = event
+                .dist
+                .installed_version()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             match event.kind {
                 ChangeEventKind::Added => {
                     writeln!(
@@ -164,7 +169,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "+".green(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        version.dimmed(),
                     )?;
                 }
                 ChangeEventKind::Removed => {
@@ -173,7 +178,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "-".red(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        version.dimmed(),
                     )?;
                 }
                 ChangeEventKind::Reinstalled => {
@@ -182,7 +187,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "~".yellow(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        version.dimmed(),
                     )?;
                 }
             }
@@ -306,26 +311,37 @@ impl InstallLogger for UpgradeInstallLogger {
     }
 
     fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result {
+        fn format_version(version: Option<&Version>) -> String {
+            match version {
+                Some(version) => format!("v{version}"),
+                None => "unknown".to_string(),
+            }
+        }
+
         // Index the removals by package name.
-        let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let removals: FxHashMap<&PackageName, BTreeSet<Option<Version>>> =
             changelog.uninstalled.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.uninstalled.len(), FxBuildHasher),
                 |mut acc, distribution| {
-                    acc.entry(distribution.name())
-                        .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                    acc.entry(distribution.name()).or_default().insert(
+                        distribution
+                            .installed_version()
+                            .map(|v| v.version().clone()),
+                    );
                     acc
                 },
             );
 
         // Index the additions by package name.
-        let additions: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let additions: FxHashMap<&PackageName, BTreeSet<Option<Version>>> =
             changelog.installed.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.installed.len(), FxBuildHasher),
                 |mut acc, distribution| {
-                    acc.entry(distribution.name())
-                        .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                    acc.entry(distribution.name()).or_default().insert(
+                        distribution
+                            .installed_version()
+                            .map(|v| v.version().clone()),
+                    );
                     acc
                 },
             );
@@ -336,7 +352,7 @@ impl InstallLogger for UpgradeInstallLogger {
                 if removals == additions {
                     let reinstalls = additions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(version.as_ref()))
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
@@ -349,12 +365,12 @@ impl InstallLogger for UpgradeInstallLogger {
                 } else {
                     let removals = removals
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(version.as_ref()))
                         .collect::<Vec<_>>()
                         .join(", ");
                     let additions = additions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(version.as_ref()))
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
@@ -370,7 +386,7 @@ impl InstallLogger for UpgradeInstallLogger {
             (Some(removals), None) => {
                 let removals = removals
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(version.as_ref()))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
@@ -384,7 +400,7 @@ impl InstallLogger for UpgradeInstallLogger {
             (None, Some(additions)) => {
                 let additions = additions
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(version.as_ref()))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
