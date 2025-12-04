@@ -1,13 +1,15 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::slice;
 
+use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
+use uv_warnings::warn_user_once;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
@@ -116,6 +118,8 @@ impl RequiresDist {
                 .unwrap_or(&empty),
             SourceStrategy::Disabled => &empty,
         };
+        // Keep track of which sources we use, so we can print a warning for unused ones.
+        let mut project_sources_used = BTreeSet::new();
 
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
             project_workspace.current_project().root(),
@@ -143,6 +147,7 @@ impl RequiresDist {
                                 Some(&metadata.name),
                                 project_workspace.project_root(),
                                 project_sources,
+                                &mut project_sources_used,
                                 project_indexes,
                                 extra,
                                 Some(&group),
@@ -186,6 +191,7 @@ impl RequiresDist {
                         Some(&metadata.name),
                         project_workspace.project_root(),
                         project_sources,
+                        &mut project_sources_used,
                         project_indexes,
                         extra.as_deref(),
                         group,
@@ -205,6 +211,21 @@ impl RequiresDist {
                 .collect::<Result<Box<_>, _>>()?,
             SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
+
+        // Warn if we have any unused project sources.
+        let mut unused_source_names = Vec::new();
+        for package_name in project_sources.keys() {
+            if !project_sources_used.contains(package_name) {
+                unused_source_names.push(package_name);
+            }
+        }
+        if !unused_source_names.is_empty() {
+            warn_user_once!(
+                "some {} don't match a direct dependency and have no effect: {}",
+                "[tool.uv.sources]".cyan(),
+                unused_source_names.iter().map(OwoColorize::cyan).join(", "),
+            );
+        }
 
         Ok(Self {
             name: metadata.name,
