@@ -101,7 +101,7 @@ async fn credentials_for_url(
     let backend = AuthBackend::from_settings(preview).await?;
     let credentials = match &backend {
         AuthBackend::System(provider) => provider.fetch(url, username).await,
-        AuthBackend::TextStore(store, _lock) => store.get_credentials(url, username).cloned(),
+        AuthBackend::TextStore(store, _lock) => store.get_credentials(url, username)?.cloned(),
     };
     Ok(credentials)
 }
