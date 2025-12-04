@@ -21,6 +21,8 @@ use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
 
+#[cfg(not(feature = "self-update"))]
+use crate::install_source::InstallSource;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
@@ -59,6 +61,8 @@ use crate::settings::{
 
 pub(crate) mod child;
 pub(crate) mod commands;
+#[cfg(not(feature = "self-update"))]
+mod install_source;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
@@ -1249,10 +1253,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
-            anyhow::bail!(
-                "uv was installed through an external package manager, and self-update \
-                is not available. Please use your package manager to update uv."
-            );
+            const BASE_MESSAGE: &str =
+                "uv was installed through an external package manager and cannot update itself.";
+
+            let message = match InstallSource::detect() {
+                Some(source) => format!(
+                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
+                    source.description(),
+                    source.update_instructions().green(),
+                    hint = "hint".bold().cyan(),
+                    colon = ":".bold(),
+                    base = BASE_MESSAGE
+                ),
+                None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
+            };
+
+            anyhow::bail!(message);
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
