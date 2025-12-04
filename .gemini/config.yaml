@@ -1,0 +1,36 @@
+# Config for the Gemini Pull Request Review Bot.
+# https://github.com/marketplace/gemini-code-assist
+
+# Enables fun features such as a poem in the initial pull request summary.
+# Type: boolean, default: false.
+have_fun: false
+
+code_review:
+  # Disables Gemini from acting on PRs.
+  # Type: boolean, default: false.
+  disable: false
+
+  # Minimum severity of comments to post (LOW, MEDIUM, HIGH, CRITICAL).
+  # Type: string, default: MEDIUM.
+  comment_severity_threshold: MEDIUM
+
+  # Max number of review comments (-1 for unlimited).
+  # Type: integer, default: -1.
+  max_review_comments: -1
+
+  pull_request_opened:
+    # Post helpful instructions when PR is opened.
+    # Type: boolean, default: false.
+    help: true
+
+    # Post PR summary when opened.
+    # Type boolean, default: true.
+    summary: true 
+
+    # Post code review on PR open.
+    # Type boolean, default: true.
+    code_review: true
+
+# List of glob patterns to ignore (files and directories).
+# Type: array of string, default: [].
+ignore_patterns: []
