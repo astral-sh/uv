@@ -14,7 +14,7 @@ fn workspace_metadata_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32,7 +32,8 @@ fn workspace_metadata_simple() {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 }
 
@@ -49,7 +50,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -75,7 +76,8 @@ fn workspace_metadata_root_workspace() -> Result<()> {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 
     Ok(())
@@ -94,7 +96,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -120,7 +122,8 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 
     Ok(())
@@ -141,7 +144,7 @@ fn workspace_metadata_from_member() -> Result<()> {
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&member_dir), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&member_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -167,7 +170,8 @@ fn workspace_metadata_from_member() -> Result<()> {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 
     Ok(())
@@ -198,7 +202,7 @@ fn workspace_metadata_multiple_members() {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace_root), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace_root), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -224,7 +228,8 @@ fn workspace_metadata_multiple_members() {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 }
 
@@ -237,7 +242,7 @@ fn workspace_metadata_single_project() {
 
     let project = context.temp_dir.child("my-project");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&project), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -255,7 +260,8 @@ fn workspace_metadata_single_project() {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 }
 
@@ -272,7 +278,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -290,7 +296,8 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     }
 
     ----- stderr -----
-    "###
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    "#
     );
 
     Ok(())
@@ -301,13 +308,14 @@ fn workspace_metadata_with_excluded() -> Result<()> {
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata(), @r###"
+    uv_snapshot!(context.filters(), context.workspace_metadata(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
-    "###
+    "
     );
 }
