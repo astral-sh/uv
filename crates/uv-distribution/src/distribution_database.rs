@@ -89,12 +89,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
+        let current_timeout = self.client.unmanaged.timeout().as_secs();
+        let suggested_timeout = current_timeout * 2;
         if err.is_timeout() {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout ({}s).\nTry increasing UV_HTTP_TIMEOUT to a larger integer value (in seconds), e.g., UV_HTTP_TIMEOUT=60",
-                    self.client.unmanaged.timeout().as_secs()
+                    "Failed to download distribution due to network timeout ({current_timeout}s).\nTry increasing ``UV_HTTP_TIMEOUT`` to a larger value, e.g., ``UV_HTTP_TIMEOUT={suggested_timeout}``"
                 ),
             )
         } else {
