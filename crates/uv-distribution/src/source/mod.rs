@@ -457,7 +457,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -587,7 +587,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -859,7 +859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -964,7 +964,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1185,7 +1185,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1309,7 +1309,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1614,7 +1614,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // We don't track any cache information for Git-based source distributions; they're assumed
         // to be immutable.
@@ -1829,7 +1829,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))

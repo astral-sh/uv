@@ -25,7 +25,7 @@ use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -1308,7 +1308,7 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 impl AddTarget {
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
-    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
         match self {
             Self::Script(_, interpreter) => interpreter.lock().await,
             Self::Project(_, python_target) => python_target.interpreter().lock().await,

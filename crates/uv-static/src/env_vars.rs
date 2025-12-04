@@ -1271,4 +1271,10 @@ impl EnvVars {
     /// of build failures.
     #[attr_added_in("0.9.15")]
     pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
+
+    /// The time in seconds uv waits for a file lock to become available.
+    ///
+    /// Defaults to 300s (5 min).
+    #[attr_added_in("0.9.4")]
+    pub const UV_LOCK_TIMEOUT: &'static str = "UV_LOCK_TIMEOUT";
 }

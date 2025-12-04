@@ -36,7 +36,7 @@ use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
     Resolution,
 };
-use uv_fs::LockedFile;
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -493,12 +493,16 @@ impl SourceBuild {
                 "uv-setuptools-{}.lock",
                 cache_digest(&canonical_source_path)
             ));
-            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
-                .await
-                .inspect_err(|err| {
-                    warn!("Failed to acquire build lock: {err}");
-                })
-                .ok();
+            source_tree_lock = LockedFile::acquire(
+                lock_path,
+                LockedFileMode::Exclusive,
+                self.source_tree.to_string_lossy(),
+            )
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire build lock: {err}");
+            })
+            .ok();
         }
         Ok(source_tree_lock)
     }

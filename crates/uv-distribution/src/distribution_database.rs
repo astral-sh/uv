@@ -395,7 +395,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     built_wheel.target.file_name().unwrap().to_str().unwrap()
                 ),
             );
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // If the wheel was unzipped previously, respect it. Source distributions are
@@ -578,7 +578,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
@@ -749,7 +749,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
@@ -951,7 +951,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Determine the last-modified time of the wheel.
