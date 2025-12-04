@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
+use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest, Version};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -13,7 +13,7 @@ use crate::printer::Printer;
 
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
-    version: Option<String>,
+    requested_version: Option<String>,
     token: Option<String>,
     dry_run: bool,
     printer: Printer,
@@ -63,10 +63,8 @@ pub(crate) async fn self_update(
     // If we know what our version is, ignore whatever the receipt thinks it is!
     // This makes us behave better if someone manually installs a random version of uv
     // in a way that doesn't update the receipt.
-    if let Ok(version) = env!("CARGO_PKG_VERSION").parse() {
-        // This is best-effort, it's fine if it fails (also it can't actually fail)
-        let _ = updater.set_current_version(version);
-    }
+    let current_version: Version = env!("CARGO_PKG_VERSION").parse()?;
+    let _ = updater.set_current_version(current_version.clone());
 
     // Ensure the receipt is for the current binary. If it's not, then the user likely has multiple
     // uv binaries installed, and the current binary was _not_ installed via the standalone
@@ -104,41 +102,73 @@ pub(crate) async fn self_update(
         )
     )?;
 
-    let update_request = if let Some(version) = version {
+    let update_request = if let Some(version) = requested_version {
         UpdateRequest::SpecificTag(version)
     } else {
         UpdateRequest::Latest
     };
 
-    updater.configure_version_specifier(update_request.clone());
+    updater.configure_version_specifier(update_request);
+
+    let new_version = if let Some(queried_version) = updater.query_new_version().await? {
+        queried_version.to_owned()
+    } else {
+        // AxoUpdater interface is not clear when this would happen, and its current version would never hit this code path.
+        writeln!(printer.stderr(), "Could not determine version to update.",)?;
+        return Ok(ExitStatus::Error);
+    };
+
+    writeln!(
+        printer.stderr(),
+        "{}",
+        format_args!(
+            "{}{} Current version: {}",
+            "info".cyan().bold(),
+            ":".bold(),
+            format!("v{current_version}").bold().cyan(),
+        )
+    )?;
+
+    writeln!(
+        printer.stderr(),
+        "{}",
+        format_args!(
+            "{}{} Latest/requested version: {}",
+            "info".cyan().bold(),
+            ":".bold(),
+            format!("v{new_version}").bold().cyan(),
+        )
+    )?;
 
     if dry_run {
-        // TODO(charlie): `updater.fetch_release` isn't public, so we can't say what the latest
-        // version is.
         if updater.is_update_needed().await? {
-            let version = match update_request {
-                UpdateRequest::Latest | UpdateRequest::LatestMaybePrerelease => {
-                    "the latest version".to_string()
-                }
-                UpdateRequest::SpecificTag(version) | UpdateRequest::SpecificVersion(version) => {
-                    format!("v{version}")
-                }
-            };
-            writeln!(
-                printer.stderr(),
-                "Would update uv from {} to {}",
-                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
-                version.bold().white(),
-            )?;
-        } else {
             writeln!(
                 printer.stderr(),
                 "{}",
-                format_args!(
-                    "You're on the latest version of uv ({})",
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
-                )
+                format_args!("{}{} Would update uv.", "info".cyan().bold(), ":".bold())
             )?;
+        } else {
+            if current_version == new_version {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format_args!(
+                        "{}{} Would not update uv. Already on the latest/requested version of uv.",
+                        "info".cyan().bold(),
+                        ":".bold(),
+                    )
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format_args!(
+                        "{}{} Would not update uv. Executable was not determined to be eligible.",
+                        "info".cyan().bold(),
+                        ":".bold(),
+                    )
+                )?;
+            }
         }
         return Ok(ExitStatus::Success);
     }
@@ -191,7 +221,7 @@ pub(crate) async fn self_update(
                     "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
+                    format!("v{current_version}").bold().cyan()
                 )
             )?;
         }
