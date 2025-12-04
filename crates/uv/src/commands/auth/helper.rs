@@ -8,8 +8,9 @@ use tracing::debug;
 
 use uv_auth::{AuthBackend, Credentials, PyxTokenStore};
 use uv_client::BaseClientBuilder;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user;
 
 use crate::{commands::ExitStatus, printer::Printer, settings::NetworkSettings};
 
@@ -126,6 +127,13 @@ pub(crate) async fn helper(
     network_settings: &NetworkSettings,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    if !preview.is_enabled(PreviewFeatures::AUTH_HELPER) {
+        warn_user!(
+            "The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeatures::AUTH_HELPER
+        );
+    }
+
     let request = BazelCredentialRequest::from_stdin()?;
 
     // TODO: make this logic generic over the protocol by providing `request.uri` from a

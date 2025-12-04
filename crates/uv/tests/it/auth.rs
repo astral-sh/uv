@@ -1955,6 +1955,7 @@ fn bazel_helper_basic_auth() {
     {"headers":{"Authorization":["Basic dGVzdHVzZXI6dGVzdHBhc3M="]}}
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
     );
 }
@@ -1988,6 +1989,7 @@ fn bazel_helper_token() {
     {"headers":{"Authorization":["Basic X190b2tlbl9fOm15dG9rZW4xMjM="]}}
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
     );
 }
@@ -2007,6 +2009,7 @@ fn bazel_helper_no_credentials() {
     {"headers":{}}
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
     );
 }
@@ -2026,6 +2029,7 @@ fn bazel_helper_invalid_json() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
       Caused by: expected ident at line 1 column 2
     "
@@ -2047,6 +2051,7 @@ fn bazel_helper_invalid_uri() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
       Caused by: relative URL without a base: "not a url" at line 1 column 18
     "#
@@ -2083,6 +2088,7 @@ fn bazel_helper_username_in_uri() {
     {"headers":{"Authorization":["Basic c3BlY2lmaWN1c2VyOnNwZWNpZmljcGFzcw=="]}}
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
     );
 }
@@ -2117,6 +2123,7 @@ fn bazel_helper_unknown_username_in_uri() {
     {"headers":{}}
 
     ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
     );
 }
