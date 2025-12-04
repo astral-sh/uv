@@ -18,3 +18,4 @@ uv run "$project_root/scripts/bump-workspace-crate-versions.py"
 
 echo "Updating lockfile..."
 cargo update -p uv
+pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
