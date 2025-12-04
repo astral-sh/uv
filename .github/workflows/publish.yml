@@ -1,6 +1,6 @@
 # Perform publishing steps.
 #
-# This is a resuable workflow that runs as a subworkflow of .github/workflows/release.yml;
+# This is a reusable workflow that runs as a subworkflow of .github/workflows/release.yml;
 # specifically, as the `publish` job within `cargo-dist`.
 #
 # Internally, this reusable workflow dispatches to other reusable workflows for specific
