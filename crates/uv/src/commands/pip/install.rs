@@ -639,13 +639,34 @@ pub(crate) async fn pip_install(
         preview,
     );
 
-    // Sync the environment.
-    match operations::install(
+    let start = std::time::Instant::now();
+
+    // Make a plan
+    let plan = match operations::plan(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
         modifications,
         &reinstall,
+        &build_options,
+        &hasher,
+        &tags,
+        &build_dispatch,
+        &cache,
+        &environment,
+    ) {
+        Ok(plan) => plan,
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+    };
+
+    // Sync the environment.
+    match operations::install(
+        &resolution,
+        plan,
         &build_options,
         link_mode,
         compile,
@@ -662,6 +683,7 @@ pub(crate) async fn pip_install(
         dry_run,
         printer,
         preview,
+        start,
     )
     .await
     {

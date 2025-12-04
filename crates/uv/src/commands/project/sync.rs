@@ -824,13 +824,26 @@ pub(super) async fn do_sync(
 
     let site_packages = SitePackages::from_environment(venv)?;
 
-    // Sync the environment.
-    operations::install(
+    let start = std::time::Instant::now();
+
+    let plan = operations::plan(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,
         modifications,
         reinstall,
+        build_options,
+        &hasher,
+        &tags,
+        &build_dispatch,
+        cache,
+        venv,
+    )?;
+
+    // Sync the environment.
+    operations::install(
+        &resolution,
+        plan,
         build_options,
         link_mode,
         compile_bytecode,
@@ -847,6 +860,7 @@ pub(super) async fn do_sync(
         dry_run,
         printer,
         preview,
+        start,
     )
     .await?;
 
