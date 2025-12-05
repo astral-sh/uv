@@ -2489,6 +2489,29 @@ where
                             ContextValue::String("uv pip show".to_string()),
                         );
                     }
+                    "activate" => {
+                        // Handle "activate" with a helpful error message
+                        // instead of the generic unknown command error
+                        eprintln!(
+                            "{} `uv activate` is not supported. To activate a virtual environment, use:",
+                            "error".red().bold()
+                        );
+                        #[cfg(unix)]
+                        {
+                            eprintln!("  {}", "source .venv/bin/activate".green());
+                        }
+                        #[cfg(windows)]
+                        {
+                            eprintln!("  {}", ".venv\\Scripts\\activate".green());
+                            eprintln!("  {}", ".venv\\Scripts\\Activate.ps1".green());
+                        }
+                        eprintln!(
+                            "\n{} Create a virtual environment with: {}",
+                            "hint".bold().cyan(),
+                            "uv venv".green()
+                        );
+                        return ExitStatus::Error.into();
+                    }
                     _ => {}
                 }
             }
