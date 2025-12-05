@@ -6433,6 +6433,8 @@ name = "uv-preview"
 version = "0.0.5"
 dependencies = [
  "bitflags 2.9.4",
+ "schemars",
+ "serde",
  "thiserror 2.0.17",
  "uv-warnings",
 ]
@@ -6764,6 +6766,7 @@ dependencies = [
  "uv-normalize",
  "uv-options-metadata",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
