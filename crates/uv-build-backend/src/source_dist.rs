@@ -26,8 +26,7 @@ pub fn build_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
@@ -45,8 +44,7 @@ pub fn list_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<(SourceDistFilename, FileList), Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
@@ -188,8 +186,7 @@ fn write_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }

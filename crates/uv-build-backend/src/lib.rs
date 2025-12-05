@@ -32,9 +32,9 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Invalid pyproject.toml")]
-    Toml(#[from] toml::de::Error),
-    #[error("Invalid pyproject.toml")]
+    #[error("Invalid metadata format in: {}", _0.user_display())]
+    Toml(PathBuf, #[source] toml::de::Error),
+    #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
