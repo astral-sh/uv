@@ -792,15 +792,15 @@ fn license_glob_without_matches_errors() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(context.temp_dir.path())
-        .current_dir(project.path()), @r###"
+        .current_dir(project.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid pyproject.toml
+    error: Invalid project metadata
       Caused by: `project.license-files` glob `abc` did not match any files
-    "###);
+    ");
 
     Ok(())
 }
