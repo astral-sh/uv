@@ -5120,8 +5120,11 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if anyio is first-party
+          [build-system]
+          requires = ["setuptools"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           anyio = ["setuptools"]
 
@@ -5193,8 +5196,11 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if anyio is first-party
+          [build-system]
+          requires = ["setuptools"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           anyio = ["setuptools"]
 
@@ -8831,8 +8837,11 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+          # if iniconfig is first-party
+          [build-system]
+          requires = ["hatchling"]
+          # otherwise
           [tool.uv.extra-build-dependencies]
           iniconfig = ["hatchling"]
 
