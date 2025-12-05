@@ -4991,8 +4991,9 @@ pub enum ToolCommand {
     /// Install commands provided by a Python package.
     ///
     /// Packages are installed into an isolated virtual environment in the uv tools directory. The
-    /// executables are linked the tool executable directory, which is determined according to the
-    /// XDG standard and can be retrieved with `uv tool dir --bin`.
+    /// executables are linked to the tool executable directory, which is determined according to
+    /// the XDG standard and can be retrieved with `uv tool dir --bin`.
+    /// See `uv help tool dir` for how to specify the directories to install/link tools.
     ///
     /// If the tool was previously installed, the existing tool will generally be replaced.
     Install(ToolInstallArgs),
