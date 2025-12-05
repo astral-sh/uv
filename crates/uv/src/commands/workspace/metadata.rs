@@ -55,7 +55,7 @@ pub(crate) async fn metadata(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::WORKSPACE_METADATA) {
+    if !preview.is_enabled(PreviewFeatures::WORKSPACE_METADATA) {
         warn_user!(
             "The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeatures::WORKSPACE_METADATA
