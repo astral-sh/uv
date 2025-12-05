@@ -307,6 +307,11 @@ impl EnvVars {
     #[attr_added_in("0.4.18")]
     pub const UV_NO_SYNC: &'static str = "UV_NO_SYNC";
 
+    /// Equivalent to the `--isolated-lock` command-line argument. If set, uv will resolve and sync
+    /// without writing the `uv.lock` file to disk.
+    #[attr_added_in("0.9.16")]
+    pub const UV_ISOLATED_LOCK: &'static str = "UV_ISOLATED_LOCK";
+
     /// Equivalent to the `--locked` command-line argument. If set, uv will assert that the
     /// `uv.lock` remains unchanged.
     #[attr_added_in("0.4.25")]

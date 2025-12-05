@@ -160,6 +160,81 @@ fn frozen() -> Result<()> {
 }
 
 #[test]
+fn isolated_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=3,<5"]
+        "#,
+    )?;
+
+    // Running with `--isolated-lock` should not create a lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--isolated-lock"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    context
+        .temp_dir
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    // Create a lockfile.
+    context.lock().assert().success();
+
+    let locked = context.read("uv.lock");
+
+    // Modify the dependencies.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=3,<5", "iniconfig"]
+        "#,
+    )?;
+
+    // Running with `--isolated-lock` should sync the new dependencies,
+    // but not update the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--isolated-lock"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let after = context.read("uv.lock");
+
+    assert_eq!(
+        locked, after,
+        "Lock file should not be modified with --isolated-lock"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn empty() -> Result<()> {
     let context = TestContext::new("3.12");
 

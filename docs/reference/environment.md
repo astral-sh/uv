@@ -249,6 +249,12 @@ Defaults to `~/.local/bin`.
 Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
 a `pyproject.toml` or `uv.toml` file.
 
+### `UV_ISOLATED_LOCK`
+<small class="added-in">added in `0.9.16`</small>
+
+Equivalent to the `--isolated-lock` command-line argument. If set, uv will resolve and sync
+without writing the `uv.lock` file to disk.
+
 ### `UV_KEYRING_PROVIDER`
 <small class="added-in">added in `0.1.19`</small>
 

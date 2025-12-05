@@ -1343,6 +1343,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: bool,
+    pub(crate) isolated_lock: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
@@ -1396,6 +1397,7 @@ impl SyncSettings {
             only_install_package,
             locked,
             frozen,
+            isolated_lock,
             active,
             no_active,
             dry_run,
@@ -1437,6 +1439,7 @@ impl SyncSettings {
             output_format,
             lock_check,
             frozen,
+            isolated_lock,
             dry_run,
             script,
             active: flag(active, no_active, "active"),

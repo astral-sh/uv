@@ -2024,6 +2024,7 @@ async fn run_project(
                 project_dir,
                 args.lock_check,
                 args.frozen,
+                args.isolated_lock,
                 args.dry_run,
                 args.active,
                 args.all_packages,

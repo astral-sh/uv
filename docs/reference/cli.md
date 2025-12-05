@@ -1446,7 +1446,9 @@ uv sync [OPTIONS]
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
 <p>May also be set with the <code>UV_INDEX_URL</code> environment variable.</p></dd><dt id="uv-sync--inexact"><a href="#uv-sync--inexact"><code>--inexact</code></a>, <code>--no-exact</code></dt><dd><p>Do not remove extraneous packages present in the environment.</p>
 <p>When enabled, uv will make the minimum necessary changes to satisfy the requirements. By default, syncing will remove any extraneous packages from the environment</p>
-</dd><dt id="uv-sync--keyring-provider"><a href="#uv-sync--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
+</dd><dt id="uv-sync--isolated-lock"><a href="#uv-sync--isolated-lock"><code>--isolated-lock</code></a></dt><dd><p>Resolve and sync without persisting changes to the <code>uv.lock</code> file.</p>
+<p>Performs a full resolution and installs the result into the project environment, but leaves the lockfile unchanged. Useful for testing alternate resolution strategies without updating the lockfile on disk.</p>
+<p>May also be set with the <code>UV_ISOLATED_LOCK</code> environment variable.</p></dd><dt id="uv-sync--keyring-provider"><a href="#uv-sync--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 <p>Defaults to <code>disabled</code>.</p>
 <p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p><p>Possible values:</p>
