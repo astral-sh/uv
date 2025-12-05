@@ -27,6 +27,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::Operator;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
@@ -239,13 +240,62 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
-                    requirements.extend(group.iter().cloned().map(|group| Requirement {
-                        origin: Some(RequirementOrigin::Group(
-                            pyproject_path.clone(),
-                            metadata.name.clone(),
-                            group_name.clone(),
-                        )),
-                        ..group
+                    if let Some(requires_python) = group.requires_python.as_ref() {
+                        if !python_requirement
+                            .target()
+                            .is_contained_by(requires_python.specifiers())
+                        {
+                            let required_spec = requires_python.specifiers().to_string();
+                            let active_spec = python_requirement.target().specifiers().to_string();
+                            let interpreter_version = python_requirement.exact().to_string();
+
+                            let suggested_version = requires_python
+                                .range()
+                                .lower()
+                                .specifier()
+                                .and_then(|specifier| {
+                                    let (operator, version) = specifier.into_parts();
+
+                                    match operator {
+                                        Operator::GreaterThanEqual
+                                        | Operator::Equal
+                                        | Operator::ExactEqual
+                                        | Operator::EqualStar
+                                        | Operator::TildeEqual => Some(version),
+                                        _ => None,
+                                    }
+                                });
+
+                            let mut message = format!(
+                                "Dependency group `{group_name}` in `{}` requires Python `{required_spec}`, but uv is resolving for Python `{active_spec}` (current interpreter: `{interpreter_version}`).",
+                                pyproject_path.user_display()
+                            );
+
+                            if let Some(ref version) = suggested_version {
+                                let suggested_python = version.to_string();
+
+                                write!(
+                                    message,
+                                    "{}",
+                                    &format!(
+                                        " Re-run with `--python {suggested_python}` to target a compatible Python version."
+                                    )
+                                )?;
+                            }
+
+                            return Err(anyhow!(message).into());
+                        }
+                    }
+
+                    requirements.extend(group.requirements.iter().cloned().map(|group| {
+                        Requirement {
+                            origin: Some(RequirementOrigin::Group(
+                                pyproject_path.clone(),
+                                metadata.name.clone(),
+                                group_name.clone(),
+                            )),
+                            ..group
+                        }
                     }));
                 }
             }
