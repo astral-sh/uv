@@ -13259,7 +13259,7 @@ fn install_missing_python_with_target() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.14.1
+    Using CPython 3.14.2
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
