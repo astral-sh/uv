@@ -17921,3 +17921,52 @@ fn post_release_less_than() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/10699>
+#[test]
+fn invalid_platform_macos() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("mlx")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .env(EnvVars::MACOSX_DEPLOYMENT_TARGET, "12.5")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of mlx are available:
+              mlx==0.0.2
+              mlx==0.0.3
+              mlx==0.0.4
+              mlx==0.0.5
+              mlx==0.0.6
+              mlx==0.0.7
+              mlx==0.0.9
+              mlx==0.0.10
+              mlx==0.0.11
+              mlx==0.1.0
+              mlx==0.2.0
+              mlx==0.3.0
+              mlx==0.4.0
+              mlx==0.5.1
+              mlx==0.6.0
+              mlx==0.7.0
+          and mlx<=0.0.3 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that mlx<=0.0.3 cannot be used.
+          And because mlx>=0.0.4 has no wheels with a matching platform tag (e.g., `macosx_12_0_arm64`) and you require mlx, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `mlx` (v0.0.3) with the following Python ABI tags: `cp38`, `cp39`, `cp310`, `cp311`
+
+          hint: Wheels are available for `mlx` (v0.7.0) on the following platforms: `macosx_13_0_arm64`, `macosx_14_0_arm64`
+
+          hint: Wheels are built for macOS 13.0 or newer; set environment variable MACOSX_DEPLOYMENT_TARGET (e.g. MACOSX_DEPLOYMENT_TARGET=13.0) to target a compatible minimum deployment target (current minimum is 12.5)
+    ");
+
+    Ok(())
+}

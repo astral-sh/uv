@@ -937,7 +937,7 @@ impl TargetTriple {
 }
 
 /// Return the macOS deployment target as parsed from the environment.
-fn macos_deployment_target() -> Option<(u16, u16)> {
+pub fn macos_deployment_target() -> Option<(u16, u16)> {
     let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
     let mut parts = version.split('.');
 
