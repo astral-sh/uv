@@ -41,7 +41,33 @@ The `UV_PREVIEW_FEATURES` environment variable can be used similarly, e.g.:
 $ UV_PREVIEW_FEATURES=foo,bar uv run ...
 ```
 
+Alternatively, preview features can be configured in `pyproject.toml` or `uv.toml`:
+
+```toml
+[tool.uv]
+preview-features = ["json-output", "format"]
+```
+
+Or, all preview features can be enabled with:
+
+```toml
+[tool.uv]
+preview = true
+```
+
 For backwards compatibility, enabling preview features that do not exist will warn, but not error.
+
+## Configuration precedence
+
+When multiple preview configuration methods are used, the following precedence applies (highest to
+lowest):
+
+1. Command line flags (`--no-preview`, `--preview`, `--preview-features`)
+2. Environment variables (`UV_PREVIEW`, `UV_PREVIEW_FEATURES`)
+3. Configuration files (`pyproject.toml`, `uv.toml`)
+
+For example, if you set `preview = true` in configuration but use `--no-preview` on the command
+line, preview features will be disabled.
 
 ## Using preview features
 

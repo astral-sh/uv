@@ -148,6 +148,66 @@ impl TestContext {
         self
     }
 
+    /// Set the "concurrent builds" for all commands in this context.
+    pub fn with_concurrent_builds(mut self, concurrent_builds: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_BUILDS.into(),
+            concurrent_builds.into(),
+        ));
+        self
+    }
+
+    /// Set the "concurrent downloads" for all commands in this context.
+    pub fn with_concurrent_downloads(mut self, concurrent_downloads: &str) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_CONCURRENT_DOWNLOADS.into(),
+            concurrent_downloads.into(),
+        ));
+        self
+    }
+
+    /// Set the "link mode" for all commands in this context.
+    pub fn with_link_mode(mut self, link_mode: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_LINK_MODE.into(), link_mode.into()));
+        self
+    }
+
+    /// Set the "http retries" for all commands in this context.
+    pub fn with_http_retries(mut self, http_retries: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_RETRIES.into(), http_retries.into()));
+        self
+    }
+
+    /// Set the "color" preference for all commands in this context.
+    pub fn with_color(mut self, color: &str) -> Self {
+        // Color is controlled by NO_COLOR, FORCE_COLOR, and CLICOLOR_FORCE environment variables
+        // See: crates/uv/src/settings.rs GlobalSettings::resolve
+        match color.to_lowercase().as_str() {
+            "never" => {
+                self.extra_env.push((EnvVars::NO_COLOR.into(), "1".into()));
+            }
+            "always" => {
+                self.extra_env
+                    .push((EnvVars::FORCE_COLOR.into(), "1".into()));
+            }
+            "auto" => {
+                // Auto is the default behavior, but we explicitly remove color-related env vars
+                // to ensure consistent behavior across environments
+                self.extra_env.push((EnvVars::NO_COLOR.into(), "".into()));
+                self.extra_env
+                    .push((EnvVars::FORCE_COLOR.into(), "".into()));
+                self.extra_env
+                    .push((EnvVars::CLICOLOR_FORCE.into(), "".into()));
+            }
+            _ => {
+                panic!("Invalid color value: {color}. Use 'never', 'always', or 'auto'");
+            }
+        }
+        self
+    }
+
     /// Add extra standard filtering for messages like "Resolved 10 packages" which
     /// can differ between platforms.
     ///

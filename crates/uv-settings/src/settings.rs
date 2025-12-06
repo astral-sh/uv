@@ -257,6 +257,17 @@ pub struct GlobalOptions {
         "#
     )]
     pub preview: Option<bool>,
+    /// Enable experimental preview features.
+    /// Preview features may change without warning.
+    /// Use comma-separated values or pass multiple times to enable multiple features.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            preview-features = ["json-output", "format"]
+        "#
+    )]
+    pub preview_features: Option<Vec<String>>,
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
@@ -2048,6 +2059,7 @@ pub struct OptionsWire {
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
     preview: Option<bool>,
+    preview_features: Option<Vec<String>>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
@@ -2142,6 +2154,7 @@ impl From<OptionsWire> for Options {
             no_cache,
             cache_dir,
             preview,
+            preview_features,
             python_preference,
             python_downloads,
             python_install_mirror,
@@ -2213,6 +2226,7 @@ impl From<OptionsWire> for Options {
                 no_cache,
                 cache_dir,
                 preview,
+                preview_features,
                 python_preference,
                 python_downloads,
                 concurrent_downloads,
