@@ -90,6 +90,7 @@ miette = { workspace = true, features = ["fancy-no-backtrace"] }
 open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rkyv = { workspace = true }
@@ -115,7 +116,7 @@ version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
-diskus = { workspace = true }
+crossbeam-channel = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
