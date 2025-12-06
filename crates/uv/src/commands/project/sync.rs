@@ -60,6 +60,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: bool,
+    isolated_lock: bool,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
@@ -329,7 +330,7 @@ pub(crate) async fn sync(
         LockMode::Frozen
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(environment.interpreter(), lock_check)
-    } else if dry_run.enabled() {
+    } else if isolated_lock || dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
         LockMode::Write(environment.interpreter())
@@ -382,7 +383,7 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    let lock_report = LockReport::from((&lock_target, &mode, &outcome));
+    let lock_report = LockReport::from((&lock_target, &mode, &outcome, dry_run.enabled()));
     if let Some(message) = lock_report.format(output_format) {
         writeln!(printer.stderr(), "{message}")?;
     }
@@ -1308,8 +1309,10 @@ struct LockReport {
     dry_run: bool,
 }
 
-impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
-    fn from((target, mode, outcome): (&LockTarget, &LockMode, &Outcome)) -> Self {
+impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome, bool)> for LockReport {
+    fn from(
+        (target, mode, outcome, dry_run_enabled): (&LockTarget, &LockMode, &Outcome, bool),
+    ) -> Self {
         Self {
             path: target.lock_path().deref().into(),
             action: match outcome {
@@ -1329,7 +1332,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                 // TODO(zanieb): We don't have a way to report the outcome of the lock yet
                 Outcome::LockMismatch(..) => LockAction::Check,
             },
-            dry_run: matches!(mode, LockMode::DryRun(_)),
+            dry_run: matches!(mode, LockMode::DryRun(_)) && dry_run_enabled,
         }
     }
 }

@@ -3848,6 +3848,14 @@ pub struct SyncArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Resolve and sync without persisting changes to the `uv.lock` file.
+    ///
+    /// Performs a full resolution and installs the result into the project environment, but leaves
+    /// the lockfile unchanged. Useful for testing alternate resolution strategies without
+    /// updating the lockfile on disk.
+    #[arg(long, env = EnvVars::UV_ISOLATED_LOCK, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "frozen"])]
+    pub isolated_lock: bool,
+
     /// Perform a dry run, without writing the lockfile or modifying the project environment.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
