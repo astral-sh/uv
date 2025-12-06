@@ -23,6 +23,7 @@ Released on 2025-12-06.
 - Support `--target` and `--prefix` in `uv pip list`, `uv pip freeze`, and `uv pip show` ([#16955](https://github.com/astral-sh/uv/pull/16955))
 - Tweak language for build backend validation errors ([#16720](https://github.com/astral-sh/uv/pull/16720))
 - Use explicit credentials cache instead of global static ([#16768](https://github.com/astral-sh/uv/pull/16768))
+- Enable SIMD in HTML parsing ([#17010](https://github.com/astral-sh/uv/pull/17010))
 
 ### Preview features
 
@@ -33,6 +34,7 @@ Released on 2025-12-06.
 
 - Fix Pyston wheel compatibility tags ([#16972](https://github.com/astral-sh/uv/pull/16972))
 - Allow redundant entries in `tool.uv.build-backend.module-name` but emit warnings ([#16928](https://github.com/astral-sh/uv/pull/16928))
+- Fix infinite loop in non-attribute re-treats during HTML parsing ([#17010](https://github.com/astral-sh/uv/pull/17010))
 
 ### Documentation
 
