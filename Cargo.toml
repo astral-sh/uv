@@ -177,7 +177,7 @@ target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
-astral-tl = { version = "0.7.9" }
+astral-tl = { version = "0.7.11" }
 tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync", "time"] }
 tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
