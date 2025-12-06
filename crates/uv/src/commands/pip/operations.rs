@@ -44,7 +44,7 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
@@ -436,34 +436,21 @@ impl Changelog {
     }
 }
 
-/// Install a set of requirements into the current environment.
-///
-/// Returns a [`Changelog`] summarizing the changes made to the environment.
-pub(crate) async fn install(
+/// Produce a [`Plan`] for how to approach installing a set of packages
+#[allow(clippy::result_large_err)]
+pub(crate) fn plan(
     resolution: &Resolution,
     site_packages: SitePackages,
     installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
-    link_mode: LinkMode,
-    compile: bool,
     hasher: &HashStrategy,
     tags: &Tags,
-    client: &RegistryClient,
-    in_flight: &InFlight,
-    concurrency: Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
-    logger: Box<dyn InstallLogger>,
-    installer_metadata: bool,
-    dry_run: DryRun,
-    printer: Printer,
-    preview: Preview,
-) -> Result<Changelog, Error> {
-    let start = std::time::Instant::now();
-
+) -> Result<Plan, Error> {
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::new(resolution)
@@ -484,11 +471,6 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run.enabled() {
-        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
-        return Ok(Changelog::default());
-    }
-
     let Plan {
         cached,
         remote,
@@ -502,27 +484,62 @@ pub(crate) async fn install(
         Modifications::Exact => extraneous,
     };
 
+    Ok(Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    })
+}
+
+/// Install a set of requirements into the current environment.
+///
+/// Returns a [`Changelog`] summarizing the changes made to the environment.
+pub(crate) async fn install(
+    resolution: &Resolution,
+    plan: Plan,
+    build_options: &BuildOptions,
+    link_mode: LinkMode,
+    compile: bool,
+    hasher: &HashStrategy,
+    tags: &Tags,
+    client: &RegistryClient,
+    in_flight: &InFlight,
+    concurrency: Concurrency,
+    build_dispatch: &BuildDispatch<'_>,
+    cache: &Cache,
+    venv: &PythonEnvironment,
+    logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
+    dry_run: DryRun,
+    printer: Printer,
+    preview: Preview,
+    start: std::time::Instant,
+) -> Result<Changelog, Error> {
     // Nothing to do.
-    if remote.is_empty()
-        && cached.is_empty()
-        && reinstalls.is_empty()
-        && extraneous.is_empty()
+    if plan.remote.is_empty()
+        && plan.cached.is_empty()
+        && plan.reinstalls.is_empty()
+        && plan.extraneous.is_empty()
         && !compile
     {
         logger.on_audit(resolution.len(), start, printer)?;
+        if dry_run.enabled() {
+            writeln!(printer.stderr(), "Would make no changes")?;
+        }
+        return Ok(Changelog::default());
+    }
+
+    if dry_run.enabled() {
+        report_dry_run(dry_run, plan, printer)?;
         return Ok(Changelog::default());
     }
 
     // Partition into two sets: those that require build isolation, and those that disable it. This
     // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
     // `--no-build-isolation` packages "access" to the rest of the environment.
-    let (isolated_phase, shared_phase) = Plan {
-        cached,
-        remote,
-        reinstalls,
-        extraneous,
-    }
-    .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
+    let (isolated_phase, shared_phase) =
+        plan.partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
 
     let has_isolated_phase = !isolated_phase.is_empty();
     let has_shared_phase = !shared_phase.is_empty();
@@ -834,33 +851,13 @@ pub(crate) fn report_target_environment(
 
 /// Report on the results of a dry-run installation.
 #[allow(clippy::result_large_err)]
-fn report_dry_run(
-    dry_run: DryRun,
-    resolution: &Resolution,
-    plan: Plan,
-    modifications: Modifications,
-    start: std::time::Instant,
-    printer: Printer,
-) -> Result<(), Error> {
+fn report_dry_run(dry_run: DryRun, plan: Plan, printer: Printer) -> Result<(), Error> {
     let Plan {
         cached,
         remote,
         reinstalls,
         extraneous,
     } = plan;
-
-    // If we're in `install` mode, ignore any extraneous distributions.
-    let extraneous = match modifications {
-        Modifications::Sufficient => vec![],
-        Modifications::Exact => extraneous,
-    };
-
-    // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
-        writeln!(printer.stderr(), "Would make no changes")?;
-        return Ok(());
-    }
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {

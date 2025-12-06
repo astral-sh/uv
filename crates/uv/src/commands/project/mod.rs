@@ -2140,13 +2140,26 @@ pub(crate) async fn sync_environment(
         preview,
     );
 
-    // Sync the environment.
-    pip::operations::install(
+    let start = std::time::Instant::now();
+
+    let plan = pip::operations::plan(
         resolution,
         site_packages,
         InstallationStrategy::Permissive,
         modifications,
         reinstall,
+        build_options,
+        &hasher,
+        tags,
+        &build_dispatch,
+        cache,
+        &venv,
+    )?;
+
+    // Sync the environment.
+    pip::operations::install(
+        resolution,
+        plan,
         build_options,
         link_mode,
         compile_bytecode,
@@ -2163,6 +2176,7 @@ pub(crate) async fn sync_environment(
         dry_run,
         printer,
         preview,
+        start,
     )
     .await?;
 
@@ -2408,13 +2422,27 @@ pub(crate) async fn update_environment(
         Err(err) => return Err(err.into()),
     };
 
-    // Sync the environment.
-    let changelog = pip::operations::install(
+    let start = std::time::Instant::now();
+
+    // Make a plan
+    let plan = pip::operations::plan(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
         modifications,
         reinstall,
+        build_options,
+        &hasher,
+        &tags,
+        &build_dispatch,
+        cache,
+        &venv,
+    )?;
+
+    // Sync the environment.
+    let changelog = pip::operations::install(
+        &resolution,
+        plan,
         build_options,
         *link_mode,
         *compile_bytecode,
@@ -2431,6 +2459,7 @@ pub(crate) async fn update_environment(
         dry_run,
         printer,
         preview,
+        start,
     )
     .await?;
 
