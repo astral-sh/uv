@@ -3,6 +3,48 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.16
+
+Released on 2025-12-06.
+
+### Python
+
+- Add CPython 3.14.2
+- Add CPython 3.13.11
+
+### Enhancements
+
+- Add a 5m default timeout to acquiring file locks to fail faster on deadlock ([#16342](https://github.com/astral-sh/uv/pull/16342))
+- Add a stub `debug` subcommand to `uv pip` announcing its intentional absence ([#16966](https://github.com/astral-sh/uv/pull/16966))
+- Add bounds in `uv add --script` ([#16954](https://github.com/astral-sh/uv/pull/16954))
+- Add brew specific message for `uv self update` ([#16838](https://github.com/astral-sh/uv/pull/16838))
+- Error when built wheel is for the wrong platform ([#16074](https://github.com/astral-sh/uv/pull/16074))
+- Filter wheels from PEP 751 files based on `--no-binary` et al in `uv pip compile` ([#16956](https://github.com/astral-sh/uv/pull/16956))
+- Support `--target` and `--prefix` in `uv pip list`, `uv pip freeze`, and `uv pip show` ([#16955](https://github.com/astral-sh/uv/pull/16955))
+- Tweak language for build backend validation errors ([#16720](https://github.com/astral-sh/uv/pull/16720))
+- Use explicit credentials cache instead of global static ([#16768](https://github.com/astral-sh/uv/pull/16768))
+- Enable SIMD in HTML parsing ([#17010](https://github.com/astral-sh/uv/pull/17010))
+
+### Preview features
+
+- Fix missing preview warning in `uv workspace metadata` ([#16988](https://github.com/astral-sh/uv/pull/16988))
+- Add a `uv auth helper --protocol bazel` command ([#16886](https://github.com/astral-sh/uv/pull/16886))
+
+### Bug fixes
+
+- Fix Pyston wheel compatibility tags ([#16972](https://github.com/astral-sh/uv/pull/16972))
+- Allow redundant entries in `tool.uv.build-backend.module-name` but emit warnings ([#16928](https://github.com/astral-sh/uv/pull/16928))
+- Fix infinite loop in non-attribute re-treats during HTML parsing ([#17010](https://github.com/astral-sh/uv/pull/17010))
+
+### Documentation
+
+- Clarify `--project` flag help text to indicate project discovery ([#16965](https://github.com/astral-sh/uv/pull/16965))
+- Regenerate the crates.io READMEs on release ([#16992](https://github.com/astral-sh/uv/pull/16992))
+- Update Docker integration guide to prefer `COPY` over `ADD` for simple cases ([#16883](https://github.com/astral-sh/uv/pull/16883))
+- Update PyTorch documentation to include information about supporting CUDA 13.0.x ([#16957](https://github.com/astral-sh/uv/pull/16957))
+- Update the versioning policy ([#16710](https://github.com/astral-sh/uv/pull/16710))
+- Upgrade PyTorch documentation to latest versions ([#16970](https://github.com/astral-sh/uv/pull/16970))
+
 ## 0.9.15
 
 Released on 2025-12-02.
@@ -477,4 +519,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
