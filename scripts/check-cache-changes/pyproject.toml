@@ -1,0 +1,15 @@
+[project]
+name = "check-cache-changes"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "anyio>=4.12.0",
+  "package",
+  "tqdm",
+]
+
+[tool.uv.sources]
+tqdm = { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl" }
+package = { git = "https://github.com/astral-sh/uv-dynamic-metadata-test", rev = "6c5aa0a65db737c9e7e2e60dc865bd8087012e64" }
+# TODO(konsti): Add a case with extra build dependencies
+# TODO(konsti): Add a case with config settings
