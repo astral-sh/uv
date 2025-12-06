@@ -6202,6 +6202,7 @@ uv cache size [OPTIONS]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-cache-size--quiet"><a href="#uv-cache-size--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-cache-size--threads"><a href="#uv-cache-size--threads"><code>--threads</code></a> <i>threads</i></dt><dd><p>Number of threads to use when calculating the cache size</p>
 </dd><dt id="uv-cache-size--verbose"><a href="#uv-cache-size--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
