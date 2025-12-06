@@ -1039,6 +1039,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5401,6 +5410,7 @@ dependencies = [
  "byteorder",
  "clap",
  "console 0.16.1",
+ "crossbeam-channel",
  "ctrlc",
  "dotenvy",
  "dunce",
@@ -5423,6 +5433,7 @@ dependencies = [
  "owo-colors",
  "petgraph",
  "predicates",
+ "rayon",
  "regex",
  "reqwest",
  "rkyv",
