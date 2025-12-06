@@ -19,7 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -28,6 +28,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -37,16 +38,16 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
-    default_dependency_groups, detect_conflicts, script_extra_build_requires, script_specification,
-    update_environment,
+    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -212,6 +213,7 @@ pub(crate) async fn sync(
         environment: EnvironmentReport::from(&environment),
         action: SyncAction::from(&environment),
         target: TargetName::from(&target),
+        packages: Vec::new(),
     };
 
     // Show the intermediate results if relevant
@@ -292,14 +294,17 @@ pub(crate) async fn sync(
             )
             .await
             {
-                Ok(..) => {
+                Ok(EnvironmentUpdate { changelog, .. }) => {
                     // Generate a report for the script without a lockfile
                     let report = Report {
                         schema: SchemaReport::default(),
                         target: TargetName::from(&target),
                         project: None,
                         script: Some(ScriptReport::from(script)),
-                        sync: sync_report,
+                        sync: SyncReport {
+                            packages: PackageChangeReport::from_changelog(&changelog),
+                            ..sync_report
+                        },
                         lock: None,
                         dry_run: dry_run.enabled(),
                     };
@@ -387,27 +392,13 @@ pub(crate) async fn sync(
         writeln!(printer.stderr(), "{message}")?;
     }
 
-    let report = Report {
-        schema: SchemaReport::default(),
-        target: TargetName::from(&target),
-        project: target.project().map(ProjectReport::from),
-        script: target.script().map(ScriptReport::from),
-        sync: sync_report,
-        lock: Some(lock_report),
-        dry_run: dry_run.enabled(),
-    };
-
-    if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout_important(), "{output}")?;
-    }
-
     // Identify the installation target.
     let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
     let state = state.fork();
 
     // Perform the sync operation.
-    match do_sync(
+    let changelog = match do_sync(
         sync_target,
         &environment,
         &extras,
@@ -430,13 +421,30 @@ pub(crate) async fn sync(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(changelog) => changelog,
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
+    };
+
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(&target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            packages: PackageChangeReport::from_changelog(&changelog),
+            ..sync_report
+        },
+        lock: Some(lock_report),
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
     }
 
     match outcome {
@@ -614,7 +622,7 @@ pub(super) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-) -> Result<(), ProjectError> {
+) -> Result<Changelog, ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -825,7 +833,7 @@ pub(super) async fn do_sync(
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
-    operations::install(
+    let changelog = operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,
@@ -850,7 +858,7 @@ pub(super) async fn do_sync(
     )
     .await?;
 
-    Ok(())
+    Ok(changelog)
 }
 
 /// Filter out any virtual workspace members.
@@ -1254,6 +1262,9 @@ struct SyncReport {
     environment: EnvironmentReport,
     /// The action performed during the sync, e.g., what was done to the environment.
     action: SyncAction,
+    /// The packages that changed during the sync.
+    #[serde(default)]
+    packages: Vec<PackageChangeReport>,
 
     // We store these fields so the report can format itself self-contained, but the outer
     // [`Report`] is intended to include these in user-facing output
@@ -1276,6 +1287,7 @@ impl SyncReport {
         let Self {
             environment,
             action,
+            packages: _,
             dry_run,
             target,
         } = self;
@@ -1292,6 +1304,79 @@ impl SyncReport {
 
         Some(message)
     }
+}
+
+/// A summary of a single package change performed during sync.
+#[derive(Serialize, Debug, Clone)]
+struct PackageChangeReport {
+    /// The normalized package name.
+    name: PackageName,
+    /// The resolved version of the package.
+    version: Option<uv_pep440::Version>,
+    /// The source for URL-based requirements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<PackageChangeSourceReport>,
+    /// The action that was taken for the package.
+    action: PackageChangeAction,
+}
+
+impl PackageChangeReport {
+    fn from_changelog(changelog: &Changelog) -> Vec<Self> {
+        let mut changes: Vec<_> = changelog
+            .uninstalled
+            .iter()
+            .map(|dist| Self::from_dist(dist, PackageChangeAction::Removed))
+            .chain(
+                changelog
+                    .installed
+                    .iter()
+                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Added)),
+            )
+            .chain(
+                changelog
+                    .reinstalled
+                    .iter()
+                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Reinstalled)),
+            )
+            .collect();
+
+        changes.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.action.cmp(&b.action))
+                .then_with(|| a.version.cmp(&b.version))
+        });
+        changes
+    }
+
+    fn from_dist(dist: &ChangedDist, action: PackageChangeAction) -> Self {
+        let (version, url) = match dist.installed_version() {
+            Some(version) => (Some(version.version().clone()), version.url().cloned()),
+            None => (None, None),
+        };
+
+        Self {
+            name: dist.name().clone(),
+            version,
+            source: url.map(|url| PackageChangeSourceReport { url: url.clone() }),
+            action,
+        }
+    }
+}
+
+/// The action taken on an individual package during sync.
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+enum PackageChangeAction {
+    Removed,
+    Added,
+    Reinstalled,
+}
+
+/// The source for a package change, when it originated from a URL requirement.
+#[derive(Serialize, Debug, Clone)]
+struct PackageChangeSourceReport {
+    url: DisplaySafeUrl,
 }
 
 /// The report for a lock operation.
