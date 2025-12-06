@@ -1316,6 +1316,54 @@ versions or platforms.
 
 ---
 
+### [`http-proxy`](#http-proxy) {: #http-proxy }
+
+The URL of the HTTP proxy to use.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    http-proxy = "http://proxy.example.com"
+    ```
+=== "uv.toml"
+
+    ```toml
+    http-proxy = "http://proxy.example.com"
+    ```
+
+---
+
+### [`https-proxy`](#https-proxy) {: #https-proxy }
+
+The URL of the HTTPS proxy to use.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    https-proxy = "https://proxy.example.com"
+    ```
+=== "uv.toml"
+
+    ```toml
+    https-proxy = "https://proxy.example.com"
+    ```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The package indexes to use when resolving dependencies.
@@ -1733,6 +1781,30 @@ those provided via `--find-links`.
 
     ```toml
     no-index = true
+    ```
+
+---
+
+### [`no-proxy`](#no-proxy) {: #no-proxy }
+
+A list of hosts to exclude from proxying.
+
+**Default value**: `None`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-proxy = ["localhost", "127.0.0.1"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    no-proxy = ["localhost", "127.0.0.1"]
     ```
 
 ---
