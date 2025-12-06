@@ -21,14 +21,131 @@
 <meta name="robots" content="index,follow"/>
 <script type="application/ld+json">
     {
-        {% if page and page.meta.git_revision_date_localized_raw_iso_datetime %}
-        "datePublished": "{{ page.meta.git_revision_date_localized_raw_iso_datetime }}Z",
-        "dateModified": "{{ page.meta.git_revision_date_localized_raw_iso_datetime  }}Z",
-        {% endif %}
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "Astral Docs",
         "url": "https://docs.astral.sh"
     }
 </script>
+{% endblock %}
+
+<!-- 
+Replace the mkdocs header entirely to look more like Mintlify's theme
+-->
+{% block header %}
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+
+    <!-- Logo -->
+    <a href="/"
+       title="{{ config.site_name }}"
+       class="md-header__button md-logo"
+       aria-label="{{ config.site_name }}"
+       data-md-component="logo">
+      {% include "partials/logo.html" %}
+    </a>
+
+    <!-- Branding text -->
+    <div class="md-header__branding">
+      <a href="/">
+        <span class="md-header__branding-text">
+          <span class="md-header__branding-name">uv</span>
+          Documentation
+        </span>
+      </a>
+    </div>
+
+
+    <!-- Hamburger menu for mobile -->
+    <label class="md-header__button md-icon" for="__drawer">
+      {% include ".icons/material/menu.svg" %}
+    </label>
+
+    <!-- Hidden checkbox for search toggle -->
+    <input class="md-toggle" type="checkbox" id="__search">
+
+    <!-- Site title -->
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">{{ config.site_name }}</span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            {% if page.meta and page.meta.title %}
+              {{ page.meta.title }}
+            {% else %}
+              {{ page.title }}
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Centered search bar -->
+    <div class="md-header__search-container">
+      <label class="md-header__search-input" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <span class="md-header__search-placeholder">Search...</span>
+        <span class="md-header__search-shortcut">⌘K</span>
+      </label>
+    </div>
+    {% include "partials/search.html" %}
+
+    <!-- Mobile search button -->
+    <label class="md-header__button md-icon" for="__search">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"></path></svg>
+    </label>
+
+    <!-- Navigation links container -->
+    <div class="md-header__nav-links">
+      <!-- Discord (icon only) -->
+      <a href="https://discord.com/invite/astral-sh"
+         title="Discord"
+         class="md-header__nav-link md-header__nav-link--icon"
+         target="_blank"
+         rel="noopener">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 127.14 96.36" width="18" height="18">
+          <path fill="currentColor" d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+        </svg>
+      </a>
+
+      <!-- GitHub (icon only with colored background) -->
+      <a href="https://github.com/astral-sh/uv"
+         title="GitHub"
+         class="md-header__nav-link md-header__nav-link--github"
+         target="_blank"
+         rel="noopener">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+          <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+      </a>
+    </div>
+
+    <!-- Color palette toggle -->
+    <form class="md-header__option" data-md-component="palette">
+      {% for option in config.theme.palette %}
+      <input class="md-option"
+             data-md-color-media="{{ option.media }}"
+             data-md-color-scheme="{{ option.scheme | replace(' ', '-') }}"
+             data-md-color-primary="{{ option.primary | replace(' ', '-') }}"
+             data-md-color-accent="{{ option.accent | replace(' ', '-') }}"
+             aria-label="{% if option.toggle %}{{ option.toggle.name }}{% endif %}"
+             type="radio"
+             name="__palette"
+             id="__palette_{{ loop.index }}">
+      {% if option.toggle %}
+      <label class="md-header__button md-icon"
+             title="{{ option.toggle.name }}"
+             for="__palette_{{ loop.index % loop.length + 1 }}"
+             hidden>
+        {% include ".icons/" ~ option.toggle.icon ~ ".svg" %}
+      </label>
+      {% endif %}
+      {% endfor %}
+    </form>
+  </nav>
+</header>
 {% endblock %}

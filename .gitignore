@@ -34,7 +34,7 @@ perf.data.old
 profile.json
 profile.json.gz
 
-# MkDocs
+# Documentation
 /site
 
 # macOS

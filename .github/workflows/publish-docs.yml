@@ -2,7 +2,7 @@
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a post-announce
 # job within `cargo-dist`.
-name: mkdocs
+name: documentation
 
 on:
   workflow_dispatch:
@@ -20,11 +20,10 @@ on:
 permissions: {}
 
 jobs:
-  mkdocs:
+  publish-documentation:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
-      MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -63,27 +62,8 @@ jobs:
           echo "BRANCH_NAME=update-docs-$branch_display_name-$timestamp" >> $GITHUB_ENV
           echo "TIMESTAMP=$timestamp" >> $GITHUB_ENV
 
-      - name: "Add SSH key"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd # v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
-
-      - name: "Install Insiders dependencies"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: pip install -r docs/requirements-insiders.txt
-
-      - name: "Install dependencies"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
-        run: pip install -r docs/requirements.txt
-
-      - name: "Build Insiders docs"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: mkdocs build --strict -f mkdocs.insiders.yml
-
       - name: "Build docs"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
-        run: mkdocs build --strict -f mkdocs.public.yml
+        run: uvx build --with-requirements docs/requirements.txt zensical build --strict -f mkdocs.public.yml
 
       - name: "Clone docs repo"
         run: |

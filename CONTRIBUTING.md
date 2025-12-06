@@ -174,11 +174,7 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   # For contributors.
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
-
-   # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-   uvx --with-requirements docs/requirements-insiders.txt -- mkdocs serve -f mkdocs.insiders.yml
+   uvx --with-requirements docs/requirements.txt -- zensical serve -f mkdocs.public.yml
    ```
 
 The documentation should then be available locally at
