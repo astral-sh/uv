@@ -203,6 +203,7 @@ xz2 = { version = "0.1.7" }
 zeroize = { version = "1.8.1" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 zstd = { version = "0.13.3" }
+diskus = { git = "https://github.com/sharkdp/diskus", version = "0.8.0" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }

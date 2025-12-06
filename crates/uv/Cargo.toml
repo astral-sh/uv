@@ -115,6 +115,7 @@ version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
+diskus = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }

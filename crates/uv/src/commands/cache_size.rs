@@ -1,6 +1,8 @@
 use std::fmt::Write;
+use std::num::NonZero;
 
 use anyhow::Result;
+use diskus::{FilesizeType, Walk};
 
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
@@ -12,6 +14,7 @@ use uv_warnings::warn_user;
 pub(crate) fn cache_size(
     cache: &Cache,
     human_readable: bool,
+    threads: Option<usize>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -31,16 +34,18 @@ pub(crate) fn cache_size(
         return Ok(ExitStatus::Success);
     }
 
-    // Walk the entire cache root
-    let total_bytes: u64 = walkdir::WalkDir::new(cache.root())
-        .follow_links(false)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter_map(|entry| match entry.metadata() {
-            Ok(metadata) if metadata.is_file() => Some(metadata.len()),
-            _ => None,
-        })
-        .sum();
+    let num_threads = threads.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(NonZero::get)
+            .unwrap_or(1)
+    });
+
+    tracing::info!("Using {} threads to calculate cache size", num_threads);
+
+    let root_path_buf = &[cache.root().to_path_buf()];
+
+    let walk = Walk::new(root_path_buf, num_threads, FilesizeType::ApparentSize);
+    let (total_bytes, _) = walk.run();
 
     if human_readable {
         let (bytes, unit) = human_readable_bytes(total_bytes);
