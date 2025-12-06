@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.54/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -5329,6 +5329,173 @@ fn virtual_package_extra_priorities() -> Result<()> {
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_b-1.0.0.tar.gz", hash = "sha256:1871d4ccdcae672dbeda7e8c9bd16c28e3256e343470d1ae9f8bd2946ba7ab9f" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_b-1.0.0-py3-none-any.whl", hash = "sha256:d92888ac830ae8768749436fec5133b9262667c2c743285f941b18bb13724222" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// A package is first used under a marker that is a subset of the required environments that it fulfills, and then under a marker that is a subset it doesn't fulfill.
+///
+/// `a` has a wheel only supports Windows, and the required platforms are Linux and Windows. The first time we encounter `a`, it's used with a Windows-only marker, so it doesn't violate. Afterwards, we select `b`, and while it doesn't change the version for `a`, it requires it universally. Now the resolution needs to fail, as `a` is now missing the Linux wheel.
+///
+/// See <https://github.com/astral-sh/uv/pull/16824#discussion_r2556176057>
+///
+/// ```text
+/// markers-change-after-selection
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a; sys_platform == "win32"
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// └── b
+///     └── b-1.0.0
+///         └── requires a; sys_platform == "linux"
+///             └── satisfied by a-1.0.0
+/// ```
+#[test]
+fn markers_change_after_selection() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"markers-change-after-selection-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''markers-change-after-selection-a; sys_platform == "win32"''',
+          '''markers-change-after-selection-b''',
+        ]
+        requires-python = ">=3.12"
+        [tool.uv]
+        required-environments = [
+          '''sys_platform == "linux"''',
+          '''sys_platform == "win32"''',
+        ]
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+      ╰─▶ Because only package-a{sys_platform == 'win32'}==1.0.0 is available and package-a==1.0.0 has no Linux-compatible wheels, we can conclude that all versions of package-a{sys_platform == 'win32'} cannot be used.
+          And because your project depends on package-a{sys_platform == 'win32'}, we can conclude that your project's requirements are unsatisfiable.
+    "
+    );
+
+    Ok(())
+}
+
+/// While both Linux and Windows are required and `win-only` has only a Windows wheel, `win-only` is also used only on Windows.
+///
+/// ```text
+/// requires-python-subset
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires win-only; sys_platform == "win32"
+/// │       └── satisfied by win-only-1.0.0
+/// └── win-only
+///     └── win-only-1.0.0
+/// ```
+#[test]
+fn requires_python_subset() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"requires-python-subset-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''requires-python-subset-win-only; sys_platform == "win32"''',
+        ]
+        requires-python = ">=3.12"
+        [tool.uv]
+        required-environments = [
+          '''sys_platform == "linux"''',
+          '''sys_platform == "win32"''',
+        ]
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform == 'win32'",
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-win-only", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-win-only", marker = "sys_platform == 'win32'" }]
+
+        [[package]]
+        name = "package-win-only"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_subset_win_only-1.0.0-cp312-abi3-win_amd64.whl", hash = "sha256:91d59021b1c4aad7449e315ae1248c5c588a7e84cb7592671a41453012302711" },
         ]
         "#
         );
