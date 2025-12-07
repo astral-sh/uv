@@ -80,6 +80,21 @@ impl Display for ToolRunCommand {
     }
 }
 
+fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
+    for arg in args {
+        if let Some(arg_str) = arg.to_str() {
+            if arg_str == "--verbose" {
+                return Some("--verbose");
+            }
+            // Match -v, -vv, -vvv, etc. (but not other flags starting with -v like -version)
+            if arg_str.starts_with("-v") && arg_str.chars().skip(1).all(|c| c == 'v') {
+                return Some(arg_str);
+            }
+        }
+    }
+    None
+}
+
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -308,23 +323,10 @@ pub(crate) async fn run(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
-            let mut uvx_verbose_flag_hint = None;
-            for flag in args.iter() {
-                if let Some(flag_str) = flag.to_str() {
-                    if flag_str == "--verbose" {
-                        uvx_verbose_flag_hint = Some("--verbose");
-                        break;
-                    }
-                    if flag_str.starts_with("-v") && flag_str.chars().skip(1).all(|c| c == 'v') {
-                        uvx_verbose_flag_hint = Some(flag_str);
-                        break;
-                    }
-                }
-            }
 
             let diagnostic = 
             diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
-            let diagnostic = if let Some(verbose_flag) = uvx_verbose_flag_hint {
+            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
                     diagnostic
                     .with_hint(format!(
                         "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
