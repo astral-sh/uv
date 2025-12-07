@@ -309,6 +309,8 @@ pub(crate) async fn run(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
+            println!("[DEBUG] UVX we are here");
+
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .with_context("tool")
                 .report(err)
