@@ -74,7 +74,6 @@ axoupdater = { workspace = true, features = [
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
-crossbeam-channel = { workspace = true }
 ctrlc = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
@@ -91,7 +90,6 @@ miette = { workspace = true, features = ["fancy-no-backtrace"] }
 open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
-rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rkyv = { workspace = true }
@@ -117,6 +115,7 @@ version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
+diskus = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
