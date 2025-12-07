@@ -308,13 +308,38 @@ pub(crate) async fn run(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
+            let mut uvx_verbose_flag_hint = None;
+            for flag in args.iter() {
+                if let Some(flag_str) = flag.to_str() {
+                    if flag_str == "--verbose" {
+                        uvx_verbose_flag_hint = Some("--verbose");
+                        break;
+                    }
+                    if flag_str.starts_with("-v") && flag_str.chars().skip(1).all(|c| c == 'v') {
+                        uvx_verbose_flag_hint = Some(flag_str);
+                        break;
+                    }
+                }
+            }
 
-            println!("[DEBUG] UVX we are here");
-
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .with_context("tool")
+            let diagnostic = 
+            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+            let diagnostic = if let Some(verbose_flag) = uvx_verbose_flag_hint {
+                    diagnostic
+                    .with_hint(format!(
+                        "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                        verbose_flag.cyan(),
+                        target.cyan(),
+                        invocation_source.to_string().cyan(),
+                        format!("{invocation_source} {verbose_flag} {target}").green()
+                    ))
+            } else {
+                    diagnostic.with_context("tool")
+            };
+            return diagnostic
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            
         }
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
