@@ -149,4 +149,3 @@ fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Er
 
     Ok(())
 }
-
