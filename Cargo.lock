@@ -5700,6 +5700,7 @@ dependencies = [
  "rustc-hash",
  "same-file",
  "serde",
+ "shellexpand",
  "tempfile",
  "tracing",
  "uv-cache-info",
