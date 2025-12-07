@@ -324,25 +324,24 @@ pub(crate) async fn run(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            let diagnostic = 
-            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+            let diagnostic =
+                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
             let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                    diagnostic
-                    .with_hint(format!(
-                        "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
-                        verbose_flag.cyan(),
-                        target.cyan(),
-                        invocation_source.to_string().cyan(),
-                        format!("{invocation_source} {verbose_flag} {target}").green()
-                    ))
+                diagnostic.with_hint(format!(
+                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                    verbose_flag.cyan(),
+                    target.cyan(),
+                    invocation_source.to_string().cyan(),
+                    format!("{invocation_source} {verbose_flag} {target}").green()
+                ))
             } else {
-                    diagnostic.with_context("tool")
+                diagnostic.with_context("tool")
             };
             return diagnostic
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            
         }
+
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
