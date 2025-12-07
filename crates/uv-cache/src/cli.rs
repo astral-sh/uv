@@ -5,7 +5,6 @@ use uv_static::EnvVars;
 
 use crate::Cache;
 use clap::Parser;
-use shellexpand;
 use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -54,7 +53,7 @@ impl Cache {
             {
                 expanded
             } else {
-                cache_dir.to_path_buf()
+                cache_dir.clone()
             };
             Ok(Self::from_path(cache_dir))
         } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
@@ -150,3 +149,4 @@ fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Er
 
     Ok(())
 }
+
