@@ -6,7 +6,7 @@ use std::fmt::Write;
 use std::io::stdout;
 #[cfg(feature = "self-update")]
 use std::ops::Bound;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
@@ -45,6 +45,7 @@ use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
+use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -2490,26 +2491,114 @@ where
                         );
                     }
                     "activate" => {
-                        // Handle "activate" with a helpful error message
-                        // instead of the generic unknown command error
-                        eprintln!(
-                            "{} `uv activate` is not supported. To activate a virtual environment, use:",
-                            "error".red().bold()
-                        );
-                        #[cfg(unix)]
-                        {
-                            eprintln!("  {}", "source .venv/bin/activate".green());
+                        let current_dir = match std::env::current_dir() {
+                            Ok(dir) => dir,
+                            Err(_) => PathBuf::from("."),
+                        };
+                        let mut venv_path = None;
+
+                        for dir in current_dir.ancestors() {
+                            // If we're _within_ a virtualenv, use it.
+                            if uv_fs::is_virtualenv_base(dir) {
+                                venv_path = Some(dir.to_path_buf());
+                                break;
+                            }
+
+                            // Otherwise, search for a `.venv` directory.
+                            let dot_venv = dir.join(".venv");
+                            if dot_venv.is_dir() && uv_fs::is_virtualenv_base(&dot_venv) {
+                                venv_path = Some(dot_venv);
+                                break;
+                            }
                         }
-                        #[cfg(windows)]
-                        {
-                            eprintln!("  {}", ".venv\\Scripts\\activate".green());
-                            eprintln!("  {}", ".venv\\Scripts\\Activate.ps1".green());
+
+                        if let Some(path) = venv_path {
+                            // Determine the appropriate activation command based on the shell.
+                            let activation = match Shell::from_env() {
+                                None => {
+                                    // If we can't detect the shell, provide a generic message with common commands.
+                                    eprintln!(
+                                        "{} `uv activate` is not supported. To activate a virtual environment, use:",
+                                        "error".red().bold()
+                                    );
+                                    #[cfg(unix)]
+                                    {
+                                        eprintln!(
+                                            "  {}",
+                                            format!(
+                                                "source {}",
+                                                path.join("bin/activate").display()
+                                            )
+                                            .green()
+                                        );
+                                    }
+                                    #[cfg(windows)]
+                                    {
+                                        eprintln!(
+                                            "  {}",
+                                            format!("{}\\Scripts\\activate", path.display())
+                                                .green()
+                                        );
+                                        eprintln!(
+                                            "  {}",
+                                            format!("{}\\Scripts\\Activate.ps1", path.display())
+                                                .green()
+                                        );
+                                    }
+                                    return ExitStatus::Error.into();
+                                }
+                                Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
+                                    "source {}",
+                                    shlex_posix(path.join("bin/activate"))
+                                )),
+                                Some(Shell::Fish) => Some(format!(
+                                    "source {}",
+                                    shlex_posix(path.join("bin/activate.fish"))
+                                )),
+                                Some(Shell::Nushell) => Some(format!(
+                                    "overlay use {}",
+                                    shlex_posix(path.join("bin/activate.nu"))
+                                )),
+                                Some(Shell::Csh) => Some(format!(
+                                    "source {}",
+                                    shlex_posix(path.join("bin/activate.csh"))
+                                )),
+                                Some(Shell::Powershell) => Some(shlex_windows(
+                                    path.join("Scripts/activate"),
+                                    Shell::Powershell,
+                                )),
+                                Some(Shell::Cmd) => {
+                                    Some(shlex_windows(path.join("Scripts/activate"), Shell::Cmd))
+                                }
+                            };
+
+                            if let Some(act) = activation {
+                                eprintln!(
+                                    "{} `uv activate` is not supported. To activate a virtual environment, use:",
+                                    "error".red().bold()
+                                );
+                                eprintln!("  {}", act.green());
+                            }
+                        } else {
+                            eprintln!(
+                                "{} `uv activate` is not supported. To activate a virtual environment, use:",
+                                "error".red().bold()
+                            );
+                            #[cfg(unix)]
+                            {
+                                eprintln!("  {}", "source .venv/bin/activate".green());
+                            }
+                            #[cfg(windows)]
+                            {
+                                eprintln!("  {}", ".venv\\Scripts\\activate".green());
+                                eprintln!("  {}", ".venv\\Scripts\\Activate.ps1".green());
+                            }
+                            eprintln!(
+                                "\n{} Create a virtual environment with: {}",
+                                "hint".bold().cyan(),
+                                "uv venv".green()
+                            );
                         }
-                        eprintln!(
-                            "\n{} Create a virtual environment with: {}",
-                            "hint".bold().cyan(),
-                            "uv venv".green()
-                        );
                         return ExitStatus::Error.into();
                     }
                     _ => {}
