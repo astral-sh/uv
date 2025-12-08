@@ -167,16 +167,16 @@ fn lock_exclude_newer_invalid_relative() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("invalid span"), @r#"
+        .arg("invalid span"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'invalid span' for '--exclude-newer <EXCLUDE_NEWER>': `invalid span` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "invalid span": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i and failed to parse "invalid span" in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found
+    error: invalid value 'invalid span' for '--exclude-newer <EXCLUDE_NEWER>': `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     For more information, try '--help'.
-    "#);
+    ");
 
     Ok(())
 }
@@ -253,16 +253,16 @@ fn lock_exclude_newer_error_messages() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("invalid span"), @r#"
+        .arg("invalid span"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'invalid span' for '--exclude-newer <EXCLUDE_NEWER>': `invalid span` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "invalid span": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i and failed to parse "invalid span" in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found
+    error: invalid value 'invalid span' for '--exclude-newer <EXCLUDE_NEWER>': `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
@@ -279,16 +279,16 @@ fn lock_exclude_newer_error_messages() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("12/02/2006"), @r#"
+        .arg("12/02/2006"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '12/02/2006' for '--exclude-newer <EXCLUDE_NEWER>': `12/02/2006` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "12/02/2006": failed to parse "12/0" as year (a four digit integer): invalid digit, expected 0-9 but got / and failed to parse "12/02/2006" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with "/02/2006" instead
+    error: invalid value '12/02/2006' for '--exclude-newer <EXCLUDE_NEWER>': `12/02/2006` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
@@ -299,7 +299,7 @@ fn lock_exclude_newer_error_messages() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "2 weak": failed to parse "2 we" as year (a four digit integer): invalid digit, expected 0-9 but got   and failed to parse "2 weak" in the "friendly" format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
+    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a relative duration: failed to parse "2 weak" in the "friendly" format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
 
     For more information, try '--help'.
     "#);
@@ -307,16 +307,16 @@ fn lock_exclude_newer_error_messages() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("30"), @r#"
+        .arg("30"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '30' for '--exclude-newer <EXCLUDE_NEWER>': `30` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "30": expected four digit year (or leading sign for six digit year), but found end of input and failed to parse "30" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found end of input
+    error: invalid value '30' for '--exclude-newer <EXCLUDE_NEWER>': `30` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
@@ -327,7 +327,7 @@ fn lock_exclude_newer_error_messages() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a timestamp, date, or relative duration: failed to parse month in date "1000000 years": month is not valid: parameter 'month' with value 0 is not in the required range of 1..=12 and failed to parse "1000000 years" in the "friendly" format: failed to set value 1000000 as year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
+    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a relative duration: failed to parse "1000000 years" in the "friendly" format: failed to set value 1000000 as year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
 
     For more information, try '--help'.
     "#);
@@ -481,7 +481,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
         |
       9 |         exclude-newer = "invalid span"
         |                         ^^^^^^^^^^^^^^
-      `invalid span` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "invalid span": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i and failed to parse "invalid span" in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found
+      `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     Ignoring existing lockfile due to removal of global exclude newer
     Resolved 2 packages in [TIME]

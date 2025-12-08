@@ -187,6 +187,73 @@ impl From<Timestamp> for ExcludeNewerValue {
     }
 }
 
+/// Determine what format the user likely intended and return an appropriate error message.
+///
+/// Uses heuristics to guess the intended format:
+/// - `[-+]?[Pp]` → ISO 8601 duration (e.g., `P2W`, `-P30D`)
+/// - `[-+]?\s*[0-9]+\s*[A-Za-z]` → friendly duration (e.g., `2 weeks`, `-30 days`)
+/// - `[-+]?[0-9]{4}-` → date/timestamp (e.g., `2024-01-01`)
+/// - Otherwise → generic error with examples
+fn format_exclude_newer_error(
+    input: &str,
+    date_err: jiff::Error,
+    span_err: jiff::Error,
+) -> String {
+    let trimmed = input.trim();
+
+    // Check for ISO 8601 duration: [-+]?[Pp]
+    // e.g., "P2W", "+P1D", "-P30D"
+    let after_sign = trimmed.trim_start_matches(['+', '-']);
+    if after_sign.starts_with('P') || after_sign.starts_with('p') {
+        return format!(
+            "`{input}` could not be parsed as an ISO 8601 duration: {span_err}"
+        );
+    }
+
+    // Check for friendly duration: [-+]?\s*[0-9]+\s*[A-Za-z]
+    // e.g., "2 weeks", "-30 days", "1hour"
+    let after_sign_trimmed = after_sign.trim_start();
+    let mut chars = after_sign_trimmed.chars().peekable();
+
+    // Check if we start with a digit
+    if chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+        // Skip digits
+        while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+            chars.next();
+        }
+        // Skip optional whitespace
+        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            chars.next();
+        }
+        // Check if next character is a letter (unit designator)
+        if chars.peek().is_some_and(|c| c.is_ascii_alphabetic()) {
+            return format!(
+                "`{input}` could not be parsed as a relative duration: {span_err}"
+            );
+        }
+    }
+
+    // Check for date/timestamp: [-+]?[0-9]{4}-
+    // e.g., "2024-01-01", "2024-01-01T00:00:00Z"
+    let mut chars = after_sign.chars();
+    let looks_like_date = chars.next().is_some_and(|c| c.is_ascii_digit())
+        && chars.next().is_some_and(|c| c.is_ascii_digit())
+        && chars.next().is_some_and(|c| c.is_ascii_digit())
+        && chars.next().is_some_and(|c| c.is_ascii_digit())
+        && chars.next().is_some_and(|c| c == '-');
+
+    if looks_like_date {
+        return format!(
+            "`{input}` could not be parsed as a valid date: {date_err}"
+        );
+    }
+
+    // Fallback: generic error showing both possibilities
+    format!(
+        "`{input}` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)"
+    )
+}
+
 impl FromStr for ExcludeNewerValue {
     type Err = String;
 
@@ -269,10 +336,8 @@ impl FromStr for ExcludeNewerValue {
             Err(err) => err,
         };
 
-        // Return a comprehensive error message
-        Err(format!(
-            "`{input}` could not be parsed as a timestamp, date, or relative duration: {date_err} and {span_err}"
-        ))
+        // Return a targeted error message based on heuristics about what the user likely intended
+        Err(format_exclude_newer_error(input, date_err, span_err))
     }
 }
 

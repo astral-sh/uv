@@ -3409,7 +3409,7 @@ fn compile_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` could not be parsed as a timestamp, date, or relative duration: parsed value '2022-04-04', but unparsed input "+02:00" remains (expected no unparsed input) and failed to parse "2022-04-04+02:00" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with "-04-04+02:00" instead
+    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` could not be parsed as a valid date: parsed value '2022-04-04', but unparsed input "+02:00" remains (expected no unparsed input)
 
     For more information, try '--help'.
     "#
@@ -3429,7 +3429,7 @@ fn compile_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a timestamp, date, or relative duration: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23 and failed to parse "2022-04-04T26:00:00+00" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with "-04-04T26:00:00+00" instead
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
     "#
@@ -3577,16 +3577,16 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer-package")
-        .arg("tqdm=invalid-date"), @r#"
+        .arg("tqdm=invalid-date"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a timestamp, date, or relative duration: failed to parse year in date "invalid-date": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i and failed to parse "invalid-date" in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found
+    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
