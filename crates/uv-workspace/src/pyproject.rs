@@ -269,8 +269,11 @@ impl schemars::JsonSchema for RequiresPythonSpecifiers {
         Cow::Borrowed("RequiresPythonSpecifiers")
     }
 
-    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        <String as schemars::JsonSchema>::json_schema(generator)
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "PEP 440 version specifiers for `requires-python`, e.g. `>=3.9` or `>=3.9,<3.14`. Free-threaded selectors (e.g., `3.14t`) are not supported."
+        })
     }
 }
 

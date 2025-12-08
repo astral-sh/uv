@@ -1854,6 +1854,7 @@
       "type": "string"
     },
     "RequiresPythonSpecifiers": {
+      "description": "PEP 440 version specifiers for `requires-python`, e.g. `>=3.9` or `>=3.9,<3.14`. Free-threaded selectors (e.g., `3.14t`) are not supported.",
       "type": "string"
     },
     "ResolutionMode": {
