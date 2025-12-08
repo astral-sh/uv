@@ -1994,6 +1994,6 @@ mod tests {
         assert!(
             !error.contains("free-threaded"),
             "Error should NOT mention free-threaded: {error}"
-        )
+        );
     }
 }
