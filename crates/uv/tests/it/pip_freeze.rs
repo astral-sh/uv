@@ -131,7 +131,7 @@ fn freeze_with_editable() -> Result<()> {
         "anyio\n-e {}",
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("test/packages/poetry_editable")
             .display()
     ))?;
 
@@ -149,7 +149,7 @@ fn freeze_with_editable() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     anyio==4.3.0
-    -e file://[WORKSPACE]/scripts/packages/poetry_editable
+    -e file://[WORKSPACE]/test/packages/poetry_editable
 
     ----- stderr -----
     warning: The package `anyio` requires `idna>=2.8`, but it's not installed

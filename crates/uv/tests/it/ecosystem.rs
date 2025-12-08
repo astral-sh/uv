@@ -80,7 +80,7 @@ fn airflow() -> Result<()> {
 }
 
 /// Does a lock on the given ecosystem package for the given name. That
-/// is, there should be a directory at `./ecosystem/{name}` from the
+/// is, there should be a directory at `./test/packages/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     let context = TestContext::new(python_version);

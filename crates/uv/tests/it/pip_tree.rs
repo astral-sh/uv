@@ -827,7 +827,7 @@ fn with_editable() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/hatchling_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/hatchling_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -836,7 +836,7 @@ fn with_editable() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + hatchling-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/hatchling_editable)
+     + hatchling-editable==0.1.0 (from file://[WORKSPACE]/test/packages/hatchling_editable)
      + iniconfig==2.0.1.dev6+g9cae431 (from git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4)
     "###
     );

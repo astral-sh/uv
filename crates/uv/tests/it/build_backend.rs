@@ -27,7 +27,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 #[cfg(feature = "pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     let temp_dir = TempDir::new()?;
 
@@ -83,7 +83,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 #[cfg(feature = "pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
-    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     let sdist_dir = TempDir::new()?;
 
@@ -157,7 +157,7 @@ fn built_by_uv_direct() -> Result<()> {
 #[cfg(feature = "pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
-    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     // Without the editable, pytest fails.
     context.pip_install().arg("pytest").assert().success();

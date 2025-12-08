@@ -1,8 +1,8 @@
 [files]
 extend-exclude = [
     "**/snapshots/",
-    "ecosystem/**",
-    "scripts/**/*.in",
+    "test/packages/ecosystem/**",
+    "test/requirements/**/*.in",
     "crates/uv-build-frontend/src/pipreqs/mapping",
 ]
 ignore-hidden = false

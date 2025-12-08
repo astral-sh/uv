@@ -127,7 +127,7 @@ Please refer to Ruff's
 it applies to uv, too.
 
 We provide diverse sets of requirements for testing and benchmarking the resolver in
-`scripts/requirements` and for the installer in `scripts/requirements/compiled`.
+`test/requirements` and for the installer in `test/requirements/compiled`.
 
 You can use `scripts/benchmark` to benchmark predefined workloads between uv versions and with other
 tools, e.g., from the `scripts/benchmark` directory:
@@ -138,7 +138,7 @@ uv run resolver \
     --poetry \
     --benchmark \
     resolve-cold \
-    ../scripts/requirements/trio.in
+    ../test/requirements/trio.in
 ```
 
 ### Analyzing concurrency
@@ -148,7 +148,7 @@ visualize parallel requests and find any spots where uv is CPU-bound. Example us
 `uv-dev` respectively:
 
 ```shell
-RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
+RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile test/requirements/jupyter.in
 ```
 
 ```shell

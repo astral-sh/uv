@@ -776,7 +776,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
         "bz2 @ {}",
         context
             .workspace_root
-            .join("scripts/links/bz2-1.0.0.tar.bz2")
+            .join("test/links/bz2-1.0.0.tar.bz2")
             .display()
     ))?;
 
@@ -791,7 +791,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + bz2==1.0.0 (from file://[WORKSPACE]/scripts/links/bz2-1.0.0.tar.bz2)
+     + bz2==1.0.0 (from file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2)
     "###
     );
 
@@ -2263,9 +2263,7 @@ fn sync_editable() -> Result<()> {
 
     // Copy into the temporary directory so we can mutate it.
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/poetry_editable"),
+        context.workspace_root.join("test/packages/poetry_editable"),
         &poetry_editable,
     )?;
 
@@ -2429,9 +2427,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;
 
@@ -2544,9 +2540,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;
 
@@ -2687,7 +2681,7 @@ fn find_links() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2720,7 +2714,7 @@ fn find_links_no_index_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2750,7 +2744,7 @@ fn find_links_offline_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2781,7 +2775,7 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2811,7 +2805,7 @@ fn find_links_wheel_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2829,7 +2823,7 @@ fn find_links_wheel_cache() -> Result<()> {
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2861,7 +2855,7 @@ fn find_links_source_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2879,7 +2873,7 @@ fn find_links_source_cache() -> Result<()> {
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4045,7 +4039,7 @@ fn require_hashes_source_tree() -> Result<()> {
         "black @ {} --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
         context
             .workspace_root
-            .join("scripts/packages/black_editable")
+            .join("test/packages/black_editable")
             .display()
     ))?;
 
@@ -4057,8 +4051,8 @@ fn require_hashes_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
-      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      × Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
+      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
     "###
     );
 
@@ -4149,7 +4143,7 @@ fn require_hashes_wheel_path() -> Result<()> {
         "tqdm @ {} --hash=sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13",
         context
             .workspace_root
-            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
             .display()
     ))?;
 
@@ -4164,7 +4158,7 @@ fn require_hashes_wheel_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl)
+     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
     "###
     );
 
@@ -4181,7 +4175,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
         "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
         context
             .workspace_root
-            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
             .display()
     ))?;
 
@@ -4194,8 +4188,8 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
           Expected:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4218,7 +4212,7 @@ fn require_hashes_source_path() -> Result<()> {
         "tqdm @ {} --hash=sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b",
         context
             .workspace_root
-            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .join("test/links/tqdm-999.0.0.tar.gz")
             .display()
     ))?;
 
@@ -4233,7 +4227,7 @@ fn require_hashes_source_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==999.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz)
+     + tqdm==999.0.0 (from file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz)
     "###
     );
 
@@ -4250,7 +4244,7 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
         "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
         context
             .workspace_root
-            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .join("test/links/tqdm-999.0.0.tar.gz")
             .display()
     ))?;
 
@@ -4262,8 +4256,8 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      × Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
 
           Expected:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4312,7 +4306,7 @@ fn require_hashes_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        -e file://{workspace_root}/test/packages/black_editable[d]
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -4326,7 +4320,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/test/packages/black_editable[d]
     "###
     );
 

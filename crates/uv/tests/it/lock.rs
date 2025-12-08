@@ -11044,7 +11044,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11158,7 +11158,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11279,7 +11279,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11395,7 +11395,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11689,7 +11689,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11795,7 +11795,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11886,7 +11886,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -12001,7 +12001,7 @@ fn lock_local_index() -> Result<()> {
     fs_err::copy(
         context
             .workspace_root
-            .join("scripts/links/basic_package-0.1.0.tar.gz"),
+            .join("test/links/basic_package-0.1.0.tar.gz"),
         &sdist,
     )?;
 
@@ -12009,7 +12009,7 @@ fn lock_local_index() -> Result<()> {
     fs_err::copy(
         context
             .workspace_root
-            .join("scripts/links/basic_package-0.1.0-py3-none-any.whl"),
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
         &wheel,
     )?;
 
@@ -21051,7 +21051,7 @@ fn lock_keyring_credentials() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21146,7 +21146,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21231,7 +21231,7 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21335,7 +21335,7 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )

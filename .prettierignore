@@ -4,5 +4,5 @@ PREVIEW-CHANGELOG.md
 docs/reference/cli.md
 docs/reference/settings.md
 docs/reference/environment.md
-ecosystem/home-assistant-core/LICENSE.md
+test/packages/ecosystem/home-assistant-core/LICENSE.md
 docs/guides/integration/gitlab.md

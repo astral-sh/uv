@@ -1630,11 +1630,11 @@ impl TestContext {
     /// test context.
     ///
     /// The given name should correspond to the name of a sub-directory (not a
-    /// path to it) in the top-level `ecosystem` directory.
+    /// path to it) in the `test/packages/ecosystem` directory.
     ///
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
-        let project_dir = PathBuf::from(format!("../../ecosystem/{name}"));
+        let project_dir = PathBuf::from(format!("../../test/packages/ecosystem/{name}"));
         self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {

@@ -287,7 +287,7 @@ fn list_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -298,7 +298,7 @@ fn list_editable() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -317,7 +317,7 @@ fn list_editable() {
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
 
     ----- stderr -----
@@ -333,7 +333,7 @@ fn list_editable_only() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -344,7 +344,7 @@ fn list_editable_only() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -362,7 +362,7 @@ fn list_editable_only() {
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
 
     ----- stderr -----
     "###
@@ -408,7 +408,7 @@ fn list_exclude() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -419,7 +419,7 @@ fn list_exclude() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -440,7 +440,7 @@ fn list_exclude() {
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
 
     ----- stderr -----
@@ -491,7 +491,7 @@ fn list_format_json() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -502,7 +502,7 @@ fn list_format_json() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -518,7 +518,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
     "###
@@ -530,7 +530,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"}]
 
     ----- stderr -----
     "###
@@ -558,7 +558,7 @@ fn list_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -569,7 +569,7 @@ fn list_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -724,7 +724,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -735,7 +735,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );

@@ -69,7 +69,7 @@ fn workspace_metadata_from_member() -> Result<()> {
 
     let albatross_workspace = context
         .workspace_root
-        .join("scripts/workspaces/albatross-root-workspace");
+        .join("test/packages/workspaces/albatross-root-workspace");
 
     copy_dir_ignore(albatross_workspace, &workspace)?;
 
