@@ -47,7 +47,7 @@ use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::compile_bytecode;
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::printer::Printer;
 
@@ -569,7 +569,15 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run.enabled() {
-        return report_dry_run(dry_run, resolution, plan, modifications, start, printer);
+        return report_dry_run(
+            dry_run,
+            resolution,
+            plan,
+            modifications,
+            start,
+            logger.as_ref(),
+            printer,
+        );
     }
 
     let Plan {
@@ -929,6 +937,7 @@ fn report_dry_run(
     plan: Plan,
     modifications: Modifications,
     start: std::time::Instant,
+    logger: &dyn InstallLogger,
     printer: Printer,
 ) -> Result<Changelog, Error> {
     let Plan {
@@ -946,7 +955,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        DefaultInstallLogger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_audit(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -954,7 +963,7 @@ fn report_dry_run(
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        DefaultInstallLogger.on_prepare(remote.len(), None, start, printer, dry_run)?;
+        logger.on_prepare(remote.len(), None, start, printer, dry_run)?;
         remote.clone()
     };
 
@@ -962,14 +971,14 @@ fn report_dry_run(
     let uninstalls = extraneous.len() + reinstalls.len();
 
     if uninstalls > 0 {
-        DefaultInstallLogger.on_uninstall(uninstalls, start, printer, dry_run)?;
+        logger.on_uninstall(uninstalls, start, printer, dry_run)?;
     }
 
     // Install the resolved distributions.
     let installs = wheels.len() + cached.len();
 
     if installs > 0 {
-        DefaultInstallLogger.on_install(installs, start, printer, dry_run)?;
+        logger.on_install(installs, start, printer, dry_run)?;
     }
 
     let uninstalled = reinstalls
@@ -984,7 +993,7 @@ fn report_dry_run(
 
     let changelog = Changelog::new(installed, uninstalled);
 
-    DefaultInstallLogger.on_complete(&changelog, printer, dry_run)?;
+    logger.on_complete(&changelog, printer, dry_run)?;
 
     if matches!(dry_run, DryRun::Check) {
         return Err(Error::OutdatedEnvironment);
