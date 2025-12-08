@@ -463,7 +463,7 @@ pub(crate) fn create(
             (true, "activate.fish") => {
                 r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
             }
-            (true, "activate.nu") => r#"(path self | path dirname | path dirname)"#.to_string(),
+            (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
             (false, "activate.nu") => {
                 format!(
                     "'{}'",
