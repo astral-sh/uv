@@ -873,9 +873,13 @@
       "properties": {
         "requires-python": {
           "description": "Version of python to require when installing this group",
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RequiresPythonSpecifiers"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1847,6 +1851,9 @@
     },
     "Requirement": {
       "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
+      "type": "string"
+    },
+    "RequiresPythonSpecifiers": {
       "type": "string"
     },
     "ResolutionMode": {
