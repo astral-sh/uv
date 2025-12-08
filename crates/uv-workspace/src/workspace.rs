@@ -587,7 +587,12 @@ impl Workspace {
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| ((name.to_owned(), None), requires_python.clone()));
+                .map(|requires_python| {
+                    (
+                        (name.to_owned(), None),
+                        requires_python.clone().into_inner(),
+                    )
+                });
             requires.extend(top_requires);
 
             // Get the requires-python for each enabled group on this package
@@ -599,6 +604,8 @@ impl Workspace {
                     .into_iter()
                     .filter_map(move |(group_name, flat_group)| {
                         if groups.contains(&group_name) {
+                            // `flat_group.requires_python` is already `VersionSpecifiers`
+                            // (unlike `Project.requires_python` which needs `.into_inner()`)
                             flat_group.requires_python.map(|requires_python| {
                                 ((name.to_owned(), Some(group_name)), requires_python)
                             })

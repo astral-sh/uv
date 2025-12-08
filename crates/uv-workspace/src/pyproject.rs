@@ -200,6 +200,80 @@ impl AsRef<[u8]> for PyProjectToml {
     }
 }
 
+/// A wrapper around `VersionSpecifiers` for `requires-python` fields.
+///
+/// This provides context-aware error messages when parsing fails, particularly
+/// for free-threaded selectors (e.g., `3.14t`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct RequiresPythonSpecifiers(VersionSpecifiers);
+
+impl RequiresPythonSpecifiers {
+    /// Convert the [`RequiresPythonSpecifiers`] into its inner `VersionSpecifiers`.
+    #[must_use]
+    pub fn into_inner(self) -> VersionSpecifiers {
+        self.0
+    }
+}
+
+impl Deref for RequiresPythonSpecifiers {
+    type Target = VersionSpecifiers;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl IntoIterator for RequiresPythonSpecifiers {
+    type Item = uv_pep440::VersionSpecifier;
+    type IntoIter = std::vec::IntoIter<uv_pep440::VersionSpecifier>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'de> Deserialize<'de> for RequiresPythonSpecifiers {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        VersionSpecifiers::from_str(&s)
+            .map(RequiresPythonSpecifiers)
+            .map_err(|err| {
+                // Detect free-threaded Python specifiers (e.g., "3.14t", ">=3.14t")
+                // by checking if the error line ends with a digit followed by 't'
+                if err.line().ends_with('t')
+                    && err
+                        .line()
+                        .chars()
+                        .rev()
+                        .nth(1)
+                        .is_some_and(|c| c.is_ascii_digit())
+                {
+                    let version = err.line().trim_start_matches(|c: char| !c.is_ascii_digit());
+                    serde::de::Error::custom(format!(
+                        "{err}\n\nhint: `requires-python` cannot include a free-threaded selector, consider using `uv python pin {version}` instead"
+                    ))
+                } else {
+                    serde::de::Error::custom(err)
+                }
+            })
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for RequiresPythonSpecifiers {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("RequiresPythonSpecifiers")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        <String as schemars::JsonSchema>::json_schema(generator)
+    }
+}
+
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
@@ -212,7 +286,7 @@ pub struct Project {
     /// The version of the project
     pub version: Option<Version>,
     /// The Python versions this project is compatible with.
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<RequiresPythonSpecifiers>,
     /// The dependencies of the project.
     pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.
@@ -232,7 +306,7 @@ struct ProjectWire {
     name: Option<PackageName>,
     version: Option<Version>,
     dynamic: Option<Vec<String>>,
-    requires_python: Option<VersionSpecifiers>,
+    requires_python: Option<RequiresPythonSpecifiers>,
     dependencies: Option<Vec<String>>,
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
     gui_scripts: Option<serde::de::IgnoredAny>,
@@ -768,8 +842,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
 #[serde(rename_all = "kebab-case")]
 pub struct DependencyGroupSettings {
     /// Version of python to require when installing this group
-    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<RequiresPythonSpecifiers>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1879,5 +1952,48 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requires_python_free_threaded_hint() {
+        let toml = r#"
+        [project]
+        name = "test-package"
+        version = "0.1.0"
+        requires-python = ">=3.14t"
+        "#;
+        let result = PyProjectToml::from_string(toml.to_string());
+        assert!(result.is_err());
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("free-threaded"),
+            "Error should mention free-threaded: {error}"
+        );
+        assert!(
+            error.contains("uv python pin 3.14t"),
+            "Error should suggest uv python pin with the version: {error}"
+        );
+    }
+
+    #[test]
+    fn requires_python_other_error_no_hint() {
+        let toml = r#"
+        [project]
+        name = "test-package"
+        version = "0.1.0"
+        requires-python = ">=invalid"
+        "#;
+        let error = PyProjectToml::from_string(toml.to_string())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            !error.contains("free-threaded"),
+            "Error should NOT mention free-threaded: {error}"
+        )
     }
 }
