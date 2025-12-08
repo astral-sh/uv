@@ -463,8 +463,15 @@ pub(crate) fn create(
             (true, "activate.fish") => {
                 r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
             }
+            (true, "activate.nu") => r#"(path self | path dirname | path dirname)"#.to_string(),
+            (false, "activate.nu") => {
+                format!(
+                    "'{}'",
+                    escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
+                )
+            }
             // Note:
-            // * relocatable activate scripts appear not to be possible in csh and nu shell
+            // * relocatable activate scripts appear not to be possible in csh.
             // * `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
