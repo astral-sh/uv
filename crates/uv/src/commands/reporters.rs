@@ -211,6 +211,7 @@ impl ProgressReporter {
         progress.finish_with_message(message);
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn on_request_start(&self, direction: Direction, name: String, size: Option<u64>) -> usize {
         let ProgressMode::Multi {
             multi_progress,
