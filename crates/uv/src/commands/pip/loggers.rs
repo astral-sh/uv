@@ -222,31 +222,11 @@ impl InstallLogger for SummaryInstallLogger {
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result {
-        let s = if count == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )
+        DefaultInstallLogger.on_uninstall(count, start, printer)
     }
 
     fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
-        let s = if count == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Installed {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )
+        DefaultInstallLogger.on_install(count, start, printer)
     }
 
     fn on_complete(&self, _changelog: &Changelog, _printer: Printer) -> fmt::Result {
