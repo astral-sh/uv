@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::fmt::Write;
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -349,10 +348,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
-                if dry_run.enabled() {
-                    writeln!(printer.stderr(), "Would make no changes")?;
-                }
+                DefaultInstallLogger.on_audit(requirements.len(), start, printer, dry_run)?;
 
                 return Ok(ExitStatus::Success);
             }

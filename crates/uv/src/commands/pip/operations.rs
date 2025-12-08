@@ -509,7 +509,7 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
-        logger.on_audit(resolution.len(), start, printer)?;
+        logger.on_audit(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -593,7 +593,7 @@ pub(crate) async fn install(
     let changelog = Changelog::new(installs, uninstalls);
 
     // Notify the user of any environment modifications.
-    logger.on_complete(&changelog, printer)?;
+    logger.on_complete(&changelog, printer, dry_run)?;
 
     Ok(changelog)
 }
@@ -660,7 +660,13 @@ async fn execute_plan(
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
 
-        logger.on_prepare(wheels.len(), phase.map(InstallPhase::label), start, printer)?;
+        logger.on_prepare(
+            wheels.len(),
+            phase.map(InstallPhase::label),
+            start,
+            printer,
+            DryRun::Disabled,
+        )?;
 
         wheels
     };
@@ -702,7 +708,7 @@ async fn execute_plan(
             }
         }
 
-        logger.on_uninstall(uninstalls.len(), start, printer)?;
+        logger.on_uninstall(uninstalls.len(), start, printer, DryRun::Disabled)?;
     }
 
     // Install the resolved distributions.
@@ -721,7 +727,7 @@ async fn execute_plan(
             // task.
             .install_blocking(installs)?;
 
-        logger.on_install(installs.len(), start, printer)?;
+        logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }
 
     Ok((installs, uninstalls))
@@ -857,8 +863,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
-        writeln!(printer.stderr(), "Would make no changes")?;
+        DefaultInstallLogger.on_audit(resolution.len(), start, printer, dry_run)?;
         return Ok(());
     }
 
@@ -866,16 +871,7 @@ fn report_dry_run(
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        let s = if remote.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Would download {}",
-                format!("{} package{}", remote.len(), s).bold(),
-            )
-            .dimmed()
-        )?;
+        DefaultInstallLogger.on_prepare(remote.len(), None, start, printer, dry_run)?;
         remote.clone()
     };
 
@@ -883,28 +879,14 @@ fn report_dry_run(
     let uninstalls = extraneous.len() + reinstalls.len();
 
     if uninstalls > 0 {
-        let s = if uninstalls == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Would uninstall {}",
-                format!("{uninstalls} package{s}").bold(),
-            )
-            .dimmed()
-        )?;
+        DefaultInstallLogger.on_uninstall(uninstalls, start, printer, dry_run)?;
     }
 
     // Install the resolved distributions.
     let installs = wheels.len() + cached.len();
 
     if installs > 0 {
-        let s = if installs == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!("Would install {}", format!("{installs} package{s}").bold()).dimmed()
-        )?;
+        DefaultInstallLogger.on_install(installs, start, printer, dry_run)?;
     }
 
     // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
