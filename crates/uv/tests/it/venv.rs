@@ -1300,7 +1300,7 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_nu = scripts.child("activate.nu");
     activate_nu.assert(predicates::path::is_file());
     activate_nu.assert(predicates::str::contains(
-        r#"let virtual_env = (path self | path dirname | path dirname)"#,
+        r"let virtual_env = (path self | path dirname | path dirname)",
     ));
 }
 
