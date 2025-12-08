@@ -83,9 +83,7 @@ impl Display for ToolRunCommand {
 /// Check if the given arguments contain a verbose flag (e.g., `--verbose`, `-v`, `-vv`, etc.)
 fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
     args.iter().find_map(|arg| {
-        let Some(arg_str) = arg.to_str() else {
-            return None;
-        };
+        let arg_str = arg.to_str()?;
         if arg_str == "--verbose" {
             Some("--verbose")
         } else if arg_str.starts_with("-v") && arg_str.chars().skip(1).all(|c| c == 'v') {
