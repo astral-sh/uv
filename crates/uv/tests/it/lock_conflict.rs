@@ -15292,7 +15292,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
     Would use project environment at: .venv
     Resolved 4 packages in [TIME]
     Found up-to-date lockfile at: uv.lock
-    Would download 2 packages
+    Prepared 2 packages in [TIME]
     Would install 2 packages
      + python-dateutil==2.8.0
      + six==1.17.0

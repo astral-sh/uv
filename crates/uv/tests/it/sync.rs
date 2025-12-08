@@ -641,7 +641,7 @@ fn sync_dry_json() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would install 1 package
      + iniconfig==2.0.0
     "#);
@@ -1041,7 +1041,7 @@ fn check() -> Result<()> {
     )?;
 
     // Running `uv sync --check` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1050,11 +1050,11 @@ fn check() -> Result<()> {
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
     Would create lockfile at: uv.lock
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would install 1 package
      + iniconfig==2.0.0
     The environment is outdated; run `uv sync` to update the environment
-    "###);
+    ");
 
     // Sync the environment.
     uv_snapshot!(context.filters(), context.sync(), @r"
@@ -1064,7 +1064,6 @@ fn check() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
@@ -10588,7 +10587,7 @@ fn sync_dry_run() -> Result<()> {
     Would create project environment at: .venv
     Resolved 2 packages in [TIME]
     Would create lockfile at: uv.lock
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would install 1 package
      + iniconfig==2.0.0
     ");
@@ -10603,7 +10602,6 @@ fn sync_dry_run() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
@@ -10743,7 +10741,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would install 1 package
      + iniconfig==2.0.0
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
@@ -10794,7 +10792,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
     ----- stderr -----
     Would use project environment at: .venv
-    Would download 3 packages
+    Prepared 3 packages in [TIME]
     Would install 3 packages
      + anyio==3.7.0
      + idna==3.6

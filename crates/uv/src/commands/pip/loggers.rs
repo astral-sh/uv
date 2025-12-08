@@ -33,7 +33,6 @@ pub(crate) trait InstallLogger {
         suffix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
-        dry_run: DryRun,
     ) -> fmt::Result;
 
     /// Log the completion of the uninstallation phase.
@@ -101,26 +100,20 @@ impl InstallLogger for DefaultInstallLogger {
         suffix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
-        dry_run: DryRun,
     ) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
-        let what = if let Some(suffix) = suffix {
-            format!("{count} package{s} {suffix}")
-        } else {
-            format!("{count} package{s}")
-        };
-        let what = what.bold();
         writeln!(
             printer.stderr(),
             "{}",
-            if dry_run.enabled() {
-                format!("Would download {what}")
-            } else {
-                format!(
-                    "Prepared {what} {}",
-                    format!("in {}", elapsed(start.elapsed())).dimmed()
-                )
-            }
+            format!(
+                "Prepared {} {}",
+                if let Some(suffix) = suffix {
+                    format!("{count} package{s} {suffix}")
+                } else {
+                    format!("{count} package{s}")
+                },
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
             .dimmed()
         )
     }
@@ -265,7 +258,6 @@ impl InstallLogger for SummaryInstallLogger {
         _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
-        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -330,7 +322,6 @@ impl InstallLogger for UpgradeInstallLogger {
         _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
-        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }

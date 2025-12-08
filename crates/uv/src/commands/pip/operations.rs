@@ -22,7 +22,7 @@ use uv_distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
     ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
+use uv_distribution_types::{Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
@@ -44,9 +44,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
+use crate::commands::compile_bytecode;
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -484,11 +484,6 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run.enabled() {
-        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
-        return Ok(Changelog::default());
-    }
-
     let Plan {
         cached,
         remote,
@@ -548,6 +543,7 @@ pub(crate) async fn install(
             venv,
             logger.as_ref(),
             installer_metadata,
+            dry_run,
             printer,
             preview,
         )
@@ -577,6 +573,7 @@ pub(crate) async fn install(
             venv,
             logger.as_ref(),
             installer_metadata,
+            dry_run,
             printer,
             preview,
         )
@@ -594,6 +591,10 @@ pub(crate) async fn install(
 
     // Notify the user of any environment modifications.
     logger.on_complete(&changelog, printer, dry_run)?;
+
+    if matches!(dry_run, DryRun::Check) {
+        return Err(Error::OutdatedEnvironment);
+    }
 
     Ok(changelog)
 }
@@ -629,6 +630,7 @@ async fn execute_plan(
     venv: &PythonEnvironment,
     logger: &dyn InstallLogger,
     installer_metadata: bool,
+    dry_run: DryRun,
     printer: Printer,
     preview: Preview,
 ) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
@@ -660,13 +662,7 @@ async fn execute_plan(
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
 
-        logger.on_prepare(
-            wheels.len(),
-            phase.map(InstallPhase::label),
-            start,
-            printer,
-            DryRun::Disabled,
-        )?;
+        logger.on_prepare(wheels.len(), phase.map(InstallPhase::label), start, printer)?;
 
         wheels
     };
@@ -676,58 +672,62 @@ async fn execute_plan(
     if !uninstalls.is_empty() {
         let start = std::time::Instant::now();
 
-        for dist_info in &uninstalls {
-            match uv_installer::uninstall(dist_info).await {
-                Ok(summary) => {
-                    debug!(
-                        "Uninstalled {} ({} file{}, {} director{})",
-                        dist_info.name(),
-                        summary.file_count,
-                        if summary.file_count == 1 { "" } else { "s" },
-                        summary.dir_count,
-                        if summary.dir_count == 1 { "y" } else { "ies" },
-                    );
+        if !dry_run.enabled() {
+            for dist_info in &uninstalls {
+                match uv_installer::uninstall(dist_info).await {
+                    Ok(summary) => {
+                        debug!(
+                            "Uninstalled {} ({} file{}, {} director{})",
+                            dist_info.name(),
+                            summary.file_count,
+                            if summary.file_count == 1 { "" } else { "s" },
+                            summary.dir_count,
+                            if summary.dir_count == 1 { "y" } else { "ies" },
+                        );
+                    }
+                    Err(uv_installer::UninstallError::Uninstall(
+                        uv_install_wheel::Error::MissingRecord(_),
+                    )) => {
+                        warn_user!(
+                            "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                            dist_info.install_path().user_display().cyan(),
+                        );
+                    }
+                    Err(uv_installer::UninstallError::Uninstall(
+                        uv_install_wheel::Error::MissingTopLevel(_),
+                    )) => {
+                        warn_user!(
+                            "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
+                            dist_info.install_path().user_display().cyan(),
+                        );
+                    }
+                    Err(err) => return Err(err.into()),
                 }
-                Err(uv_installer::UninstallError::Uninstall(
-                    uv_install_wheel::Error::MissingRecord(_),
-                )) => {
-                    warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
-                        dist_info.install_path().user_display().cyan(),
-                    );
-                }
-                Err(uv_installer::UninstallError::Uninstall(
-                    uv_install_wheel::Error::MissingTopLevel(_),
-                )) => {
-                    warn_user!(
-                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
-                        dist_info.install_path().user_display().cyan(),
-                    );
-                }
-                Err(err) => return Err(err.into()),
             }
         }
 
-        logger.on_uninstall(uninstalls.len(), start, printer, DryRun::Disabled)?;
+        logger.on_uninstall(uninstalls.len(), start, printer, dry_run)?;
     }
 
     // Install the resolved distributions.
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv, preview)
-            .with_link_mode(link_mode)
-            .with_cache(cache)
-            .with_installer_metadata(installer_metadata)
-            .with_reporter(Arc::new(
-                InstallReporter::from(printer).with_length(installs.len() as u64),
-            ))
-            // This technically can block the runtime, but we are on the main thread and
-            // have no other running tasks at this point, so this lets us avoid spawning a blocking
-            // task.
-            .install_blocking(installs)?;
+        if !dry_run.enabled() {
+            installs = uv_installer::Installer::new(venv, preview)
+                .with_link_mode(link_mode)
+                .with_cache(cache)
+                .with_installer_metadata(installer_metadata)
+                .with_reporter(Arc::new(
+                    InstallReporter::from(printer).with_length(installs.len() as u64),
+                ))
+                // This technically can block the runtime, but we are on the main thread and
+                // have no other running tasks at this point, so this lets us avoid spawning a blocking
+                // task.
+                .install_blocking(installs)?;
+        }
 
-        logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
+        logger.on_install(installs.len(), start, printer, dry_run)?;
     }
 
     Ok((installs, uninstalls))
@@ -836,116 +836,6 @@ pub(crate) fn report_target_environment(
     }
 
     Ok(writeln!(printer.stderr(), "{}", message.dimmed())?)
-}
-
-/// Report on the results of a dry-run installation.
-#[allow(clippy::result_large_err)]
-fn report_dry_run(
-    dry_run: DryRun,
-    resolution: &Resolution,
-    plan: Plan,
-    modifications: Modifications,
-    start: std::time::Instant,
-    printer: Printer,
-) -> Result<(), Error> {
-    let Plan {
-        cached,
-        remote,
-        reinstalls,
-        extraneous,
-    } = plan;
-
-    // If we're in `install` mode, ignore any extraneous distributions.
-    let extraneous = match modifications {
-        Modifications::Sufficient => vec![],
-        Modifications::Exact => extraneous,
-    };
-
-    // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        DefaultInstallLogger.on_audit(resolution.len(), start, printer, dry_run)?;
-        return Ok(());
-    }
-
-    // Download, build, and unzip any missing distributions.
-    let wheels = if remote.is_empty() {
-        vec![]
-    } else {
-        DefaultInstallLogger.on_prepare(remote.len(), None, start, printer, dry_run)?;
-        remote.clone()
-    };
-
-    // Remove any upgraded or extraneous installations.
-    let uninstalls = extraneous.len() + reinstalls.len();
-
-    if uninstalls > 0 {
-        DefaultInstallLogger.on_uninstall(uninstalls, start, printer, dry_run)?;
-    }
-
-    // Install the resolved distributions.
-    let installs = wheels.len() + cached.len();
-
-    if installs > 0 {
-        DefaultInstallLogger.on_install(installs, start, printer, dry_run)?;
-    }
-
-    // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
-    for event in reinstalls
-        .into_iter()
-        .chain(extraneous.into_iter())
-        .map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.installed_version().to_string(),
-            kind: ChangeEventKind::Removed,
-        })
-        .chain(wheels.into_iter().map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.version_or_url().to_string(),
-            kind: ChangeEventKind::Added,
-        }))
-        .chain(cached.into_iter().map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.installed_version().to_string(),
-            kind: ChangeEventKind::Added,
-        }))
-        .sorted_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| a.kind.cmp(&b.kind)))
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "+".green(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "-".red(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-            ChangeEventKind::Reinstalled => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "~".yellow(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-        }
-    }
-
-    if matches!(dry_run, DryRun::Check) {
-        return Err(Error::OutdatedEnvironment);
-    }
-
-    Ok(())
 }
 
 /// Report any diagnostics on resolved distributions.

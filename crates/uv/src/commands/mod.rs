@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use std::{fmt::Display, fmt::Write, process::ExitCode};
+use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
 use anyhow::Context;
@@ -65,7 +65,6 @@ pub(crate) use uv_console::human_readable_bytes;
 use uv_distribution_types::InstalledMetadata;
 use uv_fs::{CWD, Simplified};
 use uv_installer::compile_tree;
-use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -150,13 +149,6 @@ pub(super) enum ChangeEventKind {
 #[derive(Debug)]
 pub(super) struct ChangeEvent<'a, T: InstalledMetadata> {
     dist: &'a T,
-    kind: ChangeEventKind,
-}
-
-#[derive(Debug)]
-pub(super) struct DryRunEvent<T: Display> {
-    name: PackageName,
-    version: T,
     kind: ChangeEventKind,
 }
 

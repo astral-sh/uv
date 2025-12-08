@@ -5322,14 +5322,14 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--dry-run")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Would download 7 packages
+    Prepared 7 packages in [TIME]
     Would install 7 packages
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -5338,7 +5338,7 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
      + httpx==0.25.1
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     Ok(())
@@ -5354,19 +5354,19 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
         .arg("-r")
         .arg("requirements.txt")
         .arg("--dry-run")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Would download 3 packages
+    Prepared 3 packages in [TIME]
     Would install 3 packages
-     + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
+     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     Ok(())
@@ -5405,19 +5405,19 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
         .arg("--upgrade-package")
         .arg("anyio")
         .arg("--dry-run")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would uninstall 1 package
     Would install 1 package
      - anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
      + anyio==4.3.0
-    "###
+    "
     );
 
     Ok(())
@@ -5504,20 +5504,20 @@ fn dry_run_install_transitive_dependency_already_installed()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--dry-run")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Would download 4 packages
+    Prepared 4 packages in [TIME]
     Would install 4 packages
      + anyio==4.3.0
      + httpx==0.25.1
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     Ok(())
@@ -5557,19 +5557,19 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--dry-run"), @r###"
+        .arg("--dry-run"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would uninstall 1 package
     Would install 1 package
      - httpx==0.25.0
      + httpx==0.25.1
-    "###
+    "
     );
 
     Ok(())

@@ -1056,18 +1056,18 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_sync()
         .arg("requirements.txt")
         .arg("--dry-run")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Would download 1 package
+    Prepared 1 package in [TIME]
     Would install 1 package
      + colorama==0.4.2
     warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install")
-    "###
+    "#
     );
 
     Ok(())
@@ -5883,7 +5883,7 @@ fn pep_751_wheel_only() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Would download 9 packages
+    Prepared 9 packages in [TIME]
     Would install 9 packages
      + filelock==3.13.1
      + fsspec==2024.3.1
