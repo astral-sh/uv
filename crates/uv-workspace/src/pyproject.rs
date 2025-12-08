@@ -1967,9 +1967,9 @@ mod tests {
         version = "0.1.0"
         requires-python = ">=3.14t"
         "#;
-        let result = PyProjectToml::from_string(toml.to_string());
-        assert!(result.is_err());
-        let error = result.unwrap_err().to_string();
+        let error = PyProjectToml::from_string(toml.to_string())
+            .unwrap_err()
+            .to_string();
         assert!(
             error.contains("free-threaded"),
             "Error should mention free-threaded: {error}"
