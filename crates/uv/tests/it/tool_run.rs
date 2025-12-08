@@ -2832,6 +2832,69 @@ fn tool_run_with_script_and_from_script() {
     ");
 }
 
+/// Test that when a user provides `--verbose` to the subcommand,
+/// we show a helpful hint.
+#[test]
+fn tool_run_verbose_hint() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let mut filters = context.filters();
+    filters.push((
+        r"Because nonexistent-package-\w+ was not found in the package registry and you require nonexistent-package-\w+, we can conclude that your requirements are unsatisfiable\.",
+        "Because the package was not found, we can conclude that your requirements are unsatisfiable.",
+    ));
+
+    // Test with --verbose flag
+    uv_snapshot!(filters.clone(), context.tool_run()
+        .arg("nonexistent-package-foo")
+        .arg("--verbose")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the package was not found, we can conclude that your requirements are unsatisfiable.
+      help: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
+    "###);
+
+    // Test with -v flag
+    uv_snapshot!(filters.clone(), context.tool_run()
+        .arg("nonexistent-package-bar")
+        .arg("-v")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the package was not found, we can conclude that your requirements are unsatisfiable.
+      help: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
+    "###);
+
+    // Test with -vv flag
+    uv_snapshot!(filters, context.tool_run()
+        .arg("nonexistent-package-baz")
+        .arg("-vv")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the package was not found, we can conclude that your requirements are unsatisfiable.
+      help: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
+    "###);
+}
+
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9")
