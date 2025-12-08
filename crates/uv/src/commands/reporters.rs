@@ -108,6 +108,7 @@ enum Direction {
     Upload,
     Download,
     Extract,
+    Hash,
 }
 
 impl Direction {
@@ -116,6 +117,7 @@ impl Direction {
             Self::Download => "Downloading",
             Self::Upload => "Uploading",
             Self::Extract => "Extracting",
+            Self::Hash => "Hashing",
         }
     }
 }
@@ -220,6 +222,8 @@ impl ProgressReporter {
 
         let mut state = state.lock().unwrap();
 
+        let display_name = format!("{} {name}", direction.as_str());
+
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
@@ -264,24 +268,18 @@ impl ProgressReporter {
                 let (bytes, unit) = human_readable_bytes(size);
                 let _ = writeln!(
                     self.printer.stderr(),
-                    "{} {} {}",
-                    direction.as_str().bold().cyan(),
-                    name,
+                    "{} {}",
+                    display_name.bold().cyan(),
                     format!("({bytes:.1}{unit})").dimmed()
                 );
             }
-            progress.set_message(name);
+            progress.set_message(display_name.clone());
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
             if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
-                let _ = writeln!(
-                    self.printer.stderr(),
-                    "{} {}",
-                    direction.as_str().bold().cyan(),
-                    name
-                );
+                let _ = writeln!(self.printer.stderr(), "{}", display_name.bold().cyan());
             }
-            progress.set_message(name);
+            progress.set_message(display_name.clone());
             progress.finish();
         }
 
@@ -322,6 +320,7 @@ impl ProgressReporter {
                         Direction::Download => "Downloaded",
                         Direction::Upload => "Uploaded",
                         Direction::Extract => "Extracted",
+                        Direction::Hash => "Hashed",
                     },
                     progress.message()
                 );
@@ -702,6 +701,19 @@ impl uv_publish::Reporter for PublishReporter {
 
     fn on_upload_complete(&self, id: usize) {
         self.reporter.on_upload_complete(id);
+    }
+
+    fn on_hash_start(&self, name: &str, size: Option<u64>) -> usize {
+        self.reporter
+            .on_request_start(Direction::Hash, name.to_string(), size)
+    }
+
+    fn on_hash_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_request_progress(id, inc);
+    }
+
+    fn on_hash_complete(&self, id: usize) {
+        self.reporter.on_request_complete(Direction::Hash, id);
     }
 }
 

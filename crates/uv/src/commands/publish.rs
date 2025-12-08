@@ -206,10 +206,16 @@ pub(crate) async fn publish(
             )?;
         }
 
+        let reporter = PublishReporter::single(printer);
+
         // Collect the metadata for the file.
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+        let form_metadata = FormMetadata::read_from_file_with_reporter(
+            &group.file,
+            &group.filename,
+            Some(&reporter),
+        )
+        .await
+        .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         // Run validation checks on the file, but don't upload it (if possible).
         uv_publish::validate(
@@ -227,7 +233,6 @@ pub(crate) async fn publish(
             continue;
         }
 
-        let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &group,
             &form_metadata,

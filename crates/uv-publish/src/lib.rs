@@ -144,6 +144,11 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
     fn on_upload_complete(&self, id: usize);
+    fn on_hash_start(&self, _name: &str, _size: Option<u64>) -> usize {
+        0
+    }
+    fn on_hash_progress(&self, _id: usize, _inc: u64) {}
+    fn on_hash_complete(&self, _id: usize) {}
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -674,14 +679,16 @@ pub async fn check_url(
     if let Some(remote_hash) = archived_file.hashes.first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
-        let local_hash = &hash_file(file, vec![Hasher::from(remote_hash.algorithm)])
-            .await
-            .map_err(|err| {
-                PublishError::PublishPrepare(
-                    file.to_path_buf(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?[0];
+        let local_hash = &hash_file(
+            file,
+            &filename.to_string(),
+            vec![Hasher::from(remote_hash.algorithm)],
+            None,
+        )
+        .await
+        .map_err(|err| {
+            PublishError::PublishPrepare(file.to_path_buf(), Box::new(PublishPrepareError::Io(err)))
+        })?[0];
         if local_hash.digest == remote_hash.digest {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
@@ -704,12 +711,31 @@ pub async fn check_url(
 /// Calculate the requested hashes of a file.
 async fn hash_file(
     path: impl AsRef<Path>,
+    name: &str,
     hashers: Vec<Hasher>,
+    reporter: Option<&dyn Reporter>,
 ) -> Result<Vec<HashDigest>, io::Error> {
-    debug!("Hashing {}", path.as_ref().display());
-    let file = BufReader::new(File::open(path.as_ref()).await?);
+    let path = path.as_ref();
+    debug!("Hashing {}", path.display());
+
     let mut hashers = hashers;
-    HashReader::new(file, &mut hashers).finish().await?;
+
+    if let Some(reporter) = reporter {
+        let file = File::open(path).await?;
+        let file_size = file.metadata().await?.len();
+        let idx = reporter.on_hash_start(name, Some(file_size));
+        let reader = BufReader::new(file);
+        let mut reader = HashReader::new(
+            ProgressReader::new(reader, |read| reporter.on_hash_progress(idx, read as u64)),
+            &mut hashers,
+        );
+        let result = reader.finish().await;
+        reporter.on_hash_complete(idx);
+        result?;
+    } else {
+        let reader = BufReader::new(File::open(path).await?);
+        HashReader::new(reader, &mut hashers).finish().await?;
+    }
 
     Ok(hashers
         .into_iter()
@@ -790,12 +816,22 @@ impl FormMetadata {
         file: &Path,
         filename: &DistFilename,
     ) -> Result<Self, PublishPrepareError> {
+        Self::read_from_file_with_reporter(file, filename, None).await
+    }
+
+    pub async fn read_from_file_with_reporter(
+        file: &Path,
+        filename: &DistFilename,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Self, PublishPrepareError> {
         let hashes = hash_file(
             file,
+            &filename.to_string(),
             vec![
                 Hasher::from(HashAlgorithm::Sha256),
                 Hasher::from(HashAlgorithm::Blake2b),
             ],
+            reporter,
         )
         .await?;
 
