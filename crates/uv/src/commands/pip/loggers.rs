@@ -7,11 +7,10 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_configuration::DryRun;
-use uv_distribution_types::{InstalledMetadata, Name};
+use uv_distribution_types::Name;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 
-use crate::commands::pip::operations::Changelog;
+use crate::commands::pip::operations::{Changelog, ShortSpecifier};
 use crate::commands::{ChangeEvent, ChangeEventKind, elapsed};
 use crate::printer::Printer;
 
@@ -206,7 +205,7 @@ impl InstallLogger for DefaultInstallLogger {
                     .name()
                     .cmp(b.dist.name())
                     .then_with(|| a.kind.cmp(&b.kind))
-                    .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
+                    .then_with(|| a.dist.long_specifier().cmp(&b.dist.long_specifier()))
             })
         {
             match event.kind {
@@ -216,7 +215,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "+".green(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
                 ChangeEventKind::Removed => {
@@ -225,7 +224,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "-".red(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
                 ChangeEventKind::Reinstalled => {
@@ -234,7 +233,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "~".yellow(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
             }
@@ -363,25 +362,25 @@ impl InstallLogger for UpgradeInstallLogger {
         _dry_run: DryRun,
     ) -> fmt::Result {
         // Index the removals by package name.
-        let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let removals: FxHashMap<&PackageName, BTreeSet<ShortSpecifier>> =
             changelog.uninstalled.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.uninstalled.len(), FxBuildHasher),
                 |mut acc, distribution| {
                     acc.entry(distribution.name())
                         .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                        .insert(distribution.short_specifier());
                     acc
                 },
             );
 
         // Index the additions by package name.
-        let additions: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let additions: FxHashMap<&PackageName, BTreeSet<ShortSpecifier>> =
             changelog.installed.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.installed.len(), FxBuildHasher),
                 |mut acc, distribution| {
                     acc.entry(distribution.name())
                         .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                        .insert(distribution.short_specifier());
                     acc
                 },
             );
