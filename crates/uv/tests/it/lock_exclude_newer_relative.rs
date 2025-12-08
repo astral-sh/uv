@@ -1137,6 +1137,109 @@ fn lock_exclude_newer_mixed_relative_global_absolute_package() -> Result<()> {
     Ok(())
 }
 
+/// Test that negative durations produce the same timestamp as positive durations.
+/// This ensures that `span.abs()` is applied correctly, so "-1 day" and "1 day" both
+/// result in a cutoff 1 day in the past (not 1 day in the future for negative).
+#[test]
+fn lock_exclude_newer_negative_duration_same_as_positive() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Lock with positive duration "7 days"
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2025-11-21T12:00:00Z")
+        .arg("--exclude-newer")
+        .arg("7 days"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock_positive = context.read("uv.lock");
+    let timestamp_positive = lock_positive
+        .lines()
+        .find(|line| line.starts_with("exclude-newer = "))
+        .expect("Should find exclude-newer line");
+
+    let _ = fs_err::remove_file(context.temp_dir.child("uv.lock"));
+
+    // Lock with negative ISO 8601 duration "-P7D" (should produce same timestamp)
+    // Note: We use --exclude-newer=-P7D to avoid the dash being interpreted as a flag
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2025-11-21T12:00:00Z")
+        .arg("--exclude-newer=-P7D"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock_negative_iso = context.read("uv.lock");
+    let timestamp_negative_iso = lock_negative_iso
+        .lines()
+        .find(|line| line.starts_with("exclude-newer = "))
+        .expect("Should find exclude-newer line");
+
+    let _ = fs_err::remove_file(context.temp_dir.child("uv.lock"));
+
+    // Lock with "7 days ago" friendly format (should also produce same timestamp)
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2025-11-21T12:00:00Z")
+        .arg("--exclude-newer")
+        .arg("7 days ago"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock_ago = context.read("uv.lock");
+    let timestamp_ago = lock_ago
+        .lines()
+        .find(|line| line.starts_with("exclude-newer = "))
+        .expect("Should find exclude-newer line");
+
+    // All three should produce the same cutoff timestamp (7 days before 2025-11-21T12:00:00Z)
+    assert_eq!(
+        timestamp_positive, timestamp_negative_iso,
+        "Negative ISO duration should produce the same timestamp as positive duration"
+    );
+    assert_eq!(
+        timestamp_positive, timestamp_ago,
+        "'7 days ago' should produce the same timestamp as '7 days'"
+    );
+
+    // Verify the actual timestamp is correct (2025-11-14T12:00:00Z = 7 days before 2025-11-21T12:00:00Z)
+    assert!(
+        timestamp_positive.contains("2025-11-14T12:00:00Z"),
+        "Expected timestamp to be 2025-11-14T12:00:00Z, got: {timestamp_positive}"
+    );
+
+    Ok(())
+}
+
 /// Changing the span in pyproject.toml invalidates the lockfile.
 #[test]
 fn lock_exclude_newer_span_change_invalidates() -> Result<()> {

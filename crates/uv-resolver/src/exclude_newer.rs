@@ -194,20 +194,14 @@ impl From<Timestamp> for ExcludeNewerValue {
 /// - `[-+]?\s*[0-9]+\s*[A-Za-z]` → friendly duration (e.g., `2 weeks`, `-30 days`)
 /// - `[-+]?[0-9]{4}-` → date/timestamp (e.g., `2024-01-01`)
 /// - Otherwise → generic error with examples
-fn format_exclude_newer_error(
-    input: &str,
-    date_err: jiff::Error,
-    span_err: jiff::Error,
-) -> String {
+fn format_exclude_newer_error(input: &str, date_err: jiff::Error, span_err: jiff::Error) -> String {
     let trimmed = input.trim();
 
     // Check for ISO 8601 duration: [-+]?[Pp]
     // e.g., "P2W", "+P1D", "-P30D"
     let after_sign = trimmed.trim_start_matches(['+', '-']);
     if after_sign.starts_with('P') || after_sign.starts_with('p') {
-        return format!(
-            "`{input}` could not be parsed as an ISO 8601 duration: {span_err}"
-        );
+        return format!("`{input}` could not be parsed as an ISO 8601 duration: {span_err}");
     }
 
     // Check for friendly duration: [-+]?\s*[0-9]+\s*[A-Za-z]
@@ -227,9 +221,7 @@ fn format_exclude_newer_error(
         }
         // Check if next character is a letter (unit designator)
         if chars.peek().is_some_and(|c| c.is_ascii_alphabetic()) {
-            return format!(
-                "`{input}` could not be parsed as a relative duration: {span_err}"
-            );
+            return format!("`{input}` could not be parsed as a relative duration: {span_err}");
         }
     }
 
@@ -243,9 +235,7 @@ fn format_exclude_newer_error(
         && chars.next().is_some_and(|c| c == '-');
 
     if looks_like_date {
-        return format!(
-            "`{input}` could not be parsed as a valid date: {date_err}"
-        );
+        return format!("`{input}` could not be parsed as a valid date: {date_err}");
     }
 
     // Fallback: generic error showing both possibilities
@@ -327,7 +317,10 @@ impl FromStr for ExcludeNewerValue {
 
                 // We're using a UTC timezone so there are no transitions (e.g., DST) and days are
                 // always 24 hours. This means that we can also allow weeks as a unit.
-                let cutoff = now.checked_sub(span).map_err(|err| {
+                //
+                // Note we use `span.abs()` so `1 day ago` has the same effect as `1 day` instead
+                // of resulting in a future date.
+                let cutoff = now.checked_sub(span.abs()).map_err(|err| {
                     format!("Duration `{input}` is too large to subtract from current time: {err}")
                 })?;
 
