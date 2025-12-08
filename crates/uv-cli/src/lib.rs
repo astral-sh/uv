@@ -345,7 +345,7 @@ pub struct GlobalArgs {
     #[arg(global = true, long, env = EnvVars::UV_WORKING_DIR)]
     pub directory: Option<PathBuf>,
 
-    /// Run the command within the given project directory.
+    /// Discover a project in the given directory.
     ///
     /// All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
     /// up the directory tree from the project root, as will the project's virtual environment
@@ -1013,6 +1013,9 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Check(PipCheckArgs),
+    /// Display debug information (unsupported)
+    #[command(hide = true)]
+    Debug(PipDebugArgs),
 }
 
 #[derive(Subcommand)]
@@ -2486,6 +2489,14 @@ pub struct PipFreezeArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with_all = ["prefix", "paths"])]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with_all = ["target", "paths"])]
+    pub prefix: Option<PathBuf>,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2560,6 +2571,14 @@ pub struct PipListArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipListCompatArgs,
@@ -2676,6 +2695,14 @@ pub struct PipShowArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// Show a package from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// Show a package from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2734,6 +2761,21 @@ pub struct PipTreeArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
+}
+
+#[derive(Args)]
+pub struct PipDebugArgs {
+    #[arg(long, hide = true)]
+    pub platform: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub python_version: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub implementation: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub abi: Option<String>,
 }
 
 #[derive(Args)]
@@ -4896,6 +4938,14 @@ pub enum AuthCommand {
     /// Credentials are only stored in this directory when the plaintext backend is used, as
     /// opposed to the native backend, which uses the system keyring.
     Dir(AuthDirArgs),
+    /// Act as a credential helper for external tools.
+    ///
+    /// Implements the Bazel credential helper protocol to provide credentials
+    /// to external tools via JSON over stdin/stdout.
+    ///
+    /// This command is typically invoked by external tools.
+    #[command(hide = true)]
+    Helper(AuthHelperArgs),
 }
 
 #[derive(Args)]
@@ -6175,6 +6225,30 @@ pub struct AuthTokenArgs {
 pub struct AuthDirArgs {
     /// The domain or URL of the service to lookup.
     pub service: Option<Service>,
+}
+
+#[derive(Args)]
+pub struct AuthHelperArgs {
+    #[command(subcommand)]
+    pub command: AuthHelperCommand,
+
+    /// The credential helper protocol to use
+    #[arg(long, value_enum, required = true)]
+    pub protocol: AuthHelperProtocol,
+}
+
+/// Credential helper protocols supported by uv
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+pub enum AuthHelperProtocol {
+    /// Bazel credential helper protocol as described in [the
+    /// spec](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
+    Bazel,
+}
+
+#[derive(Subcommand)]
+pub enum AuthHelperCommand {
+    /// Retrieve credentials for a URI
+    Get,
 }
 
 #[derive(Args)]

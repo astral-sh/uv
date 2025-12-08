@@ -26,6 +26,7 @@ bitflags::bitflags! {
         const WORKSPACE_DIR = 1 << 14;
         const WORKSPACE_LIST = 1 << 15;
         const SBOM_EXPORT = 1 << 16;
+        const AUTH_HELPER = 1 << 17;
     }
 }
 
@@ -52,6 +53,7 @@ impl PreviewFeatures {
             Self::WORKSPACE_DIR => "workspace-dir",
             Self::WORKSPACE_LIST => "workspace-list",
             Self::SBOM_EXPORT => "sbom-export",
+            Self::AUTH_HELPER => "auth-helper",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -106,6 +108,7 @@ impl FromStr for PreviewFeatures {
                 "workspace-dir" => Self::WORKSPACE_DIR,
                 "workspace-list" => Self::WORKSPACE_LIST,
                 "sbom-export" => Self::SBOM_EXPORT,
+                "auth-helper" => Self::AUTH_HELPER,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;

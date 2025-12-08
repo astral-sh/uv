@@ -585,6 +585,7 @@ pub struct Concurrency {
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
     pub skip_wheel_filename_check: Option<bool>,
+    pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
@@ -613,6 +614,7 @@ impl EnvironmentOptions {
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
+            hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
@@ -774,6 +776,9 @@ impl From<&EnvironmentOptions> for EnvironmentFlags {
         let mut flags = Self::empty();
         if options.skip_wheel_filename_check == Some(true) {
             flags.insert(Self::SKIP_WHEEL_FILENAME_CHECK);
+        }
+        if options.hide_build_output == Some(true) {
+            flags.insert(Self::HIDE_BUILD_OUTPUT);
         }
         flags
     }

@@ -46,6 +46,16 @@ if hasattr(sys, "implementation"):
             r"\1.\2",
             sys.implementation.cache_tag,
         )
+    elif implementation_name == "pyston":
+        # Pyston reports the CPython version as sys.implementation.version,
+        # so we need to discover the Pyston version from the cache_tag
+        import re
+
+        implementation_version = re.sub(
+            r"pyston-(\d)(\d+)",
+            r"\1.\2",
+            sys.implementation.cache_tag,
+        )
     else:
         implementation_version = format_full_version(sys.implementation.version)
 else:

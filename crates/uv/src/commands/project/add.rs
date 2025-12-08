@@ -25,7 +25,7 @@ use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -442,6 +442,7 @@ pub(crate) async fn add(
                     project.workspace(),
                     &settings.resolver.index_locations,
                     settings.resolver.sources,
+                    client.credentials_cache(),
                 )?
             } else {
                 LoweredExtraBuildDependencies::from_non_lowered(
@@ -708,17 +709,14 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
-    // If we're modifying a script, and lockfile doesn't exist, don't create it.
-    if let AddTarget::Script(ref script, _) = target {
-        if !LockTarget::from(script).lock_path().is_file() {
-            writeln!(
-                printer.stderr(),
-                "Updated `{}`",
-                script.path.user_display().cyan()
-            )?;
-            return Ok(ExitStatus::Success);
-        }
-    }
+    // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
+    // to perform resolution, since we want to use the resolved versions to populate lower bounds
+    // in the script.
+    let dry_run = if let AddTarget::Script(ref script, _) = target {
+        !LockTarget::from(script).lock_path().is_file()
+    } else {
+        false
+    };
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
@@ -763,6 +761,7 @@ pub(crate) async fn add(
         &defaulted_groups,
         raw,
         bounds,
+        dry_run,
         constraints,
         &settings,
         &client_builder,
@@ -1004,6 +1003,7 @@ async fn lock_and_sync(
     groups: &DependencyGroupsWithDefaults,
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
+    dry_run: bool,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -1017,6 +1017,8 @@ async fn lock_and_sync(
         project::lock::LockOperation::new(
             if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(target.interpreter(), lock_check)
+            } else if dry_run {
+                LockMode::DryRun(target.interpreter())
             } else {
                 LockMode::Write(target.interpreter())
             },
@@ -1140,6 +1142,8 @@ async fn lock_and_sync(
                 project::lock::LockOperation::new(
                     if let LockCheck::Enabled(lock_check) = lock_check {
                         LockMode::Locked(target.interpreter(), lock_check)
+                    } else if dry_run {
+                        LockMode::DryRun(target.interpreter())
                     } else {
                         LockMode::Write(target.interpreter())
                     },
@@ -1304,7 +1308,7 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 impl AddTarget {
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
-    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
         match self {
             Self::Script(_, interpreter) => interpreter.lock().await,
             Self::Project(_, python_target) => python_target.interpreter().lock().await,

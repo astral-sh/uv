@@ -33,6 +33,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -45,8 +46,9 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::{Pep723Error, Pep723Metadata, Pep723Script};
+use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -269,8 +271,8 @@ impl RequirementsSpecification {
                 Self::from_requirements_txt(requirements_txt)
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => contents,
+                let content = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(content) => content,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                         return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                     }
@@ -282,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
+                let pyproject_toml = toml::from_str::<PyProjectToml>(&content)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
@@ -291,7 +293,15 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::Pep723Script(path) => {
-                let script = match Pep723Script::read(&path).await {
+                let content = if let Some(content) = cache.get(path.as_path()) {
+                    content.clone()
+                } else {
+                    let content = read_file(path, client_builder).await?;
+                    cache.insert(path.clone(), content.clone());
+                    content
+                };
+
+                let metadata = match Pep723Metadata::parse(content.as_bytes()) {
                     Ok(Some(script)) => script,
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
@@ -299,16 +309,10 @@ impl RequirementsSpecification {
                             path.user_display(),
                         ));
                     }
-                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to read `{}` (not found)",
-                            path.user_display(),
-                        ));
-                    }
                     Err(err) => return Err(err.into()),
                 };
 
-                Self::from_pep723_metadata(&script.metadata)
+                Self::from_pep723_metadata(&metadata)
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
@@ -347,11 +351,10 @@ impl RequirementsSpecification {
                 ));
             }
             RequirementsSource::Extensionless(path) => {
-                // Read the file content.
                 let content = if let Some(content) = cache.get(path.as_path()) {
                     content.clone()
                 } else {
-                    let content = uv_fs::read_to_string_transcode(&path).await?;
+                    let content = read_file(path, client_builder).await?;
                     cache.insert(path.clone(), content.clone());
                     content
                 };
@@ -740,4 +743,33 @@ pub struct GroupsSpecification {
     pub root: PathBuf,
     /// The enabled groups.
     pub groups: Vec<PipGroupName>,
+}
+
+/// Read the contents of a path, fetching over HTTP(S) if necessary.
+async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Result<String> {
+    // If the path is a URL, fetch it over HTTP(S).
+    if path.starts_with("http://") || path.starts_with("https://") {
+        // Only continue if we are absolutely certain no local file exists.
+        //
+        // We don't do this check on Windows since the file path would
+        // be invalid anyway, and thus couldn't refer to a local file.
+        if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
+            let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
+
+            let client = client_builder.build();
+            let response = client
+                .for_host(&url)
+                .get(Url::from(url.clone()))
+                .send()
+                .await?;
+
+            response.error_for_status_ref()?;
+
+            return Ok(response.text().await?);
+        }
+    }
+
+    // Read the file content.
+    let content = uv_fs::read_to_string_transcode(path).await?;
+    Ok(content)
 }

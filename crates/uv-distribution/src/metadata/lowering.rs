@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use either::Either;
 use thiserror::Error;
-
+use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
@@ -44,6 +44,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
+        credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
@@ -231,7 +232,7 @@ impl LoweredRequirement {
                                 ));
                             };
                             if let Some(credentials) = index.credentials() {
-                                uv_auth::store_credentials(index.raw_url(), credentials);
+                                credentials_cache.store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {
                                 url: index.url.clone(),
@@ -358,6 +359,7 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
+        credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -466,7 +468,7 @@ impl LoweredRequirement {
                                 ));
                             };
                             if let Some(credentials) = index.credentials() {
-                                uv_auth::store_credentials(index.raw_url(), credentials);
+                                credentials_cache.store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {
                                 url: index.url.clone(),

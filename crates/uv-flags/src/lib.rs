@@ -6,6 +6,7 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct EnvironmentFlags: u32 {
         const SKIP_WHEEL_FILENAME_CHECK = 1 << 0;
+        const HIDE_BUILD_OUTPUT = 1 << 1;
     }
 }
 

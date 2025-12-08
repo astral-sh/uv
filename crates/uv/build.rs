@@ -16,8 +16,10 @@
 use embed_manifest::manifest::{ActiveCodePage, ExecutionLevel, Setting, SupportedOS};
 use embed_manifest::{embed_manifest, empty_manifest};
 
+use uv_static::EnvVars;
+
 fn main() {
-    if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
+    if std::env::var_os(EnvVars::CARGO_CFG_WINDOWS).is_some() {
         let [major, minor, patch] = uv_version::version()
             .splitn(3, '.')
             .map(str::parse)

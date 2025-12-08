@@ -72,6 +72,7 @@ mod pip_show;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod pip_sync;
 
+mod pip_debug;
 mod pip_tree;
 mod pip_uninstall;
 

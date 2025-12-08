@@ -1445,7 +1445,7 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
+    /// Check whether the lock matches the project structure, requirements and configuration.
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,
@@ -1969,7 +1969,12 @@ impl Lock {
             // not be available as top-level configuration (i.e., if they're defined within a
             // workspace member), but we already validated that the dependencies are up-to-date, so
             // we can consider them "available".
-            for requirement in &package.metadata.requires_dist {
+            for requirement in package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+            {
                 if let RequirementSource::Registry {
                     index: Some(index), ..
                 } = &requirement.source

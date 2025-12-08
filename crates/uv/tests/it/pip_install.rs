@@ -7,7 +7,7 @@ use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use url::Url;
 use wiremock::{
@@ -10710,7 +10710,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
     .arg("--upgrade")
     .arg(".")
-    .env("UV_NO_SOURCES", "true"), @r###"
+    .env(EnvVars::UV_NO_SOURCES, "true"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10730,7 +10730,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--upgrade")
         .arg(".")
-        .env("UV_NO_SOURCES", "false"), @r###"
+        .env(EnvVars::UV_NO_SOURCES, "false"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10751,7 +10751,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .arg("--upgrade")
         .arg("--no-sources")
         .arg(".")
-        .env("UV_NO_SOURCES", "False"), @r"
+        .env(EnvVars::UV_NO_SOURCES, "False"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13253,20 +13253,20 @@ fn install_missing_python_with_target() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
-        .arg("--target").arg(target_dir.path()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        .arg("--target").arg(target_dir.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Using CPython 3.14.0
-        Resolved 3 packages in [TIME]
-        Prepared 3 packages in [TIME]
-        Installed 3 packages in [TIME]
-         + anyio==4.3.0
-         + idna==3.6
-         + sniffio==1.3.1
-        "###
+    ----- stderr -----
+    Using CPython 3.14.2
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
     );
 }
 
@@ -13299,4 +13299,166 @@ fn install_missing_python_version_with_target() {
          + sniffio==1.3.1
         "###
     );
+}
+
+/// Use a wheel that is only compatible with Python 3.13 with Python 3.12 or Python 3.13 to simulate
+/// a wheel build for the wrong platform in a cross-install scenario. Ensure that we catch this case
+/// and error accordingly. Additionally, we ensure that for a build dependency, which builds and
+/// runs on the host, not the target, we accept wheel platforms for the host.
+#[test]
+fn build_backend_wrong_wheel_platform() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+        .with_filter((r" on [^ ]+ [^ ]+\.", " on [ARCH] [OS]."))
+        .with_filter((r" on [^ ]+ [^ ]+$", " on [ARCH] [OS]"));
+
+    let py313 = context.temp_dir.child("child");
+    py313.create_dir_all()?;
+    let py313_pyproject_toml = py313.child("pyproject.toml");
+    py313_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "py313"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    let build_backend = py313.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+
+        from hatchling.build import *
+        from hatchling.build import build_wheel as build_wheel_original
+
+
+        def build_wheel(
+            wheel_directory: str,
+            config_settings: "Mapping[Any, Any] | None" = None,
+            metadata_directory: "str | None" = None,
+        ) -> str:
+            filename = build_wheel_original(
+                wheel_directory, config_settings, metadata_directory
+            )
+            py313_wheel = "py313-0.1.0-py313-none-any.whl"
+            os.rename(
+                os.path.join(wheel_directory, filename),
+                os.path.join(wheel_directory, py313_wheel),
+            )
+            return py313_wheel
+    "#})?;
+    py313.child("src/py313/__init__.py").touch()?;
+
+    // Test the matrix of
+    // (compatible host, incompatible host) x (compatible target, incompatible target)
+
+    // A Python 3.13 host with a 3.13 implicit target works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + py313==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // A Python 3.13 host with a 3.12 explicit target fails.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    ");
+
+    // A python 3.12 host with a 3.13 explicit target works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ py313==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // A Python 3.13 host with a 3.12 explicit target fails.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    ");
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "py313 @ file://{py313}"]
+        build-backend = "hatchling.build"
+        "#,
+        py313 = py313.path().portable_display()
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("parent")
+        .child("__init__.py")
+        .touch()?;
+
+    // A build host of 3.13 works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // A build host of 3.12 fails.
+    context.venv().arg("-p").arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `parent @ file://[TEMP_DIR]/`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
+    ");
+
+    Ok(())
 }

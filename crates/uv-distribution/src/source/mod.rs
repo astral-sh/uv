@@ -20,9 +20,9 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
 use zip::ZipArchive;
 
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
@@ -44,6 +44,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -326,14 +327,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(source, &GitSourceUrl::from(dist), hashes, client)
-                    .boxed_local()
-                    .await?
+                self.git_metadata(
+                    source,
+                    &GitSourceUrl::from(dist),
+                    hashes,
+                    client,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
-                    .boxed_local()
-                    .await?
+                self.source_tree_metadata(
+                    source,
+                    &DirectorySourceUrl::from(dist),
+                    hashes,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -365,14 +377,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes, client)
-                    .boxed_local()
-                    .await?
+                self.git_metadata(
+                    source,
+                    resource,
+                    hashes,
+                    client,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                self.source_tree_metadata(source, resource, hashes)
-                    .boxed_local()
-                    .await?
+                self.source_tree_metadata(
+                    source,
+                    resource,
+                    hashes,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -434,7 +457,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -564,7 +587,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -836,7 +859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -941,7 +964,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1162,7 +1185,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1249,6 +1272,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
+        credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1266,6 +1290,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.workspace_cache(),
+                        credentials_cache,
                     )
                     .await?,
                 ));
@@ -1284,7 +1309,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1319,6 +1344,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.locations(),
                             self.build_context.sources(),
                             self.build_context.workspace_cache(),
+                            credentials_cache,
                         )
                         .await?,
                     ));
@@ -1368,6 +1394,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?,
             ));
@@ -1429,6 +1456,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.workspace_cache(),
+                credentials_cache,
             )
             .await?,
         ))
@@ -1491,6 +1519,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         path: &Path,
         pyproject_toml: &PyProjectToml,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
         match uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml.clone()) {
@@ -1503,6 +1532,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -1584,7 +1614,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // We don't track any cache information for Git-based source distributions; they're assumed
         // to be immutable.
@@ -1662,6 +1692,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitSourceUrl<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
+        credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1798,7 +1829,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -1823,6 +1854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.locations(),
                             self.build_context.sources(),
                             self.build_context.workspace_cache(),
+                            credentials_cache,
                         )
                         .await?,
                     ));
@@ -1856,6 +1888,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context.locations(),
                                 self.build_context.sources(),
                                 self.build_context.workspace_cache(),
+                                credentials_cache,
                             )
                             .await?,
                         ));
@@ -1908,6 +1941,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?,
             ));
@@ -1969,6 +2003,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.workspace_cache(),
+                credentials_cache,
             )
             .await?,
         ))
@@ -2435,6 +2470,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 temp_dir.path(),
+                source_strategy,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -2503,7 +2539,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         } else {
                             BuildKind::Wheel
                         },
-                        BuildOutput::Debug,
+                        if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                            BuildOutput::Quiet
+                        } else {
+                            BuildOutput::Debug
+                        },
                         self.build_stack.cloned().unwrap_or_default(),
                     )
                     .await
@@ -2535,7 +2575,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .await
         .map_err(Error::CacheWrite)?;
 
-        debug!("Finished building: {source}");
+        debug!("Built `{source}` into `{disk_filename}`");
         Ok((disk_filename, filename, metadata))
     }
 
@@ -2604,7 +2644,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source.as_dist(),
                 source_strategy,
                 build_kind,
-                BuildOutput::Debug,
+                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                    BuildOutput::Quiet
+                } else {
+                    BuildOutput::Debug
+                },
                 self.build_stack.cloned().unwrap_or_default(),
             )
             .await
