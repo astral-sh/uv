@@ -75,6 +75,7 @@ base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
+diskus = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true, default-features = false }
@@ -115,7 +116,6 @@ version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
-diskus = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
