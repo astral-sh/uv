@@ -45,9 +45,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "ambient-id"
-version = "0.0.6"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36b48a3b1ad866e5034859be45edd1ebba2f097289c8a34b61623c76f10480f3"
+checksum = "b8cad022ed72ad2176498be1c097bb46e598193e92f3491ea0766980edeee168"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",

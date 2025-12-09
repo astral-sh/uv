@@ -75,7 +75,7 @@ uv-virtualenv = { version = "0.0.6", path = "crates/uv-virtualenv" }
 uv-warnings = { version = "0.0.6", path = "crates/uv-warnings" }
 uv-workspace = { version = "0.0.6", path = "crates/uv-workspace" }
 
-ambient-id = { version = "0.0.6", default-features = false, features = ["astral-reqwest-middleware"] }
+ambient-id = { version = "0.0.7", default-features = false, features = ["astral-reqwest-middleware"] }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
