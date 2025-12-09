@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use futures::StreamExt;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
@@ -13,6 +13,7 @@ use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
+use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
@@ -27,12 +28,13 @@ use uv_python::managed::{
     create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
+    Interpreter, PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey,
+    PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference,
+    VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::{warn_user, warn_user_once, write_error_chain};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -191,7 +193,9 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
+    compile_bytecode: bool,
     concurrency: &Concurrency,
+    cache: &Cache,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -434,6 +438,23 @@ pub(crate) async fn install(
         })
     };
 
+    // For all satisfied installs, bytecode compile them now before any future
+    // early return.
+    if compile_bytecode {
+        let mut satisfied = satisfied.clone();
+        satisfied.sort();
+        for installation in &satisfied {
+            compile_stdlib_bytecode(installation, concurrency, cache, &printer)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to bytecode-compile Python standard library for: {}",
+                        installation.key()
+                    )
+                })?;
+        }
+    }
+
     // Check if Python downloads are banned
     if matches!(python_downloads, PythonDownloads::Never) && !unsatisfied.is_empty() {
         writeln!(
@@ -493,6 +514,16 @@ pub(crate) async fn install(
                 };
 
                 let installation = ManagedPythonInstallation::new(path, download);
+                if compile_bytecode {
+                    compile_stdlib_bytecode(&installation, concurrency, cache, &printer)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Failed to bytecode-compile Python standard library for: {}",
+                                installation.key()
+                            )
+                        })?;
+                }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
                     // Take note of which installations satisfied which requests
@@ -1069,6 +1100,55 @@ fn create_bin_links(
             }
         }
     }
+}
+
+/// Attempt to compile the bytecode for a [`ManagedPythonInstallation`]'s stdlib
+async fn compile_stdlib_bytecode(
+    installation: &ManagedPythonInstallation,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    printer: &Printer,
+) -> Result<()> {
+    let start = std::time::Instant::now();
+    let interpreter = Interpreter::query(installation.executable(false), cache)
+        .context("Couldn't locate the interpreter")?;
+
+    // Attempt to avoid accidentally bytecode compiling some other python
+    // installation's bytecode if the installed interpreter reports a weird
+    // stdlib path.
+    let stdlib_path = interpreter.stdlib().canonicalize()?;
+    let interpreter_path = installation.path().canonicalize()?;
+    if !stdlib_path.starts_with(interpreter_path) {
+        warn_user_once!(
+            "The stdlib path for {} ({}) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.",
+            installation.key(),
+            stdlib_path.display()
+        );
+        return Ok(());
+    }
+
+    let files = uv_installer::compile_tree(
+        &stdlib_path,
+        &installation.executable(false),
+        concurrency,
+        cache.root(),
+    )
+    .await
+    .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
+    let s = if files == 1 { "" } else { "s" };
+    writeln!(
+        printer.stderr(),
+        "{}",
+        format!(
+            "Bytecode compiled {} {} {} {}",
+            format!("{files} file{s}").bold(),
+            "for".dimmed(),
+            installation.key().bold().dimmed(),
+            format!("in {}", elapsed(start.elapsed())).dimmed(),
+        )
+        .dimmed()
+    )?;
+    Ok(())
 }
 
 pub(crate) fn format_executables(

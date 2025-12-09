@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::{env, path::Path, process::Command};
 
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
@@ -15,6 +16,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use walkdir::WalkDir;
 
 #[test]
 fn python_install() {
@@ -3950,4 +3952,181 @@ fn python_install_upgrade_version_file() {
 
     hint: The version request came from a `.python-version` file; change the patch version in the file to upgrade instead
     ");
+}
+
+#[test]
+fn python_install_compile_bytecode() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install 3.14 and compile its bytecode
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    // Find the stdlib path for cpython 3.14
+    let stdlib = fs_err::read_link(
+        context
+            .bin_dir
+            .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX)),
+    )?
+    .parent()
+    .context("Python binary should be a child of `bin`")?
+    .parent()
+    .context("`bin` directory should be a child of the installation path")?
+    .join("lib")
+    .join("python3.14");
+
+    // And the count should match
+    let count = {
+        let mut count = 0;
+        let walker = WalkDir::new(stdlib).into_iter();
+        for entry in walker {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.metadata()?.is_file() && path.extension().is_some_and(|ext| ext == "pyc") {
+                count += 1;
+            }
+        }
+        count
+    };
+
+    insta::assert_snapshot!(count.to_string(), @"1052");
+
+    // Attempting to install with --compile-bytecode should (currently)
+    // unconditionally re-run the bytecode compiler
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Python 3.14 is already installed
+    ");
+
+    // Reinstalling with --compile-bytecode should compile bytecode.
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall").arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Installed Python 3.14.2 in [TIME]
+     ~ cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    // Clean up
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--quiet").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // A fresh install should be able to be compiled later
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Python 3.14 is already installed
+    ");
+
+    // Clean up
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--quiet").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // An upgrade should also compile bytecode
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0 in [TIME]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    // Clean up
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--quiet").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Should handle installing and compiling multiple versions correctly
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled 1084 files for cpython-3.12.12-[PLATFORM] in [TIME]
+    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
+    Installed 2 versions in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    // Should handle graalpython, pyodide and pypy gracefully
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl").arg("graalpy-3.12").arg("pypy-3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The stdlib path for pyodide-3.13.2-emscripten-wasm32-musl (/usr/lib/python3.13) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.
+    Bytecode compiled 718 files for graalpy-3.12.0-[PLATFORM] in [TIME]
+    Bytecode compiled 2049 files for pypy-3.11.13-[PLATFORM] in [TIME]
+    Installed 3 versions in [TIME]
+     + graalpy-3.12.0-[PLATFORM] (python3.12)
+     + pypy-3.11.13-[PLATFORM] (python3.11)
+     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+    ");
+
+    Ok(())
 }
