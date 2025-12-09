@@ -987,7 +987,9 @@ impl TestContext {
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
+            // Lock to a point in time view of the world
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
             // When installations are allowed, we don't want to write to global state, like the
             // Windows registry
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")

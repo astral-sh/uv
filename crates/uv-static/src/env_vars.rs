@@ -1085,6 +1085,12 @@ impl EnvVars {
     #[attr_added_in("0.5.29")]
     pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
 
+    /// Used to mock the current timestamp for relative `--exclude-newer` times in tests.
+    /// Should be set to an RFC 3339 timestamp (e.g., `2025-11-21T12:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.9.8")]
+    pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";

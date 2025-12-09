@@ -49,6 +49,7 @@ use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -59,7 +60,7 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
     PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
@@ -1059,15 +1060,32 @@ impl Lock {
             let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
-                if let Some(global) = exclude_newer.global {
+                if let Some(global) = &exclude_newer.global {
                     options_table.insert("exclude-newer", value(global.to_string()));
+                    // Serialize the original span if present
+                    if let Some(span) = global.span() {
+                        options_table.insert("exclude-newer-span", value(span.to_string()));
+                    }
                 }
 
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, timestamp) in &exclude_newer.package {
-                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    for (name, exclude_newer_value) in &exclude_newer.package {
+                        if let Some(span) = exclude_newer_value.span() {
+                            // Serialize as inline table with timestamp and span
+                            let mut inline = toml_edit::InlineTable::new();
+                            inline.insert(
+                                "timestamp",
+                                exclude_newer_value.timestamp().to_string().into(),
+                            );
+                            inline.insert("span", span.to_string().into());
+                            package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                        } else {
+                            // Serialize as simple string
+                            package_table
+                                .insert(name.as_ref(), value(exclude_newer_value.to_string()));
+                        }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
                 }
@@ -2132,10 +2150,12 @@ struct ResolverOptions {
     exclude_newer: ExcludeNewerWire,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<Timestamp>,
+    exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
 }
@@ -2143,7 +2163,9 @@ struct ExcludeNewerWire {
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         Self {
-            global: wire.exclude_newer,
+            global: wire
+                .exclude_newer
+                .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
             package: wire.exclude_newer_package,
         }
     }
@@ -2151,8 +2173,13 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
+        let (timestamp, span) = exclude_newer
+            .global
+            .map(ExcludeNewerValue::into_parts)
+            .map_or((None, None), |(t, s)| (Some(t), s));
         Self {
-            exclude_newer: exclude_newer.global,
+            exclude_newer: timestamp,
+            exclude_newer_span: span,
             exclude_newer_package: exclude_newer.package,
         }
     }
