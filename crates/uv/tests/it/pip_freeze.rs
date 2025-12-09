@@ -574,3 +574,41 @@ fn freeze_prefix() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn freeze_exclude() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    // Run `pip sync`.
+    context
+        .pip_sync()
+        .arg(requirements_txt.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze --exclude MarkupSafe`.
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}

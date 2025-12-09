@@ -976,6 +976,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             commands::pip_freeze(
                 args.exclude_editable,
+                args.exclude,
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
