@@ -144,11 +144,11 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
     fn on_upload_complete(&self, id: usize);
-    fn on_hash_start(&self, name: &str, size: Option<u64>) -> usize {
+    fn on_hash_start(&self, _name: &str, _size: Option<u64>) -> usize {
         0
     }
-    fn on_hash_progress(&self, id: usize, inc: u64) {}
-    fn on_hash_complete(&self, id: usize) {}
+    fn on_hash_progress(&self, _id: usize, _inc: u64) {}
+    fn on_hash_complete(&self, _id: usize) {}
 }
 
 /// Context for using a fresh registry client for check URL requests.
