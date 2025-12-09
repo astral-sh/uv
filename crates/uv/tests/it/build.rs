@@ -1533,7 +1533,7 @@ fn build_non_package() -> Result<()> {
 fn build_fast_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     uv_snapshot!(context.build()
         .arg(&built_by_uv)
@@ -1633,7 +1633,7 @@ fn build_fast_path() -> Result<()> {
 fn build_list_files() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
@@ -1755,7 +1755,7 @@ fn build_list_files() -> Result<()> {
 fn build_list_files_errors() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     let mut filters = context.filters();
     // In CI, we run with link mode settings.
@@ -1779,7 +1779,7 @@ fn build_list_files_errors() -> Result<()> {
     "###);
 
     // Not a uv build backend package, we can't list it.
-    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     let mut filters = context.filters();
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
@@ -1793,7 +1793,7 @@ fn build_list_files_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[WORKSPACE]/scripts/packages/anyio_local`
+      × Failed to build `[WORKSPACE]/test/packages/anyio_local`
       ╰─▶ Can only use `--list` with the uv backend
     "###);
     Ok(())
@@ -1802,7 +1802,7 @@ fn build_list_files_errors() -> Result<()> {
 #[test]
 fn build_version_mismatch() -> Result<()> {
     let context = TestContext::new("3.12");
-    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     context
         .build()
         .arg("--sdist")

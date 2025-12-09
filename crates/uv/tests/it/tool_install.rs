@@ -295,7 +295,7 @@ fn tool_install_with_editable() -> Result<()> {
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
@@ -597,7 +597,7 @@ fn tool_install_editable() {
     // Install `black` as an editable package.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -609,7 +609,7 @@ fn tool_install_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     Installed 1 executable: black
     "###);
 
@@ -649,7 +649,7 @@ fn tool_install_editable() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
@@ -717,7 +717,7 @@ fn tool_install_editable() {
     Prepared 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 6 packages in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + black==24.2.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -898,7 +898,7 @@ fn tool_install_editable_from() {
         .arg("black")
         .arg("-e")
         .arg("--from")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -910,7 +910,7 @@ fn tool_install_editable_from() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     Installed 1 executable: black
     "###);
 
@@ -950,7 +950,7 @@ fn tool_install_editable_from() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
@@ -4394,7 +4394,7 @@ fn tool_install_find_links() {
     // Run with `--find-links`.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/"))
+        .arg(context.workspace_root.join("test/links/"))
         .arg("basic-app")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
@@ -4413,7 +4413,7 @@ fn tool_install_find_links() {
     // Install with `--find-links`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/"))
+        .arg(context.workspace_root.join("test/links/"))
         .arg("basic-app")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -4464,7 +4464,7 @@ fn tool_install_find_links() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/"))
+        .arg(context.workspace_root.join("test/links/"))
         .arg("basic-app")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"

@@ -7521,7 +7521,7 @@ async fn add_requirements_from_remote_script() -> Result<()> {
 fn remove_repeated() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+    let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -7553,7 +7553,7 @@ fn remove_repeated() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -7576,7 +7576,7 @@ fn remove_repeated() -> Result<()> {
         dev-dependencies = ["anyio"]
 
         [tool.uv.sources]
-        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
+        anyio = { path = "[WORKSPACE]/test/packages/anyio_local" }
         "###
         );
     });
@@ -7612,7 +7612,7 @@ fn remove_repeated() -> Result<()> {
         dev-dependencies = ["anyio"]
 
         [tool.uv.sources]
-        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
+        anyio = { path = "[WORKSPACE]/test/packages/anyio_local" }
         "###
         );
     });
@@ -7626,7 +7626,7 @@ fn remove_repeated() -> Result<()> {
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11003,7 +11003,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
 
     let wheel_src = context
         .workspace_root
-        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
@@ -13021,7 +13021,7 @@ fn add_index_url_in_keyring() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -13079,7 +13079,7 @@ fn add_full_url_in_keyring() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -13756,7 +13756,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )

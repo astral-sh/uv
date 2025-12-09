@@ -46,7 +46,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-root-workspace"),
+            .join("test/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
@@ -92,7 +92,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-virtual-workspace"),
+            .join("test/workspaces/albatross-virtual-workspace"),
         &workspace,
     )?;
 
@@ -138,7 +138,7 @@ fn workspace_metadata_from_member() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-root-workspace"),
+            .join("test/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
@@ -274,7 +274,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-project-in-excluded"),
+            .join("test/workspaces/albatross-project-in-excluded"),
         &workspace,
     )?;
 

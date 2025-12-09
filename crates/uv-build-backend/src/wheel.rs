@@ -840,7 +840,7 @@ mod test {
     #[test]
     fn test_prepare_metadata() {
         let metadata_dir = TempDir::new().unwrap();
-        let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+        let built_by_uv = Path::new("../../test/packages/built-by-uv");
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())

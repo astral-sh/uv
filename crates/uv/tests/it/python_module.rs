@@ -43,7 +43,7 @@ fn find_uv_bin_venv() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -52,7 +52,7 @@ fn find_uv_bin_venv() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -83,7 +83,7 @@ fn find_uv_bin_target() {
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv"))
+        .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--target")
         .arg("target"), @r"
     success: true
@@ -95,7 +95,7 @@ fn find_uv_bin_target() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -129,7 +129,7 @@ fn find_uv_bin_prefix() {
     let prefix = context.temp_dir.child("prefix");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv"))
+        .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--prefix")
         .arg(prefix.path()), @r"
     success: true
@@ -141,7 +141,7 @@ fn find_uv_bin_prefix() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -183,7 +183,7 @@ fn find_uv_bin_base_prefix() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python")
         .arg(base_venv.path())
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -193,7 +193,7 @@ fn find_uv_bin_base_prefix() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -239,7 +239,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     // We should find the binary in an ephemeral `--with` environment
     uv_snapshot!(context.filters(), context.run()
         .arg("--with")
-        .arg(context.workspace_root.join("scripts/packages/fake-uv"))
+        .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("python")
         .arg("-c")
         .arg(TEST_SCRIPT), @r"
@@ -254,7 +254,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -284,7 +284,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         [tool.uv.sources]
         uv = {{ path = "{}" }}
         "#,
-        context.workspace_root.join("scripts/packages/fake-uv").portable_display()
+        context.workspace_root.join("test/packages/fake-uv").portable_display()
     })?;
 
     // When running in an ephemeral environment, we should find the binary in the project
@@ -305,7 +305,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -346,7 +346,7 @@ fn find_uv_bin_user_bin() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -355,7 +355,7 @@ fn find_uv_bin_user_bin() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -430,7 +430,7 @@ fn find_uv_bin_error_message() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -439,7 +439,7 @@ fn find_uv_bin_error_message() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -486,7 +486,7 @@ fn find_uv_bin_py38() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -495,7 +495,7 @@ fn find_uv_bin_py38() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -526,7 +526,7 @@ fn find_uv_bin_py39() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -535,7 +535,7 @@ fn find_uv_bin_py39() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -566,7 +566,7 @@ fn find_uv_bin_py310() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -575,7 +575,7 @@ fn find_uv_bin_py310() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -606,7 +606,7 @@ fn find_uv_bin_py311() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -615,7 +615,7 @@ fn find_uv_bin_py311() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -646,7 +646,7 @@ fn find_uv_bin_py312() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -655,7 +655,7 @@ fn find_uv_bin_py312() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -686,7 +686,7 @@ fn find_uv_bin_py313() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -695,7 +695,7 @@ fn find_uv_bin_py313() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
@@ -726,7 +726,7 @@ fn find_uv_bin_py314() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -735,7 +735,7 @@ fn find_uv_bin_py314() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
     "
     );
 
