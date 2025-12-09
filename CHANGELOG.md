@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.17
+
+Released on 2025-12-09.
+
+### Enhancements
+
+- Add `torch-tensorrt` and `torchao` to the PyTorch list ([#17053](https://github.com/astral-sh/uv/pull/17053))
+- Add hint for misplaced `--verbose`  in `uv tool run` ([#17020](https://github.com/astral-sh/uv/pull/17020))
+- Add support for relative durations in `exclude-newer` (a.k.a., dependency cooldowns) ([#16814](https://github.com/astral-sh/uv/pull/16814))
+- Add support for relocatable nushell activation script ([#17036](https://github.com/astral-sh/uv/pull/17036))
+
+### Bug fixes
+
+- Respect dropped (but explicit) indexes in dependency groups ([#17012](https://github.com/astral-sh/uv/pull/17012))
+
+### Documentation
+
+- Improve `source-exclude` reference docs ([#16832](https://github.com/astral-sh/uv/pull/16832))
+- Recommend `UV_NO_DEV` in Docker installs ([#17030](https://github.com/astral-sh/uv/pull/17030))
+- Update `UV_VERSION` in docs for GitLab CI/CD ([#17040](https://github.com/astral-sh/uv/pull/17040))
+
 ## 0.9.16
 
 Released on 2025-12-06.
