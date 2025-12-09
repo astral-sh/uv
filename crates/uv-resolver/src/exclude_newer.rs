@@ -7,6 +7,8 @@ use std::{
 
 use jiff::{Span, Timestamp, ToSpan, Unit, tz::TimeZone};
 use rustc_hash::FxHashMap;
+use serde::Deserialize;
+use serde::de::value::MapAccessDeserializer;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -500,12 +502,13 @@ impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
     {
         struct Visitor;
 
-        impl serde::de::Visitor<'_> for Visitor {
+        impl<'de> serde::de::Visitor<'de> for Visitor {
             type Value = PackageExcludeNewer;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str(
-                    "a date/timestamp/duration string, or false to disable exclude-newer",
+                    "a date/timestamp/duration string, false to disable exclude-newer, or a table \
+                     with timestamp/span",
                 )
             }
 
@@ -529,6 +532,15 @@ impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
                 } else {
                     Ok(PackageExcludeNewer::Disabled)
                 }
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                Ok(PackageExcludeNewer::Enabled(Box::new(
+                    ExcludeNewerValue::deserialize(MapAccessDeserializer::new(map))?,
+                )))
             }
         }
 

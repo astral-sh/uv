@@ -689,8 +689,7 @@ Values may also be specified for specific packages, e.g.,
 exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 ```
 
-Use `--exclude-newer-package <package>=<date>` to apply the cutoff to specific packages rather than
-globally. The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
+The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
 restriction, e.g., to allow resolving packages from an index that does not publish upload times.
 
 Package-specific values will take precedence over global values.
