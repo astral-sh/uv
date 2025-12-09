@@ -1212,16 +1212,16 @@
           "const": "Disabled"
         },
         {
-          "description": "Use this specific cutoff for this package.",
+          "description": "Enable exclude-newer with this cutoff for this package.",
           "type": "object",
           "properties": {
-            "Cutoff": {
+            "Enabled": {
               "$ref": "#/definitions/ExcludeNewerTimestamp"
             }
           },
           "additionalProperties": false,
           "required": [
-            "Cutoff"
+            "Enabled"
           ]
         }
       ]
