@@ -1073,7 +1073,7 @@ impl Lock {
                     let mut package_table = toml_edit::Table::new();
                     for (name, setting) in &exclude_newer.package {
                         match setting {
-                            PackageExcludeNewer::Cutoff(exclude_newer_value) => {
+                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
                                     // Serialize as inline table with timestamp and span
                                     let mut inline = toml_edit::InlineTable::new();

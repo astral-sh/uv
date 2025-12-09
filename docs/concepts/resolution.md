@@ -654,10 +654,6 @@ may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) t
 `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your system's
 configured time zone.
 
-Use `--exclude-newer-package <package>=<date>` to apply the cutoff to specific packages rather than
-globally. The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
-restriction, e.g., to allow resolving packages from an index that does not publish upload times.
-
 !!! important
 
     The package index must support the `upload-time` field as specified in
@@ -692,6 +688,10 @@ Values may also be specified for specific packages, e.g.,
 [tool.uv]
 exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 ```
+
+Use `--exclude-newer-package <package>=<date>` to apply the cutoff to specific packages rather than
+globally. The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
+restriction, e.g., to allow resolving packages from an index that does not publish upload times.
 
 Package-specific values will take precedence over global values.
 
