@@ -226,6 +226,7 @@ jobs:
     needs:
       - plan
       - host
+      - custom-publish-pypi # DIRTY: see #16989
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-crates.yml
     with:
