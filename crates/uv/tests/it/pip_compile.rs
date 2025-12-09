@@ -3565,7 +3565,7 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE`
+    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE` or `PACKAGE=false`
 
     For more information, try '--help'.
     "

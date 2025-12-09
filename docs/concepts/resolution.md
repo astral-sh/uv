@@ -654,12 +654,16 @@ may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) t
 `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your system's
 configured time zone.
 
+Use `--exclude-newer-package <package>=<date>` to apply the cutoff to specific packages rather than
+globally. The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
+restriction, e.g., to allow resolving packages from an index that does not publish upload times.
+
 !!! important
 
     The package index must support the `upload-time` field as specified in
     [`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
-    distribution, the distribution will be treated as unavailable. PyPI provides `upload-time` for
-    all packages.
+    distribution, the distribution will be treated as unavailable unless the package is opted out
+    via `--exclude-newer-package <package>=false`. PyPI provides `upload-time` for all packages.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated

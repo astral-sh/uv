@@ -61,7 +61,7 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
-    PrereleaseMode, ResolutionMode, ResolverOutput,
+    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -1071,20 +1071,29 @@ impl Lock {
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, exclude_newer_value) in &exclude_newer.package {
-                        if let Some(span) = exclude_newer_value.span() {
-                            // Serialize as inline table with timestamp and span
-                            let mut inline = toml_edit::InlineTable::new();
-                            inline.insert(
-                                "timestamp",
-                                exclude_newer_value.timestamp().to_string().into(),
-                            );
-                            inline.insert("span", span.to_string().into());
-                            package_table.insert(name.as_ref(), Item::Value(inline.into()));
-                        } else {
-                            // Serialize as simple string
-                            package_table
-                                .insert(name.as_ref(), value(exclude_newer_value.to_string()));
+                    for (name, setting) in &exclude_newer.package {
+                        match setting {
+                            PackageExcludeNewer::Timestamp(exclude_newer_value) => {
+                                if let Some(span) = exclude_newer_value.span() {
+                                    // Serialize as inline table with timestamp and span
+                                    let mut inline = toml_edit::InlineTable::new();
+                                    inline.insert(
+                                        "timestamp",
+                                        exclude_newer_value.timestamp().to_string().into(),
+                                    );
+                                    inline.insert("span", span.to_string().into());
+                                    package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                                } else {
+                                    // Serialize as simple string
+                                    package_table.insert(
+                                        name.as_ref(),
+                                        value(exclude_newer_value.to_string()),
+                                    );
+                                }
+                            }
+                            PackageExcludeNewer::Disabled => {
+                                package_table.insert(name.as_ref(), value(false));
+                            }
                         }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));

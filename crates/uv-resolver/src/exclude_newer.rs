@@ -95,9 +95,9 @@ impl std::fmt::Display for ExcludeNewerChange {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewerPackageChange {
-    PackageAdded(PackageName, ExcludeNewerValue),
+    PackageAdded(PackageName, PackageExcludeNewer),
     PackageRemoved(PackageName),
-    PackageChanged(PackageName, ExcludeNewerValueChange),
+    PackageChanged(PackageName, Box<PackageExcludeNewerChange>),
 }
 
 impl ExcludeNewerPackageChange {
@@ -112,18 +112,20 @@ impl ExcludeNewerPackageChange {
 impl std::fmt::Display for ExcludeNewerPackageChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PackageAdded(name, value) => {
+            Self::PackageAdded(name, PackageExcludeNewer::Timestamp(value)) => {
                 write!(
                     f,
-                    "addition of exclude newer `{value}` for package `{name}`"
+                    "addition of exclude newer `{}` for package `{name}`",
+                    value.as_ref()
                 )
+            }
+            Self::PackageAdded(name, PackageExcludeNewer::Disabled) => {
+                write!(f, "addition of exclude newer disable for package `{name}`")
             }
             Self::PackageRemoved(name) => {
                 write!(f, "removal of exclude newer for package `{name}`")
             }
-            Self::PackageChanged(name, change) => {
-                write!(f, "{change} for package `{name}`")
-            }
+            Self::PackageChanged(name, change) => write!(f, "{change} for package `{name}`"),
         }
     }
 }
@@ -425,47 +427,175 @@ impl std::fmt::Display for ExcludeNewerValue {
     }
 }
 
+/// Backwards-compatible alias for the exclude-newer timestamp type.
+pub type ExcludeNewerTimestamp = ExcludeNewerValue;
+
+/// Per-package exclude-newer setting.
+///
+/// This enum represents whether exclude-newer should be disabled for a package,
+/// or if a specific timestamp cutoff should be used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum PackageExcludeNewer {
+    /// Disable exclude-newer for this package (allow all versions regardless of upload date).
+    Disabled,
+    /// Use this specific timestamp cutoff for this package.
+    Timestamp(Box<ExcludeNewerValue>),
+}
+
 /// A package-specific exclude-newer entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExcludeNewerPackageEntry {
     pub package: PackageName,
-    pub timestamp: ExcludeNewerValue,
+    pub setting: PackageExcludeNewer,
 }
 
 impl FromStr for ExcludeNewerPackageEntry {
     type Err = String;
 
-    /// Parses a [`ExcludeNewerPackageEntry`] from a string in the format `PACKAGE=DATE`.
+    /// Parses a [`ExcludeNewerPackageEntry`] from a string in the format `PACKAGE=DATE` or `PACKAGE=false`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some((package, date)) = s.split_once('=') else {
+        let Some((package, value)) = s.split_once('=') else {
             return Err(format!(
-                "Invalid `exclude-newer-package` value `{s}`: expected format `PACKAGE=DATE`"
+                "Invalid `exclude-newer-package` value `{s}`: expected format `PACKAGE=DATE` or `PACKAGE=false`"
             ));
         };
 
         let package = PackageName::from_str(package).map_err(|err| {
             format!("Invalid `exclude-newer-package` package name `{package}`: {err}")
         })?;
-        let timestamp = ExcludeNewerValue::from_str(date)
-            .map_err(|err| format!("Invalid `exclude-newer-package` timestamp `{date}`: {err}"))?;
 
-        Ok(Self { package, timestamp })
+        let setting = if value == "false" {
+            PackageExcludeNewer::Disabled
+        } else {
+            PackageExcludeNewer::Timestamp(Box::new(ExcludeNewerValue::from_str(value).map_err(
+                |err| format!("Invalid `exclude-newer-package` timestamp `{value}`: {err}"),
+            )?))
+        };
+
+        Ok(Self { package, setting })
+    }
+}
+
+impl From<(PackageName, PackageExcludeNewer)> for ExcludeNewerPackageEntry {
+    fn from((package, setting): (PackageName, PackageExcludeNewer)) -> Self {
+        Self { package, setting }
     }
 }
 
 impl From<(PackageName, ExcludeNewerValue)> for ExcludeNewerPackageEntry {
     fn from((package, timestamp): (PackageName, ExcludeNewerValue)) -> Self {
-        Self { package, timestamp }
+        Self {
+            package,
+            setting: PackageExcludeNewer::Timestamp(Box::new(timestamp)),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PackageExcludeNewer;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a timestamp string or false/null to disable exclude-newer")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ExcludeNewerValue::from_str(v)
+                    .map(|ts| PackageExcludeNewer::Timestamp(Box::new(ts)))
+                    .map_err(|e| E::custom(format!("failed to parse timestamp: {e}")))
+            }
+
+            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if v {
+                    Err(E::custom(
+                        "expected false to disable exclude-newer, got true",
+                    ))
+                } else {
+                    Ok(PackageExcludeNewer::Disabled)
+                }
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(PackageExcludeNewer::Disabled)
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(PackageExcludeNewer::Disabled)
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+impl serde::Serialize for PackageExcludeNewer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Timestamp(timestamp) => timestamp.to_string().serialize(serializer),
+            Self::Disabled => serializer.serialize_bool(false),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackageExcludeNewerChange {
+    Disabled { was: ExcludeNewerValue },
+    Enabled { now: ExcludeNewerValue },
+    TimestampChanged(ExcludeNewerValueChange),
+}
+
+impl PackageExcludeNewerChange {
+    pub fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::Disabled { .. } | Self::Enabled { .. } => false,
+            Self::TimestampChanged(change) => change.is_relative_timestamp_change(),
+        }
+    }
+}
+
+impl std::fmt::Display for PackageExcludeNewerChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disabled { was } => {
+                write!(f, "disable exclude newer (was `{was}`)")
+            }
+            Self::Enabled { now } => {
+                write!(f, "enable exclude newer `{now}`")
+            }
+            Self::TimestampChanged(change) => write!(f, "{change}"),
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerValue>);
+pub struct ExcludeNewerPackage(FxHashMap<PackageName, PackageExcludeNewer>);
 
 impl Deref for ExcludeNewerPackage {
-    type Target = FxHashMap<PackageName, ExcludeNewerValue>;
+    type Target = FxHashMap<PackageName, PackageExcludeNewer>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -482,15 +612,15 @@ impl FromIterator<ExcludeNewerPackageEntry> for ExcludeNewerPackage {
     fn from_iter<T: IntoIterator<Item = ExcludeNewerPackageEntry>>(iter: T) -> Self {
         Self(
             iter.into_iter()
-                .map(|entry| (entry.package, entry.timestamp))
+                .map(|entry| (entry.package, entry.setting))
                 .collect(),
         )
     }
 }
 
 impl IntoIterator for ExcludeNewerPackage {
-    type Item = (PackageName, ExcludeNewerValue);
-    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerValue>;
+    type Item = (PackageName, PackageExcludeNewer);
+    type IntoIter = std::collections::hash_map::IntoIter<PackageName, PackageExcludeNewer>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -498,8 +628,8 @@ impl IntoIterator for ExcludeNewerPackage {
 }
 
 impl<'a> IntoIterator for &'a ExcludeNewerPackage {
-    type Item = (&'a PackageName, &'a ExcludeNewerValue);
-    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerValue>;
+    type Item = (&'a PackageName, &'a PackageExcludeNewer);
+    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, PackageExcludeNewer>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -508,20 +638,55 @@ impl<'a> IntoIterator for &'a ExcludeNewerPackage {
 
 impl ExcludeNewerPackage {
     /// Convert to the inner `HashMap`.
-    pub fn into_inner(self) -> FxHashMap<PackageName, ExcludeNewerValue> {
+    pub fn into_inner(self) -> FxHashMap<PackageName, PackageExcludeNewer> {
         self.0
     }
 
+    /// Returns true if this map is empty (no package-specific settings).
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
-        for (package, timestamp) in self {
-            let Some(other_timestamp) = other.get(package) else {
-                return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
-            };
-            if let Some(change) = timestamp.compare(other_timestamp) {
-                return Some(ExcludeNewerPackageChange::PackageChanged(
-                    package.clone(),
-                    change,
-                ));
+        for (package, setting) in self {
+            match (setting, other.get(package)) {
+                (
+                    PackageExcludeNewer::Timestamp(self_timestamp),
+                    Some(PackageExcludeNewer::Timestamp(other_timestamp)),
+                ) => {
+                    if let Some(change) = self_timestamp.compare(other_timestamp) {
+                        return Some(ExcludeNewerPackageChange::PackageChanged(
+                            package.clone(),
+                            Box::new(PackageExcludeNewerChange::TimestampChanged(change)),
+                        ));
+                    }
+                }
+                (
+                    PackageExcludeNewer::Timestamp(self_timestamp),
+                    Some(PackageExcludeNewer::Disabled),
+                ) => {
+                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                        package.clone(),
+                        Box::new(PackageExcludeNewerChange::Disabled {
+                            was: self_timestamp.as_ref().clone(),
+                        }),
+                    ));
+                }
+                (
+                    PackageExcludeNewer::Disabled,
+                    Some(PackageExcludeNewer::Timestamp(other_timestamp)),
+                ) => {
+                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                        package.clone(),
+                        Box::new(PackageExcludeNewerChange::Enabled {
+                            now: other_timestamp.as_ref().clone(),
+                        }),
+                    ));
+                }
+                (PackageExcludeNewer::Disabled, Some(PackageExcludeNewer::Disabled)) => {}
+                (_, None) => {
+                    return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
+                }
             }
         }
 
@@ -574,12 +739,16 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
-    /// Returns the timestamp for a specific package, falling back to the global timestamp if set.
+    /// Returns the exclude-newer timestamp for a specific package, returning `Some(timestamp)`
+    /// if the package has a package-specific timestamp or falls back to the global timestamp if
+    /// set, or `None` if exclude-newer is explicitly disabled for the package (set to `false`) or
+    /// if no exclude-newer is configured.
     pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<ExcludeNewerValue> {
-        self.package
-            .get(package_name)
-            .cloned()
-            .or(self.global.clone())
+        match self.package.get(package_name) {
+            Some(PackageExcludeNewer::Timestamp(timestamp)) => Some(timestamp.as_ref().clone()),
+            Some(PackageExcludeNewer::Disabled) => None,
+            None => self.global.clone(),
+        }
     }
 
     /// Returns true if this has any configuration (global or per-package).
@@ -615,11 +784,18 @@ impl std::fmt::Display for ExcludeNewer {
             }
         }
         let mut first = true;
-        for (name, timestamp) in &self.package {
+        for (name, setting) in &self.package {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{name}: {timestamp}")?;
+            match setting {
+                PackageExcludeNewer::Timestamp(timestamp) => {
+                    write!(f, "{name}: {}", timestamp.as_ref())?;
+                }
+                PackageExcludeNewer::Disabled => {
+                    write!(f, "{name}: disabled")?;
+                }
+            }
             first = false;
         }
         Ok(())
@@ -690,11 +866,21 @@ mod tests {
     fn test_exclude_newer_package_entry() {
         let entry = ExcludeNewerPackageEntry::from_str("numpy=2023-01-01T00:00:00Z").unwrap();
         assert_eq!(entry.package.as_ref(), "numpy");
-        assert!(entry.timestamp.to_string().contains("2023-01-01"));
+        match entry.setting {
+            PackageExcludeNewer::Timestamp(ref timestamp) => {
+                assert!(timestamp.to_string().contains("2023-01-01"));
+            }
+            PackageExcludeNewer::Disabled => panic!("expected timestamp"),
+        }
 
         // Test with relative timestamp
         let entry = ExcludeNewerPackageEntry::from_str("requests=7 days").unwrap();
         assert_eq!(entry.package.as_ref(), "requests");
-        // Just verify it parsed without error - the timestamp will be relative to now
+        assert!(matches!(entry.setting, PackageExcludeNewer::Timestamp(_)));
+
+        // Test disabling exclude-newer per package
+        let entry = ExcludeNewerPackageEntry::from_str("torch=false").unwrap();
+        assert_eq!(entry.package.as_ref(), "torch");
+        assert!(matches!(entry.setting, PackageExcludeNewer::Disabled));
     }
 }

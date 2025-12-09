@@ -31101,6 +31101,148 @@ fn test_tilde_equals_python_version() -> Result<()> {
     Ok(())
 }
 
+/// Test that exclude-newer-package can be disabled for specific packages using `false`.
+#[test]
+fn lock_exclude_newer_package_disable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests", "tqdm"]
+        "#,
+    )?;
+
+    // Lock with global exclude-newer and disable it for tqdm
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=false"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2022-04-04T12:00:00Z"
+
+        [options.exclude-newer-package]
+        tqdm = false
+
+        [[package]]
+        name = "certifi"
+        version = "2021.10.8"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/6c/ae/d26450834f0acc9e3d1f74508da6df1551ceab6c2ce0766a593362d6d57f/certifi-2021.10.8.tar.gz", hash = "sha256:78884e7c1d4b00ce3cea67b44566851c4343c120abd683433ce934a68ea58872", size = 151214, upload-time = "2021-10-08T19:32:15.277Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/37/45/946c02767aabb873146011e665728b680884cd8fe70dde973c640e45b775/certifi-2021.10.8-py2.py3-none-any.whl", hash = "sha256:d62a0163eb4c2344ac042ab2bdf75399a71a2d8c7d47eac2e2ee91b9d6339569", size = 149195, upload-time = "2021-10-08T19:32:10.712Z" },
+        ]
+
+        [[package]]
+        name = "charset-normalizer"
+        version = "2.0.12"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/56/31/7bcaf657fafb3c6db8c787a865434290b726653c912085fbd371e9b92e1c/charset-normalizer-2.0.12.tar.gz", hash = "sha256:2857e29ff0d34db842cd7ca3230549d1a697f96ee6d3fb071cfa6c7393832597", size = 79105, upload-time = "2022-02-12T14:33:13.788Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/06/b3/24afc8868eba069a7f03650ac750a778862dc34941a4bebeb58706715726/charset_normalizer-2.0.12-py3-none-any.whl", hash = "sha256:6881edbebdb17b39b4eaaa821b438bf6eddffb4468cf344f09f89def34a8b1df", size = 39623, upload-time = "2022-02-12T14:33:12.294Z" },
+        ]
+
+        [[package]]
+        name = "colorama"
+        version = "0.4.4"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/1f/bb/5d3246097ab77fa083a61bd8d3d527b7ae063c7d8e8671b1cf8c4ec10cbe/colorama-0.4.4.tar.gz", hash = "sha256:5941b2b48a20143d2267e95b1c2a7603ce057ee39fd88e7329b0c292aa16869b", size = 27813, upload-time = "2020-10-15T18:36:33.372Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/44/98/5b86278fbbf250d239ae0ecb724f8572af1c91f4a11edf4d36a206189440/colorama-0.4.4-py2.py3-none-any.whl", hash = "sha256:9f47eda37229f68eee03b24b9748937c7dc3868f906e8ba69fbcbdd3bc5dc3e2", size = 16028, upload-time = "2020-10-13T02:42:26.463Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.3"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/62/08/e3fc7c8161090f742f504f40b1bccbfc544d4a4e09eb774bf40aafce5436/idna-3.3.tar.gz", hash = "sha256:9d643ff0a55b762d5cdb124b8eaa99c66322e2157b69160bc32796e824360e6d", size = 286689, upload-time = "2021-10-12T23:33:41.312Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff", size = 61160, upload-time = "2021-10-12T23:33:38.02Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "requests" },
+            { name = "tqdm" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "requests" },
+            { name = "tqdm" },
+        ]
+
+        [[package]]
+        name = "requests"
+        version = "2.27.1"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "certifi" },
+            { name = "charset-normalizer" },
+            { name = "idna" },
+            { name = "urllib3" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/60/f3/26ff3767f099b73e0efa138a9998da67890793bfa475d8278f84a30fec77/requests-2.27.1.tar.gz", hash = "sha256:68d7c56fd5a8999887728ef304a6d12edc7be74f1cfa47714fc8b414525c9a61", size = 106758, upload-time = "2022-01-05T15:40:51.698Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2d/61/08076519c80041bc0ffa1a8af0cbd3bf3e2b62af10435d269a9d0f40564d/requests-2.27.1-py2.py3-none-any.whl", hash = "sha256:f22fa1e554c9ddfd16e6e41ac79759e17be9e492b3587efa038054674760e72d", size = 63133, upload-time = "2022-01-05T15:40:49.334Z" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "4.67.1"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "colorama", marker = "sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
+        ]
+
+        [[package]]
+        name = "urllib3"
+        version = "1.26.9"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/1b/a5/4eab74853625505725cefdf168f48661b2cd04e7843ab836f3f63abf81da/urllib3-1.26.9.tar.gz", hash = "sha256:aabaf16477806a5e1dd19aa41f8c2b7950dd3c746362d7e3223dbe6de6ac448e", size = 295258, upload-time = "2022-03-16T13:28:19.197Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ec/03/062e6444ce4baf1eac17a6a0ebfe36bb1ad05e1df0e20b110de59c278498/urllib3-1.26.9-py2.py3-none-any.whl", hash = "sha256:44ece4d53fb1706f667c9bd1c648f5469a2ec925fcf3a776667042d645472c14", size = 138990, upload-time = "2022-03-16T13:28:16.026Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Test that exclude-newer-package is properly serialized in the lockfile.
 #[test]
 fn lock_exclude_newer_package() -> Result<()> {
