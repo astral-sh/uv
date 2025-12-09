@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-
+use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
@@ -57,6 +57,7 @@ impl SourcedDependencyGroups {
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // If the `pyproject.toml` doesn't exist, fail early.
         if !pyproject_path.is_file() {
@@ -156,6 +157,7 @@ impl SourcedDependencyGroups {
                             locations,
                             project.workspace(),
                             git_member,
+                            credentials_cache,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),

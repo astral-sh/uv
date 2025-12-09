@@ -1,6 +1,6 @@
 [package]
 name = "uv-build-frontend"
-version = "0.0.1"
+version = "0.0.6"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }

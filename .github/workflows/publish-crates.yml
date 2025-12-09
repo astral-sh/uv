@@ -27,6 +27,7 @@ jobs:
       # - uses: rust-lang/crates-io-auth-action@v1
       #   id: auth
       - name: Publish workspace crates
-        run: cargo publish --workspace
+        # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
+        run: cargo publish --workspace --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}

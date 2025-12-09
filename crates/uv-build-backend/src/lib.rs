@@ -1,3 +1,4 @@
+use itertools::Itertools;
 mod metadata;
 mod serde_verbatim;
 mod settings;
@@ -7,8 +8,10 @@ mod wheel;
 pub use metadata::{PyProjectToml, check_direct_build};
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
+use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,9 +32,9 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Invalid pyproject.toml")]
-    Toml(#[from] toml::de::Error),
-    #[error("Invalid pyproject.toml")]
+    #[error("Invalid metadata format in: {}", _0.user_display())]
+    Toml(PathBuf, #[source] toml::de::Error),
+    #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
@@ -191,6 +194,60 @@ fn check_metadata_directory(
     Ok(())
 }
 
+/// Returns the list of module names without names which would be included twice
+///
+/// In normal cases it should do nothing:
+///
+/// * `["aaa"] -> ["aaa"]`
+/// * `["aaa", "bbb"] -> ["aaa", "bbb"]`
+///
+/// Duplicate elements are removed:
+///
+/// * `["aaa", "aaa"] -> ["aaa"]`
+/// * `["bbb", "aaa", "bbb"] -> ["aaa", "bbb"]`
+///
+/// Names with more specific paths are removed in favour of more general paths:
+///
+/// * `["aaa.foo", "aaa"] -> ["aaa"]`
+/// * `["bbb", "aaa", "bbb.foo", "ccc.foo", "ccc.foo.bar", "aaa"] -> ["aaa", "bbb.foo", "ccc.foo"]`
+///
+/// This does not preserve the order of the elements.
+fn prune_redundant_modules(mut names: Vec<String>) -> Vec<String> {
+    names.sort();
+    let mut pruned = Vec::with_capacity(names.len());
+    for name in names {
+        if let Some(last) = pruned.last() {
+            if name == *last {
+                continue;
+            }
+            // This is a more specific (narrow) module name than what came before
+            if name
+                .strip_prefix(last)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+            {
+                continue;
+            }
+        }
+        pruned.push(name);
+    }
+    pruned
+}
+
+/// Wraps [`prune_redundant_modules`] with a conditional warning when modules are ignored
+fn prune_redundant_modules_warn(names: &[String], show_warnings: bool) -> Vec<String> {
+    let pruned = prune_redundant_modules(names.to_vec());
+    if show_warnings && names.len() != pruned.len() {
+        let mut pruned: HashSet<_> = pruned.iter().collect();
+        let ignored: Vec<_> = names.iter().filter(|name| !pruned.remove(name)).collect();
+        let s = if ignored.len() == 1 { "" } else { "s" };
+        warn_user_once!(
+            "Ignoring redundant module name{s} in `tool.uv.build-backend.module-name`: `{}`",
+            ignored.into_iter().join("`, `")
+        );
+    }
+    pruned
+}
+
 /// Returns the source root and the module path(s) with the `__init__.py[i]`  below to it while
 /// checking the project layout and names.
 ///
@@ -213,6 +270,7 @@ fn find_roots(
     relative_module_root: &Path,
     module_name: Option<&ModuleName>,
     namespace: bool,
+    show_warnings: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
     // Check that even if a path contains `..`, we only include files below the module root.
@@ -231,8 +289,8 @@ fn find_roots(
                 ModuleName::Name(name) => {
                     vec![name.split('.').collect::<PathBuf>()]
                 }
-                ModuleName::Names(names) => names
-                    .iter()
+                ModuleName::Names(names) => prune_redundant_modules_warn(names, show_warnings)
+                    .into_iter()
                     .map(|name| name.split('.').collect::<PathBuf>())
                     .collect(),
             }
@@ -250,9 +308,9 @@ fn find_roots(
     let modules_relative = if let Some(module_name) = module_name {
         match module_name {
             ModuleName::Name(name) => vec![module_path_from_module_name(&src_root, name)?],
-            ModuleName::Names(names) => names
-                .iter()
-                .map(|name| module_path_from_module_name(&src_root, name))
+            ModuleName::Names(names) => prune_redundant_modules_warn(names, show_warnings)
+                .into_iter()
+                .map(|name| module_path_from_module_name(&src_root, &name))
                 .collect::<Result<_, _>>()?,
         }
     } else {
@@ -420,19 +478,20 @@ mod tests {
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
-        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION)?;
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION, false)?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
         fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) = list_source_dist(source_root, MOCK_UV_VERSION)?;
+        let (_name, source_dist_list_files) =
+            list_source_dist(source_root, MOCK_UV_VERSION, false)?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION)?;
+        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
+        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -446,7 +505,13 @@ mod tests {
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, MOCK_UV_VERSION)?;
+        let wheel_filename = build_wheel(
+            &sdist_top_level_directory,
+            dist,
+            None,
+            MOCK_UV_VERSION,
+            false,
+        )?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -534,7 +599,7 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+        let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
             "src",
@@ -756,7 +821,7 @@ mod tests {
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15").unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
@@ -767,6 +832,7 @@ mod tests {
             output_dir.path(),
             None,
             "0.5.15",
+            false,
         )
         .unwrap();
         let wheel = output_dir
@@ -831,6 +897,7 @@ mod tests {
             output_dir.path(),
             Some(&metadata_dir.path().join(&dist_info_dir)),
             "0.5.15",
+            false,
         )
         .unwrap();
         let wheel = output_dir
@@ -1412,6 +1479,116 @@ mod tests {
         simple_namespace_part-1.0.0.dist-info/METADATA
         simple_namespace_part-1.0.0.dist-info/RECORD
         simple_namespace_part-1.0.0.dist-info/WHEEL
+        ");
+    }
+
+    /// `prune_redundant_modules` should remove modules which are already
+    /// included (either directly or via their parent)
+    #[test]
+    fn test_prune_redundant_modules() {
+        fn check(input: &[&str], expect: &[&str]) {
+            let input = input.iter().map(|s| (*s).to_string()).collect();
+            let expect: Vec<_> = expect.iter().map(|s| (*s).to_string()).collect();
+            assert_eq!(prune_redundant_modules(input), expect);
+        }
+
+        // Basic cases
+        check(&[], &[]);
+        check(&["foo"], &["foo"]);
+        check(&["foo", "bar"], &["bar", "foo"]);
+
+        // Deshadowing
+        check(&["foo", "foo.bar"], &["foo"]);
+        check(&["foo.bar", "foo"], &["foo"]);
+        check(
+            &["foo.bar.a", "foo.bar.b", "foo.bar", "foo", "foo.bar.a.c"],
+            &["foo"],
+        );
+        check(
+            &["bar.one", "bar.two", "baz", "bar", "baz.one"],
+            &["bar", "baz"],
+        );
+
+        // Potential false positives
+        check(&["foo", "foobar"], &["foo", "foobar"]);
+        check(
+            &["foo", "foobar", "foo.bar", "foobar.baz"],
+            &["foo", "foobar"],
+        );
+        check(&["foo.bar", "foo.baz"], &["foo.bar", "foo.baz"]);
+        check(&["foo", "foo", "foo.bar", "foo.bar"], &["foo"]);
+
+        // Everything
+        check(
+            &[
+                "foo.inner",
+                "foo.inner.deeper",
+                "foo",
+                "bar",
+                "bar.sub",
+                "bar.sub.deep",
+                "foobar",
+                "baz.baz.bar",
+                "baz.baz",
+                "qux",
+            ],
+            &["bar", "baz.baz", "foo", "foobar", "qux"],
+        );
+    }
+
+    /// A package with duplicate module names.
+    #[test]
+    fn duplicate_module_names() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "duplicate"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = ["foo", "foo", "bar.baz", "bar.baz.submodule"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("foo")).unwrap();
+        File::create(src.path().join("src").join("foo").join("__init__.py")).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("bar").join("baz")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("bar")
+                .join("baz")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        duplicate-1.0.0/
+        duplicate-1.0.0/PKG-INFO
+        duplicate-1.0.0/pyproject.toml
+        duplicate-1.0.0/src
+        duplicate-1.0.0/src/bar
+        duplicate-1.0.0/src/bar/baz
+        duplicate-1.0.0/src/bar/baz/__init__.py
+        duplicate-1.0.0/src/foo
+        duplicate-1.0.0/src/foo/__init__.py
+        ");
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        bar/
+        bar/baz/
+        bar/baz/__init__.py
+        duplicate-1.0.0.dist-info/
+        duplicate-1.0.0.dist-info/METADATA
+        duplicate-1.0.0.dist-info/RECORD
+        duplicate-1.0.0.dist-info/WHEEL
+        foo/
+        foo/__init__.py
         ");
     }
 }

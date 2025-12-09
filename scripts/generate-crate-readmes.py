@@ -9,8 +9,7 @@ import subprocess
 
 GENERATED_HEADER = "<!-- This file is generated. DO NOT EDIT -->"
 
-UV_TEMPLATE = """
-{GENERATED_HEADER}
+UV_TEMPLATE = """{GENERATED_HEADER}
 
 # uv
 
@@ -22,6 +21,8 @@ for more information.
 This crate is the entry point to the uv command-line interface. The Rust API exposed here is not
 considered public interface.
 
+This is version {uv_version}. The source can be found [here]({source_url}).
+
 The following uv workspace members are also available:
 
 {WORKSPACE_MEMBERS}
@@ -32,18 +33,23 @@ See uv's [crate versioning policy](https://docs.astral.sh/uv/reference/policies/
 """
 
 
-MEMBER_TEMPLATE = """
-{GENERATED_HEADER}
+MEMBER_TEMPLATE = """{GENERATED_HEADER}
 
 # {name}
 
-This crate is an internal component of [uv](https://crates.io/uv). The Rust API exposed here is
+This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here is
 unstable and will have frequent breaking changes.
+
+This version ({crate_version}) is a component of [uv {uv_version}]({uv_crates_io_url}). The source can
+be found [here]({source_url}).
 
 See uv's [crate versioning
 policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning) for details on
 versioning.
 """
+
+
+REPO_URL = "https://github.com/astral-sh/uv"
 
 
 def main() -> None:
@@ -56,14 +62,29 @@ def main() -> None:
     content = json.loads(result.stdout)
     packages = {package["id"]: package for package in content["packages"]}
 
+    # Find the uv version from the uv crate
+    uv_version = None
+    for package in content["packages"]:
+        if package["name"] == "uv":
+            uv_version = package["version"]
+            break
+    if uv_version is None:
+        raise RuntimeError("Could not find uv crate")
+
     workspace_root = pathlib.Path(content["workspace_root"])
     readme_path = workspace_root / "crates" / "uv" / "README.md"
 
     workspace_members = []
     for workspace_member in content["workspace_members"]:
-        name = packages[workspace_member]["name"]
-        if name != "uv":
-            workspace_members.append(name)
+        package = packages[workspace_member]
+        name = package["name"]
+        # Skip the main uv crate
+        if name == "uv":
+            continue
+        # Skip crates with publish = false
+        if package.get("publish") == []:
+            continue
+        workspace_members.append(name)
 
     workspace_members.sort()
 
@@ -72,8 +93,12 @@ def main() -> None:
     )
 
     # Generate README for the main uv crate
+    uv_source_url = f"{REPO_URL}/blob/{uv_version}/crates/uv"
     readme_content = UV_TEMPLATE.format(
-        GENERATED_HEADER=GENERATED_HEADER, WORKSPACE_MEMBERS=members_list
+        GENERATED_HEADER=GENERATED_HEADER,
+        WORKSPACE_MEMBERS=members_list,
+        uv_version=uv_version,
+        source_url=uv_source_url,
     )
     readme_path.write_text(readme_content)
 
@@ -102,9 +127,21 @@ def main() -> None:
                 print(f"Skipping {name}: existing README without generated header")
                 continue
 
+        # Get the crate version and compute source URL
+        crate_version = package["version"]
+        # Compute relative path from workspace root to crate directory
+        relative_crate_path = crate_dir.relative_to(workspace_root)
+        source_url = f"{REPO_URL}/blob/{uv_version}/{relative_crate_path}"
+
         # Generate the README content
+        uv_crates_io_url = f"https://crates.io/crates/uv/{uv_version}"
         member_readme_content = MEMBER_TEMPLATE.format(
-            GENERATED_HEADER=GENERATED_HEADER, name=name
+            GENERATED_HEADER=GENERATED_HEADER,
+            name=name,
+            crate_version=crate_version,
+            uv_version=uv_version,
+            uv_crates_io_url=uv_crates_io_url,
+            source_url=source_url,
         )
         member_readme_path.write_text(member_readme_content)
         generated_paths.append(member_readme_path)

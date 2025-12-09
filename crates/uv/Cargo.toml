@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.9.11"
+version = "0.9.16"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -121,6 +121,12 @@ arrayvec = { workspace = true }
 self-replace = { workspace = true }
 windows = { workspace = true }
 
+[build-dependencies]
+uv-static = { workspace = true }
+uv-version = { workspace = true }
+
+embed-manifest = { workspace = true }
+
 [dev-dependencies]
 uv-publish = { workspace = true, features = ["test"] }
 
@@ -173,6 +179,7 @@ tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing
 default-tests = [
     "crates-io",
     "git",
+    "git-lfs",
     "pypi",
     "r2",
     "python",
@@ -185,6 +192,8 @@ default-tests = [
 crates-io = []
 # Introduces a testing dependency on Git.
 git = []
+# Introduces a testing dependency on Git LFS.
+git-lfs = ["git"]
 # Introduces a testing dependency on PyPI.
 pypi = []
 # Introduces a testing dependency on R2.

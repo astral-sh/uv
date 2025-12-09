@@ -195,8 +195,8 @@ $ uv export --format pylock.toml
 $ uv export --format cyclonedx1.5
 ```
 
-See the [export guide](../../guides/export.md) for comprehensive documentation on all export formats
-and their use cases.
+See the [export guide](./export.md) for comprehensive documentation on all export formats and their
+use cases.
 
 ## Partial installations
 

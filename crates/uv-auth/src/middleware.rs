@@ -17,13 +17,13 @@ use crate::credentials::Authentication;
 use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
-    AccessToken, CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
+    AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
-use crate::{Index, TextCredentialStore, TomlCredentialError};
+use crate::{Index, TextCredentialStore};
 
 /// Cached check for whether we're running in Dependabot.
 static IS_DEPENDABOT: LazyLock<bool> =
@@ -65,49 +65,55 @@ impl NetrcMode {
 
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
-    Automatic(LazyLock<Option<TextCredentialStore>>),
+    Automatic(tokio::sync::OnceCell<Option<TextCredentialStore>>),
     Enabled(TextCredentialStore),
     Disabled,
 }
 
 impl Default for TextStoreMode {
     fn default() -> Self {
-        // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
-        // implementation for now.
-        Self::Automatic(LazyLock::new(|| {
-            let path = TextCredentialStore::default_file()
-                .inspect_err(|err| {
-                    warn!("Failed to determine credentials file path: {}", err);
-                })
-                .ok()?;
-
-            match TextCredentialStore::read(&path) {
-                Ok((store, _lock)) => {
-                    debug!("Loaded credential file {}", path.display());
-                    Some(store)
-                }
-                Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    debug!("No credentials file found at {}", path.display());
-                    None
-                }
-                Err(err) => {
-                    warn!(
-                        "Failed to load credentials from {}: {}",
-                        path.display(),
-                        err
-                    );
-                    None
-                }
-            }
-        }))
+        Self::Automatic(tokio::sync::OnceCell::new())
     }
 }
 
 impl TextStoreMode {
+    async fn load_default_store() -> Option<TextCredentialStore> {
+        let path = TextCredentialStore::default_file()
+            .inspect_err(|err| {
+                warn!("Failed to determine credentials file path: {}", err);
+            })
+            .ok()?;
+
+        match TextCredentialStore::read(&path).await {
+            Ok((store, _lock)) => {
+                debug!("Loaded credential file {}", path.display());
+                Some(store)
+            }
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                debug!("No credentials file found at {}", path.display());
+                None
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to load credentials from {}: {}",
+                    path.display(),
+                    err
+                );
+                None
+            }
+        }
+    }
+
     /// Get the parsed credential store, if enabled.
-    fn get(&self) -> Option<&TextCredentialStore> {
+    async fn get(&self) -> Option<&TextCredentialStore> {
         match self {
-            Self::Automatic(lock) => lock.as_ref(),
+            // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
+            // implementation for now.
+            Self::Automatic(lock) => lock.get_or_init(Self::load_default_store).await.as_ref(),
             Self::Enabled(store) => Some(store),
             Self::Disabled => None,
         }
@@ -131,7 +137,8 @@ pub struct AuthMiddleware {
     netrc: NetrcMode,
     text_store: TextStoreMode,
     keyring: Option<KeyringProvider>,
-    cache: Option<CredentialsCache>,
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
+    cache: Arc<CredentialsCache>,
     /// Auth policies for specific URLs.
     indexes: Indexes,
     /// Set all endpoints as needing authentication. We never try to send an
@@ -146,13 +153,20 @@ pub struct AuthMiddleware {
     preview: Preview,
 }
 
+impl Default for AuthMiddleware {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuthMiddleware {
     pub fn new() -> Self {
         Self {
             netrc: NetrcMode::default(),
             text_store: TextStoreMode::default(),
             keyring: None,
-            cache: None,
+            // TODO(konsti): There shouldn't be a credential cache without that in the initializer.
+            cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             only_authenticated: false,
             base_client: None,
@@ -205,7 +219,14 @@ impl AuthMiddleware {
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
     pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
-        self.cache = Some(cache);
+        self.cache = Arc::new(cache);
+        self
+    }
+
+    /// Configure the [`CredentialsCache`] to use from an existing [`Arc`].
+    #[must_use]
+    pub fn with_cache_arc(mut self, cache: Arc<CredentialsCache>) -> Self {
+        self.cache = cache;
         self
     }
 
@@ -238,17 +259,9 @@ impl AuthMiddleware {
         self
     }
 
-    /// Get the configured authentication store.
-    ///
-    /// If not set, the global store is used.
+    /// Global authentication cache for a uv invocation to share credentials across uv clients.
     fn cache(&self) -> &CredentialsCache {
-        self.cache.as_ref().unwrap_or(&CREDENTIALS_CACHE)
-    }
-}
-
-impl Default for AuthMiddleware {
-    fn default() -> Self {
-        Self::new()
+        &self.cache
     }
 }
 
@@ -729,9 +742,16 @@ impl AuthMiddleware {
             Some(credentials)
 
         // Text credential store support.
-        } else if let Some(credentials) = self.text_store.get().and_then(|text_store| {
+        } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store.get_credentials(url, credentials.as_ref().and_then(|credentials| credentials.username())).cloned()
+            text_store
+                .get_credentials(
+                    url,
+                    credentials
+                        .as_ref()
+                        .and_then(|credentials| credentials.username()),
+                )
+                .cloned()
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
@@ -747,10 +767,16 @@ impl AuthMiddleware {
                 if let Some(index) = index {
                     // N.B. The native store performs an exact look up right now, so we use the root
                     // URL of the index instead of relying on prefix-matching.
-                    debug!("Checking native store for credentials for index URL {}{}", display_username, index.root_url);
+                    debug!(
+                        "Checking native store for credentials for index URL {}{}",
+                        display_username, index.root_url
+                    );
                     native_store.fetch(&index.root_url, username).await
                 } else {
-                    debug!("Checking native store for credentials for URL {}{}", display_username, url);
+                    debug!(
+                        "Checking native store for credentials for URL {}{}",
+                        display_username, url
+                    );
                     native_store.fetch(url, username).await
                 }
                 // TODO(zanieb): We should have a realm fallback here too
@@ -771,10 +797,18 @@ impl AuthMiddleware {
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index) = index {
-                        debug!("Checking keyring for credentials for index URL {}@{}", username, index.url);
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username)).await
+                        debug!(
+                            "Checking keyring for credentials for index URL {}@{}",
+                            username, index.url
+                        );
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username))
+                            .await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {}@{}", username, url);
+                        debug!(
+                            "Checking keyring for credentials for full URL {}@{}",
+                            username, url
+                        );
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
@@ -783,12 +817,16 @@ impl AuthMiddleware {
                             "Checking keyring for credentials for index URL {} without username due to `authenticate = always`",
                             index.url
                         );
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), None).await
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
+                            .await
                     } else {
                         None
                     }
                 } else {
-                    debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
+                    debug!(
+                        "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
+                    );
                     None
                 }
             }
@@ -798,9 +836,9 @@ impl AuthMiddleware {
             Some(credentials)
         } else {
             None
-        }
-        .map(Authentication::from)
-        .map(Arc::new);
+        };
+
+        let credentials = credentials.map(Authentication::from).map(Arc::new);
 
         // Register the fetch for this key
         self.cache().fetches.done(key, credentials.clone());

@@ -158,6 +158,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         output_dir: &'a Path,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;

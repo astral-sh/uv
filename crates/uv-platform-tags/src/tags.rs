@@ -79,6 +79,13 @@ pub struct Tags {
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,
+    /// Python platform used to generate the tags, for error messages.
+    python_platform: Platform,
+    /// Python version used to generate the tags, for error messages.
+    python_version: (u8, u8),
+    /// Whether the tags are for a different Python interpreter than the current one, for error
+    /// messages.
+    is_cross: bool,
 }
 
 impl Tags {
@@ -86,7 +93,12 @@ impl Tags {
     ///
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
-    pub fn new(tags: Vec<(LanguageTag, AbiTag, PlatformTag)>) -> Self {
+    fn new(
+        tags: Vec<(LanguageTag, AbiTag, PlatformTag)>,
+        python_platform: Platform,
+        python_version: (u8, u8),
+        is_cross: bool,
+    ) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
 
@@ -104,6 +116,9 @@ impl Tags {
         Self {
             map: Arc::new(map),
             best,
+            python_platform,
+            python_version,
+            is_cross,
         }
     }
 
@@ -116,6 +131,7 @@ impl Tags {
         implementation_version: (u8, u8),
         manylinux_compatible: bool,
         gil_disabled: bool,
+        is_cross: bool,
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
 
@@ -219,7 +235,7 @@ impl Tags {
                 ));
             }
         }
-        Ok(Self::new(tags))
+        Ok(Self::new(tags, platform.clone(), python_version, is_cross))
     }
 
     /// Returns true when there exists at least one tag for this platform
@@ -319,6 +335,18 @@ impl Tags {
             .get(&python_tag)
             .map(|abis| abis.contains_key(&abi_tag))
             .unwrap_or(false)
+    }
+
+    pub fn python_platform(&self) -> &Platform {
+        &self.python_platform
+    }
+
+    pub fn python_version(&self) -> (u8, u8) {
+        self.python_version
+    }
+
+    pub fn is_cross(&self) -> bool {
+        self.is_cross
     }
 }
 
@@ -1467,6 +1495,7 @@ mod tests {
             (3, 9),
             false,
             false,
+            false,
         )
         .unwrap();
         assert_snapshot!(
@@ -1529,6 +1558,7 @@ mod tests {
             "cpython",
             (3, 9),
             true,
+            false,
             false,
         )
         .unwrap();
@@ -2152,6 +2182,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
             false,
             false,
         )

@@ -80,6 +80,20 @@ impl Display for ToolRunCommand {
     }
 }
 
+/// Check if the given arguments contain a verbose flag (e.g., `--verbose`, `-v`, `-vv`, etc.)
+fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
+    args.iter().find_map(|arg| {
+        let arg_str = arg.to_str()?;
+        if arg_str == "--verbose" {
+            Some("--verbose")
+        } else if arg_str.starts_with("-v") && arg_str.chars().skip(1).all(|c| c == 'v') {
+            Some(arg_str)
+        } else {
+            None
+        }
+    })
+}
+
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -90,6 +104,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    lfs: Option<bool>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -276,6 +291,7 @@ pub(crate) async fn run(
         &settings,
         &client_builder,
         isolated,
+        lfs,
         python_preference,
         python_downloads,
         installer_metadata,
@@ -307,11 +323,24 @@ pub(crate) async fn run(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .with_context("tool")
+            let diagnostic =
+                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
+                diagnostic.with_hint(format!(
+                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                    verbose_flag.cyan(),
+                    target.cyan(),
+                    invocation_source.to_string().cyan(),
+                    format!("{invocation_source} {verbose_flag} {target}").green()
+                ))
+            } else {
+                diagnostic.with_context("tool")
+            };
+            return diagnostic
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
+
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
@@ -446,7 +475,11 @@ async fn show_help(
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
-        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err)
+            if err
+                .as_io_error()
+                .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+        {
             writeln!(printer.stdout(), "{help}")?;
             return Ok(());
         }
@@ -691,6 +724,7 @@ async fn get_or_create_environment(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
+    lfs: Option<bool>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -803,6 +837,7 @@ async fn get_or_create_environment(
                         &workspace_cache,
                         printer,
                         preview,
+                        lfs,
                     )
                     .await?
                     .pop()
@@ -900,6 +935,7 @@ async fn get_or_create_environment(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -926,6 +962,7 @@ async fn get_or_create_environment(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 

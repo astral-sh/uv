@@ -33,7 +33,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
@@ -49,6 +49,7 @@ use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -59,7 +60,7 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
     PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
@@ -1059,15 +1060,32 @@ impl Lock {
             let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
-                if let Some(global) = exclude_newer.global {
+                if let Some(global) = &exclude_newer.global {
                     options_table.insert("exclude-newer", value(global.to_string()));
+                    // Serialize the original span if present
+                    if let Some(span) = global.span() {
+                        options_table.insert("exclude-newer-span", value(span.to_string()));
+                    }
                 }
 
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, timestamp) in &exclude_newer.package {
-                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    for (name, exclude_newer_value) in &exclude_newer.package {
+                        if let Some(span) = exclude_newer_value.span() {
+                            // Serialize as inline table with timestamp and span
+                            let mut inline = toml_edit::InlineTable::new();
+                            inline.insert(
+                                "timestamp",
+                                exclude_newer_value.timestamp().to_string().into(),
+                            );
+                            inline.insert("span", span.to_string().into());
+                            package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                        } else {
+                            // Serialize as simple string
+                            package_table
+                                .insert(name.as_ref(), value(exclude_newer_value.to_string()));
+                        }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
                 }
@@ -1445,7 +1463,7 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
+    /// Check whether the lock matches the project structure, requirements and configuration.
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,
@@ -1969,7 +1987,12 @@ impl Lock {
             // not be available as top-level configuration (i.e., if they're defined within a
             // workspace member), but we already validated that the dependencies are up-to-date, so
             // we can consider them "available".
-            for requirement in &package.metadata.requires_dist {
+            for requirement in package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+            {
                 if let RequirementSource::Registry {
                     index: Some(index), ..
                 } = &requirement.source
@@ -2127,10 +2150,12 @@ struct ResolverOptions {
     exclude_newer: ExcludeNewerWire,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<Timestamp>,
+    exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
 }
@@ -2138,7 +2163,9 @@ struct ExcludeNewerWire {
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         Self {
-            global: wire.exclude_newer,
+            global: wire
+                .exclude_newer
+                .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
             package: wire.exclude_newer_package,
         }
     }
@@ -2146,8 +2173,13 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
+        let (timestamp, span) = exclude_newer
+            .global
+            .map(ExcludeNewerValue::into_parts)
+            .map_or((None, None), |(t, s)| (Some(t), s));
         Self {
-            exclude_newer: exclude_newer.global,
+            exclude_newer: timestamp,
+            exclude_newer_span: span,
             exclude_newer_package: exclude_newer.package,
         }
     }
@@ -2758,8 +2790,12 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url =
-                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
+                let git_url = GitUrl::from_commit(
+                    url,
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                    git.lfs,
+                )?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = DisplaySafeUrl::from(ParsedGitUrl {
@@ -3621,6 +3657,7 @@ impl Source {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: git_dist.subdirectory.clone(),
+                lfs: git_dist.git.lfs(),
             },
         )
     }
@@ -3936,6 +3973,7 @@ struct GitSource {
     precise: GitOid,
     subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
+    lfs: GitLfs,
 }
 
 /// An error that occurs when a source string could not be parsed.
@@ -3951,15 +3989,18 @@ impl GitSource {
     fn from_url(url: &Url) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
+        let mut lfs = GitLfs::Disabled;
         for (key, val) in url.query_pairs() {
             match &*key {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
+                "lfs" => lfs = GitLfs::from(val.eq_ignore_ascii_case("true")),
                 _ => {}
             }
         }
+
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
@@ -3967,6 +4008,7 @@ impl GitSource {
             precise,
             subdirectory,
             kind,
+            lfs,
         })
     }
 }
@@ -4353,6 +4395,11 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     {
         url.query_pairs_mut()
             .append_pair("subdirectory", &subdirectory);
+    }
+
+    // Put lfs=true in the package source git url only when explicitly enabled.
+    if git_dist.git.lfs().enabled() {
+        url.query_pairs_mut().append_pair("lfs", "true");
     }
 
     // Put the requested reference in the query.
@@ -5105,7 +5152,12 @@ fn normalize_requirement(
                 repository.set_fragment(None);
                 repository.set_query(None);
 
-                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.

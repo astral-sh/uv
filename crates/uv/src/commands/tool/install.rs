@@ -56,6 +56,7 @@ pub(crate) async fn install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
+    lfs: Option<bool>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -148,6 +149,7 @@ pub(crate) async fn install(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?
             .pop()
@@ -274,6 +276,7 @@ pub(crate) async fn install(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -299,6 +302,7 @@ pub(crate) async fn install(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 
@@ -337,7 +341,10 @@ pub(crate) async fn install(
                             package_name.cyan()
                         );
                     }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err)
+                        if err
+                            .as_io_error()
+                            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) => {}
                     Err(err) => {
                         return Err(err.into());
                     }

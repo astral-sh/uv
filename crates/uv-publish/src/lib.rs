@@ -1,5 +1,6 @@
 mod trusted_publishing;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -14,7 +15,7 @@ use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
@@ -57,11 +58,19 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
+    PublishSend(
+        PathBuf,
+        Box<DisplaySafeUrl>,
+        #[source] Box<PublishSendError>,
+    ),
     #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
-    Validate(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
+    Validate(
+        PathBuf,
+        Box<DisplaySafeUrl>,
+        #[source] Box<PublishSendError>,
+    ),
     #[error("Failed to obtain token for trusted publishing")]
-    TrustedPublishing(#[from] TrustedPublishingError),
+    TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
     MixedCredentials(String),
     #[error("Failed to query check URL")]
@@ -99,6 +108,8 @@ pub enum PublishPrepareError {
     MultiplePkgInfo(String),
     #[error("Failed to read: `{0}`")]
     Read(String, #[source] io::Error),
+    #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
+    InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
 
 /// Failure in or after (HTTP) transport for a specific file.
@@ -239,34 +250,72 @@ impl PublishSendError {
     }
 }
 
-/// Collect the source distributions and wheels for publishing.
-///
-/// Returns the path, the raw filename and the parsed filename. The raw filename is a fixup for
-/// <https://github.com/astral-sh/uv/issues/8030> caused by
-/// <https://github.com/pypa/setuptools/issues/3777> in combination with
-/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
-#[allow(clippy::result_large_err)]
-pub fn files_for_publishing(
-    paths: Vec<String>,
-) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
-    let mut seen = FxHashSet::default();
-    let mut files = Vec::new();
+/// Represents a single "to-be-uploaded" distribution, along with zero
+/// or more attestations that will be uploaded alongside it.
+#[derive(Debug)]
+pub struct UploadDistribution {
+    /// The path to the main distribution file to upload.
+    pub file: PathBuf,
+    /// The raw filename of the main distribution file.
+    pub raw_filename: String,
+    /// The parsed filename of the main distribution file.
+    pub filename: DistFilename,
+    /// Zero or more paths to PEP 740 attestations for the distribution.
+    pub attestations: Vec<PathBuf>,
+}
+
+/// Given a list of paths (which may contain globs), unroll them into
+/// a flat, unique list of files. Files are returned in a stable
+/// but unspecified order.
+fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
+    let mut files = BTreeSet::default();
     for path in paths {
-        for dist in glob(&path).map_err(|err| PublishError::Pattern(path, err))? {
-            let dist = dist?;
-            if !dist.is_file() {
+        for file in glob(&path).map_err(|err| PublishError::Pattern(path.clone(), err))? {
+            let file = file?;
+            if !file.is_file() {
                 continue;
             }
-            if !seen.insert(dist.clone()) {
-                continue;
-            }
-            let Some(filename) = dist
-                .file_name()
-                .and_then(|filename| filename.to_str())
-                .map(ToString::to_string)
-            else {
-                continue;
-            };
+
+            files.insert(file);
+        }
+    }
+
+    Ok(files.into_iter().collect())
+}
+
+/// Given a flat list of input files, merge them into a list of [`UploadDistribution`]s.
+fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribution> {
+    let mut groups = FxHashMap::default();
+    let mut attestations_by_dist = FxHashMap::default();
+    for file in files {
+        let Some(filename) = file
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+
+        // Attestations are named as `<dist>.<type>.attestation`, e.g.
+        // `foo-1.2.3.tar.gz.publish.attestation`.
+        // We use this to build up a map of `dist -> [attestations]`
+        // for subsequent merging.
+        let mut filename_parts = filename.rsplitn(3, '.');
+        if filename_parts.next() == Some("attestation")
+            && let Some(_) = filename_parts.next()
+            && let Some(dist_name) = filename_parts.next()
+        {
+            debug!(
+                "Found attestation for distribution: `{}` -> `{}`",
+                file.user_display(),
+                dist_name
+            );
+
+            attestations_by_dist
+                .entry(dist_name.to_string())
+                .or_insert_with(Vec::new)
+                .push(file);
+        } else {
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
                 // I've never seen these in upper case
@@ -281,18 +330,51 @@ pub fn files_for_publishing(
                     warn_user!(
                         "Skipping file that looks like a distribution, \
                         but is not a valid distribution filename: `{}`",
-                        dist.user_display()
+                        file.user_display()
                     );
                 }
                 continue;
             };
-            files.push((dist, filename, dist_filename));
+
+            groups.insert(
+                filename.clone(),
+                UploadDistribution {
+                    file,
+                    raw_filename: filename,
+                    filename: dist_filename,
+                    attestations: Vec::new(),
+                },
+            );
         }
     }
-    // TODO(konsti): Should we sort those files, e.g. wheels before sdists because they are more
-    // certain to have reliable metadata, even though the metadata in the upload API is unreliable
-    // in general?
-    Ok(files)
+
+    if no_attestations {
+        debug!("Not merging attestations with distributions per user request");
+    } else {
+        // Merge attestations into their respective upload groups.
+        for (dist_name, attestations) in attestations_by_dist {
+            if let Some(group) = groups.get_mut(&dist_name) {
+                group.attestations = attestations;
+                group.attestations.sort();
+            }
+        }
+    }
+
+    groups.into_values().collect()
+}
+
+/// Collect the source distributions and wheels for publishing.
+///
+/// Returns an [`UploadGroup`] for each distribution to be published.
+/// This group contains the path, the raw filename and the parsed filename. The raw filename is a fixup for
+/// <https://github.com/astral-sh/uv/issues/8030> caused by
+/// <https://github.com/pypa/setuptools/issues/3777> in combination with
+/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
+pub fn group_files_for_publishing(
+    paths: Vec<String>,
+    no_attestations: bool,
+) -> Result<Vec<UploadDistribution>, PublishError> {
+    Ok(group_files(unroll_paths(paths)?, no_attestations))
 }
 
 pub enum TrustedPublishResult {
@@ -357,10 +439,11 @@ pub async fn check_trusted_publishing(
 
             let Some(token) =
                 trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await?
+                    .await
+                    .map_err(Box::new)?
             else {
                 return Err(PublishError::TrustedPublishing(
-                    TrustedPublishingError::NoToken,
+                    TrustedPublishingError::NoToken.into(),
                 ));
             };
 
@@ -376,10 +459,8 @@ pub async fn check_trusted_publishing(
 ///
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
-    file: &Path,
+    group: &UploadDistribution,
     form_metadata: &FormMetadata,
-    raw_filename: &str,
-    filename: &DistFilename,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
     retry_policy: ExponentialBackoff,
@@ -392,9 +473,7 @@ pub async fn upload(
     let start_time = SystemTime::now();
     loop {
         let (request, idx) = build_upload_request(
-            file,
-            raw_filename,
-            filename,
+            group,
             registry,
             client,
             credentials,
@@ -402,7 +481,7 @@ pub async fn upload(
             reporter.clone(),
         )
         .await
-        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
+        .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         let result = request.send().await;
         if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
@@ -425,9 +504,9 @@ pub async fn upload(
 
         let response = result.map_err(|err| {
             PublishError::PublishSend(
-                file.to_path_buf(),
-                registry.clone(),
-                PublishSendError::ReqwestMiddleware(err),
+                group.file.clone(),
+                registry.clone().into(),
+                PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
 
@@ -443,7 +522,13 @@ pub async fn upload(
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
                 ) {
                     if let Some(check_url_client) = &check_url_client {
-                        if check_url(check_url_client, file, filename, download_concurrency).await?
+                        if check_url(
+                            check_url_client,
+                            &group.file,
+                            &group.filename,
+                            download_concurrency,
+                        )
+                        .await?
                         {
                             // There was a raced upload of the same file, so even though our upload failed,
                             // the right file now exists in the registry.
@@ -452,9 +537,9 @@ pub async fn upload(
                     }
                 }
                 Err(PublishError::PublishSend(
-                    file.to_path_buf(),
-                    registry.clone(),
-                    err,
+                    group.file.clone(),
+                    registry.clone().into(),
+                    err.into(),
                 ))
             }
         };
@@ -491,14 +576,16 @@ pub async fn validate(
         let response = request.send().await.map_err(|err| {
             PublishError::Validate(
                 file.to_path_buf(),
-                registry.clone(),
-                PublishSendError::ReqwestMiddleware(err),
+                registry.clone().into(),
+                PublishSendError::ReqwestMiddleware(err).into(),
             )
         })?;
 
         handle_response(&validation_url, response)
             .await
-            .map_err(|err| PublishError::Validate(file.to_path_buf(), registry.clone(), err))?;
+            .map_err(|err| {
+                PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
+            })?;
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
     }
@@ -836,9 +923,7 @@ impl<'a> IntoIterator for &'a FormMetadata {
 ///
 /// Returns the [`RequestBuilder`] and the reporter progress bar ID.
 async fn build_upload_request<'a>(
-    file: &Path,
-    raw_filename: &str,
-    filename: &DistFilename,
+    group: &UploadDistribution,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
     credentials: &Credentials,
@@ -850,9 +935,9 @@ async fn build_upload_request<'a>(
         form = form.text(*key, value.clone());
     }
 
-    let file = File::open(file).await?;
+    let file = File::open(&group.file).await?;
     let file_size = file.metadata().await?.len();
-    let idx = reporter.on_upload_start(&filename.to_string(), Some(file_size));
+    let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
     let reader = ProgressReader::new(file, move |read| {
         reporter.on_upload_progress(idx, read as u64);
     });
@@ -860,8 +945,26 @@ async fn build_upload_request<'a>(
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
     // See [`files_for_publishing`] on `raw_filename`
-    let part = Part::stream_with_length(file_reader, file_size).file_name(raw_filename.to_string());
+    let part =
+        Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
     form = form.part("content", part);
+
+    let mut attestations = vec![];
+    for attestation_path in &group.attestations {
+        let contents = fs_err::read_to_string(attestation_path)?;
+        // NOTE: We don't currently validate the interior structure of an attestation beyond being
+        // valid JSON. We could validate it pretty easily in the future.
+        let raw_attestation = serde_json::from_str::<serde_json::Value>(&contents)
+            .map_err(|err| PublishPrepareError::InvalidAttestation(attestation_path.into(), err))?;
+        attestations.push(raw_attestation);
+    }
+
+    if !attestations.is_empty() {
+        // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
+        let attestations_json =
+            serde_json::to_string(&attestations).expect("Round-trip of PEP 740 attestation failed");
+        form = form.text("attestations", attestations_json);
+    }
 
     // If we have a username but no password, attach the username to the URL so the authentication
     // middleware can find the matching password.
@@ -1032,7 +1135,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use insta::{assert_debug_snapshot, assert_snapshot};
+    use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
 
     use uv_auth::Credentials;
@@ -1040,7 +1143,7 @@ mod tests {
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{FormMetadata, Reporter, build_upload_request};
+    use crate::{FormMetadata, Reporter, UploadDistribution, build_upload_request, group_files};
 
     struct DummyReporter;
 
@@ -1053,14 +1156,303 @@ mod tests {
         fn on_upload_complete(&self, _id: usize) {}
     }
 
+    #[test]
+    fn test_group_files() {
+        // Fisher-Yates shuffle.
+        fn shuffle<T>(vec: &mut [T]) {
+            let n: usize = vec.len();
+            for i in 0..(n - 1) {
+                #[allow(clippy::cast_possible_truncation)]
+                let j = (fastrand::usize(..)) % (n - i) + i;
+                vec.swap(i, j);
+            }
+        }
+
+        let valid_sdist = "dist/acme-1.2.3.tar.gz";
+        let valid_sdist_publish_attestation = format!("{valid_sdist}.publish.attestation");
+        let valid_sdist_build_attestation = format!("{valid_sdist}.build.attestation");
+        let valid_sdist_frob_attestation = format!("{valid_sdist}.frob.attestation");
+
+        let valid_wheel = "dist/acme-1.2.3-py3-none-any.whl";
+        let valid_wheel_publish_attestation = format!("{valid_wheel}.publish.attestation");
+        let valid_wheel_build_attestation = format!("{valid_wheel}.build.attestation");
+        let valid_wheel_frob_attestation = format!("{valid_wheel}.frob.attestation");
+
+        let invalid_sdist = "dist/nudnik.tar.gz";
+        let invalid_wheel = "dist/nudnik.whl";
+        let valid_sdist_invalid_attestation = format!("{valid_sdist}.attestation");
+        let invalid_attestation = "dist/nudnik.attestation";
+
+        // Valid sdists/wheels without attestations
+        {
+            let dists = [valid_sdist, valid_wheel];
+
+            let mut groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
+            groups.sort_by_key(|group| group.raw_filename.clone());
+
+            assert_debug_snapshot!(groups, @r#"
+            [
+                UploadDistribution {
+                    file: "dist/acme-1.2.3-py3-none-any.whl",
+                    raw_filename: "acme-1.2.3-py3-none-any.whl",
+                    filename: WheelFilename(
+                        WheelFilename {
+                            name: PackageName(
+                                "acme",
+                            ),
+                            version: "1.2.3",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                    ),
+                    attestations: [],
+                },
+                UploadDistribution {
+                    file: "dist/acme-1.2.3.tar.gz",
+                    raw_filename: "acme-1.2.3.tar.gz",
+                    filename: SourceDistFilename(
+                        SourceDistFilename {
+                            name: PackageName(
+                                "acme",
+                            ),
+                            version: "1.2.3",
+                            extension: TarGz,
+                        },
+                    ),
+                    attestations: [],
+                },
+            ]
+            "#);
+        }
+
+        // Valid sdists/wheels with attestations in various orders.
+        {
+            let mut dists = vec![
+                valid_sdist,
+                &valid_sdist_publish_attestation,
+                &valid_sdist_build_attestation,
+                &valid_sdist_frob_attestation,
+                valid_wheel,
+                &valid_wheel_build_attestation,
+                &valid_wheel_publish_attestation,
+                &valid_wheel_frob_attestation,
+            ];
+
+            allow_duplicates! {
+                for _ in 0..5 {
+                    shuffle(&mut dists);
+
+                    let mut groups =
+                        group_files(dists.iter().map(PathBuf::from).collect(), false);
+                    groups.sort_by_key(|group| group.raw_filename.clone());
+
+                    assert_debug_snapshot!(groups, @r#"
+                    [
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3-py3-none-any.whl",
+                            raw_filename: "acme-1.2.3-py3-none-any.whl",
+                            filename: WheelFilename(
+                                WheelFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    tags: Small {
+                                        small: WheelTagSmall {
+                                            python_tag: Python {
+                                                major: 3,
+                                                minor: None,
+                                            },
+                                            abi_tag: None,
+                                            platform_tag: Any,
+                                        },
+                                    },
+                                },
+                            ),
+                            attestations: [
+                                "dist/acme-1.2.3-py3-none-any.whl.build.attestation",
+                                "dist/acme-1.2.3-py3-none-any.whl.frob.attestation",
+                                "dist/acme-1.2.3-py3-none-any.whl.publish.attestation",
+                            ],
+                        },
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3.tar.gz",
+                            raw_filename: "acme-1.2.3.tar.gz",
+                            filename: SourceDistFilename(
+                                SourceDistFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    extension: TarGz,
+                                },
+                            ),
+                            attestations: [
+                                "dist/acme-1.2.3.tar.gz.build.attestation",
+                                "dist/acme-1.2.3.tar.gz.frob.attestation",
+                                "dist/acme-1.2.3.tar.gz.publish.attestation",
+                            ],
+                        },
+                    ]
+                    "#);
+                }
+            }
+        }
+
+        // Valid sdists/wheels with attestations in various orders, but
+        // attestations are disabled while grouping.
+        {
+            let mut dists = vec![
+                valid_sdist,
+                &valid_sdist_publish_attestation,
+                &valid_sdist_build_attestation,
+                &valid_sdist_frob_attestation,
+                valid_wheel,
+                &valid_wheel_build_attestation,
+                &valid_wheel_publish_attestation,
+                &valid_wheel_frob_attestation,
+            ];
+
+            allow_duplicates! {
+                for _ in 0..5 {
+                    shuffle(&mut dists);
+
+                    let mut groups =
+                        group_files(dists.iter().map(PathBuf::from).collect(), true);
+                    groups.sort_by_key(|group| group.raw_filename.clone());
+
+                    assert_debug_snapshot!(groups, @r#"
+                    [
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3-py3-none-any.whl",
+                            raw_filename: "acme-1.2.3-py3-none-any.whl",
+                            filename: WheelFilename(
+                                WheelFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    tags: Small {
+                                        small: WheelTagSmall {
+                                            python_tag: Python {
+                                                major: 3,
+                                                minor: None,
+                                            },
+                                            abi_tag: None,
+                                            platform_tag: Any,
+                                        },
+                                    },
+                                },
+                            ),
+                            attestations: [],
+                        },
+                        UploadDistribution {
+                            file: "dist/acme-1.2.3.tar.gz",
+                            raw_filename: "acme-1.2.3.tar.gz",
+                            filename: SourceDistFilename(
+                                SourceDistFilename {
+                                    name: PackageName(
+                                        "acme",
+                                    ),
+                                    version: "1.2.3",
+                                    extension: TarGz,
+                                },
+                            ),
+                            attestations: [],
+                        },
+                    ]
+                    "#);
+                }
+            }
+        }
+
+        // Invalid dist/attestation filenames get ignored.
+        {
+            let dists = [
+                valid_sdist,
+                &valid_sdist_frob_attestation,
+                valid_wheel,
+                &valid_wheel_build_attestation,
+                invalid_sdist,
+                invalid_wheel,
+                &valid_sdist_invalid_attestation,
+                invalid_attestation,
+            ];
+
+            let groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
+            assert_debug_snapshot!(groups, @r#"
+            [
+                UploadDistribution {
+                    file: "dist/acme-1.2.3-py3-none-any.whl",
+                    raw_filename: "acme-1.2.3-py3-none-any.whl",
+                    filename: WheelFilename(
+                        WheelFilename {
+                            name: PackageName(
+                                "acme",
+                            ),
+                            version: "1.2.3",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                    ),
+                    attestations: [
+                        "dist/acme-1.2.3-py3-none-any.whl.build.attestation",
+                    ],
+                },
+                UploadDistribution {
+                    file: "dist/acme-1.2.3.tar.gz",
+                    raw_filename: "acme-1.2.3.tar.gz",
+                    filename: SourceDistFilename(
+                        SourceDistFilename {
+                            name: PackageName(
+                                "acme",
+                            ),
+                            version: "1.2.3",
+                            extension: TarGz,
+                        },
+                    ),
+                    attestations: [
+                        "dist/acme-1.2.3.tar.gz.frob.attestation",
+                    ],
+                },
+            ]
+            "#);
+        }
+    }
+
     /// Snapshot the data we send for an upload request for a source distribution.
     #[tokio::test]
     async fn upload_request_source_dist() {
-        let raw_filename = "tqdm-999.0.0.tar.gz";
-        let file = PathBuf::from("../../scripts/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+        let group = {
+            let raw_filename = "tqdm-999.0.0.tar.gz";
+            let file = PathBuf::from("../../test/links/").join(raw_filename);
+            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            UploadDistribution {
+                file,
+                raw_filename: raw_filename.to_string(),
+                filename,
+                attestations: vec![],
+            }
+        };
+
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
             .await
             .unwrap();
 
@@ -1121,9 +1513,7 @@ mod tests {
 
         let client = BaseClientBuilder::default().build();
         let (request, _) = build_upload_request(
-            &file,
-            raw_filename,
-            &filename,
+            &group,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &client,
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
@@ -1171,11 +1561,20 @@ mod tests {
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-        let file = PathBuf::from("../../scripts/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+        let group = {
+            let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+            let file = PathBuf::from("../../test/links/").join(raw_filename);
+            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            UploadDistribution {
+                file,
+                raw_filename: raw_filename.to_string(),
+                filename,
+                attestations: vec![],
+            }
+        };
+
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
             .await
             .unwrap();
 
@@ -1274,9 +1673,7 @@ mod tests {
 
         let client = BaseClientBuilder::default().build();
         let (request, _) = build_upload_request(
-            &file,
-            raw_filename,
-            &filename,
+            &group,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &client,
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),

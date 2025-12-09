@@ -59,7 +59,10 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
         .build()
         .unwrap();
 
-    let cache = Cache::from_path("../../.cache").init().unwrap();
+    let cache = Cache::from_path("../../.cache")
+        .init_no_wait()
+        .expect("No cache contention when running benchmarks")
+        .unwrap();
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
@@ -131,7 +134,7 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
     });
 
     pub(crate) async fn resolve(

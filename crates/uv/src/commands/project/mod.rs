@@ -7,7 +7,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -21,7 +21,7 @@ use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
@@ -753,11 +753,12 @@ impl ScriptInterpreter {
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
         match script {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    LockedFileMode::Exclusive,
                     script.path.simplified_display(),
                 )
                 .await
@@ -765,6 +766,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Remote(.., url) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    LockedFileMode::Exclusive,
                     url.to_string(),
                 )
                 .await
@@ -772,6 +774,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Stdin(metadata) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    LockedFileMode::Exclusive,
                     "stdin".to_string(),
                 )
                 .await
@@ -1046,12 +1049,13 @@ impl ProjectInterpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
         LockedFile::acquire(
             std::env::temp_dir().join(format!(
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
+            LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
         )
         .await
@@ -1678,17 +1682,19 @@ pub(crate) async fn resolve_names(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    lfs: Option<bool>,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-        requirements
-            .into_iter()
-            .partition_map(|spec| match spec.requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        .into_iter()
+        .map(|spec| {
+            spec.requirement
+                .augment_requirement(None, None, None, lfs, None)
+        })
+        .partition_map(|requirement| match requirement {
+            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
+        });
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {
@@ -2567,6 +2573,7 @@ pub(crate) fn detect_conflicts(
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -2586,6 +2593,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2606,6 +2614,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2626,6 +2635,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2643,6 +2653,7 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(settings.sources);
@@ -2675,6 +2686,7 @@ pub(crate) fn script_extra_build_requires(
                         script_sources,
                         script_indexes,
                         &settings.index_locations,
+                        credentials_cache,
                     )
                     .map_ok(move |requirement| ExtraBuildRequirement {
                         requirement: requirement.into_inner(),

@@ -1122,6 +1122,8 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        /// Whether to use Git LFS when cloning the repository.
+        lfs: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1220,6 +1222,7 @@ impl<'de> Deserialize<'de> for Source {
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
+            lfs: Option<bool>,
             url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
@@ -1243,6 +1246,7 @@ impl<'de> Deserialize<'de> for Source {
             rev,
             tag,
             branch,
+            lfs,
             url,
             path,
             editable,
@@ -1320,6 +1324,7 @@ impl<'de> Deserialize<'de> for Source {
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -1576,6 +1581,10 @@ pub enum SourceError {
     )]
     UnusedBranch(String, String),
     #[error(
+        "`{0}` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided."
+    )]
+    UnusedLfs(String),
+    #[error(
         "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
     )]
     UnusedEditable(String),
@@ -1604,12 +1613,13 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        lfs: Option<bool>,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some() || tag.is_some() || rev.is_some())
+            && (branch.is_some() || tag.is_some() || rev.is_some() || lfs.is_some())
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
@@ -1629,6 +1639,7 @@ impl Source {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                                 marker: *marker,
                                 extra: extra.clone(),
                                 group: group.clone(),
@@ -1645,6 +1656,9 @@ impl Source {
             }
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+            if let Some(true) = lfs {
+                return Err(SourceError::UnusedLfs(name.to_string()));
             }
         }
 
@@ -1697,9 +1711,25 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Self::Path {
-                editable,
+            RequirementSource::Path { install_path, .. } => Self::Path {
+                editable: None,
+                package: None,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
+                ),
+                marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable: is_editable,
+                ..
+            } => Self::Path {
+                editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
@@ -1738,6 +1768,7 @@ impl Source {
                         rev: rev.cloned(),
                         tag,
                         branch,
+                        lfs,
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1749,6 +1780,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
+                        lfs,
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,

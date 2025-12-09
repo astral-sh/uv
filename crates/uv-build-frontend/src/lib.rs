@@ -28,7 +28,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
@@ -36,7 +36,7 @@ use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
     Resolution,
 };
-use uv_fs::LockedFile;
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -292,6 +292,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        credentials_cache: &CredentialsCache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
@@ -310,6 +311,7 @@ impl SourceBuild {
             locations,
             source_strategy,
             workspace_cache,
+            credentials_cache,
         )
         .await
         .map_err(|err| *err)?;
@@ -452,6 +454,7 @@ impl SourceBuild {
                 &environment_variables,
                 &modified_path,
                 &temp_dir,
+                credentials_cache,
             )
             .await?;
         }
@@ -490,12 +493,16 @@ impl SourceBuild {
                 "uv-setuptools-{}.lock",
                 cache_digest(&canonical_source_path)
             ));
-            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
-                .await
-                .inspect_err(|err| {
-                    warn!("Failed to acquire build lock: {err}");
-                })
-                .ok();
+            source_tree_lock = LockedFile::acquire(
+                lock_path,
+                LockedFileMode::Exclusive,
+                self.source_tree.to_string_lossy(),
+            )
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire build lock: {err}");
+            })
+            .ok();
         }
         Ok(source_tree_lock)
     }
@@ -556,6 +563,7 @@ impl SourceBuild {
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -584,6 +592,7 @@ impl SourceBuild {
                                     locations,
                                     source_strategy,
                                     workspace_cache,
+                                    credentials_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -956,6 +965,7 @@ async fn create_pep517_build_environment(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
     temp_dir: &TempDir,
+    credentials_cache: &CredentialsCache,
 ) -> Result<(), Error> {
     // Write the hook output to a file so that we can read it back reliably.
     let outfile = temp_dir
@@ -1050,6 +1060,7 @@ async fn create_pep517_build_environment(
                 locations,
                 source_strategy,
                 workspace_cache,
+                credentials_cache,
             )
             .await
             .map_err(Error::Lowering)?;

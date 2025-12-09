@@ -82,6 +82,7 @@ plugins:
         "configuration/files.md": "concepts/configuration-files.md"
         "configuration/indexes.md": "concepts/indexes.md"
         "configuration/environment.md": "reference/environment.md"
+        "guides/export.md": "concepts/projects/export.md"
   - llmstxt:
       markdown_description: |
         You can use uv to install Python dependencies, run scripts, manage virtual environments,
@@ -101,7 +102,6 @@ plugins:
           - guides/scripts.md
           - guides/tools.md
           - guides/projects.md
-          - guides/export.md
           - guides/package.md
         Integrations:
           - guides/integration/docker.md
@@ -124,6 +124,7 @@ plugins:
           - concepts/projects/sync.md
           - concepts/projects/config.md
           - concepts/projects/build.md
+          - concepts/projects/export.md
           - concepts/projects/workspaces.md
         Features:
           - concepts/tools.md
@@ -178,7 +179,6 @@ nav:
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
-      - Exporting lockfiles: guides/export.md
       - Publishing packages: guides/package.md
       - Migration:
           - guides/migration/index.md
@@ -208,6 +208,7 @@ nav:
           - Locking and syncing: concepts/projects/sync.md
           - Configuring projects: concepts/projects/config.md
           - Building distributions: concepts/projects/build.md
+          - Exporting lockfiles: concepts/projects/export.md
           - Using workspaces: concepts/projects/workspaces.md
       - Tools: concepts/tools.md
       - Python versions: concepts/python-versions.md

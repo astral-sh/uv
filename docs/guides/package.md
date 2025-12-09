@@ -45,7 +45,7 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
 
 The `uv version` command provides conveniences for updating the version of your package before you
 publish it.
-[See the project docs for reading your package's version](./projects.md#managing-version).
+[See the project docs for reading your package's version](./projects.md#viewing-your-version).
 
 To update to an exact version, provide it as a positional argument:
 
@@ -162,6 +162,34 @@ using `--index`, the index URL is used as check URL. uv will skip uploading file
 to files in the registry, and it will also handle raced parallel uploads. Note that existing files
 need to match exactly with those previously uploaded to the registry, this avoids accidentally
 publishing source distribution and wheels with different contents for the same version.
+
+### Uploading attestations with your package
+
+!!! note
+
+    Some third-party package indexes may not support attestations, and may
+    reject uploads that include them (rather than silently ignoring them).
+    If you encounter issues when uploading, you can use `--no-attestations` or
+    `UV_PUBLISH_NO_ATTESTATIONS` to disable uv's default behavior.
+
+!!! tip
+
+    `uv publish` does not currently generate attestations; attestations must
+    be created separately before publishing.
+
+`uv publish` supports uploading [attestations](https://peps.python.org/pep-0740/) to registries that
+support them, like PyPI.
+
+uv will automatically discover and match attestations. For example, given the following `dist/`
+directory, `uv publish` will upload the attestations along with their corresponding distributions:
+
+```console
+$ ls dist/
+hello_world-1.0.0-py3-none-any.whl
+hello_world-1.0.0-py3-none-any.whl.publish.attestation
+hello_world-1.0.0.tar.gz
+hello_world-1.0.0.tar.gz.publish.attestation
+```
 
 ## Installing your package
 

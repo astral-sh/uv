@@ -36,7 +36,7 @@ fn prune_no_op() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
     DEBUG Released lock at `[CACHE_DIR]/.lock`
@@ -77,7 +77,7 @@ fn prune_stale_directory() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
@@ -139,7 +139,7 @@ fn prune_cached_env() {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
@@ -186,7 +186,7 @@ fn prune_stale_symlink() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
@@ -196,8 +196,8 @@ fn prune_stale_symlink() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn prune_force() -> Result<()> {
+#[tokio::test]
+async fn prune_force() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -218,7 +218,7 @@ fn prune_force() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
     DEBUG Released lock at `[CACHE_DIR]/.lock`
@@ -229,7 +229,9 @@ fn prune_force() -> Result<()> {
     simple.create_dir_all()?;
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path()).with_exclusive_lock();
+    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
+        .with_exclusive_lock()
+        .await;
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @r"
     success: true
     exit_code: 0
@@ -406,7 +408,7 @@ fn prune_stale_revision() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired lock for `[CACHE_DIR]/`
+    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]

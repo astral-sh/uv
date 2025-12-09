@@ -384,7 +384,7 @@ fn show_editable() -> Result<()> {
     context
         .pip_install()
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
+        .arg("../../test/packages/poetry_editable")
         .current_dir(current_dir()?)
         .env(
             EnvVars::CARGO_TARGET_DIR,
@@ -401,7 +401,7 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [SITE_PACKAGES]/
-    Editable project location: [WORKSPACE]/scripts/packages/poetry_editable
+    Editable project location: [WORKSPACE]/test/packages/poetry_editable
     Requires: anyio
     Required-by:
 
@@ -533,4 +533,106 @@ fn show_files() {
 
     ----- stderr -----
     "#);
+}
+
+#[test]
+fn show_target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    let target = context.temp_dir.child("target");
+
+    // Install packages to a target directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+
+    // Show package in the target directory.
+    uv_snapshot!(context.filters(), context.pip_show()
+        .arg("markupsafe")
+        .arg("--target")
+        .arg(target.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Name: markupsafe
+    Version: 2.1.3
+    Location: [TEMP_DIR]/target
+    Requires:
+    Required-by:
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --target, the package should not be found.
+    uv_snapshot!(context.pip_show().arg("markupsafe"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Package(s) not found for: markupsafe
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn show_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--prefix")
+        .arg(prefix.path())
+        .assert()
+        .success();
+
+    // Show package in the prefix directory.
+    uv_snapshot!(context.filters(), context.pip_show()
+        .arg("markupsafe")
+        .arg("--prefix")
+        .arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Name: markupsafe
+    Version: 2.1.3
+    Location: [TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages
+    Requires:
+    Required-by:
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --prefix, the package should not be found.
+    uv_snapshot!(context.pip_show().arg("markupsafe"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Package(s) not found for: markupsafe
+    "###
+    );
+
+    Ok(())
 }

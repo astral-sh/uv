@@ -19,7 +19,7 @@ fn workspaces_dir() -> PathBuf {
         .unwrap()
         .parent()
         .unwrap()
-        .join("scripts")
+        .join("test")
         .join("workspaces")
 }
 

@@ -28,7 +28,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerValue, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
@@ -342,10 +342,10 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIRECTORY)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIR)]
     pub directory: Option<PathBuf>,
 
-    /// Run the command within the given project directory.
+    /// Discover a project in the given directory.
     ///
     /// All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
     /// up the directory tree from the project root, as will the project's virtual environment
@@ -1009,6 +1009,9 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Check(PipCheckArgs),
+    /// Display debug information (unsupported)
+    #[command(hide = true)]
+    Debug(PipDebugArgs),
 }
 
 #[derive(Subcommand)]
@@ -2482,6 +2485,14 @@ pub struct PipFreezeArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with_all = ["prefix", "paths"])]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with_all = ["target", "paths"])]
+    pub prefix: Option<PathBuf>,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2556,6 +2567,14 @@ pub struct PipListArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// List packages from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// List packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipListCompatArgs,
@@ -2672,6 +2691,14 @@ pub struct PipShowArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// Show a package from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
+    pub target: Option<PathBuf>,
+
+    /// Show a package from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub prefix: Option<PathBuf>,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2730,6 +2757,21 @@ pub struct PipTreeArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
+}
+
+#[derive(Args)]
+pub struct PipDebugArgs {
+    #[arg(long, hide = true)]
+    pub platform: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub python_version: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub implementation: Option<String>,
+
+    #[arg(long, hide = true)]
+    pub abi: Option<String>,
 }
 
 #[derive(Args)]
@@ -3041,15 +3083,29 @@ pub struct VenvArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long)]
@@ -4104,6 +4160,10 @@ pub struct AddArgs {
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
+
     /// Extras to enable for the dependency.
     ///
     /// May be provided more than once.
@@ -4888,6 +4948,14 @@ pub enum AuthCommand {
     /// Credentials are only stored in this directory when the plaintext backend is used, as
     /// opposed to the native backend, which uses the system keyring.
     Dir(AuthDirArgs),
+    /// Act as a credential helper for external tools.
+    ///
+    /// Implements the Bazel credential helper protocol to provide credentials
+    /// to external tools via JSON over stdin/stdout.
+    ///
+    /// This command is typically invoked by external tools.
+    #[command(hide = true)]
+    Helper(AuthHelperArgs),
 }
 
 #[derive(Args)]
@@ -5070,6 +5138,10 @@ pub struct ToolRunArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// See `uv help python` for details on Python discovery and supported request formats.
@@ -5216,6 +5288,10 @@ pub struct ToolInstallArgs {
     /// Will replace any existing entry points with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
+
+    /// Whether to use Git LFS when adding a dependency from Git.
+    #[arg(long, env = EnvVars::UV_GIT_LFS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub lfs: bool,
 
     /// The Python interpreter to use to build the tool environment.
     ///
@@ -5517,15 +5593,29 @@ pub struct ToolUpgradeArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6162,6 +6252,30 @@ pub struct AuthDirArgs {
 }
 
 #[derive(Args)]
+pub struct AuthHelperArgs {
+    #[command(subcommand)]
+    pub command: AuthHelperCommand,
+
+    /// The credential helper protocol to use
+    #[arg(long, value_enum, required = true)]
+    pub protocol: AuthHelperProtocol,
+}
+
+/// Credential helper protocols supported by uv
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+pub enum AuthHelperProtocol {
+    /// Bazel credential helper protocol as described in [the
+    /// spec](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
+    Bazel,
+}
+
+#[derive(Subcommand)]
+pub enum AuthHelperCommand {
+    /// Retrieve credentials for a URI
+    Get,
+}
+
+#[derive(Args)]
 pub struct GenerateShellCompletionArgs {
     /// The shell to generate the completion script for
     pub shell: clap_complete_command::Shell,
@@ -6451,15 +6565,29 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6671,15 +6799,29 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6887,15 +7029,29 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
-    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
@@ -6995,10 +7151,16 @@ pub struct FetchArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`) in your system's configured time zone.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
 }
 
 #[derive(Args)]
@@ -7040,8 +7202,8 @@ pub struct DisplayTreeArgs {
 pub struct PublishArgs {
     /// Paths to the files to upload. Accepts glob expressions.
     ///
-    /// Defaults to the `dist` directory. Selects only wheels and source distributions, while
-    /// ignoring other files.
+    /// Defaults to the `dist` directory. Selects only wheels and source distributions
+    /// and their attestations, while ignoring other files.
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
@@ -7147,6 +7309,13 @@ pub struct PublishArgs {
     /// and will perform validation against the index if supported, but will not upload any files.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Do not upload attestations for the published files.
+    ///
+    /// By default, uv attempts to upload matching PEP 740 attestations with each distribution
+    /// that is published.
+    #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
+    pub no_attestations: bool,
 }
 
 #[derive(Args)]

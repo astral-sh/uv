@@ -1813,15 +1813,13 @@ fn run_with_editable() -> Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -4395,7 +4393,7 @@ fn run_remote_pep723_script() {
         r"(?m)^Downloaded remote script to:.*\.py$",
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
+    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
