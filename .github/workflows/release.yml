@@ -208,12 +208,12 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
-  custom-publish:
+  custom-publish-pypi:
     needs:
       - plan
       - host
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
-    uses: ./.github/workflows/publish.yml
+    uses: ./.github/workflows/publish-pypi.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -222,16 +222,30 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
+  custom-publish-crates:
+    needs:
+      - plan
+      - host
+    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    uses: ./.github/workflows/publish-crates.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+    # publish jobs get escalated permissions
+    permissions:
+      "contents": "read"
+
   # Create a GitHub Release while uploading all files to it
   announce:
     needs:
       - plan
       - host
-      - custom-publish
+      - custom-publish-pypi
+      - custom-publish-crates
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish.result == 'skipped' || needs.custom-publish.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
     permissions:
       "attestations": "write"
