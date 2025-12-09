@@ -32,9 +32,9 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Invalid pyproject.toml")]
-    Toml(#[from] toml::de::Error),
-    #[error("Invalid pyproject.toml")]
+    #[error("Invalid metadata format in: {}", _0.user_display())]
+    Toml(PathBuf, #[source] toml::de::Error),
+    #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
@@ -599,7 +599,7 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+        let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
             "src",

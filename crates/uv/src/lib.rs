@@ -479,12 +479,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Login(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLoginSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthLoginSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_login(
@@ -492,7 +487,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.username,
                 args.password,
                 args.token,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -502,18 +497,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Logout(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLogoutSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthLogoutSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_logout(
                 args.service,
                 args.username,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -523,18 +513,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Token(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthTokenSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthTokenSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_token(
                 args.service,
                 args.username,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -558,7 +543,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             match args.command {
                 AuthHelperCommand::Get => {
-                    commands::auth_helper(globals.preview, &globals.network_settings, printer).await
+                    commands::auth_helper(client_builder, globals.preview, printer).await
                 }
             }
         }

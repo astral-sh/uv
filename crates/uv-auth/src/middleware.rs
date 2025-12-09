@@ -744,7 +744,14 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store.get_credentials(url, credentials.as_ref().and_then(|credentials| credentials.username())).cloned()
+            text_store
+                .get_credentials(
+                    url,
+                    credentials
+                        .as_ref()
+                        .and_then(|credentials| credentials.username()),
+                )
+                .cloned()
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
@@ -760,10 +767,16 @@ impl AuthMiddleware {
                 if let Some(index) = index {
                     // N.B. The native store performs an exact look up right now, so we use the root
                     // URL of the index instead of relying on prefix-matching.
-                    debug!("Checking native store for credentials for index URL {}{}", display_username, index.root_url);
+                    debug!(
+                        "Checking native store for credentials for index URL {}{}",
+                        display_username, index.root_url
+                    );
                     native_store.fetch(&index.root_url, username).await
                 } else {
-                    debug!("Checking native store for credentials for URL {}{}", display_username, url);
+                    debug!(
+                        "Checking native store for credentials for URL {}{}",
+                        display_username, url
+                    );
                     native_store.fetch(url, username).await
                 }
                 // TODO(zanieb): We should have a realm fallback here too
@@ -784,10 +797,18 @@ impl AuthMiddleware {
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index) = index {
-                        debug!("Checking keyring for credentials for index URL {}@{}", username, index.url);
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username)).await
+                        debug!(
+                            "Checking keyring for credentials for index URL {}@{}",
+                            username, index.url
+                        );
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username))
+                            .await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {}@{}", username, url);
+                        debug!(
+                            "Checking keyring for credentials for full URL {}@{}",
+                            username, url
+                        );
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
@@ -796,12 +817,16 @@ impl AuthMiddleware {
                             "Checking keyring for credentials for index URL {} without username due to `authenticate = always`",
                             index.url
                         );
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), None).await
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
+                            .await
                     } else {
                         None
                     }
                 } else {
-                    debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
+                    debug!(
+                        "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
+                    );
                     None
                 }
             }
@@ -811,9 +836,9 @@ impl AuthMiddleware {
             Some(credentials)
         } else {
             None
-        }
-        .map(Authentication::from)
-        .map(Arc::new);
+        };
+
+        let credentials = credentials.map(Authentication::from).map(Arc::new);
 
         // Register the fetch for this key
         self.cache().fetches.done(key, credentials.clone());

@@ -384,7 +384,7 @@ fn show_editable() -> Result<()> {
     context
         .pip_install()
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
+        .arg("../../test/packages/poetry_editable")
         .current_dir(current_dir()?)
         .env(
             EnvVars::CARGO_TARGET_DIR,
@@ -401,7 +401,7 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [SITE_PACKAGES]/
-    Editable project location: [WORKSPACE]/scripts/packages/poetry_editable
+    Editable project location: [WORKSPACE]/test/packages/poetry_editable
     Requires: anyio
     Required-by:
 

@@ -2304,7 +2304,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
 fn sync_extra_build_dependencies_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
-    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+    let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
     let child = context.temp_dir.child("child");
@@ -2536,7 +2536,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
-    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+    let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
     let child = context.temp_dir.child("child");
@@ -2882,7 +2882,7 @@ fn sync_relative_wheel() -> Result<()> {
 
     context.temp_dir.child("wheels").create_dir_all()?;
     fs_err::copy(
-        "../../scripts/links/ok-1.0.0-py3-none-any.whl",
+        "../../test/links/ok-1.0.0-py3-none-any.whl",
         context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
     )?;
 
@@ -5856,7 +5856,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 #[test]
 fn sync_extra_build_dependencies_script_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
-    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+    let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
     let child = context.temp_dir.child("child");
@@ -10263,7 +10263,7 @@ fn sync_build_tag() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -10538,7 +10538,7 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 
     let wheel_src = context
         .workspace_root
-        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 

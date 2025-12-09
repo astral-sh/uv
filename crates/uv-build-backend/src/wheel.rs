@@ -31,8 +31,7 @@ pub fn build_wheel(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -71,8 +70,7 @@ pub fn list_wheel(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -273,8 +271,7 @@ pub fn build_editable(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -335,8 +332,7 @@ pub fn metadata(
     metadata_directory: &Path,
     uv_version: &str,
 ) -> Result<String, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -844,7 +840,7 @@ mod test {
     #[test]
     fn test_prepare_metadata() {
         let metadata_dir = TempDir::new().unwrap();
-        let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+        let built_by_uv = Path::new("../../test/packages/built-by-uv");
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())

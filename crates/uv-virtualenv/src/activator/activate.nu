@@ -68,7 +68,7 @@ export-env {
         }
     }
 
-    let virtual_env = '{{ VIRTUAL_ENV_DIR }}'
+    let virtual_env = {{ VIRTUAL_ENV_DIR }}
     let bin = '{{ BIN_NAME }}'
     let path_name = if (has-env 'Path') { 'Path' } else { 'PATH' }
     let venv_path = ([$virtual_env $bin] | path join)

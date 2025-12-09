@@ -385,6 +385,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .boxed_local()
             .await?;
 
+        // Check that the wheel is compatible with its install target.
+        //
+        // When building a build dependency for a cross-install, the build dependency needs
+        // to install and run on the host instead of the target. In this case the `tags` are already
+        // for the host instead of the target, so this check passes.
+        if !built_wheel.filename.is_compatible(tags) {
+            return if tags.is_cross() {
+                Err(Error::BuiltWheelIncompatibleTargetPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            } else {
+                Err(Error::BuiltWheelIncompatibleHostPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            };
+        }
+
         // Acquire the advisory lock.
         #[cfg(windows)]
         let _lock = {

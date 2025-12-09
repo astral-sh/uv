@@ -3877,23 +3877,14 @@ impl PublishSettings {
 pub(crate) struct AuthLogoutSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLogoutArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLogoutArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3903,23 +3894,14 @@ impl AuthLogoutSettings {
 pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthTokenSettings {
     /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthTokenArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthTokenArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3931,25 +3913,16 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLoginArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLoginArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }

@@ -12,7 +12,7 @@ use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{commands::ExitStatus, printer::Printer, settings::NetworkSettings};
+use crate::{commands::ExitStatus, printer::Printer};
 
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]
@@ -60,8 +60,8 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
 
 async fn credentials_for_url(
     url: &DisplaySafeUrl,
+    client_builder: BaseClientBuilder<'_>,
     preview: Preview,
-    network_settings: &NetworkSettings,
 ) -> Result<Option<Credentials>> {
     let pyx_store = PyxTokenStore::from_settings()?;
 
@@ -85,16 +85,9 @@ async fn credentials_for_url(
                     .unwrap_or(url.to_string())
             );
         }
-        let client = BaseClientBuilder::new(
-            network_settings.connectivity,
-            network_settings.native_tls,
-            network_settings.allow_insecure_host.clone(),
-            preview,
-            network_settings.timeout,
-            network_settings.retries,
-        )
-        .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
-        .build();
+        let client = client_builder
+            .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
+            .build();
         let token = pyx_store
             .access_token(client.for_host(pyx_store.api()).raw_client(), 0)
             .await
@@ -123,8 +116,8 @@ async fn credentials_for_url(
 ///
 /// Full spec is [available here](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
 pub(crate) async fn helper(
+    client_builder: BaseClientBuilder<'_>,
     preview: Preview,
-    network_settings: &NetworkSettings,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeatures::AUTH_HELPER) {
@@ -138,7 +131,7 @@ pub(crate) async fn helper(
 
     // TODO: make this logic generic over the protocol by providing `request.uri` from a
     // trait - that should help with adding new protocols
-    let credentials = credentials_for_url(&request.uri, preview, network_settings).await?;
+    let credentials = credentials_for_url(&request.uri, client_builder, preview).await?;
 
     let response = serde_json::to_string(
         &credentials

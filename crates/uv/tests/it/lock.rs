@@ -11044,7 +11044,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11158,7 +11158,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11279,7 +11279,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11395,7 +11395,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11689,7 +11689,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11795,7 +11795,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -11886,7 +11886,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
 
-    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
         let entry = entry?;
         let path = entry.path();
         if path
@@ -12001,7 +12001,7 @@ fn lock_local_index() -> Result<()> {
     fs_err::copy(
         context
             .workspace_root
-            .join("scripts/links/basic_package-0.1.0.tar.gz"),
+            .join("test/links/basic_package-0.1.0.tar.gz"),
         &sdist,
     )?;
 
@@ -12009,7 +12009,7 @@ fn lock_local_index() -> Result<()> {
     fs_err::copy(
         context
             .workspace_root
-            .join("scripts/links/basic_package-0.1.0-py3-none-any.whl"),
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
         &wheel,
     )?;
 
@@ -21051,7 +21051,7 @@ fn lock_keyring_credentials() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21146,7 +21146,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21231,7 +21231,7 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -21335,7 +21335,7 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -32277,6 +32277,103 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
           And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// If an index is filtered out (e.g., it's the second `default = true` index defined in the file),
+/// we should still consider the lockfile valid if it's referenced by name, regardless of whether
+/// it's defined in a dependency group or the top-level `project.dependencies` field.
+///
+/// See: <https://github.com/astral-sh/uv/issues/16843>
+#[test]
+fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "second" }
+
+        [[tool.uv.index]]
+        name = "first"
+        url = "https://test.pypi.org/simple"
+        default = true
+
+        [[tool.uv.index]]
+        name = "second"
+        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "iniconfig", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
