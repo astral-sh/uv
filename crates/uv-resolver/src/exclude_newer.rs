@@ -122,7 +122,7 @@ impl std::fmt::Display for ExcludeNewerPackageChange {
             Self::PackageAdded(name, PackageExcludeNewer::Disabled) => {
                 write!(
                     f,
-                    "addition of exclude newer exception for package `{name}`"
+                    "addition of exclude newer exclusion for package `{name}`"
                 )
             }
             Self::PackageRemoved(name) => {
@@ -470,7 +470,7 @@ impl FromStr for ExcludeNewerPackageEntry {
             PackageExcludeNewer::Disabled
         } else {
             PackageExcludeNewer::Enabled(Box::new(ExcludeNewerValue::from_str(value).map_err(
-                |err| format!("Invalid `exclude-newer-package` timestamp `{value}`: {err}"),
+                |err| format!("Invalid `exclude-newer-package` value `{value}`: {err}"),
             )?))
         };
 
@@ -504,7 +504,9 @@ impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
             type Value = PackageExcludeNewer;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a timestamp string or false/null to disable exclude-newer")
+                formatter.write_str(
+                    "a date/timestamp/duration string, or false to disable exclude-newer",
+                )
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -513,7 +515,7 @@ impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
             {
                 ExcludeNewerValue::from_str(v)
                     .map(|ts| PackageExcludeNewer::Enabled(Box::new(ts)))
-                    .map_err(|e| E::custom(format!("failed to parse timestamp: {e}")))
+                    .map_err(|e| E::custom(format!("failed to parse exclude-newer value: {e}")))
             }
 
             fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
@@ -527,20 +529,6 @@ impl<'de> serde::Deserialize<'de> for PackageExcludeNewer {
                 } else {
                     Ok(PackageExcludeNewer::Disabled)
                 }
-            }
-
-            fn visit_none<E>(self) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(PackageExcludeNewer::Disabled)
-            }
-
-            fn visit_unit<E>(self) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(PackageExcludeNewer::Disabled)
             }
         }
 
@@ -580,10 +568,10 @@ impl std::fmt::Display for PackageExcludeNewerChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disabled { was } => {
-                write!(f, "disable exclude newer (was `{was}`)")
+                write!(f, "add exclude newer exclusion (was `{was}`)")
             }
             Self::Enabled { now } => {
-                write!(f, "enable exclude newer `{now}`")
+                write!(f, "remove exclude newer exclusion (now `{now}`)")
             }
             Self::TimestampChanged(change) => write!(f, "{change}"),
         }
@@ -739,10 +727,10 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
-    /// Returns the exclude-newer timestamp for a specific package, returning `Some(timestamp)`
-    /// if the package has a package-specific timestamp or falls back to the global timestamp if
-    /// set, or `None` if exclude-newer is explicitly disabled for the package (set to `false`) or
-    /// if no exclude-newer is configured.
+    /// Returns the exclude-newer value for a specific package, returning `Some(value)` if the
+    /// package has a package-specific setting or falls back to the global value if set, or `None`
+    /// if exclude-newer is explicitly disabled for the package (set to `false`) or if no
+    /// exclude-newer is configured.
     pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<ExcludeNewerValue> {
         match self.package.get(package_name) {
             Some(PackageExcludeNewer::Enabled(timestamp)) => Some(timestamp.as_ref().clone()),
