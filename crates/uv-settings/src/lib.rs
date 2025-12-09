@@ -162,6 +162,7 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                validate_pyproject_toml(&path, &options)?;
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -280,6 +281,83 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
             path.to_path_buf(),
             "required-environments",
         ));
+    }
+    Ok(())
+}
+
+/// Validate that an [`Options`] schema is compatible with `pyproject.toml`.
+///
+/// Some settings are user-specific and should not be in a `pyproject.toml` file
+/// that may be checked into version control.
+fn validate_pyproject_toml(path: &Path, options: &Options) -> Result<(), Error> {
+    let Options {
+        globals:
+            GlobalOptions {
+                required_version: _,
+                native_tls,
+                offline,
+                no_cache,
+                cache_dir,
+                preview: _,
+                python_preference: _,
+                python_downloads: _,
+                concurrent_downloads: _,
+                concurrent_builds: _,
+                concurrent_installs: _,
+                http_proxy,
+                https_proxy,
+                no_proxy,
+                allow_insecure_host,
+            },
+        top_level: _,
+        install_mirrors: _,
+        publish: _,
+        add: _,
+        pip: _,
+        cache_keys: _,
+        override_dependencies: _,
+        exclude_dependencies: _,
+        constraint_dependencies: _,
+        build_constraint_dependencies: _,
+        environments: _,
+        required_environments: _,
+        conflicts: _,
+        workspace: _,
+        sources: _,
+        dev_dependencies: _,
+        default_groups: _,
+        dependency_groups: _,
+        managed: _,
+        package: _,
+        build_backend: _,
+    } = options;
+
+    if native_tls.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "native-tls"));
+    }
+    if offline.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "offline"));
+    }
+    if no_cache.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "no-cache"));
+    }
+    if cache_dir.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "cache-dir"));
+    }
+    if allow_insecure_host.is_some() {
+        return Err(Error::UvTomlOnlyField(
+            path.to_path_buf(),
+            "allow-insecure-host",
+        ));
+    }
+    if http_proxy.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "http-proxy"));
+    }
+    if https_proxy.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "https-proxy"));
+    }
+    if no_proxy.is_some() {
+        return Err(Error::UvTomlOnlyField(path.to_path_buf(), "no-proxy"));
     }
     Ok(())
 }
@@ -574,6 +652,10 @@ pub enum Error {
     #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]
     PyprojectOnlyField(PathBuf, &'static str),
+
+    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `pyproject.toml` file. `{}` is user-specific and should be placed in a `uv.toml` file, set via environment variable, or passed via the CLI instead.", _0.user_display(), _1, _1
+    )]
+    UvTomlOnlyField(PathBuf, &'static str),
 
     #[error("Failed to parse environment variable `{name}` with invalid value `{value}`: {err}")]
     InvalidEnvironmentVariable {

@@ -283,26 +283,40 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
             option_type: OptionType::Configuration,
             ..
         } => {
-            output.push_str(&format_tab(
-                "pyproject.toml",
-                &format_header(
-                    field.scope,
+            if field.uv_toml_only {
+                // Only show uv.toml example for fields that are not allowed in pyproject.toml
+                output.push_str(&format_code(
+                    "uv.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::UvToml,
+                    ),
                     field.example,
-                    parents,
-                    ConfigurationFile::PyprojectToml,
-                ),
-                field.example,
-            ));
-            output.push_str(&format_tab(
-                "uv.toml",
-                &format_header(
-                    field.scope,
+                ));
+            } else {
+                output.push_str(&format_tab(
+                    "pyproject.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::PyprojectToml,
+                    ),
                     field.example,
-                    parents,
-                    ConfigurationFile::UvToml,
-                ),
-                field.example,
-            ));
+                ));
+                output.push_str(&format_tab(
+                    "uv.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::UvToml,
+                    ),
+                    field.example,
+                ));
+            }
         }
         _ => {}
     }

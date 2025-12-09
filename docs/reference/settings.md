@@ -766,17 +766,10 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    allow-insecure-host = ["localhost:8080"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    allow-insecure-host = ["localhost:8080"]
-    ```
+allow-insecure-host = ["localhost:8080"]
+```
 
 ---
 
@@ -793,17 +786,10 @@ Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    cache-dir = "./.uv_cache"
-    ```
-=== "uv.toml"
-
-    ```toml
-    cache-dir = "./.uv_cache"
-    ```
+cache-dir = "./.uv_cache"
+```
 
 ---
 
@@ -1326,17 +1312,10 @@ The URL of the HTTP proxy to use.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    http-proxy = "http://proxy.example.com"
-    ```
-=== "uv.toml"
-
-    ```toml
-    http-proxy = "http://proxy.example.com"
-    ```
+http-proxy = "http://proxy.example.com"
+```
 
 ---
 
@@ -1350,17 +1329,10 @@ The URL of the HTTPS proxy to use.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    https-proxy = "https://proxy.example.com"
-    ```
-=== "uv.toml"
-
-    ```toml
-    https-proxy = "https://proxy.example.com"
-    ```
+https-proxy = "https://proxy.example.com"
+```
 
 ---
 
@@ -1564,17 +1536,10 @@ included in your system's certificate store.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    native-tls = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    native-tls = true
-    ```
+native-tls = true
+```
 
 ---
 
@@ -1746,17 +1711,10 @@ duration of the operation.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    no-cache = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    no-cache = true
-    ```
+no-cache = true
+```
 
 ---
 
@@ -1795,17 +1753,10 @@ A list of hosts to exclude from proxying.
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    no-proxy = ["localhost", "127.0.0.1"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    no-proxy = ["localhost", "127.0.0.1"]
-    ```
+no-proxy = ["localhost", "127.0.0.1"]
+```
 
 ---
 
@@ -1845,17 +1796,10 @@ Disable network access, relying only on locally cached data and locally availabl
 
 **Example usage**:
 
-=== "pyproject.toml"
+```toml title="uv.toml"
 
-    ```toml
-    [tool.uv]
-    offline = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    offline = true
-    ```
+offline = true
+```
 
 ---
 

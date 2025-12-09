@@ -214,7 +214,8 @@ pub struct GlobalOptions {
         value_type = "bool",
         example = r#"
             native-tls = true
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub native_tls: Option<bool>,
     /// Disable network access, relying only on locally cached data and locally available files.
@@ -223,7 +224,8 @@ pub struct GlobalOptions {
         value_type = "bool",
         example = r#"
             offline = true
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub offline: Option<bool>,
     /// Avoid reading from or writing to the cache, instead using a temporary directory for the
@@ -233,7 +235,8 @@ pub struct GlobalOptions {
         value_type = "bool",
         example = r#"
             no-cache = true
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub no_cache: Option<bool>,
     /// Path to the cache directory.
@@ -245,7 +248,8 @@ pub struct GlobalOptions {
         value_type = "str",
         example = r#"
             cache-dir = "./.uv_cache"
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub cache_dir: Option<PathBuf>,
     /// Whether to enable experimental, preview features.
@@ -317,7 +321,8 @@ pub struct GlobalOptions {
         value_type = "str",
         example = r#"
             http-proxy = "http://proxy.example.com"
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub http_proxy: Option<String>,
     /// The URL of the HTTPS proxy to use.
@@ -326,7 +331,8 @@ pub struct GlobalOptions {
         value_type = "str",
         example = r#"
             https-proxy = "https://proxy.example.com"
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub https_proxy: Option<String>,
     /// A list of hosts to exclude from proxying.
@@ -335,7 +341,8 @@ pub struct GlobalOptions {
         value_type = "list[str]",
         example = r#"
             no-proxy = ["localhost", "127.0.0.1"]
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub no_proxy: Option<Vec<String>>,
     /// Allow insecure connections to host.
@@ -351,7 +358,8 @@ pub struct GlobalOptions {
         value_type = "list[str]",
         example = r#"
             allow-insecure-host = ["localhost:8080"]
-        "#
+        "#,
+        uv_toml_only = true
     )]
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
 }
