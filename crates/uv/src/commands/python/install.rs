@@ -7,7 +7,6 @@ use std::str::FromStr;
 
 use anyhow::{Error, Result};
 use futures::StreamExt;
-use futures::stream::FuturesUnordered;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
@@ -15,6 +14,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
 use uv_client::BaseClientBuilder;
+use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeatures};
@@ -191,6 +191,7 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
+    concurrency: &Concurrency,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -458,10 +459,9 @@ pub(crate) async fn install(
 
     // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
-    let mut tasks = FuturesUnordered::new();
 
-    for download in &downloads {
-        tasks.push(async {
+    let mut tasks = futures::stream::iter(&downloads)
+        .map(async |download| {
             (
                 *download,
                 download
@@ -477,8 +477,8 @@ pub(crate) async fn install(
                     )
                     .await,
             )
-        });
-    }
+        })
+        .buffer_unordered(concurrency.downloads);
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
