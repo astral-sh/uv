@@ -3,6 +3,8 @@ members = ["cargo:."]
 
 # Config for 'dist'
 [dist]
+# See: #16989
+allow-dirty = ["ci"]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.30.2"
 # Whether to consider the binaries in a package for distribution (defaults true)
