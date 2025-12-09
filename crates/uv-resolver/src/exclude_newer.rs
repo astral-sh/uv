@@ -143,16 +143,16 @@ impl ExcludeNewerValue {
 
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerValueChange> {
         match (&self.span, &other.span) {
-            (None, Some(span)) => Some(ExcludeNewerValueChange::SpanAdded(span.clone())),
+            (None, Some(span)) => Some(ExcludeNewerValueChange::SpanAdded(*span)),
             (Some(_), None) => Some(ExcludeNewerValueChange::SpanRemoved),
             (Some(self_span), Some(other_span)) if self_span != other_span => Some(
-                ExcludeNewerValueChange::SpanChanged(self_span.clone(), other_span.clone()),
+                ExcludeNewerValueChange::SpanChanged(*self_span, *other_span),
             ),
             (Some(_), Some(span)) if self.timestamp != other.timestamp => {
                 Some(ExcludeNewerValueChange::RelativeTimestampChanged(
                     self.timestamp,
                     other.timestamp,
-                    span.clone(),
+                    *span,
                 ))
             }
             (None, None) if self.timestamp != other.timestamp => Some(
@@ -163,7 +163,7 @@ impl ExcludeNewerValue {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ExcludeNewerSpan(Span);
 
 impl std::fmt::Display for ExcludeNewerSpan {
@@ -181,6 +181,9 @@ impl PartialEq for ExcludeNewerSpan {
 impl Eq for ExcludeNewerSpan {}
 
 impl serde::Serialize for ExcludeNewerSpan {
+    /// Serialize to an ISO 8601 duration string.
+    ///
+    /// We use ISO 8601 format for serialization (rather than the "friendly" format).
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -327,7 +330,7 @@ impl FromStr for ExcludeNewerValue {
     ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`), "friendly" durations (e.g., `1 week`, `30 days`), and ISO 8601
-    /// durations (e.g., `P24H`, `P7D`, `P30D`).
+    /// durations (e.g., `PT24H`, `P7D`, `P30D`).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         // Try parsing as a timestamp first
         if let Ok(timestamp) = input.parse::<Timestamp>() {
@@ -511,18 +514,14 @@ impl ExcludeNewerPackage {
 
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
         for (package, timestamp) in self {
-            match other.get(package) {
-                Some(other_timestamp) => {
-                    if let Some(change) = timestamp.compare(other_timestamp) {
-                        return Some(ExcludeNewerPackageChange::PackageChanged(
-                            package.clone(),
-                            change,
-                        ));
-                    }
-                }
-                None => {
-                    return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
-                }
+            let Some(other_timestamp) = other.get(package) else {
+                return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
+            };
+            if let Some(change) = timestamp.compare(other_timestamp) {
+                return Some(ExcludeNewerPackageChange::PackageChanged(
+                    package.clone(),
+                    change,
+                ));
             }
         }
 
@@ -637,7 +636,7 @@ impl schemars::JsonSchema for ExcludeNewerValue {
         schemars::json_schema!({
             "type": "string",
             "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
-            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to an absolute timestamp at lock time.",
+            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to a timestamp at lock time.",
         })
     }
 }

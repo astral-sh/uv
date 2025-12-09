@@ -701,19 +701,19 @@ This feature is available via the [`exclude-newer` option](#reproducible-resolut
 same semantics.
 
 Define a dependency cooldown by specifying a duration instead of an absolute value. Either a
-"friendly" duration (e.g., `24 hours`, `1 week`, `30 days`) or an ISO 8601 duration (e.g., `P24H`,
+"friendly" duration (e.g., `24 hours`, `1 week`, `30 days`) or an ISO 8601 duration (e.g., `PT24H`,
 `P7D`, `P30D`) can be used.
 
 !!! note
 
     Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    number of seconds assuming that a day is 24 hours (i.e., DST transitions are ignored). Calendar
+    number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored). Calendar
     units such as months and years are not allowed since they are inherently inconsistent lengths.
 
-When a duration is used for resolution, an absolute timestamp is calculated relative to the current
-time. When using a `uv.lock` file, the timestamp is included in the lockfile. uv will not update the
-lockfile when the current time changes, instead, uv will update the timestamp when a new resolution
-is performed, e.g., when `--upgrade` or `--refresh` is used.
+When a duration is used for resolution, a timestamp is calculated relative to the current time. When
+using a `uv.lock` file, the timestamp is included in the lockfile. uv will not update the lockfile
+when the current time changes, instead, uv will update the timestamp when a new resolution is
+performed, e.g., when `--upgrade` or `--refresh` is used.
 
 This option is also supported in the `pyproject.toml`, e.g.:
 
