@@ -1078,6 +1078,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonInstallSettings {
@@ -1117,6 +1118,7 @@ impl PythonInstallSettings {
             pypy_mirror: _,
             python_downloads_json_url: _,
             default,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1136,6 +1138,12 @@ impl PythonInstallSettings {
             pypy_install_mirror,
             python_downloads_json_url,
             default,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
@@ -1154,6 +1162,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonUpgradeSettings {
@@ -1191,6 +1200,7 @@ impl PythonUpgradeSettings {
             pypy_mirror: _,
             reinstall,
             python_downloads_json_url: _,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1204,6 +1214,12 @@ impl PythonUpgradeSettings {
             python_downloads_json_url,
             default,
             bin,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
