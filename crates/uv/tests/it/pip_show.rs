@@ -536,6 +536,7 @@ fn show_files() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_target() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -587,6 +588,7 @@ fn show_target() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 
