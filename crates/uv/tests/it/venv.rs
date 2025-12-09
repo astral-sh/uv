@@ -1296,6 +1296,12 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_fish = scripts.child("activate.fish");
     activate_fish.assert(predicates::path::is_file());
     activate_fish.assert(predicates::str::contains(r#"set -gx VIRTUAL_ENV ''"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"''"#));
+
+    let activate_nu = scripts.child("activate.nu");
+    activate_nu.assert(predicates::path::is_file());
+    activate_nu.assert(predicates::str::contains(
+        r"let virtual_env = (path self | path dirname | path dirname)",
+    ));
 }
 
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
