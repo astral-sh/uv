@@ -1029,11 +1029,15 @@ impl ValidatedLock {
             return Ok(Self::Unusable(lock));
         }
         if let Some(change) = lock.exclude_newer().compare(&options.exclude_newer) {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to {change}",
-            );
-            return Ok(Self::Unusable(lock));
+            // If a relative value is used, we won't invalidate on every tick of the clock unless
+            // the span duration changed or some other operation causes a new resolution
+            if !change.is_relative_timestamp_change() {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to {change}",
+                );
+                return Ok(Self::Unusable(lock));
+            }
         }
 
         match upgrade {

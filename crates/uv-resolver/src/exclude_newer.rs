@@ -11,10 +11,22 @@ use uv_normalize::PackageName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewerValueChange {
+    /// A relative span changed to a new value
     SpanChanged(ExcludeNewerSpan, ExcludeNewerSpan),
+    /// A relative span was added
     SpanAdded(ExcludeNewerSpan),
+    /// A relative span was removed
     SpanRemoved,
-    TimestampChanged(Timestamp, Timestamp),
+    /// A relative span is present and the timestamp changed
+    RelativeTimestampChanged(Timestamp, Timestamp, ExcludeNewerSpan),
+    /// The timestamp changed and a relative span is not present
+    AbsoluteTimestampChanged(Timestamp, Timestamp),
+}
+
+impl ExcludeNewerValueChange {
+    pub fn is_relative_timestamp_change(&self) -> bool {
+        matches!(self, Self::RelativeTimestampChanged(_, _, _))
+    }
 }
 
 impl std::fmt::Display for ExcludeNewerValueChange {
@@ -29,7 +41,13 @@ impl std::fmt::Display for ExcludeNewerValueChange {
             Self::SpanRemoved => {
                 write!(f, "removal of exclude newer span")
             }
-            Self::TimestampChanged(old, new) => {
+            Self::RelativeTimestampChanged(old, new, span) => {
+                write!(
+                    f,
+                    "change of calculated ({span}) exclude newer timestamp from `{old}` to `{new}`"
+                )
+            }
+            Self::AbsoluteTimestampChanged(old, new) => {
                 write!(
                     f,
                     "change of exclude newer timestamp from `{old}` to `{new}`"
@@ -45,6 +63,17 @@ pub enum ExcludeNewerChange {
     GlobalAdded(ExcludeNewerValue),
     GlobalRemoved,
     Package(ExcludeNewerPackageChange),
+}
+
+impl ExcludeNewerChange {
+    /// Whether the change is due to a change in a relative timestamp.
+    pub fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::GlobalChanged(change) => change.is_relative_timestamp_change(),
+            Self::GlobalAdded(_) | Self::GlobalRemoved => false,
+            Self::Package(change) => change.is_relative_timestamp_change(),
+        }
+    }
 }
 
 impl std::fmt::Display for ExcludeNewerChange {
@@ -69,6 +98,15 @@ pub enum ExcludeNewerPackageChange {
     PackageAdded(PackageName, ExcludeNewerValue),
     PackageRemoved(PackageName),
     PackageChanged(PackageName, ExcludeNewerValueChange),
+}
+
+impl ExcludeNewerPackageChange {
+    pub fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::PackageAdded(_, _) | Self::PackageRemoved(_) => false,
+            Self::PackageChanged(_, change) => change.is_relative_timestamp_change(),
+        }
+    }
 }
 
 impl std::fmt::Display for ExcludeNewerPackageChange {
@@ -99,18 +137,26 @@ pub struct ExcludeNewerValue {
 }
 
 impl ExcludeNewerValue {
+    pub fn into_parts(self) -> (Timestamp, Option<ExcludeNewerSpan>) {
+        (self.timestamp, self.span)
+    }
+
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerValueChange> {
-        if self.timestamp != other.timestamp {
-            return Some(ExcludeNewerValueChange::TimestampChanged(
-                self.timestamp,
-                other.timestamp,
-            ));
-        }
         match (&self.span, &other.span) {
             (None, Some(span)) => Some(ExcludeNewerValueChange::SpanAdded(span.clone())),
             (Some(_), None) => Some(ExcludeNewerValueChange::SpanRemoved),
             (Some(self_span), Some(other_span)) if self_span != other_span => Some(
                 ExcludeNewerValueChange::SpanChanged(self_span.clone(), other_span.clone()),
+            ),
+            (Some(_), Some(span)) if self.timestamp != other.timestamp => {
+                Some(ExcludeNewerValueChange::RelativeTimestampChanged(
+                    self.timestamp,
+                    other.timestamp,
+                    span.clone(),
+                ))
+            }
+            (None, None) if self.timestamp != other.timestamp => Some(
+                ExcludeNewerValueChange::AbsoluteTimestampChanged(self.timestamp, other.timestamp),
             ),
             (Some(_), Some(_)) | (None, None) => None,
         }
@@ -134,6 +180,26 @@ impl PartialEq for ExcludeNewerSpan {
 
 impl Eq for ExcludeNewerSpan {}
 
+impl serde::Serialize for ExcludeNewerSpan {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExcludeNewerSpan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let span: Span = s.parse().map_err(serde::de::Error::custom)?;
+        Ok(Self(span))
+    }
+}
+
 impl serde::Serialize for ExcludeNewerValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -148,8 +214,25 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(serde::de::Error::custom)
+        // Support both a simple string ("2024-03-11T00:00:00Z") and a table
+        // ({ timestamp = "2024-03-11T00:00:00Z", span = "P2W" })
+        #[derive(serde::Deserialize)]
+        struct TableForm {
+            timestamp: Timestamp,
+            span: Option<ExcludeNewerSpan>,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Helper {
+            String(String),
+            Table(TableForm),
+        }
+
+        match Helper::deserialize(deserializer)? {
+            Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
+            Helper::Table(TableForm { timestamp, span }) => Ok(Self::new(timestamp, span)),
+        }
     }
 }
 
@@ -170,11 +253,8 @@ impl ExcludeNewerValue {
     }
 
     /// Create a new [`ExcludeNewerTimestamp`].
-    pub fn new(timestamp: Timestamp, span: Option<Span>) -> Self {
-        Self {
-            timestamp,
-            span: span.map(ExcludeNewerSpan),
-        }
+    pub fn new(timestamp: Timestamp, span: Option<ExcludeNewerSpan>) -> Self {
+        Self { timestamp, span }
     }
 }
 
@@ -188,31 +268,28 @@ impl From<Timestamp> for ExcludeNewerValue {
 }
 
 /// Determine what format the user likely intended and return an appropriate error message.
-///
-/// Uses heuristics to guess the intended format:
-/// - `[-+]?[Pp]` → ISO 8601 duration (e.g., `P2W`, `-P30D`)
-/// - `[-+]?\s*[0-9]+\s*[A-Za-z]` → friendly duration (e.g., `2 weeks`, `-30 days`)
-/// - `[-+]?[0-9]{4}-` → date/timestamp (e.g., `2024-01-01`)
-/// - Otherwise → generic error with examples
-fn format_exclude_newer_error(input: &str, date_err: jiff::Error, span_err: jiff::Error) -> String {
+fn format_exclude_newer_error(
+    input: &str,
+    date_err: &jiff::Error,
+    span_err: &jiff::Error,
+) -> String {
     let trimmed = input.trim();
 
-    // Check for ISO 8601 duration: [-+]?[Pp]
-    // e.g., "P2W", "+P1D", "-P30D"
+    // Check for ISO 8601 duration (`[-+]?[Pp]`), e.g., "P2W", "+P1D", "-P30D"
     let after_sign = trimmed.trim_start_matches(['+', '-']);
     if after_sign.starts_with('P') || after_sign.starts_with('p') {
         return format!("`{input}` could not be parsed as an ISO 8601 duration: {span_err}");
     }
 
-    // Check for friendly duration: [-+]?\s*[0-9]+\s*[A-Za-z]
-    // e.g., "2 weeks", "-30 days", "1hour"
+    // Check for friendly duration (`[-+]?\s*[0-9]+\s*[A-Za-z]`), e.g., "2 weeks", "-30 days",
+    // "1hour"
     let after_sign_trimmed = after_sign.trim_start();
     let mut chars = after_sign_trimmed.chars().peekable();
 
     // Check if we start with a digit
-    if chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+    if chars.peek().is_some_and(char::is_ascii_digit) {
         // Skip digits
-        while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+        while chars.peek().is_some_and(char::is_ascii_digit) {
             chars.next();
         }
         // Skip optional whitespace
@@ -220,13 +297,12 @@ fn format_exclude_newer_error(input: &str, date_err: jiff::Error, span_err: jiff
             chars.next();
         }
         // Check if next character is a letter (unit designator)
-        if chars.peek().is_some_and(|c| c.is_ascii_alphabetic()) {
-            return format!("`{input}` could not be parsed as a relative duration: {span_err}");
+        if chars.peek().is_some_and(char::is_ascii_alphabetic) {
+            return format!("`{input}` could not be parsed as a duration: {span_err}");
         }
     }
 
-    // Check for date/timestamp: [-+]?[0-9]{4}-
-    // e.g., "2024-01-01", "2024-01-01T00:00:00Z"
+    // Check for date/timestamp (`[-+]?[0-9]{4}-`), e.g., "2024-01-01", "2024-01-01T00:00:00Z"
     let mut chars = after_sign.chars();
     let looks_like_date = chars.next().is_some_and(|c| c.is_ascii_digit())
         && chars.next().is_some_and(|c| c.is_ascii_digit())
@@ -238,9 +314,9 @@ fn format_exclude_newer_error(input: &str, date_err: jiff::Error, span_err: jiff
         return format!("`{input}` could not be parsed as a valid date: {date_err}");
     }
 
-    // Fallback: generic error showing both possibilities
+    // If we can't tell, return a generic error message
     format!(
-        "`{input}` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)"
+        "`{input}` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)"
     )
 }
 
@@ -250,7 +326,8 @@ impl FromStr for ExcludeNewerValue {
     /// Parse an [`ExcludeNewerTimestamp`] from a string.
     ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`), and relative durations (e.g., `1 week`, `30 days`).
+    /// (e.g., `2006-12-02`), "friendly" durations (e.g., `1 week`, `30 days`), and ISO 8601
+    /// durations (e.g., `P24H`, `P7D`, `P30D`).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         // Try parsing as a timestamp first
         if let Ok(timestamp) = input.parse::<Timestamp>() {
@@ -298,7 +375,11 @@ impl FromStr for ExcludeNewerValue {
                 // is not fixed and can differ depending on the local time zone. We could allow this
                 // via the CLI in the future, but shouldn't allow it via persistent configuration.
                 if span.get_years() != 0 {
-                    let years = span.total((Unit::Year, &now)).map(f64::ceil).unwrap_or(1.0);
+                    let years = span
+                        .total((Unit::Year, &now))
+                        .map(f64::ceil)
+                        .unwrap_or(1.0)
+                        .abs();
                     let days = years * 365.0;
                     return Err(format!(
                         "Duration `{input}` uses unit 'years' which is not allowed; use days instead, e.g., `{days:.0} days`.",
@@ -308,7 +389,8 @@ impl FromStr for ExcludeNewerValue {
                     let months = span
                         .total((Unit::Month, &now))
                         .map(f64::ceil)
-                        .unwrap_or(1.0);
+                        .unwrap_or(1.0)
+                        .abs();
                     let days = months * 30.0;
                     return Err(format!(
                         "Duration `{input}` uses 'months' which is not allowed; use days instead, e.g., `{days:.0} days`."
@@ -324,13 +406,13 @@ impl FromStr for ExcludeNewerValue {
                     format!("Duration `{input}` is too large to subtract from current time: {err}")
                 })?;
 
-                return Ok(Self::new(cutoff.into(), Some(span)));
+                return Ok(Self::new(cutoff.into(), Some(ExcludeNewerSpan(span))));
             }
             Err(err) => err,
         };
 
         // Return a targeted error message based on heuristics about what the user likely intended
-        Err(format_exclude_newer_error(input, date_err, span_err))
+        Err(format_exclude_newer_error(input, &date_err, &span_err))
     }
 }
 

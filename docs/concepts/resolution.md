@@ -652,13 +652,14 @@ uv supports an `--exclude-newer` option to limit resolution to distributions pub
 specific date, allowing reproduction of installations regardless of new package releases. The date
 may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
 `2006-12-02T02:07:43Z`), a local date in the same format (e.g., `2006-12-02`) in your system's
-configured time zone, or a relative duration (e.g., `24 hours`, `1 week`, `30 days`).
+configured time zone, a "friendly" duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601
+duration (e.g., `P24H`, `P7D`, `P30D`).
 
 !!! note
 
-    Relative durations do not respect semantics of the local time zone and are always resolved to a
-    fixed number of seconds assuming that a day is 24 hours (i.e., DST transitions are ignored).
-    Calendar units such as months and years are not allowed.
+    Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    number of seconds assuming that a day is 24 hours (i.e., DST transitions are ignored). Calendar
+    units such as months and years are not allowed.
 
 Note the package index must support the `upload-time` field as specified in
 [`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
