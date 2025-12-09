@@ -22,7 +22,7 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
     exclude_editable: bool,
-    exclude: Vec<PackageName>,
+    exclude: &[PackageName],
     strict: bool,
     python: Option<&str>,
     system: bool,
