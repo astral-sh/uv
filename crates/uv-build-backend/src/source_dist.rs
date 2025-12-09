@@ -299,6 +299,7 @@ impl TarGzWriter {
 impl DirectoryWriter for TarGzWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
+        header.set_entry_type(EntryType::Regular);
         header.set_size(bytes.len() as u64);
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
@@ -312,6 +313,7 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
         let executable_bit = {
