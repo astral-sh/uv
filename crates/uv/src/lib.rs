@@ -1617,6 +1617,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                &globals.concurrency,
                 globals.preview,
                 printer,
             )
@@ -1646,6 +1647,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                &globals.concurrency,
                 globals.preview,
                 printer,
             )
