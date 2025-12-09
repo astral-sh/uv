@@ -1828,7 +1828,6 @@ mod tests {
             .parent()
             .unwrap()
             .join("test")
-            .join("packages")
             .join("workspaces");
         let project = ProjectWorkspace::discover(
             &root_dir.join(folder),

@@ -2,8 +2,8 @@ target-version = "py312"
 exclude = [
   "crates/uv-virtualenv/src/activator/activate_this.py",
   "crates/uv-virtualenv/src/_virtualenv.py",
-  "test/packages/ecosystem",
-  "test/packages/workspaces",
+  "test/ecosystem",
+  "test/workspaces",
   "test/packages",
 ]
 

@@ -20,7 +20,6 @@ fn workspaces_dir() -> PathBuf {
         .parent()
         .unwrap()
         .join("test")
-        .join("packages")
         .join("workspaces")
 }
 
