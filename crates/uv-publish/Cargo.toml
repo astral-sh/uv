@@ -1,6 +1,6 @@
 [package]
 name = "uv-publish"
-version = "0.0.1"
+version = "0.0.6"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -49,6 +49,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+fastrand = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

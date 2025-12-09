@@ -13,7 +13,7 @@ use uv_distribution_types::{
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
     PackageConfigSettings, RequirementSource,
 };
-use uv_git_types::GitOid;
+use uv_git_types::{GitLfs, GitOid};
 use uv_normalize::PackageName;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
@@ -173,6 +173,7 @@ impl RequirementSatisfaction {
                             vcs: VcsKind::Git,
                             requested_revision: _,
                             commit_id: installed_precise,
+                            git_lfs: installed_git_lfs,
                         },
                     subdirectory: installed_subdirectory,
                 } = direct_url.as_ref()
@@ -184,6 +185,16 @@ impl RequirementSatisfaction {
                     debug!(
                         "Subdirectory mismatch: {:?} vs. {:?}",
                         installed_subdirectory, requested_subdirectory
+                    );
+                    return Self::Mismatch;
+                }
+
+                let requested_git_lfs = requested_git.lfs();
+                let installed_git_lfs = installed_git_lfs.map(GitLfs::from).unwrap_or_default();
+                if requested_git_lfs != installed_git_lfs {
+                    debug!(
+                        "Git LFS mismatch: {} (installed) vs. {} (requested)",
+                        installed_git_lfs, requested_git_lfs,
                     );
                     return Self::Mismatch;
                 }

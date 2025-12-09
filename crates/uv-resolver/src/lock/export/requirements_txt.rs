@@ -91,6 +91,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         url,
                         GitReference::from(git.kind.clone()),
                         git.precise,
+                        git.lfs,
                     )
                     .expect("Internal Git URLs must have supported schemes");
 

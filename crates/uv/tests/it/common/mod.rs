@@ -3,19 +3,22 @@
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
+use std::io::Write as _;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
+use assert_fs::fixture::{
+    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
+};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
@@ -558,8 +561,21 @@ impl TestContext {
     }
 
     /// Add a custom filter to the `TestContext`.
-    pub fn with_filter(mut self, filter: (String, String)) -> Self {
-        self.filters.push(filter);
+    pub fn with_filter(mut self, filter: (impl Into<String>, impl Into<String>)) -> Self {
+        self.filters.push((filter.0.into(), filter.1.into()));
+        self
+    }
+
+    // Unsets the git credential helper using temp home gitconfig
+    pub fn with_unset_git_credential_helper(self) -> Self {
+        let git_config = self.home_dir.child(".gitconfig");
+        git_config
+            .write_str(indoc! {r"
+                [credential]
+                    helper =
+            "})
+            .expect("Failed to unset git credential helper");
+
         self
     }
 
@@ -892,6 +908,31 @@ impl TestContext {
         Ok(())
     }
 
+    /// Setup Git LFS Filters
+    ///
+    /// You can find the default filters in <https://github.com/git-lfs/git-lfs/blob/v3.7.1/lfs/attribute.go#L66-L71>
+    /// We set required to true to get a full stacktrace when these commands fail.
+    pub fn with_git_lfs_config(mut self) -> Self {
+        let git_lfs_config = self.root.child(".gitconfig");
+        git_lfs_config
+            .write_str(indoc! {r#"
+                [filter "lfs"]
+                    clean = git-lfs clean -- %f
+                    smudge = git-lfs smudge -- %f
+                    process = git-lfs filter-process
+                    required = true
+            "#})
+            .expect("Failed to setup `git-lfs` filters");
+
+        // Its possible your system config can cause conflicts with the Git LFS tests.
+        // In such cases, add self.extra_env.push(("GIT_CONFIG_NOSYSTEM".into(), "1".into()));
+        self.extra_env.push((
+            EnvVars::GIT_CONFIG_GLOBAL.into(),
+            git_lfs_config.as_os_str().into(),
+        ));
+        self
+    }
+
     /// Shared behaviour for almost all test commands.
     ///
     /// * Use a temporary cache directory
@@ -1062,6 +1103,14 @@ impl TestContext {
     pub fn pip_tree(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("pip").arg("tree");
+        self.add_shared_options(&mut command, true);
+        command
+    }
+
+    /// Create a `pip debug` command for testing.
+    pub fn pip_debug(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("pip").arg("debug");
         self.add_shared_options(&mut command, true);
         command
     }
@@ -1411,6 +1460,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv auth helper --protocol bazel get` command.
+    pub fn auth_helper(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("auth").arg("helper");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv auth token` command.
     pub fn auth_token(&self) -> Command {
         let mut command = Self::new_command();
@@ -1610,6 +1667,7 @@ impl TestContext {
             self.filters(),
             "diff_lock",
             Some(WindowsFilters::Platform),
+            None,
         );
         assert!(status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
@@ -1738,7 +1796,9 @@ pub fn python_installations_for_versions(
     python_versions: &[&str],
     download_list: &ManagedPythonDownloadList,
 ) -> anyhow::Result<Vec<PathBuf>> {
-    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
+        .init_no_wait()?
+        .expect("No cache contention when setting up Python in tests");
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
@@ -1752,7 +1812,7 @@ pub fn python_installations_for_versions(
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {
-                panic!("Could not find Python {python_version} for test");
+                panic!("Could not find Python {python_version} for test\nTry `cargo run python install` first, or refer to CONTRIBUTING.md");
             }
         })
         .collect::<Vec<_>>();
@@ -1791,9 +1851,10 @@ pub fn run_and_format<T: AsRef<str>>(
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
+    input: Option<&str>,
 ) -> (String, Output) {
     let (snapshot, output, _) =
-        run_and_format_with_status(command, filters, function_name, windows_filters);
+        run_and_format_with_status(command, filters, function_name, windows_filters, input);
     (snapshot, output)
 }
 
@@ -1806,6 +1867,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
+    input: Option<&str>,
 ) -> (String, Output, ExitStatus) {
     let program = command
         .borrow_mut()
@@ -1825,10 +1887,30 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         );
     }
 
-    let output = command
-        .borrow_mut()
-        .output()
-        .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
+    let output = if let Some(input) = input {
+        let mut child = command
+            .borrow_mut()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
+        child
+            .stdin
+            .as_mut()
+            .expect("Failed to open stdin")
+            .write_all(input.as_bytes())
+            .expect("Failed to write to stdin");
+
+        child
+            .wait_with_output()
+            .unwrap_or_else(|err| panic!("Failed to read output from {program}: {err}"))
+    } else {
+        command
+            .borrow_mut()
+            .output()
+            .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
+    };
 
     eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     eprintln!(
@@ -2027,19 +2109,25 @@ macro_rules! uv_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform));
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform), None);
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, $spawnable:expr, input=$input:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform), Some($input));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), None);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), None, None);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Universal));
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Universal), None);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

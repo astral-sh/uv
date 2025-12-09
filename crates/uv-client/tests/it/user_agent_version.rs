@@ -20,7 +20,7 @@ async fn test_user_agent_has_version() -> Result<()> {
     let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // Send request to our dummy server
@@ -57,7 +57,70 @@ async fn test_user_agent_has_version() -> Result<()> {
         assert_json_snapshot!(&linehaul.installer, @r#"
         {
           "name": "uv",
-          "version": "[VERSION]"
+          "version": "[VERSION]",
+          "subcommand": null
+        }
+        "#);
+    });
+
+    // Wait for the server task to complete, to be a good citizen.
+    let _ = server_task.await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_user_agent_has_subcommand() -> Result<()> {
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
+
+    // Initialize uv-client
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().subcommand(vec!["foo".to_owned(), "bar".to_owned()]),
+        cache,
+    )
+    .build();
+
+    // Send request to our dummy server
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await?;
+
+    // Check the HTTP status
+    assert!(res.status().is_success());
+
+    // Check User Agent
+    let body = res.text().await?;
+
+    let (uv_version, uv_linehaul) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header");
+
+    // Deserializing Linehaul
+    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+
+    // Assert linehaul user agent
+    let filters = vec![(version(), "[VERSION]")];
+    with_settings!({
+        filters => filters
+    }, {
+        // Assert uv version
+        assert_snapshot!(uv_version, @"uv/[VERSION]");
+        // Assert linehaul json
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]",
+          "subcommand": [
+            "foo",
+            "bar"
+          ]
         }
         "#);
     });
@@ -89,7 +152,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     })?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let mut builder =
         RegistryClientBuilder::new(BaseClientBuilder::default(), cache).markers(&markers);
 
@@ -152,11 +215,12 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_json_snapshot!(&linehaul, {
             ".distro" => "[distro]",
             ".ci" => "[ci]"
-        }, @r###"
+        }, @r#"
         {
           "installer": {
             "name": "uv",
-            "version": "[VERSION]"
+            "version": "[VERSION]",
+            "subcommand": null
           },
           "python": "3.12.2",
           "implementation": {
@@ -174,7 +238,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
           "rustc_version": null,
           "ci": "[ci]"
         }
-        "###);
+        "#);
     });
 
     // Assert distro

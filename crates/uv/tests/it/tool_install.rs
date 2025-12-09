@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::process::Command;
 
 use anyhow::Result;
@@ -1815,6 +1816,297 @@ fn tool_install_unnamed_package() {
 
     ----- stderr -----
     "###);
+}
+
+/// Test installing a tool with a Git requirement.
+#[test]
+#[cfg(feature = "git")]
+fn tool_install_git() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut paths = BTreeSet::new();
+
+    // Avoid removing `git` from PATH
+    let git_path = which::which("git")
+        .expect("Failed to find `git` executable.")
+        .parent()
+        .expect("Failed to find `git` executable directory.")
+        .to_path_buf();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(git_path);
+    // Git Submodule in macos seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        let sed_path = which::which("sed")
+            .expect("Failed to find `sed` executable.")
+            .parent()
+            .expect("Failed to find `sed` executable directory.")
+            .to_path_buf();
+        paths.insert(sed_path);
+    }
+    let path = std::env::join_paths(paths).unwrap();
+
+    // Unnamed Git Install
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    fs_err::remove_dir_all(&bin_dir).expect("Failed to remove bin dir.");
+    fs_err::remove_dir_all(&tool_dir).expect("Failed to remove tool dir.");
+
+    // Named Git Install
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+}
+
+/// Test installing a tool with a Git LFS enabled requirement.
+#[test]
+#[cfg(feature = "git-lfs")]
+fn tool_install_git_lfs() {
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_git_lfs_config();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut paths = BTreeSet::new();
+
+    // Avoid removing `git` or `git-lfs` from PATH
+    let git_path = which::which("git")
+        .expect("Failed to find `git` executable.")
+        .parent()
+        .expect("Failed to find `git` executable directory.")
+        .to_path_buf();
+    let git_lfs_path = which::which("git-lfs")
+        .expect("Failed to find `git-lfs` executable.")
+        .parent()
+        .expect("Failed to find `git-lfs` executable directory.")
+        .to_path_buf();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(git_path);
+    paths.insert(git_lfs_path);
+    // Git LFS filter-process in macos seems to rely on `sh`.
+    // Git Submodule in macos seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        for bin_path in ["sh", "sed"].into_iter().map(|name| {
+            which::which(name)
+                .unwrap_or_else(|_| panic!("Failed to find `{name}` executable."))
+                .parent()
+                .unwrap_or_else(|| panic!("Failed to find `{name}` executable directory."))
+                .to_path_buf()
+        }) {
+            paths.insert(bin_path);
+        }
+    }
+    let path = std::env::join_paths(paths).unwrap();
+
+    // Verify a successful LFS request
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+    Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
+    ");
+
+    tool_dir
+        .child("test-lfs-repo")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("test-lfs-repo")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("test-lfs-repo{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=c6d77ab63d91104f32ab5e5ae2943f4d26ff875f" }]
+        entrypoints = [
+            { name = "test-lfs-repo", install-path = "[TEMP_DIR]/bin/test-lfs-repo", from = "test-lfs-repo" },
+            { name = "test-lfs-repo-assets", install-path = "[TEMP_DIR]/bin/test-lfs-repo-assets", from = "test-lfs-repo" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo!
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo! LFS_TEST=True ANOTHER_LFS_TEST=True
+
+    ----- stderr -----
+    "###);
+
+    // Attempt to install when LFS artifacts are missing and LFS is requested.
+
+    // The filters below will remove any boilerplate before what we actually want to match.
+    // They help handle slightly different output in uv-distribution/src/source/mod.rs between
+    // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
+    // In addition, we can get different error codes depending on where the failure occurs,
+    // although we know the error code cannot be 0.
+    let mut filters = context.filters();
+    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
+    filters.push((
+        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+    ));
+
+    uv_snapshot!(filters, context.tool_install()
+        .arg("--reinstall")
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: false
+    exit_code: [ERROR_CODE]
+    ----- stdout -----
+
+    ----- stderr -----
+    [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts
+    ");
+
+    // Attempt to install when LFS artifacts are missing but LFS was not requested.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+    Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
+    ");
+
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/bin/test-lfs-repo-assets", line 10, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<frozen runpy>", line 198, in _run_module_as_main
+      File "<frozen runpy>", line 88, in _run_code
+      File "[TEMP_DIR]/bin/test-lfs-repo-assets/__main__.py", line 10, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
 }
 
 /// Test installing a tool with a bare URL requirement using `--from`, where the URL and the package

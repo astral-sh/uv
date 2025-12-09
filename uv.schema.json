@@ -1965,6 +1965,13 @@
                 }
               ]
             },
+            "lfs": {
+              "description": "Whether to use Git LFS when cloning the repository.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -2646,6 +2653,11 @@
           "description": "Use the PyTorch index for CUDA 8.0.",
           "type": "string",
           "const": "cu80"
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.4.",
+          "type": "string",
+          "const": "rocm6.4"
         },
         {
           "description": "Use the PyTorch index for ROCm 6.3.",

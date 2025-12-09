@@ -3,7 +3,7 @@ use std::path::Path;
 use std::slice;
 
 use rustc_hash::FxHashSet;
-
+use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -48,6 +48,7 @@ impl RequiresDist {
         locations: &IndexLocations,
         sources: SourceStrategy,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
@@ -69,7 +70,14 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources)
+        Self::from_project_workspace(
+            metadata,
+            &project_workspace,
+            git_member,
+            locations,
+            sources,
+            credentials_cache,
+        )
     }
 
     fn from_project_workspace(
@@ -78,6 +86,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -140,6 +149,7 @@ impl RequiresDist {
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
+                                credentials_cache,
                             )
                             .map(
                                 move |requirement| match requirement {
@@ -182,6 +192,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         git_member,
+                        credentials_cache,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -432,7 +443,7 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-
+    use uv_auth::CredentialsCache;
     use uv_configuration::SourceStrategy;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
@@ -468,6 +479,7 @@ mod test {
             None,
             &IndexLocations::default(),
             SourceStrategy::default(),
+            &CredentialsCache::new(),
         )?)
     }
 
@@ -542,13 +554,13 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
-        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `package`, `index`, `workspace`, `marker`, `extra`, `group`
-        "###);
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `lfs`, `url`, `path`, `editable`, `package`, `index`, `workspace`, `marker`, `extra`, `group`
+        "#);
     }
 
     #[tokio::test]

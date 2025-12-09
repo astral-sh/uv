@@ -385,6 +385,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .boxed_local()
             .await?;
 
+        // Check that the wheel is compatible with its install target.
+        //
+        // When building a build dependency for a cross-install, the build dependency needs
+        // to install and run on the host instead of the target. In this case the `tags` are already
+        // for the host instead of the target, so this check passes.
+        if !built_wheel.filename.is_compatible(tags) {
+            return if tags.is_cross() {
+                Err(Error::BuiltWheelIncompatibleTargetPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            } else {
+                Err(Error::BuiltWheelIncompatibleHostPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            };
+        }
+
         // Acquire the advisory lock.
         #[cfg(windows)]
         let _lock = {
@@ -395,7 +416,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     built_wheel.target.file_name().unwrap().to_str().unwrap()
                 ),
             );
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // If the wheel was unzipped previously, respect it. Source distributions are
@@ -554,7 +575,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         self.builder
-            .source_tree_requires_dist(path, pyproject_toml)
+            .source_tree_requires_dist(
+                path,
+                pyproject_toml,
+                self.client.unmanaged.credentials_cache(),
+            )
             .await
     }
 
@@ -574,7 +599,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
@@ -745,7 +770,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
@@ -947,7 +972,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Determine the last-modified time of the wheel.

@@ -66,9 +66,9 @@ fn help() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -147,9 +147,9 @@ fn help_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -227,9 +227,9 @@ fn help_short_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -416,10 +416,10 @@ fn help_subcommand() {
               
               See `--project` to only change the project root directory.
               
-              [env: UV_WORKING_DIRECTORY=]
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
-              Run the command within the given project directory.
+              Discover a project in the given directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
@@ -689,10 +689,10 @@ fn help_subsubcommand() {
               
               See `--project` to only change the project root directory.
               
-              [env: UV_WORKING_DIRECTORY=]
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
-              Run the command within the given project directory.
+              Discover a project in the given directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
@@ -781,9 +781,9 @@ fn help_flag_subcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -862,9 +862,9 @@ fn help_flag_subsubcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1024,9 +1024,9 @@ fn help_with_global_option() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1147,9 +1147,9 @@ fn help_with_no_pager() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command [env: UV_WORKING_DIRECTORY=]
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config

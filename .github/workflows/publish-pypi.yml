@@ -18,8 +18,7 @@ jobs:
     environment:
       name: release
     permissions:
-      # For PyPI's trusted publishing.
-      id-token: write
+      id-token: write # For PyPI's trusted publishing
     steps:
       - name: "Install uv"
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
@@ -37,8 +36,7 @@ jobs:
     environment:
       name: release
     permissions:
-      # For PyPI's trusted publishing.
-      id-token: write
+      id-token: write # For PyPI's trusted publishing
     steps:
       - name: "Install uv"
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0

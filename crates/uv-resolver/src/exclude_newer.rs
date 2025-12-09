@@ -226,12 +226,12 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
         #[serde(untagged)]
         enum Helper {
             String(String),
-            Table(TableForm),
+            Table(Box<TableForm>),
         }
 
         match Helper::deserialize(deserializer)? {
             Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
-            Helper::Table(TableForm { timestamp, span }) => Ok(Self::new(timestamp, span)),
+            Helper::Table(table) => Ok(Self::new(table.timestamp, table.span)),
         }
     }
 }

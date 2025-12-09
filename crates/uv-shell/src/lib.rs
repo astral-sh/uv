@@ -188,12 +188,11 @@ impl Shell {
                     if zshenv.is_file() {
                         return vec![zshenv];
                     }
-                } else {
-                    // If `ZDOTDIR` is _not_ set, and `~/.zshenv` exists, then we update that file.
-                    let zshenv = home_dir.join(".zshenv");
-                    if zshenv.is_file() {
-                        return vec![zshenv];
-                    }
+                }
+                // Whether `ZDOTDIR` is set or not, if `~/.zshenv` exists then we update that file.
+                let zshenv = home_dir.join(".zshenv");
+                if zshenv.is_file() {
+                    return vec![zshenv];
                 }
 
                 if let Some(zsh_dot_dir) = zsh_dot_dir.as_ref() {
@@ -339,4 +338,106 @@ fn backtick_escape(s: &str) -> String {
         escaped.push(c);
     }
     escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fs_err::File;
+    use temp_env::with_vars;
+    use tempfile::tempdir;
+
+    // First option used by std::env::home_dir.
+    const HOME_DIR_ENV_VAR: &str = if cfg!(windows) {
+        EnvVars::USERPROFILE
+    } else {
+        EnvVars::HOME
+    };
+
+    #[test]
+    fn configuration_files_zsh_no_existing_zshenv() {
+        let tmp_home_dir = tempdir().unwrap();
+        let tmp_zdotdir = tempdir().unwrap();
+
+        with_vars(
+            [
+                (EnvVars::ZDOTDIR, None),
+                (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    Shell::Zsh.configuration_files(),
+                    vec![tmp_home_dir.path().join(".zshenv")]
+                );
+            },
+        );
+
+        with_vars(
+            [
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
+                (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    Shell::Zsh.configuration_files(),
+                    vec![tmp_zdotdir.path().join(".zshenv")]
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn configuration_files_zsh_existing_home_zshenv() {
+        let tmp_home_dir = tempdir().unwrap();
+        File::create(tmp_home_dir.path().join(".zshenv")).unwrap();
+
+        let tmp_zdotdir = tempdir().unwrap();
+
+        with_vars(
+            [
+                (EnvVars::ZDOTDIR, None),
+                (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    Shell::Zsh.configuration_files(),
+                    vec![tmp_home_dir.path().join(".zshenv")]
+                );
+            },
+        );
+
+        with_vars(
+            [
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
+                (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    Shell::Zsh.configuration_files(),
+                    vec![tmp_home_dir.path().join(".zshenv")]
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn configuration_files_zsh_existing_zdotdir_zshenv() {
+        let tmp_home_dir = tempdir().unwrap();
+
+        let tmp_zdotdir = tempdir().unwrap();
+        File::create(tmp_zdotdir.path().join(".zshenv")).unwrap();
+
+        with_vars(
+            [
+                (EnvVars::ZDOTDIR, tmp_zdotdir.path().to_str()),
+                (HOME_DIR_ENV_VAR, tmp_home_dir.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    Shell::Zsh.configuration_files(),
+                    vec![tmp_zdotdir.path().join(".zshenv")]
+                );
+            },
+        );
+    }
 }

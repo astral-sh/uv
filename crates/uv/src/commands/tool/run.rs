@@ -90,6 +90,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    lfs: Option<bool>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -276,6 +277,7 @@ pub(crate) async fn run(
         &settings,
         &client_builder,
         isolated,
+        lfs,
         python_preference,
         python_downloads,
         installer_metadata,
@@ -446,7 +448,11 @@ async fn show_help(
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
-        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err)
+            if err
+                .as_io_error()
+                .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+        {
             writeln!(printer.stdout(), "{help}")?;
             return Ok(());
         }
@@ -691,6 +697,7 @@ async fn get_or_create_environment(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
+    lfs: Option<bool>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -803,6 +810,7 @@ async fn get_or_create_environment(
                         &workspace_cache,
                         printer,
                         preview,
+                        lfs,
                     )
                     .await?
                     .pop()
@@ -900,6 +908,7 @@ async fn get_or_create_environment(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -926,6 +935,7 @@ async fn get_or_create_environment(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 

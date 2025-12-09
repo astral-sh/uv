@@ -297,6 +297,11 @@ impl EnvVars {
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
 
+    /// Equivalent to the `--no-attestations` command-line argument in `uv publish`. If set,
+    /// uv will skip uploading any collected attestations for the published distributions.
+    #[attr_added_in("0.9.12")]
+    pub const UV_PUBLISH_NO_ATTESTATIONS: &'static str = "UV_PUBLISH_NO_ATTESTATIONS";
+
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
     /// the environment.
     #[attr_added_in("0.4.18")]
@@ -553,6 +558,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
+    /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
+
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
@@ -804,6 +814,16 @@ impl EnvVars {
     #[attr_added_in("0.6.4")]
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 
+    /// Skip Smudge LFS Filter.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
+
+    /// Used in tests to set the user global git config location.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const GIT_CONFIG_GLOBAL: &'static str = "GIT_CONFIG_GLOBAL";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
@@ -830,6 +850,16 @@ impl EnvVars {
     #[attr_added_in("0.8.18")]
     pub const GITLAB_CI: &'static str = "GITLAB_CI";
 
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const PYPI_ID_TOKEN: &'static str = "PYPI_ID_TOKEN";
+
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const TESTPYPI_ID_TOKEN: &'static str = "TESTPYPI_ID_TOKEN";
+
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
     #[attr_added_in("0.4.18")]
@@ -848,6 +878,16 @@ impl EnvVars {
     /// Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
     #[attr_added_in("0.1.22")]
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
+
+    /// Used to set the location of Python stdlib when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+
+    /// Used to correctly detect virtual environments when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYVENV_LAUNCHER: &'static str = "__PYVENV_LAUNCHER__";
 
     /// Used in tests to enforce a consistent locale setting.
     #[attr_hidden]
@@ -968,6 +1008,16 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.0.5")]
     pub const CARGO_TARGET_DIR: &'static str = "CARGO_TARGET_DIR";
+
+    /// Set by cargo when compiling for Windows-like platforms.
+    #[attr_hidden]
+    #[attr_added_in("0.0.5")]
+    pub const CARGO_CFG_WINDOWS: &'static str = "CARGO_CFG_WINDOWS";
+
+    /// Specifies the directory where Cargo stores intermediate build artifacts.
+    #[attr_hidden]
+    #[attr_added_in("0.8.25")]
+    pub const OUT_DIR: &'static str = "OUT_DIR";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
     #[attr_hidden]
@@ -1125,7 +1175,13 @@ impl EnvVars {
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
+    /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
+    /// v0.9.1) is also supported for backwards compatibility.
+    #[attr_added_in("next version")]
+    pub const UV_WORKING_DIR: &'static str = "UV_WORKING_DIR";
+
     /// Equivalent to the `--directory` command-line argument.
+    #[attr_hidden]
     #[attr_added_in("0.9.1")]
     pub const UV_WORKING_DIRECTORY: &'static str = "UV_WORKING_DIRECTORY";
 
@@ -1216,4 +1272,15 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
+
+    /// Suppress output from the build backend when building source distributions, even in the event
+    /// of build failures.
+    #[attr_added_in("0.9.15")]
+    pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
+
+    /// The time in seconds uv waits for a file lock to become available.
+    ///
+    /// Defaults to 300s (5 min).
+    #[attr_added_in("0.9.4")]
+    pub const UV_LOCK_TIMEOUT: &'static str = "UV_LOCK_TIMEOUT";
 }

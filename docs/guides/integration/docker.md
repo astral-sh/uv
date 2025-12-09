@@ -31,7 +31,7 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.9.11`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.9.16`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.8` (the latest patch
   version)
 
@@ -95,7 +95,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.9.11-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.9.16-alpine`.
 
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
@@ -136,7 +136,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.9.11 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -154,7 +154,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.11 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.9.11/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.9.16/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -163,7 +163,7 @@ If you're using uv to manage your project, you can copy it into the image and in
 
 ```dockerfile title="Dockerfile"
 # Copy the project into the image
-ADD . /app
+COPY . /app
 
 # Sync the project into a new environment, asserting the lockfile is up to date
 WORKDIR /app
@@ -215,8 +215,8 @@ RUN uv run some_script.py
 
 ### Using installed tools
 
-To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
-is on the path:
+To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#tool-executables) is
+on the path:
 
 ```dockerfile title="Dockerfile"
 ENV PATH=/root/.local/bin:$PATH
@@ -412,7 +412,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project
 
 # Copy the project into the image
-ADD . /app
+COPY . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -424,10 +424,39 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
 !!! tip
 
-    If you're using a [workspace](../../concepts/projects/workspaces.md), then use the
-    `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+    If you want to remove additional, specific packages from the sync,
+    use `--no-install-package <name>`.
 
-    If you want to remove specific packages from the sync, use `--no-install-package <name>`.
+#### Intermediate layers in workspaces
+
+If you're using a [workspace](../../concepts/projects/workspaces.md), then a couple changes are
+needed:
+
+- Use `--frozen` instead of `--locked` during the initially sync.
+- Use the `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-workspace
+
+COPY . /app
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked
+```
+
+uv cannot assert that the `uv.lock` file is up-to-date without each of the workspace member
+`pyproject.toml` files, so we use `--frozen` instead of `--locked` to skip the check during the
+initial sync. The next sync, after all the workspace members have been copied, can still use
+`--locked` and will validate that the lockfile is correct for all workspace members.
 
 ### Non-editable installs
 
@@ -458,7 +487,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable
 
 # Copy the project into the intermediate image
-ADD . /app
+COPY . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -590,5 +619,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.9.11`, or (even better) the specific image digest,
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.9.16`, or (even better) the specific image digest,
     such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

@@ -13,7 +13,7 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
-    files_for_publishing, upload,
+    group_files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -36,6 +36,7 @@ pub(crate) async fn publish(
     index: Option<String>,
     index_locations: IndexLocations,
     dry_run: bool,
+    no_attestations: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -87,8 +88,8 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let files = files_for_publishing(paths)?;
-    match files.len() {
+    let groups = group_files_for_publishing(paths, no_attestations)?;
+    match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
             if dry_run {
@@ -166,44 +167,55 @@ pub(crate) async fn publish(
         None
     };
 
-    for (file, raw_filename, filename) in files {
+    for group in groups {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(check_url_client, &file, &filename, &download_concurrency)
-                .await?
+            if uv_publish::check_url(
+                check_url_client,
+                &group.file,
+                &group.filename,
+                &download_concurrency,
+            )
+            .await?
             {
-                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
+                writeln!(
+                    printer.stderr(),
+                    "File {} already exists, skipping",
+                    group.filename
+                )?;
                 continue;
             }
         }
 
-        let size = fs_err::metadata(&file)?.len();
+        let size = fs_err::metadata(&group.file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         if dry_run {
             writeln!(
                 printer.stderr(),
-                "{} {filename} {}",
+                "{} {} {}",
                 "Checking".bold().cyan(),
+                group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{} {filename} {}",
+                "{} {} {}",
                 "Uploading".bold().green(),
+                group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         }
 
         // Collect the metadata for the file.
-        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
             .await
-            .map_err(|err| PublishError::PublishPrepare(file.clone(), Box::new(err)))?;
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         // Run validation checks on the file, but don't upload it (if possible).
         uv_publish::validate(
-            &file,
+            &group.file,
             &form_metadata,
-            &raw_filename,
+            &group.raw_filename,
             &publish_url,
             &token_store,
             &upload_client,
@@ -217,10 +229,8 @@ pub(crate) async fn publish(
 
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
-            &file,
+            &group,
             &form_metadata,
-            &raw_filename,
-            &filename,
             &publish_url,
             &upload_client,
             retry_policy,

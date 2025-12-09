@@ -12,7 +12,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -21,15 +21,17 @@ use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
 
+#[cfg(not(feature = "self-update"))]
+use crate::install_source::InstallSource;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    AuthCommand, AuthNamespace, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, WorkspaceCommand, WorkspaceNamespace,
-    compat::CompatArgs,
+    AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
+    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
+    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -59,6 +61,8 @@ use crate::settings::{
 
 pub(crate) mod child;
 pub(crate) mod commands;
+#[cfg(not(feature = "self-update"))]
+mod install_source;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
@@ -72,8 +76,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         uv_warnings::enable();
     }
 
+    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
+    let directory =
+        cli.top_level.global_args.directory.clone().or_else(|| {
+            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
+        });
+
     // Switch directories as early as possible.
-    if let Some(directory) = cli.top_level.global_args.directory.as_ref() {
+    if let Some(directory) = directory.as_ref() {
         std::env::set_current_dir(directory)?;
     }
 
@@ -469,12 +479,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Login(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLoginSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthLoginSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_login(
@@ -482,7 +487,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.username,
                 args.password,
                 args.token,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -492,18 +497,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Logout(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthLogoutSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthLogoutSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_logout(
                 args.service,
                 args.username,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -513,18 +513,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Token(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AuthTokenSettings::resolve(
-                args,
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
+            let args = settings::AuthTokenSettings::resolve(args);
             show_settings!(args);
 
             commands::auth_token(
                 args.service,
                 args.username,
-                &args.network_settings,
+                client_builder,
                 printer,
                 globals.preview,
             )
@@ -535,6 +530,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::auth_dir(args.service.as_ref(), printer)?;
             Ok(ExitStatus::Success)
+        }
+        Commands::Auth(AuthNamespace {
+            command: AuthCommand::Helper(args),
+        }) => {
+            use uv_cli::AuthHelperProtocol;
+
+            // Validate protocol (currently only Bazel is supported)
+            match args.protocol {
+                AuthHelperProtocol::Bazel => {}
+            }
+
+            match args.command {
+                AuthHelperCommand::Get => {
+                    commands::auth_helper(client_builder, globals.preview, printer).await
+                }
+            }
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
@@ -551,7 +562,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
@@ -624,7 +635,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
                 args.settings.config_setting,
                 args.settings.config_settings_package,
                 args.settings.build_isolation.clone(),
@@ -660,7 +671,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
@@ -701,7 +712,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
                 &args.settings.config_setting,
@@ -823,7 +834,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
@@ -850,7 +861,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -892,7 +903,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             let mut sources = Vec::with_capacity(args.package.len() + args.requirements.len());
             for package in args.package {
@@ -913,7 +924,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 cache,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["pip".to_owned(), "uninstall".to_owned()]),
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -928,13 +939,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::pip_freeze(
                 args.exclude_editable,
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.target,
+                args.settings.prefix,
                 args.paths,
                 &cache,
                 printer,
@@ -951,7 +964,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::pip_list(
                 args.editable,
@@ -962,12 +975,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["pip".to_owned(), "list".to_owned()]),
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.target,
+                args.settings.prefix,
                 &cache,
                 printer,
                 globals.preview,
@@ -982,13 +997,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::pip_show(
                 args.package,
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.settings.target,
+                args.settings.prefix,
                 args.files,
                 &cache,
                 printer,
@@ -1002,7 +1019,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = PipTreeSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::pip_tree(
                 args.show_version_specifiers,
@@ -1016,7 +1033,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                client_builder,
+                client_builder.subcommand(vec!["pip".to_owned(), "tree".to_owned()]),
                 globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
@@ -1036,7 +1053,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::pip_check(
                 args.settings.python.as_deref(),
@@ -1048,18 +1065,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.preview,
             )
         }
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Debug(_),
+        }) => Err(anyhow!(
+            "pip's `debug` is unsupported (consider using `uvx pip debug` instead)"
+        )),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, args.force, cache, printer)
+            commands::cache_clean(&args.package, args.force, cache, printer).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, args.force, cache, printer)
+            commands::cache_prune(args.ci, args.force, cache, printer).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
@@ -1073,7 +1095,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
@@ -1103,7 +1125,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python,
                 args.install_mirrors,
                 &args.settings,
-                &client_builder,
+                &client_builder.subcommand(vec!["build".to_owned()]),
                 cli.top_level.no_config,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1134,7 +1156,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
@@ -1170,7 +1192,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                &client_builder,
+                &client_builder.subcommand(vec!["venv".to_owned()]),
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
@@ -1210,7 +1232,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                     dry_run,
                 }),
-        }) => commands::self_update(target_version, token, dry_run, printer, client_builder).await,
+        }) => {
+            commands::self_update(
+                target_version,
+                token,
+                dry_run,
+                printer,
+                client_builder.subcommand(vec!["self".to_owned(), "update".to_owned()]),
+            )
+            .await
+        }
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1223,10 +1254,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
-            anyhow::bail!(
-                "uv was installed through an external package manager, and self-update \
-                is not available. Please use your package manager to update uv."
-            );
+            const BASE_MESSAGE: &str =
+                "uv was installed through an external package manager and cannot update itself.";
+
+            let message = match InstallSource::detect() {
+                Some(source) => format!(
+                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
+                    source.description(),
+                    source.update_instructions().green(),
+                    hint = "hint".bold().cyan(),
+                    colon = ":".bold(),
+                    base = BASE_MESSAGE
+                ),
+                None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
+            };
+
+            anyhow::bail!(message);
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
@@ -1276,7 +1319,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -1317,6 +1360,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
 
+            let client_builder = match invocation_source {
+                ToolRunCommand::Uvx => client_builder.subcommand(vec!["uvx".to_owned()]),
+                ToolRunCommand::ToolRun => {
+                    client_builder.subcommand(vec!["tool".to_owned(), "run".to_owned()])
+                }
+            };
+
             Box::pin(commands::tool_run(
                 args.command,
                 args.from,
@@ -1325,6 +1375,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &overrides,
                 &build_constraints,
                 args.show_resolution || globals.verbose > 0,
+                args.lfs,
                 args.python,
                 args.python_platform,
                 args.install_mirrors,
@@ -1353,7 +1404,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -1420,13 +1471,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &excludes,
                 &build_constraints,
                 &entrypoints,
+                args.lfs,
                 args.python,
                 args.python_platform,
                 args.install_mirrors,
                 args.force,
                 args.options,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["tool".to_owned(), "install".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1445,7 +1497,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::tool_list(
                 args.show_paths,
@@ -1466,7 +1518,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
+            let cache = cache
+                .init()
+                .await?
+                .with_refresh(Refresh::All(Timestamp::now()));
 
             Box::pin(commands::tool_upgrade(
                 args.names,
@@ -1475,7 +1530,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.install_mirrors,
                 args.args,
                 args.filesystem,
-                client_builder,
+                client_builder.subcommand(vec!["tool".to_owned(), "upgrade".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1519,7 +1574,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::python_list(
                 args.request,
@@ -1532,7 +1587,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_downloads_json_url,
                 globals.python_preference,
                 globals.python_downloads,
-                &client_builder,
+                &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
                 printer,
                 globals.preview,
@@ -1558,7 +1613,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_install_mirror,
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
-                client_builder,
+                client_builder.subcommand(vec!["python".to_owned(), "install".to_owned()]),
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1587,7 +1642,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_install_mirror,
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
-                client_builder,
+                client_builder.subcommand(vec!["python".to_owned(), "upgrade".to_owned()]),
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1619,13 +1674,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonFindSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
                     (&script).into(),
                     args.show_version,
-                    &client_builder,
+                    // TODO(zsol): is this the right thing to do here?
+                    &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
                     globals.python_downloads,
                     cli.top_level.no_config,
@@ -1644,7 +1700,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.system,
                     globals.python_preference,
                     args.python_downloads_json_url.as_deref(),
-                    &client_builder,
+                    &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
                     printer,
                     globals.preview,
@@ -1659,7 +1715,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonPinSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::python_pin(
                 &project_dir,
@@ -1671,7 +1727,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.global,
                 args.rm,
                 args.install_mirrors,
-                client_builder,
+                client_builder.subcommand(vec!["python".to_owned(), "pin".to_owned()]),
                 &cache,
                 printer,
                 globals.preview,
@@ -1713,6 +1769,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 username,
                 password,
                 dry_run,
+                no_attestations,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -1727,13 +1784,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 trusted_publishing,
                 keyring_provider,
                 &environment,
-                &client_builder,
+                &client_builder.subcommand(vec!["publish".to_owned()]),
                 username,
                 password,
                 check_url,
                 index,
                 index_locations,
                 dry_run,
+                no_attestations,
                 &cache,
                 printer,
             )
@@ -1850,7 +1908,7 @@ async fn run_project(
             }
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             commands::init(
                 project_dir,
@@ -1869,7 +1927,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
-                &client_builder,
+                &client_builder.subcommand(vec!["init".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 no_config,
@@ -1885,7 +1943,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -1930,7 +1988,7 @@ async fn run_project(
                 args.python_platform,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["run".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1949,7 +2007,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -1981,7 +2039,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["sync".to_owned()]),
                 script,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1999,7 +2057,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .clone()
                     .combine(Refresh::from(args.settings.upgrade.clone())),
@@ -2027,7 +2085,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["lock".to_owned()]),
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2111,7 +2169,7 @@ async fn run_project(
             }
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -2148,13 +2206,14 @@ async fn run_project(
                 args.rev,
                 args.tag,
                 args.branch,
+                args.lfs,
                 args.extras,
                 args.package,
                 args.python,
                 args.workspace,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["add".to_owned()]),
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2173,7 +2232,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -2198,7 +2257,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["remove".to_owned()]),
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2217,7 +2276,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
+            let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -2239,7 +2298,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["version".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -2257,7 +2316,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             // Unwrap the script.
             let script = script.map(|script| match script {
@@ -2284,7 +2343,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.resolver,
-                &client_builder,
+                &client_builder.subcommand(vec!["tree".to_owned()]),
                 script,
                 globals.python_preference,
                 globals.python_downloads,
@@ -2302,7 +2361,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             // Unwrap the script.
             let script = script.map(|script| match script {
@@ -2331,7 +2390,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                client_builder,
+                client_builder.subcommand(vec!["export".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
@@ -2350,7 +2409,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init().await?;
 
             Box::pin(commands::format(
                 project_dir,
@@ -2358,7 +2417,7 @@ async fn run_project(
                 args.diff,
                 args.extra_args,
                 args.version,
-                client_builder,
+                client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
                 printer,
                 globals.preview,

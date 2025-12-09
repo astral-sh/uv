@@ -178,6 +178,23 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-dist = [{ name = "iniconfig" }]
     "#);
 
+    // Similarly, using something like `--refresh` should cause a new resolution
+    let current_timestamp = "2024-06-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("1 week")
+        .arg("--refresh"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
     Ok(())
 }
 

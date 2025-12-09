@@ -86,6 +86,13 @@ cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
 ```
 
+### Git and Git LFS
+
+A subset of uv tests require both [Git](https://git-scm.com) and [Git LFS](https://git-lfs.com/) to
+execute properly.
+
+These tests can be disabled by turning off either `git` or `git-lfs` uv features.
+
 ### Local testing
 
 You can invoke your development version of uv with `cargo run -- <args>`. For example:

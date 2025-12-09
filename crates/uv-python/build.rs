@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
+use uv_static::EnvVars;
+
 fn process_json(data: &serde_json::Value) -> serde_json::Value {
     let mut out_data = serde_json::Map::new();
 
@@ -18,12 +20,12 @@ fn process_json(data: &serde_json::Value) -> serde_json::Value {
 
 fn main() {
     let version_metadata = PathBuf::from_iter([
-        env::var("CARGO_MANIFEST_DIR").unwrap(),
+        env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap(),
         "download-metadata.json".into(),
     ]);
 
     let version_metadata_minified = PathBuf::from_iter([
-        env::var("OUT_DIR").unwrap(),
+        env::var(EnvVars::OUT_DIR).unwrap(),
         "download-metadata-minified.json".into(),
     ]);
 

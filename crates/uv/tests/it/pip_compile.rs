@@ -3583,7 +3583,7 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a relative duration like `3 days` or `2 weeks`)
+    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
 
     For more information, try '--help'.
     "
@@ -17278,26 +17278,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
         { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
-        { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17357,26 +17338,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
-        { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
         { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17419,6 +17381,82 @@ fn pep_751_compile_non_universal() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--only-binary` excludes source distributions from pylock.toml output.
+#[test]
+fn pep_751_compile_only_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--only-binary iniconfig`, the sdist should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --only-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--no-binary` excludes wheels from pylock.toml output.
+#[test]
+fn pep_751_compile_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--no-binary iniconfig`, the wheels should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "#);
 
     Ok(())
@@ -17834,8 +17872,8 @@ fn credentials_from_subdirectory() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("foo/pyproject.toml")
-        .env("UV_INDEX_INTERNAL_USERNAME", "public")
-        .env("UV_INDEX_INTERNAL_PASSWORD", "heron"), @r"
+        .env(EnvVars::index_username("INTERNAL"), "public")
+        .env(EnvVars::index_password("INTERNAL"), "heron"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17846,6 +17884,186 @@ fn credentials_from_subdirectory() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Install a package with a post-release version constraint.
+///
+/// `<V.postN` should include earlier post-releases but exclude pre-releases.
+///
+/// See: <https://github.com/astral-sh/uv/issues/16868>
+#[test]
+fn post_release_less_than() -> Result<()> {
+    let context = TestContext::new("3.10");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("hidapi>=0.12.0.post1,<0.12.0.post2")?;
+
+    // The constraint `>=0.12.0.post1, <0.12.0.post2` should only match 0.12.0.post1.
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    hidapi==0.12.0.post1
+        # via -r requirements.in
+    setuptools==69.2.0
+        # via hidapi
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// When using `uv pip compile --python-platform`, it should not matter what platform the built
+/// wheel is for. We want to ensure that uv accepts both wheels for the host platform and wheels for
+/// the target platform in `uv pip compile`. This is unlike `uv pip install --python-platform`,
+/// where a wheel for the target platform is required.
+///
+/// The main test (first snapshot) builds a Windows wheel, and targets macOS. If we run this test on
+/// Linux, the wheel tag is neither host nor target, but we don't have a reason to reject the
+/// Windows tag either.
+#[test]
+fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("./project")?;
+
+    let project = context.temp_dir.child("project");
+    // This pyproject.toml uses dynamic versioning to prevent uv from reading static metadata.
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dependencies = [
+          "sniffio; sys_platform == 'linux'",
+          "tqdm; sys_platform == 'darwin'"
+        ]
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build"
+
+        [tool.hatch.version]
+        path = "src/project/__init__.py"
+    "#})?;
+    // Rename the built wheel to a Windows wheel
+    project.child("build.py").write_str(indoc! {r#"
+        import os
+
+        import hatchling.build
+
+        __all__ = ["build_sdist", "build_wheel"]
+
+
+        def build_sdist(
+            sdist_directory: str, config_settings: "Mapping[Any, Any] | None" = None
+        ) -> str:
+            hatchling.build.build_sdist(sdist_directory, config_settings)
+
+
+        def build_wheel(
+            wheel_directory: str,
+            config_settings: "Mapping[Any, Any] | None" = None,
+            metadata_directory: "str | None" = None,
+        ) -> str:
+            name = hatchling.build.build_wheel(
+                wheel_directory, config_settings, metadata_directory
+            )
+            # Don't do this at home, ask your build backend instead so it also changes the
+            # `WHEEL` file.
+            new_name = "project-0.1.0-cp312-abi3-win_amd64.whl"
+            os.rename(
+                os.path.join(wheel_directory, name), os.path.join(wheel_directory, new_name)
+            )
+            return new_name
+    "#})?;
+    project
+        .child("src/project/__init__.py")
+        .write_str(r#"__version__ = "0.1.0"\n"#)?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform macos
+    ./project
+        # via -r requirements.in
+    tqdm==4.66.2
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform windows
+    ./project
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1 ; sys_platform == 'linux'
+        # via project
+    tqdm==4.66.2 ; sys_platform == 'darwin'
+        # via project
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

@@ -3530,6 +3530,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        lfs: None,
         python: None,
         python_platform: None,
         refresh: None(
@@ -7831,7 +7832,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE | INIT_PROJECT_FLAG | WORKSPACE_METADATA | WORKSPACE_DIR | WORKSPACE_LIST | SBOM_EXPORT,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE | INIT_PROJECT_FLAG | WORKSPACE_METADATA | WORKSPACE_DIR | WORKSPACE_LIST | SBOM_EXPORT | AUTH_HELPER,
             ),
         },
         python_preference: Managed,
@@ -8059,7 +8060,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE | INIT_PROJECT_FLAG | WORKSPACE_METADATA | WORKSPACE_DIR | WORKSPACE_LIST | SBOM_EXPORT,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE | INIT_PROJECT_FLAG | WORKSPACE_METADATA | WORKSPACE_DIR | WORKSPACE_LIST | SBOM_EXPORT | AUTH_HELPER,
             ),
         },
         python_preference: Managed,

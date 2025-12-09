@@ -56,7 +56,7 @@ use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
@@ -392,8 +392,16 @@ pub(crate) async fn pip_compile(
             ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, marker_env) =
-            resolution_environment(python_version, python_platform, &interpreter)?;
+        let tags = resolution_tags(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        )?;
+        let marker_env = resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        );
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
@@ -741,7 +749,13 @@ pub(crate) async fn pip_compile(
             };
 
             // Convert the resolution to a `pylock.toml` file.
-            let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
+            let export = PylockToml::from_resolution(
+                &resolution,
+                &no_emit_packages,
+                install_path,
+                tags.as_deref(),
+                &build_options,
+            )?;
             write!(writer, "{}", export.to_toml()?)?;
         }
     }

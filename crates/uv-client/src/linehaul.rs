@@ -12,6 +12,7 @@ use uv_version::version;
 pub struct Installer {
     pub name: Option<String>,
     pub version: Option<String>,
+    pub subcommand: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -63,7 +64,11 @@ pub struct LineHaul {
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
     #[instrument(name = "linehaul", skip_all)]
-    pub fn new(markers: Option<&MarkerEnvironment>, platform: Option<&Platform>) -> Self {
+    pub fn new(
+        markers: Option<&MarkerEnvironment>,
+        platform: Option<&Platform>,
+        subcommand: Option<Vec<String>>,
+    ) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = [
             EnvVars::BUILD_BUILDID,
@@ -123,6 +128,7 @@ impl LineHaul {
             installer: Option::from(Installer {
                 name: Some("uv".to_string()),
                 version: Some(version().to_string()),
+                subcommand,
             }),
             python: markers.map(|markers| markers.python_full_version().version.to_string()),
             implementation: Option::from(Implementation {

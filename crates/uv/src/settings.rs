@@ -547,6 +547,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
+    pub(crate) lfs: Option<bool>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -582,6 +583,7 @@ impl ToolRunSettings {
             installer,
             build,
             refresh,
+            lfs,
             python,
             python_platform,
             generate_shell_completion: _,
@@ -628,6 +630,7 @@ impl ToolRunSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
+        let lfs = lfs.then_some(true);
 
         Self {
             command,
@@ -658,6 +661,7 @@ impl ToolRunSettings {
                 .collect(),
             isolated,
             show_resolution,
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::from(refresh),
@@ -685,6 +689,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) lfs: Option<bool>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
@@ -715,6 +720,7 @@ impl ToolInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            lfs,
             installer,
             force,
             build,
@@ -738,6 +744,7 @@ impl ToolInstallSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
+        let lfs = lfs.then_some(true);
 
         Self {
             package,
@@ -774,6 +781,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             force,
@@ -1562,6 +1570,7 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) lfs: Option<bool>,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1604,6 +1613,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             no_sync,
             locked,
             frozen,
@@ -1703,6 +1713,7 @@ impl AddSettings {
             .unwrap_or_default();
 
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
+        let lfs = lfs.then_some(true);
 
         Self {
             lock_check: if locked {
@@ -1726,6 +1737,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             package,
             script,
             python: python.and_then(Maybe::into_option),
@@ -2759,6 +2771,8 @@ impl PipFreezeSettings {
             paths,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2770,6 +2784,8 @@ impl PipFreezeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2809,6 +2825,8 @@ impl PipListSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2822,6 +2840,8 @@ impl PipListSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -2854,6 +2874,8 @@ impl PipShowSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2865,6 +2887,8 @@ impl PipShowSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -3774,6 +3798,7 @@ pub(crate) struct PublishSettings {
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
     pub(crate) dry_run: bool,
+    pub(crate) no_attestations: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -3819,6 +3844,7 @@ impl PublishSettings {
             username,
             password,
             dry_run: args.dry_run,
+            no_attestations: args.no_attestations,
             publish_url: args
                 .publish_url
                 .combine(publish_url)
@@ -3851,23 +3877,14 @@ impl PublishSettings {
 pub(crate) struct AuthLogoutSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLogoutArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLogoutArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3877,23 +3894,14 @@ impl AuthLogoutSettings {
 pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthTokenSettings {
     /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthTokenArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthTokenArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3905,25 +3913,16 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLoginArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLoginArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
