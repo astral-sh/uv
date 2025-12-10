@@ -106,6 +106,12 @@
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
+    {
+      matchPackageNames: ["reqwest"],
+      matchManagers: ["cargo"],
+      minimumReleaseAge: "45 days",
+      description: "Delay reqwest updates to reduce regressions",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
