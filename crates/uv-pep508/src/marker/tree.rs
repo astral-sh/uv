@@ -2532,6 +2532,42 @@ mod test {
     }
 
     #[test]
+    fn test_simplify_extras_with_all_true() {
+        // Test `simplify_extras_with(|_| true)` which is used in `PubGrubPackage::from_package`.
+        // This simulates treating all extras as present/enabled.
+
+        // `extra == 'foo'` with all extras present should simplify to TRUE
+        let markers = MarkerTree::from_str(r#"extra == "foo""#).unwrap();
+        let simplified = markers.simplify_extras_with(|_| true);
+        assert_eq!(simplified, MarkerTree::TRUE);
+
+        // `extra != 'foo'` with all extras present should simplify to FALSE
+        // because the extra IS present, so `!= 'foo'` is false.
+        let markers = MarkerTree::from_str(r#"extra != "foo""#).unwrap();
+        let simplified = markers.simplify_extras_with(|_| true);
+        assert_eq!(simplified, MarkerTree::FALSE);
+
+        // `os_name == "nt" and extra != "foo"` with all extras present
+        // should simplify to FALSE (because `extra != "foo"` is false)
+        let markers = MarkerTree::from_str(r#"os_name == "nt" and extra != "foo""#).unwrap();
+        let simplified = markers.simplify_extras_with(|_| true);
+        assert_eq!(simplified, MarkerTree::FALSE);
+
+        // Compare with `without_extras` which removes extras without evaluating them:
+        // `extra != 'foo'` with `without_extras` should simplify to TRUE
+        let markers = MarkerTree::from_str(r#"extra != "foo""#).unwrap();
+        let simplified = markers.without_extras();
+        assert_eq!(simplified, MarkerTree::TRUE);
+
+        // `os_name == "nt" and extra != "foo"` with `without_extras`
+        // should simplify to `os_name == "nt"`
+        let markers = MarkerTree::from_str(r#"os_name == "nt" and extra != "foo""#).unwrap();
+        let simplified = markers.without_extras();
+        let expected = MarkerTree::from_str(r#"os_name == "nt""#).unwrap();
+        assert_eq!(simplified, expected);
+    }
+
+    #[test]
     fn test_marker_simplification() {
         assert_false("python_version == '3.9.1'");
         assert_true("python_version != '3.9.1'");
