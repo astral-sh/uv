@@ -282,6 +282,7 @@ pub struct GlobalArgs {
         env = EnvVars::UV_INSECURE_HOST,
         value_delimiter = ' ',
         value_parser = parse_insecure_host,
+        value_hint = ValueHint::Url,
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
@@ -6096,7 +6097,7 @@ pub struct PythonInstallArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -6105,7 +6106,7 @@ pub struct PythonInstallArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
@@ -6191,7 +6192,7 @@ pub struct PythonUpgradeArgs {
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
@@ -6200,7 +6201,7 @@ pub struct PythonUpgradeArgs {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
@@ -6368,6 +6369,7 @@ pub struct AuthLogoutArgs {
 #[derive(Args)]
 pub struct AuthLoginArgs {
     /// The domain or URL of the service to log into.
+    #[arg(value_hint = ValueHint::Url)]
     pub service: Service,
 
     /// The username to use for the service.
@@ -6403,6 +6405,7 @@ pub struct AuthLoginArgs {
 #[derive(Args)]
 pub struct AuthTokenArgs {
     /// The domain or URL of the service to lookup.
+    #[arg(value_hint = ValueHint::Url)]
     pub service: Service,
 
     /// The username to lookup.
@@ -6421,6 +6424,7 @@ pub struct AuthTokenArgs {
 #[derive(Args)]
 pub struct AuthDirArgs {
     /// The domain or URL of the service to lookup.
+    #[arg(value_hint = ValueHint::Url)]
     pub service: Option<Service>,
 }
 
