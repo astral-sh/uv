@@ -933,7 +933,7 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                 // No Python tag means no Python version requirement.
                 return MarkerTree::TRUE;
             }
-            LanguageTag::Python { major, minor: None } => {
+            LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
                 MarkerTree::expression(MarkerExpression::Version {
                     key: uv_pep508::MarkerValueVersion::PythonVersion,
                     specifier: VersionSpecifier::equals_star_version(Version::new([u64::from(
@@ -970,7 +970,7 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             LanguageTag::None | LanguageTag::Python { .. } => {
                 // No implementation marker needed
             }
-            LanguageTag::CPython { .. } => {
+            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
                 tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
