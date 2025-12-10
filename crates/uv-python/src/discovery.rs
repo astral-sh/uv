@@ -2137,6 +2137,19 @@ impl PythonRequest {
             Self::Key(request) => request.to_string(),
         }
     }
+
+    /// Convert an interpreter request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` if the request doesn't carry an exact version
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Version(v) | Self::ImplementationVersion(_, v) => v.as_pep440_version(),
+            Self::Key(download_request) => download_request
+                .version()
+                .and_then(VersionRequest::as_pep440_version),
+            _ => None,
+        }
+    }
 }
 
 impl PythonSource {
@@ -2970,6 +2983,28 @@ impl VersionRequest {
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
             | Self::Range(_, variant) => Some(*variant),
+        }
+    }
+
+    /// Convert this request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` for non-concrete requests
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Default | Self::Any | Self::Range(_, _) => None,
+            Self::Major(major, _) => Some(Version::new([u64::from(*major)])),
+            Self::MajorMinor(major, minor, _) => {
+                Some(Version::new([u64::from(*major), u64::from(*minor)]))
+            }
+            Self::MajorMinorPatch(major, minor, patch, _) => Some(Version::new([
+                u64::from(*major),
+                u64::from(*minor),
+                u64::from(*patch),
+            ])),
+            // Pre-releases of Python versions are always for the zero patch version
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => Some(
+                Version::new([u64::from(*major), u64::from(*minor), 0]).with_pre(Some(*prerelease)),
+            ),
         }
     }
 }
