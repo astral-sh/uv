@@ -6,6 +6,7 @@ use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_client::BaseClientBuilder;
+use uv_configuration::ProxyUrl;
 
 use super::http_util;
 
@@ -34,7 +35,7 @@ async fn http_proxy() -> Result<()> {
         std::time::Duration::from_secs(30),
         3,
     )
-    .http_proxy(Some(proxy_server.uri()))
+    .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
     .build();
 
     // Make a request to the target.
@@ -91,7 +92,7 @@ async fn https_proxy() -> Result<()> {
         std::time::Duration::from_secs(30),
         3,
     )
-    .https_proxy(Some(format!("http://{proxy_addr}")))
+    .https_proxy(Some(format!("http://{proxy_addr}").parse::<ProxyUrl>()?))
     .build();
 
     // Make a request to the target.
@@ -141,7 +142,7 @@ async fn no_proxy() -> Result<()> {
         std::time::Duration::from_secs(30),
         3,
     )
-    .http_proxy(Some(proxy_server.uri()))
+    .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
     .no_proxy(Some(vec![target_host]))
     .build();
 

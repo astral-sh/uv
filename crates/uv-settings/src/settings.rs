@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
@@ -315,24 +315,27 @@ pub struct GlobalOptions {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             http-proxy = "http://proxy.example.com"
         "#
     )]
-    pub http_proxy: Option<String>,
+    pub http_proxy: Option<ProxyUrl>,
     /// The URL of the HTTPS proxy to use.
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             https-proxy = "https://proxy.example.com"
         "#
     )]
-    pub https_proxy: Option<String>,
+    pub https_proxy: Option<ProxyUrl>,
     /// A list of hosts to exclude from proxying.
     #[option(
         default = "None",
         value_type = "list[str]",
+        uv_toml_only = true,
         example = r#"
             no-proxy = ["localhost", "127.0.0.1"]
         "#
@@ -2090,8 +2093,8 @@ pub struct OptionsWire {
     find_links: Option<Vec<PipFindLinks>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
-    http_proxy: Option<String>,
-    https_proxy: Option<String>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
     no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,

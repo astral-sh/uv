@@ -29,7 +29,7 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
-use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -84,8 +84,8 @@ pub struct BaseClientBuilder<'a> {
     timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
-    http_proxy: Option<String>,
-    https_proxy: Option<String>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
     no_proxy: Option<Vec<String>>,
     redirect_policy: RedirectPolicy,
     /// Whether credentials should be propagated during cross-origin redirects.
@@ -269,13 +269,13 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn http_proxy(mut self, http_proxy: Option<String>) -> Self {
+    pub fn http_proxy(mut self, http_proxy: Option<ProxyUrl>) -> Self {
         self.http_proxy = http_proxy;
         self
     }
 
     #[must_use]
-    pub fn https_proxy(mut self, https_proxy: Option<String>) -> Self {
+    pub fn https_proxy(mut self, https_proxy: Option<ProxyUrl>) -> Self {
         self.https_proxy = https_proxy;
         self
     }
@@ -549,7 +549,9 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         if let Some(http_proxy) = &self.http_proxy {
-            let mut proxy = Proxy::http(http_proxy).expect("Invalid HTTP proxy URL");
+            // The URL has been pre-validated by ProxyUrl, so this should never fail
+            let mut proxy = Proxy::http(http_proxy.as_str())
+                .expect("pre-validated HTTP proxy URL should be valid");
             if let Some(no_proxy) = &self.no_proxy {
                 let s = no_proxy.join(",");
                 proxy = proxy.no_proxy(NoProxy::from_string(&s));
@@ -558,7 +560,9 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let mut proxy = Proxy::https(https_proxy).expect("Invalid HTTPS proxy URL");
+            // The URL has been pre-validated by ProxyUrl, so this should never fail
+            let mut proxy = Proxy::https(https_proxy.as_str())
+                .expect("pre-validated HTTPS proxy URL should be valid");
             if let Some(no_proxy) = &self.no_proxy {
                 let s = no_proxy.join(",");
                 proxy = proxy.no_proxy(NoProxy::from_string(&s));

@@ -290,16 +290,24 @@
     },
     "http-proxy": {
       "description": "The URL of the HTTP proxy to use.",
-      "type": [
-        "string",
-        "null"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProxyUrl"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "https-proxy": {
       "description": "The URL of the HTTPS proxy to use.",
-      "type": [
-        "string",
-        "null"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProxyUrl"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "index": {
@@ -1816,6 +1824,11 @@
           "const": "if-necessary-or-explicit"
         }
       ]
+    },
+    "ProxyUrl": {
+      "description": "A proxy URL (e.g., `http://proxy.example.com:8080`).",
+      "type": "string",
+      "format": "uri"
     },
     "PythonDownloads": {
       "oneOf": [
