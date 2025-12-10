@@ -86,7 +86,7 @@ pub(crate) fn pip_freeze(
             if exclude_editable && dist.is_editable() {
                 return false;
             }
-            if !exclude.is_empty() && exclude.contains(dist.name()) {
+            if exclude.contains(dist.name()) {
                 return false;
             }
             true
