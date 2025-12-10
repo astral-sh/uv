@@ -4385,6 +4385,80 @@ fn tool_install_with_executables_from_no_entrypoints() {
     "###);
 }
 
+/// Test installing a tool where the root package has no executables, but `--with-executables-from`
+/// provides them.
+#[test]
+fn tool_install_with_executables_from_root_no_entrypoints() {
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut filters = context.filters();
+    filters.push(("\\+ uvloop(.+)\n ", ""));
+
+    // Install `fastapi` (which has no executables) with executables from `fastapi-cli`.
+    uv_snapshot!(filters, context.tool_install()
+        .arg("--with-executables-from")
+        .arg("fastapi-cli")
+        .arg("fastapi==0.111.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + annotated-types==0.6.0
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + click==8.1.7
+     + dnspython==2.6.1
+     + email-validator==2.1.1
+     + fastapi==0.111.0
+     + fastapi-cli==0.0.2
+     + h11==0.14.0
+     + httpcore==1.0.5
+     + httptools==0.6.1
+     + httpx==0.27.0
+     + idna==3.7
+     + jinja2==3.1.3
+     + markdown-it-py==3.0.0
+     + markupsafe==2.1.5
+     + mdurl==0.1.2
+     + orjson==3.10.3
+     + pydantic==2.7.1
+     + pydantic-core==2.18.2
+     + pygments==2.17.2
+     + python-dotenv==1.0.1
+     + python-multipart==0.0.9
+     + pyyaml==6.0.1
+     + rich==13.7.1
+     + shellingham==1.5.4
+     + sniffio==1.3.1
+     + starlette==0.37.2
+     + typer==0.12.3
+     + typing-extensions==4.11.0
+     + ujson==5.9.0
+     + uvicorn==0.29.0
+     + watchfiles==0.21.0
+     + websockets==12.0
+    Installed 1 executable from `fastapi-cli`: fastapi
+    ");
+
+    // Verify the tool was installed correctly.
+    tool_dir.child("fastapi").assert(predicate::path::is_dir());
+    bin_dir
+        .child(format!("fastapi{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::exists());
+}
+
 #[test]
 fn tool_install_find_links() {
     let context = TestContext::new("3.13").with_filtered_exe_suffix();
