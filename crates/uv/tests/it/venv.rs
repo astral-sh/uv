@@ -286,6 +286,30 @@ fn create_venv_defaults_to_cwd() {
 }
 
 #[test]
+fn create_venv_warns_when_virtual_env_is_set_and_default_used() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all().unwrap();
+
+    // With VIRTUAL_ENV set to a different path and using default `.venv`,
+    // we should warn the user that subsequent commands may target the active env.
+    uv_snapshot!(context.filters(), context.venv()
+        .env(EnvVars::VIRTUAL_ENV, other.path().as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: `VIRTUAL_ENV=[TEMP_DIR]/other` is set; subsequent commands may use the active environment instead of `.venv`. Consider clearing it with `deactivate`.
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+}
+
+#[test]
 fn create_venv_ignores_virtual_env_variable() {
     let context = TestContext::new_with_versions(&["3.12"]);
     // We shouldn't care if `VIRTUAL_ENV` is set to an non-existent directory
