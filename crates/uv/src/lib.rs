@@ -1585,6 +1585,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_urls,
                 args.output_format,
                 args.python_downloads_json_url,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
                 globals.python_preference,
                 globals.python_downloads,
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
