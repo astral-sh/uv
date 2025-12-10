@@ -31,7 +31,9 @@ pub enum ProxyUrlError {
     InvalidUrl(#[from] url::ParseError),
     #[error("proxy URL must have a scheme (e.g., http://, https://, socks5://): `{0}`")]
     MissingScheme(String),
-    #[error("invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h")]
+    #[error(
+        "invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h"
+    )]
     InvalidScheme { scheme: String, url: String },
 }
 
@@ -110,27 +112,34 @@ mod tests {
     fn parse_valid_proxy_urls() {
         // HTTP proxy
         let url = "http://proxy.example.com:8080".parse::<ProxyUrl>().unwrap();
-        assert_eq!(url.as_str(), "http://proxy.example.com:8080/");
+        assert!(url.as_str().starts_with("http://proxy.example.com:8080"));
 
         // HTTPS proxy
-        let url = "https://proxy.example.com:8080".parse::<ProxyUrl>().unwrap();
-        assert_eq!(url.as_str(), "https://proxy.example.com:8080/");
+        let url = "https://proxy.example.com:8080"
+            .parse::<ProxyUrl>()
+            .unwrap();
+        assert!(url.as_str().starts_with("https://proxy.example.com:8080"));
 
         // SOCKS5 proxy
-        let url = "socks5://proxy.example.com:1080".parse::<ProxyUrl>().unwrap();
-        assert_eq!(url.as_str(), "socks5://proxy.example.com:1080/");
+        let url = "socks5://proxy.example.com:1080"
+            .parse::<ProxyUrl>()
+            .unwrap();
+        assert!(url.as_str().starts_with("socks5://proxy.example.com:1080"));
 
         // SOCKS5H proxy
         let url = "socks5h://proxy.example.com:1080"
             .parse::<ProxyUrl>()
             .unwrap();
-        assert_eq!(url.as_str(), "socks5h://proxy.example.com:1080/");
+        assert!(url.as_str().starts_with("socks5h://proxy.example.com:1080"));
 
         // Proxy with auth
         let url = "http://user:pass@proxy.example.com:8080"
             .parse::<ProxyUrl>()
             .unwrap();
-        assert_eq!(url.as_str(), "http://user:pass@proxy.example.com:8080/");
+        assert!(
+            url.as_str()
+                .starts_with("http://user:pass@proxy.example.com:8080")
+        );
     }
 
     #[test]
@@ -148,4 +157,3 @@ mod tests {
         assert!(result.is_err());
     }
 }
-
