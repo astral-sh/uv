@@ -343,7 +343,7 @@ pub struct GlobalArgs {
     /// Relative paths are resolved with the given directory as the base.
     ///
     /// See `--project` to only change the project root directory.
-    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIR)]
+    #[arg(global = true, long, env = EnvVars::UV_WORKING_DIR, value_hint = ValueHint::DirPath)]
     pub directory: Option<PathBuf>,
 
     /// Discover a project in the given directory.
@@ -358,7 +358,7 @@ pub struct GlobalArgs {
     /// See `--directory` to change the working directory entirely.
     ///
     /// This setting has no effect when used in the `uv pip` interface.
-    #[arg(global = true, long, env = EnvVars::UV_PROJECT)]
+    #[arg(global = true, long, env = EnvVars::UV_PROJECT, value_hint = ValueHint::DirPath)]
     pub project: Option<PathBuf>,
 }
 
@@ -1913,7 +1913,7 @@ pub struct PipSyncArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -1928,7 +1928,7 @@ pub struct PipSyncArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "target")]
+    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     /// Don't build source distributions.
@@ -2289,7 +2289,7 @@ pub struct PipInstallArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -2304,7 +2304,7 @@ pub struct PipInstallArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "target")]
+    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     /// Don't build source distributions.
@@ -2504,11 +2504,11 @@ pub struct PipUninstallArgs {
     pub no_break_system_packages: bool,
 
     /// Uninstall packages from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Uninstall packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target")]
+    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     /// Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan.
@@ -2550,7 +2550,7 @@ pub struct PipFreezeArgs {
     pub python: Option<Maybe<String>>,
 
     /// Restrict to the specified installation path for listing packages (can be used multiple times).
-    #[arg(long("path"), value_parser = parse_file_path)]
+    #[arg(long("path"), value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
     pub paths: Option<Vec<PathBuf>>,
 
     /// List packages in the system Python environment.
@@ -2570,11 +2570,11 @@ pub struct PipFreezeArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(long, conflicts_with_all = ["prefix", "paths"])]
+    #[arg(long, conflicts_with_all = ["prefix", "paths"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with_all = ["target", "paths"])]
+    #[arg(long, conflicts_with_all = ["target", "paths"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
@@ -2653,11 +2653,11 @@ pub struct PipListArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target")]
+    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
@@ -2776,11 +2776,11 @@ pub struct PipShowArgs {
     pub no_system: bool,
 
     /// Show a package from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Show a package from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target")]
+    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
 
     #[command(flatten)]
@@ -2864,7 +2864,7 @@ pub struct BuildArgs {
     /// distribution archive to build into a wheel.
     ///
     /// Defaults to the current working directory.
-    #[arg(value_parser = parse_file_path)]
+    #[arg(value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
     pub src: Option<PathBuf>,
 
     /// Build a specific package in the workspace.
@@ -2889,7 +2889,7 @@ pub struct BuildArgs {
     ///
     /// Defaults to the `dist` subdirectory within the source directory, or the
     /// directory containing the source distribution archive.
-    #[arg(long, short, value_parser = parse_file_path)]
+    #[arg(long, short, value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
     pub out_dir: Option<PathBuf>,
 
     /// Build a source distribution ("sdist") from the given directory.
@@ -3113,6 +3113,7 @@ pub struct VenvArgs {
     /// Default to `.venv` in the working directory.
     ///
     /// Relative paths are resolved relative to the working directory.
+    #[arg(value_hint = ValueHint::DirPath)]
     pub path: Option<PathBuf>,
 
     /// Provide an alternative prompt prefix for the virtual environment.
@@ -3278,7 +3279,7 @@ pub struct InitArgs {
     /// If a `pyproject.toml` is found in any of the parent directories of the target path, the
     /// project will be added as a workspace member of the parent, unless `--no-workspace` is
     /// provided.
-    #[arg(required_if_eq("script", "true"))]
+    #[arg(required_if_eq("script", "true"), value_hint = ValueHint::DirPath)]
     pub path: Option<PathBuf>,
 
     /// The name of the project.
@@ -6042,7 +6043,7 @@ pub struct PythonInstallArgs {
     ///
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
-    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
     pub install_dir: Option<PathBuf>,
 
     /// Install a Python executable into the `bin` directory.
@@ -6174,7 +6175,7 @@ pub struct PythonUpgradeArgs {
     ///
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
-    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python minor version(s) to upgrade.
@@ -6228,7 +6229,7 @@ impl PythonUpgradeArgs {
 #[derive(Args)]
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
-    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
