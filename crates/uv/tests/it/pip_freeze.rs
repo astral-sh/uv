@@ -582,15 +582,20 @@ fn freeze_exclude() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    // Run `pip sync`.
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
     context
-        .pip_sync()
-        .arg(requirements_txt.path())
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--prefix")
+        .arg(prefix.path())
         .assert()
         .success();
 
     // Run `pip freeze --exclude MarkupSafe`.
-    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe"), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -601,7 +606,7 @@ fn freeze_exclude() -> Result<()> {
     );
 
     // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
-    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli"), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
