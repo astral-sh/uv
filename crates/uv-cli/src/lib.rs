@@ -664,6 +664,7 @@ pub struct VersionArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -1544,7 +1545,8 @@ pub struct PipCompileArgs {
         short,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -1868,6 +1870,7 @@ pub struct PipSyncArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2244,6 +2247,7 @@ pub struct PipInstallArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2456,6 +2460,7 @@ pub struct PipUninstallArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2547,6 +2552,7 @@ pub struct PipFreezeArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2634,6 +2640,7 @@ pub struct PipListArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2680,6 +2687,7 @@ pub struct PipCheckArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2757,6 +2765,7 @@ pub struct PipShowArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -2821,6 +2830,7 @@ pub struct PipTreeArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -3014,6 +3024,7 @@ pub struct BuildArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -3042,6 +3053,7 @@ pub struct VenvArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -3423,6 +3435,7 @@ pub struct InitArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -3702,6 +3715,7 @@ pub struct RunArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -4034,6 +4048,7 @@ pub struct SyncArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -4140,6 +4155,7 @@ pub struct LockArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -4351,6 +4367,7 @@ pub struct AddArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -4569,6 +4586,7 @@ pub struct RemoveArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -4708,6 +4726,7 @@ pub struct TreeArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -5000,6 +5019,7 @@ pub struct ExportArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 }
@@ -5295,6 +5315,7 @@ pub struct ToolRunArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -5476,6 +5497,7 @@ pub struct ToolInstallArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
@@ -5583,6 +5605,7 @@ pub struct ToolUpgradeArgs {
         verbatim_doc_comment,
         help_heading = "Python options",
         value_parser = parse_maybe_string,
+        value_hint = ValueHint::CommandName,
     )]
     pub python: Option<Maybe<String>>,
 
