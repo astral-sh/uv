@@ -16071,6 +16071,71 @@ fn project_and_group_workspace() -> Result<()> {
 }
 
 #[test]
+fn group_requires_python_incompatible_with_interpreter() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "requires-python"
+        version = "0.1.0"
+
+        [tool.uv.dependency-groups.ml1]
+        requires-python = ">=3.14"
+
+        [dependency-groups]
+        ml1 = ["tqdm"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:ml1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.14`, but uv is resolving for Python `>=3.13.[X]` (current interpreter: `3.13.[X]`). Re-run with `--python 3.14` to target a compatible Python version.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn group_requires_python_incompatible_with_python_flag() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "requires-python"
+        version = "0.1.0"
+
+        [tool.uv.dependency-groups.ml1]
+        requires-python = ">=3.13"
+
+        [dependency-groups]
+        ml1 = ["tqdm"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:ml1")
+        .arg("--python").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency group `ml1` in `pyproject.toml` requires Python `>=3.13`, but uv is resolving for Python `>=3.12` (current interpreter: `3.12.[X]`). Re-run with `--python 3.13` to target a compatible Python version.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn directory_and_group() -> Result<()> {
     // Checking that --directory is handled properly with --group
     fn new_context() -> Result<TestContext> {
