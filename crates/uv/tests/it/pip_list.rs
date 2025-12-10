@@ -791,6 +791,7 @@ fn list_ignores_quiet_flag_format_freeze() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_target() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -839,6 +840,7 @@ fn list_target() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 
