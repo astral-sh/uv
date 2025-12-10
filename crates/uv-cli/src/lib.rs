@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
-use clap::ValueEnum;
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::{PossibleValue, Styles, TypedValueParser, ValueParserFactory};
 use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
+use clap::{ValueEnum, ValueHint};
 
 use uv_auth::Service;
 use uv_cache::CacheArgs;
@@ -131,7 +131,8 @@ pub struct TopLevelArgs {
         global = true,
         long,
         env = EnvVars::UV_CONFIG_FILE,
-        help_heading = "Global options"
+        help_heading = "Global options",
+        value_hint = ValueHint::FilePath,
     )]
     pub config_file: Option<PathBuf>,
 
@@ -1350,7 +1351,7 @@ pub struct PipCompileArgs {
     ///
     /// The order of the requirements files and the requirements in them is used to determine
     /// priority during resolution.
-    #[arg(group = "sources", value_parser = parse_file_path)]
+    #[arg(group = "sources", value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
     pub src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -1360,7 +1361,15 @@ pub struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -1372,7 +1381,14 @@ pub struct PipCompileArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Exclude packages from resolution using the given requirements files.
@@ -1382,7 +1398,14 @@ pub struct PipCompileArgs {
     /// dependency list entirely and its own dependencies will be ignored during the resolution
     /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
     /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "exclude",
+        env = EnvVars::UV_EXCLUDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -1391,7 +1414,15 @@ pub struct PipCompileArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
     /// trigger the installation of that package.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
@@ -1435,7 +1466,7 @@ pub struct PipCompileArgs {
     ///
     /// If the file already exists, the existing versions will be preferred when resolving
     /// dependencies, unless `--upgrade` is also specified.
-    #[arg(long, short)]
+    #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
     /// The format in which the resolution should be output.
@@ -1712,7 +1743,7 @@ pub struct PipSyncArgs {
     /// extract the requirements for the relevant project.
     ///
     /// If `-` is provided, then requirements will be read from stdin.
-    #[arg(required(true), value_parser = parse_file_path)]
+    #[arg(required(true), value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
     pub src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -1722,7 +1753,15 @@ pub struct PipSyncArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -1731,7 +1770,15 @@ pub struct PipSyncArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
     /// trigger the installation of that package.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
@@ -2017,7 +2064,14 @@ pub struct PipInstallArgs {
     /// requirements for the relevant project.
     ///
     /// If `-` is provided, then requirements will be read from stdin.
-    #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "requirement",
+        group = "sources",
+        value_parser = parse_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub requirements: Vec<PathBuf>,
 
     /// Install the editable package based on the provided local file path.
@@ -2031,7 +2085,15 @@ pub struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -2043,7 +2105,14 @@ pub struct PipInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Exclude packages from resolution using the given requirements files.
@@ -2053,7 +2122,14 @@ pub struct PipInstallArgs {
     /// dependency list entirely and its own dependencies will be ignored during the resolution
     /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
     /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "exclude",
+        env = EnvVars::UV_EXCLUDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -2062,7 +2138,15 @@ pub struct PipInstallArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
     /// trigger the installation of that package.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
@@ -2354,7 +2438,7 @@ pub struct PipUninstallArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
-    #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
+    #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
     pub requirements: Vec<PathBuf>,
 
     /// The Python interpreter from which packages should be uninstalled.
@@ -2862,7 +2946,15 @@ pub struct BuildArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// build dependency that's installed. However, including a package in a constraints file will
     /// _not_ trigger the inclusion of that package on its own.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Require a matching hash for each requirement.
@@ -3457,7 +3549,7 @@ pub struct RunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    #[arg(long, env = EnvVars::UV_ENV_FILE, value_hint = ValueHint::FilePath)]
     pub env_file: Vec<String>,
 
     /// Avoid reading environment variables from a `.env` file.
@@ -3495,7 +3587,7 @@ pub struct RunArgs {
     /// The same environment semantics as `--with` apply.
     ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     /// Run the command in an isolated virtual environment.
@@ -3918,7 +4010,8 @@ pub struct SyncArgs {
         conflicts_with = "no_group",
         conflicts_with = "no_default_groups",
         conflicts_with = "only_group",
-        conflicts_with = "all_groups"
+        conflicts_with = "all_groups",
+        value_hint = ValueHint::FilePath,
     )]
     pub script: Option<PathBuf>,
 
@@ -4017,7 +4110,7 @@ pub struct LockArgs {
     ///
     /// If provided, uv will lock the script (based on its inline metadata table, in adherence with
     /// PEP 723) to a `.lock` file adjacent to the script itself.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pub script: Option<PathBuf>,
 
     #[command(flatten)]
@@ -4060,7 +4153,14 @@ pub struct AddArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
-    #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "requirement",
+        group = "sources",
+        value_parser = parse_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub requirements: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -4070,7 +4170,15 @@ pub struct AddArgs {
     /// `pyproject.toml` file, but _will_ be respected during dependency resolution.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Apply this marker to all added packages.
@@ -4226,7 +4334,8 @@ pub struct AddArgs {
         conflicts_with = "dev",
         conflicts_with = "optional",
         conflicts_with = "package",
-        conflicts_with = "workspace"
+        conflicts_with = "workspace",
+        value_hint = ValueHint::FilePath,
     )]
     pub script: Option<PathBuf>,
 
@@ -4445,7 +4554,7 @@ pub struct RemoveArgs {
     ///
     /// If provided, uv will remove the dependency from the script's inline metadata table, in
     /// adherence with PEP 723.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pub script: Option<PathBuf>,
 
     /// The Python interpreter to use for resolving and syncing.
@@ -4560,7 +4669,7 @@ pub struct TreeArgs {
     ///
     /// If provided, uv will resolve the dependencies based on its inline metadata table, in
     /// adherence with PEP 723.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pub script: Option<PathBuf>,
 
     /// The Python version to use when filtering the tree.
@@ -4745,7 +4854,7 @@ pub struct ExportArgs {
     pub no_hashes: bool,
 
     /// Write the exported requirements to the given file.
-    #[arg(long, short)]
+    #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
     /// Do not emit the current project.
@@ -4866,7 +4975,11 @@ pub struct ExportArgs {
     ///
     /// If provided, uv will resolve the dependencies based on its inline metadata table, in
     /// adherence with PEP 723.
-    #[arg(long, conflicts_with_all = ["all_packages", "package", "no_emit_project", "no_emit_workspace"])]
+    #[arg(
+        long,
+        conflicts_with_all = ["all_packages", "package", "no_emit_project", "no_emit_workspace"],
+        value_hint = ValueHint::FilePath,
+    )]
     pub script: Option<PathBuf>,
 
     /// The Python interpreter to use during resolution.
@@ -5080,7 +5193,12 @@ pub struct ToolRunArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// and `pylock.toml`.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     /// Constrain versions using the given requirements files.
@@ -5090,7 +5208,15 @@ pub struct ToolRunArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -5099,7 +5225,15 @@ pub struct ToolRunArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
     /// trigger the installation of that package.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -5111,7 +5245,14 @@ pub struct ToolRunArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
@@ -5122,7 +5263,7 @@ pub struct ToolRunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
+    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE, value_hint = ValueHint::FilePath)]
     pub env_file: Vec<PathBuf>,
 
     /// Avoid reading environment variables from a `.env` file.
@@ -5217,7 +5358,7 @@ pub struct ToolInstallArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// and `pylock.toml`.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     /// Install the target package in editable mode, such that changes in the package's source
@@ -5240,7 +5381,15 @@ pub struct ToolInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub constraints: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -5252,7 +5401,14 @@ pub struct ToolInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Exclude packages from resolution using the given requirements files.
@@ -5262,7 +5418,14 @@ pub struct ToolInstallArgs {
     /// dependency list entirely and its own dependencies will be ignored during the resolution
     /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
     /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        alias = "exclude",
+        env = EnvVars::UV_EXCLUDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
@@ -5271,7 +5434,15 @@ pub struct ToolInstallArgs {
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
     /// trigger the installation of that package.
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
     #[command(flatten)]
@@ -6110,7 +6281,8 @@ pub struct PythonFindArgs {
         conflicts_with = "request",
         conflicts_with = "no_project",
         conflicts_with = "system",
-        conflicts_with = "no_system"
+        conflicts_with = "no_system",
+        value_hint = ValueHint::FilePath,
     )]
     pub script: Option<PathBuf>,
 
@@ -7204,7 +7376,7 @@ pub struct PublishArgs {
     ///
     /// Defaults to the `dist` directory. Selects only wheels and source distributions
     /// and their attestations, while ignoring other files.
-    #[arg(default_value = "dist/*")]
+    #[arg(default_value = "dist/*", value_hint = ValueHint::FilePath)]
     pub files: Vec<String>,
 
     /// The name of an index in the configuration to use for publishing.
