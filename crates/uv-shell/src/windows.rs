@@ -93,14 +93,14 @@ pub fn remove_from_path(existing_path: &HSTRING, path_to_remove: &Path) -> HSTRI
     if existing_path.is_empty() {
         return existing_path.clone();
     }
-    
+
     let path_str = path_to_remove.to_string_lossy();
     let paths: Vec<&str> = existing_path
         .to_string_lossy()
         .split(';')
         .filter(|p| p.trim() != path_str.as_ref())
         .collect();
-    
+
     if paths.is_empty() {
         HSTRING::new()
     } else {
