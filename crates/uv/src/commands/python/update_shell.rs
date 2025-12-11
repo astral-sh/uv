@@ -42,6 +42,8 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
         return Ok(ExitStatus::Success);
     }
 
+    println!("[DEBUG] We are here and {:?}",executable_directory);
+
     if Shell::contains_path(&executable_directory) {
         writeln!(
             printer.stderr(),
@@ -50,6 +52,8 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
         )?;
         return Ok(ExitStatus::Success);
     }
+
+    
 
     // Determine the current shell.
     let Some(shell) = Shell::from_env() else {
