@@ -935,10 +935,6 @@ pub struct SizeArgs {
     /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
     pub human: bool,
-
-    /// Number of threads to use when calculating the cache size
-    #[arg(long)]
-    pub threads: Option<usize>,
 }
 
 #[derive(Args)]

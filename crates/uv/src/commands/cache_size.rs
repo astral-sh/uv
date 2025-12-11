@@ -13,7 +13,6 @@ use uv_warnings::warn_user;
 pub(crate) fn cache_size(
     cache: &Cache,
     human_readable: bool,
-    threads: Option<usize>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -33,12 +32,7 @@ pub(crate) fn cache_size(
         return Ok(ExitStatus::Success);
     }
 
-    let mut disk_usage = DiskUsage::new(vec![cache.root().to_path_buf()]);
-
-    if let Some(n) = threads {
-        tracing::info!("Using {} threads to calculate cache size", n);
-        disk_usage = disk_usage.num_workers(n);
-    }
+    let disk_usage = DiskUsage::new(vec![cache.root().to_path_buf()]);
 
     let total_bytes = disk_usage.count_ignoring_errors();
 

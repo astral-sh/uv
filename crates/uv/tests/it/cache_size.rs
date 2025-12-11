@@ -57,24 +57,3 @@ fn cache_size_with_packages_human() {
     ----- stderr -----
     ");
 }
-
-/// Test that `cache size --threads 2` uses the correct number of threads, via a `info` log statement.
-#[test]
-fn cache_size_with_packages_threads() {
-    let context = TestContext::new("3.12");
-
-    // Install a requirement to populate the cache.
-    context.pip_install().arg("iniconfig").assert().success();
-
-    // Check cache size with `--threads 2`
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--threads").arg("2").arg("-v"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [SIZE]
-
-    ----- stderr -----
-    DEBUG uv [VERSION] ([COMMIT] DATE)
-    INFO Using 2 threads to calculate cache size
-    ");
-}
