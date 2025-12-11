@@ -52,9 +52,11 @@ pub(crate) async fn update_shell(
                 uv_shell::windows::remove_from_path(&windows_path, &executable_directory);
 
             // Prepend the path
-            let final_path =
-                uv_shell::windows::prepend_to_path(&new_path, HSTRING::from(&executable_directory))
-                    .unwrap_or_else(|| HSTRING::from(&executable_directory));
+            let final_path = uv_shell::windows::prepend_to_path(
+                &new_path,
+                HSTRING::from(executable_directory.as_path()),
+            )
+            .unwrap_or_else(|| HSTRING::from(executable_directory.as_path()));
 
             uv_shell::windows::apply_windows_path_var(&final_path)?;
 
