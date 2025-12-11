@@ -312,9 +312,18 @@ strip = false
 debug = "full"
 lto = false
 
+# Profile for fast test execution: Skip debug info generation, and
+# apply basic optimization, which speed up build and running tests.
 [profile.fast-build]
 inherits = "dev"
 opt-level = 1
+debug = 0
+strip = "debuginfo"
+
+# Profile for faster builds: Skip debug info generation, for faster
+# builds of smaller binaries.
+[profile.no-debug]
+inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
