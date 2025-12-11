@@ -219,7 +219,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         required_environments,
         conflicts,
         workspace,
-        sources,
+        sources: _,
         dev_dependencies,
         default_groups,
         dependency_groups,
@@ -235,9 +235,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
     }
     if workspace.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "workspace"));
-    }
-    if sources.is_some() {
-        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "sources"));
     }
     if dev_dependencies.is_some() {
         return Err(Error::PyprojectOnlyField(
