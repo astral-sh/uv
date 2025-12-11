@@ -1288,7 +1288,7 @@ impl TestContext {
         self.add_shared_options(&mut command, true);
         command
     }
-    
+
     /// Create a `uv python update-shell` command with options shared across scenarios.
     pub fn python_update_shell(&self) -> Command {
         let mut command = Self::new_command();

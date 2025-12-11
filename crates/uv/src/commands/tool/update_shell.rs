@@ -16,7 +16,10 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
-pub(crate) async fn update_shell(args: PythonUpdateShellArgs, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn update_shell(
+    args: PythonUpdateShellArgs,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let executable_directory = tool_executable_dir()?;
     debug!(
         "Ensuring that the executable directory is in PATH: {}",
@@ -26,9 +29,10 @@ pub(crate) async fn update_shell(args: PythonUpdateShellArgs, printer: Printer) 
     #[cfg(windows)]
     {
         use windows::core::HSTRING;
-        
-        let is_in_path = !uv_shell::windows::prepend_path(&executable_directory)?;
-        
+
+        // Check if path is in PATH (read-only, doesn't mutate)
+        let is_in_path = uv_shell::windows::contains_path(&executable_directory)?;
+
         if is_in_path && !args.force {
             // Already in PATH and not forcing - exit early
             writeln!(
@@ -38,21 +42,22 @@ pub(crate) async fn update_shell(args: PythonUpdateShellArgs, printer: Printer) 
             )?;
             return Ok(ExitStatus::Success);
         }
-        
+
         if is_in_path && args.force {
             // Already in PATH but forcing - remove it first, then prepend
-            let windows_path = uv_shell::windows::get_windows_path_var()?
-                .unwrap_or_default();
-            
+            let windows_path = uv_shell::windows::get_windows_path_var()?.unwrap_or_default();
+
             // Remove the path if it exists
-            let new_path = uv_shell::windows::remove_from_path(&windows_path, &executable_directory);
-            
+            let new_path =
+                uv_shell::windows::remove_from_path(&windows_path, &executable_directory);
+
             // Prepend the path
-            let final_path = uv_shell::windows::prepend_to_path(&new_path, HSTRING::from(&executable_directory))
-                .unwrap_or_else(|| HSTRING::from(&executable_directory));
-            
+            let final_path =
+                uv_shell::windows::prepend_to_path(&new_path, HSTRING::from(&executable_directory))
+                    .unwrap_or_else(|| HSTRING::from(&executable_directory));
+
             uv_shell::windows::apply_windows_path_var(&final_path)?;
-            
+
             writeln!(
                 printer.stderr(),
                 "Force updated PATH to prioritize executable directory {}",
@@ -61,16 +66,15 @@ pub(crate) async fn update_shell(args: PythonUpdateShellArgs, printer: Printer) 
             writeln!(printer.stderr(), "Restart your shell to apply changes")?;
         } else if !is_in_path {
             // Not in PATH - normal prepend
-            if uv_shell::windows::prepend_path(&executable_directory)? {
-                writeln!(
-                    printer.stderr(),
-                    "Updated PATH to include executable directory {}",
-                    executable_directory.simplified_display().cyan()
-                )?;
-                writeln!(printer.stderr(), "Restart your shell to apply changes")?;
-            }
+            uv_shell::windows::prepend_path(&executable_directory)?;
+            writeln!(
+                printer.stderr(),
+                "Updated PATH to include executable directory {}",
+                executable_directory.simplified_display().cyan()
+            )?;
+            writeln!(printer.stderr(), "Restart your shell to apply changes")?;
         }
-    
+
         return Ok(ExitStatus::Success);
     }
 
@@ -114,73 +118,69 @@ pub(crate) async fn update_shell(args: PythonUpdateShellArgs, printer: Printer) 
         // Search for the command in the file, to avoid redundant updates.
         match fs_err::tokio::read_to_string(&file).await {
             Ok(contents) => {
-            // Check if command already exists
-            let command_exists = contents
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.starts_with('#'))
-                .any(|line| line.contains(&command));
+                // Check if command already exists
+                let command_exists = contents
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.starts_with('#'))
+                    .any(|line| line.contains(&command));
 
-            if command_exists {
-                if args.force {
-                    // With --force: Remove old entry and add it again at the end
-                    let new_contents: String = contents
-                        .lines()
-                        .filter(|line| {
-                            let trimmed = line.trim();
-                            // Remove old # uv comments and lines containing the command
-                            if trimmed == "# uv" || (!trimmed.starts_with('#') && trimmed.contains(&command)) {
-                                false
-                            } else {
-                                true
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    
-                    let final_contents = format!("{new_contents}\n# uv\n{command}\n");
-                    
+                if command_exists {
+                    if args.force {
+                        // With --force: Remove old entry and add it again at the end
+                        let new_contents: String = contents
+                            .lines()
+                            .filter(|line| {
+                                let trimmed = line.trim();
+                                // Remove old # uv comments and lines containing the command
+                                !(trimmed == "# uv"
+                                    || (!trimmed.starts_with('#') && trimmed.contains(&command)))
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        let final_contents = format!("{new_contents}\n# uv\n{command}\n");
+
+                        fs_err::tokio::OpenOptions::new()
+                            .create(true)
+                            .truncate(true)
+                            .write(true)
+                            .open(&file)
+                            .await?
+                            .write_all(final_contents.as_bytes())
+                            .await?;
+
+                        writeln!(
+                            printer.stderr(),
+                            "Force updated configuration file: {}",
+                            file.simplified_display().cyan()
+                        )?;
+                        updated = true;
+                    } else {
+                        // Without --force: Skip if already exists
+                        debug!(
+                            "Skipping already-updated configuration file: {}",
+                            file.simplified_display()
+                        );
+                    }
+                } else {
+                    // Command doesn't exist: Add it normally
                     fs_err::tokio::OpenOptions::new()
                         .create(true)
                         .truncate(true)
                         .write(true)
                         .open(&file)
                         .await?
-                        .write_all(final_contents.as_bytes())
+                        .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
                         .await?;
 
                     writeln!(
                         printer.stderr(),
-                        "Force updated configuration file: {}",
+                        "Updated configuration file: {}",
                         file.simplified_display().cyan()
                     )?;
                     updated = true;
-                } else {
-                    // Without --force: Skip if already exists
-                    debug!(
-                        "Skipping already-updated configuration file: {}",
-                        file.simplified_display()
-                    );
-                    continue;
                 }
-            } else {
-                // Command doesn't exist: Add it normally
-                fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(&file)
-                    .await?
-                    .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
-                    .await?;
-
-                writeln!(
-                    printer.stderr(),
-                    "Updated configuration file: {}",
-                    file.simplified_display().cyan()
-                )?;
-                updated = true;
-            }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 // Ensure that the directory containing the file exists.

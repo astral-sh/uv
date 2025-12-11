@@ -37,7 +37,7 @@ pub fn prepend_path(path: &Path) -> anyhow::Result<bool> {
 }
 
 /// Set the windows `PATH` variable in the registry.
-fn apply_windows_path_var(path: &HSTRING) -> anyhow::Result<()> {
+pub fn apply_windows_path_var(path: &HSTRING) -> anyhow::Result<()> {
     let environment = CURRENT_USER.create("Environment")?;
 
     if path.is_empty() {
@@ -52,7 +52,7 @@ fn apply_windows_path_var(path: &HSTRING) -> anyhow::Result<()> {
 /// Retrieve the windows `PATH` variable from the registry.
 ///
 /// Returns `Ok(None)` if the `PATH` variable is not a string.
-fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
+pub fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
     let environment = CURRENT_USER
         .create("Environment")
         .context("Failed to open `Environment` key")?;
@@ -72,7 +72,7 @@ fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
 /// Prepend a path to the `PATH` variable in the Windows registry.
 ///
 /// Returns `Ok(None)` if the given path is already in `PATH`.
-fn prepend_to_path(existing_path: &HSTRING, path: HSTRING) -> Option<HSTRING> {
+pub fn prepend_to_path(existing_path: &HSTRING, path: HSTRING) -> Option<HSTRING> {
     if existing_path.is_empty() {
         Some(path)
     } else if existing_path.windows(path.len()).any(|p| *p == *path) {
@@ -85,6 +85,21 @@ fn prepend_to_path(existing_path: &HSTRING, path: HSTRING) -> Option<HSTRING> {
     }
 }
 
+/// Check if a path is already in the Windows PATH variable (read-only).
+pub fn contains_path(path: &Path) -> anyhow::Result<bool> {
+    let windows_path = get_windows_path_var()?.unwrap_or_default();
+    if windows_path.is_empty() {
+        return Ok(false);
+    }
+
+    let path_str = path.to_string_lossy();
+    let path_string = windows_path.to_string_lossy();
+    let is_in_path = path_string
+        .split(';')
+        .any(|p| p.trim() == path_str.as_ref());
+
+    Ok(is_in_path)
+}
 
 /// Remove a path from the `PATH` variable string.
 ///
