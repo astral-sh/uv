@@ -498,8 +498,8 @@ fn python_list_downloads_installed() {
         success: true
         exit_code: 0
         ----- stdout -----
-        cpython-3.10.18-[PLATFORM]          managed/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-        cpython-3.10.18+debug-[PLATFORM]    managed/cpython-3.10.18+debug-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+        cpython-3.10.19-[PLATFORM]          managed/cpython-3.10.19-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+        cpython-3.10.19+debug-[PLATFORM]    managed/cpython-3.10.19+debug-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
         pypy-3.10.16-[PLATFORM]             <download available>
         graalpy-3.10.0-[PLATFORM]           <download available>
 
@@ -511,8 +511,8 @@ fn python_list_downloads_installed() {
         success: true
         exit_code: 0
         ----- stdout -----
-        cpython-3.10.18-[PLATFORM]          managed/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-        cpython-3.10.18+debug-[PLATFORM]    managed/cpython-3.10.18+debug-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+        cpython-3.10.19-[PLATFORM]          managed/cpython-3.10.19-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+        cpython-3.10.19+debug-[PLATFORM]    managed/cpython-3.10.19+debug-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
         ----- stderr -----
         ");
@@ -524,16 +524,16 @@ fn python_list_variants() {
     let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
 
     // Default behavior should only show default variants (no debug/freethreaded)
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r#"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
-    "#);
+    ");
 
     // With --all-variants, should show all variants including debug and freethreaded
     #[cfg(unix)]
@@ -541,8 +541,8 @@ fn python_list_variants() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]          <download available>
-    cpython-3.10.18+debug-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]          <download available>
+    cpython-3.10.19+debug-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]             <download available>
     graalpy-3.10.0-[PLATFORM]           <download available>
 
@@ -555,7 +555,7 @@ fn python_list_variants() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -564,14 +564,14 @@ fn python_list_variants() {
 
     // Explicit debug variant request should work without --all-variants
     #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10+debug").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r#"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10+debug").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18+debug-[PLATFORM]    <download available>
+    cpython-3.10.19+debug-[PLATFORM]    <download available>
 
     ----- stderr -----
-    "#);
+    ");
 
     // On Windows, explicit debug variant request returns empty since no debug builds available
     #[cfg(windows)]
@@ -584,24 +584,24 @@ fn python_list_variants() {
     "#);
 
     // Explicit freethreaded variant request on 3.10 should fail with error
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10+freethreaded").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r#"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10+freethreaded").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.13 does not support free-threading but 3.10t was requested.
-    "#);
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.10+freethreaded was requested.
+    ");
 
     // Explicit freethreaded+debug variant request on 3.10 should fail with error
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10+freethreaded+debug").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r#"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10+freethreaded+debug").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.13 does not support free-threading but 3.10td was requested.
-    "#);
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.10+freethreaded+debug was requested.
+    ");
 
     // Using --all-variants with a specific variant request should fail
     uv_snapshot!(context.filters(), context.python_list().arg("3.10+debug").arg("--all-variants").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
@@ -621,6 +621,8 @@ fn python_list_variants() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.19-[PLATFORM]          <download available>
+    cpython-3.10.19+debug-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]          <download available>
     cpython-3.10.18+debug-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]          <download available>
@@ -670,6 +672,7 @@ fn python_list_variants() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
     cpython-3.10.16-[PLATFORM]    <download available>

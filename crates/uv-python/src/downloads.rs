@@ -661,6 +661,7 @@ impl TryFrom<&PythonInstallationKey> for PythonDownloadRequest {
             Some(*key.os()),
             Some(*key.libc()),
             Some(key.prerelease().is_some()),
+            false,
         ))
     }
 }
