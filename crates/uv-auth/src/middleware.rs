@@ -129,6 +129,15 @@ enum TokenState {
     Initialized(Option<AccessToken>),
 }
 
+#[derive(Clone)]
+enum S3CredentialState {
+    /// The S3 credential state has not yet been initialized.
+    Uninitialized,
+    /// The S3 credential state has been initialized, with either a signer or `None` if
+    /// no S3 endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -150,6 +159,8 @@ pub struct AuthMiddleware {
     pyx_token_store: Option<PyxTokenStore>,
     /// Tokens to use for persistent credentials.
     pyx_token_state: Mutex<TokenState>,
+    /// Cached S3 credentials to avoid running the credential helper multiple times.
+    s3_credential_state: Mutex<S3CredentialState>,
     preview: Preview,
 }
 
@@ -172,6 +183,7 @@ impl AuthMiddleware {
             base_client: None,
             pyx_token_store: None,
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
+            s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -678,13 +690,26 @@ impl AuthMiddleware {
             return Some(credentials);
         }
 
-        if let Some(credentials) = S3EndpointProvider::credentials_for(url, self.preview)
-            .map(Authentication::from)
-            .map(Arc::new)
-        {
-            debug!("Found S3 credentials for {url}");
-            self.cache().fetches.done(key, Some(credentials.clone()));
-            return Some(credentials);
+        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+            let mut s3_state = self.s3_credential_state.lock().await;
+
+            // If the S3 credential state is uninitialized, initialize it.
+            let credentials = match &*s3_state {
+                S3CredentialState::Uninitialized => {
+                    trace!("Initializing S3 credentials for {url}");
+                    let signer = S3EndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *s3_state = S3CredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
+                }
+                S3CredentialState::Initialized(credentials) => credentials.clone(),
+            };
+
+            if let Some(credentials) = credentials {
+                debug!("Found S3 credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Some(credentials);
+            }
         }
 
         // If this is a known URL, authenticate it via the token store.
