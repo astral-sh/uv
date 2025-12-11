@@ -1,6 +1,6 @@
 [package]
 name = "uv-install-wheel"
-version = "0.0.6"
+version = "0.0.7"
 description = "This is an internal component crate of uv"
 keywords = ["wheel", "python"]
 

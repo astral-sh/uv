@@ -286,7 +286,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 
 /// Validate that an [`Options`] contains no fields that `uv.toml` would mask
 ///
-/// This is essentially the inverse of [`validated_uv_toml`][].
+/// This is essentially the inverse of [`validate_uv_toml`].
 fn warn_uv_toml_masked_fields(options: &Options) {
     let Options {
         globals:

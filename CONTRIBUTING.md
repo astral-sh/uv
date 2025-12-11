@@ -102,6 +102,15 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+## Crate structure
+
+Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
+[cargo-depgraph](https://github.com/jplatte/cargo-depgraph) and graphviz, then run:
+
+```shell
+cargo depgraph --dedup-transitive-deps --workspace-only | dot -Tpng > graph.png
+```
+
 ## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your

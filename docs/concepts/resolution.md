@@ -53,7 +53,7 @@ In this example, some version of both `foo` and `bar` must be selected; however,
 version requires considering the dependencies of each version of `foo` and `bar`. `foo 2.0.0` and
 `bar 2.0.0` cannot be installed together as they conflict on their required version of `lib`, so the
 resolver must select either `foo 1.0.0` (along with `bar 2.0.0`) or `bar 1.0.0` (along with
-`foo 1.0.0`). Both are valid solutions, and different resolution algorithms may yield either result.
+`foo 2.0.0`). Both are valid solutions, and different resolution algorithms may yield either result.
 
 ## Platform markers
 
