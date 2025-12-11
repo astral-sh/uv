@@ -6094,7 +6094,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 }
 
 #[test]
-fn run_project_not_found() -> Result<()> {
+fn run_project_not_found() {
     let context = TestContext::new("3.12");
 
     // Using --project with a non-existent directory should error.
@@ -6106,8 +6106,6 @@ fn run_project_not_found() -> Result<()> {
     ----- stderr -----
     error: Project directory `/tmp/does-not-exist-uv-test` does not exist
     "###);
-
-    Ok(())
 }
 
 #[test]
