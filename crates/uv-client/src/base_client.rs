@@ -29,6 +29,7 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
+use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -551,25 +552,20 @@ impl<'a> BaseClientBuilder<'a> {
             client_builder = client_builder.proxy(p.clone());
         }
 
+        let no_proxy = self
+            .no_proxy
+            .as_ref()
+            .and_then(|no_proxy| NoProxy::from_string(&no_proxy.join(",")));
+
         if let Some(http_proxy) = &self.http_proxy {
-            // The URL has been pre-validated by ProxyUrl, so this should never fail
-            let mut proxy = Proxy::http(http_proxy.as_str())
-                .expect("pre-validated HTTP proxy URL should be valid");
-            if let Some(no_proxy) = &self.no_proxy {
-                let s = no_proxy.join(",");
-                proxy = proxy.no_proxy(NoProxy::from_string(&s));
-            }
+            let proxy = http_proxy
+                .as_proxy(ProxyUrlKind::Http)
+                .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            // The URL has been pre-validated by ProxyUrl, so this should never fail
-            let mut proxy = Proxy::https(https_proxy.as_str())
-                .expect("pre-validated HTTPS proxy URL should be valid");
-            if let Some(no_proxy) = &self.no_proxy {
-                let s = no_proxy.join(",");
-                proxy = proxy.no_proxy(NoProxy::from_string(&s));
-            }
+            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 
