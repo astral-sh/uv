@@ -28,7 +28,7 @@ pub(crate) async fn update_shell(
 
     #[cfg(windows)]
     {
-        use windows::core::HSTRING;
+        use windows_registry::HSTRING;
 
         // Check if path is in PATH (read-only, doesn't mutate)
         let is_in_path = uv_shell::windows::contains_path(&executable_directory)?;
