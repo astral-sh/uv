@@ -30,6 +30,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 rayon = { workspace = true }
+reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -41,6 +42,8 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+insta = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []
