@@ -6092,3 +6092,41 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_project_not_found() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Using --project with a non-existent directory should error.
+    uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project directory `/tmp/does-not-exist-uv-test` does not exist
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_project_is_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a file instead of a directory.
+    let file_path = context.temp_dir.child("not-a-directory");
+    file_path.write_str("")?;
+
+    // Using --project with a file path should error.
+    uv_snapshot!(context.filters(), context.run().arg("--project").arg(file_path.path()).arg("python").arg("-c").arg("print('hello')"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project path `not-a-directory` is not a directory
+    "###);
+
+    Ok(())
+}
