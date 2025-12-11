@@ -214,7 +214,7 @@
       }
     },
     "exclude-newer": {
-      "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
+      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerTimestamp"
@@ -225,7 +225,7 @@
       ]
     },
     "exclude-newer-package": {
-      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the given date.\n\nAccepts package-date pairs in a dictionary format.",
+      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the\ngiven date.\n\nAccepts a dictionary format of `PACKAGE = \"DATE\"` pairs, where `DATE` is an RFC 3339\ntimestamp (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g., `24 hours`, `1 week`,\n`30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerPackage"

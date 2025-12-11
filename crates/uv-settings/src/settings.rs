@@ -803,11 +803,14 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    /// Limit candidate packages to those that were uploaded prior to a given point in time.
+    /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
-    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
-    /// behave consistently across timezones.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g.,
+    /// `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "str",
@@ -816,9 +819,16 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub exclude_newer: Option<ExcludeNewerValue>,
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
     ///
-    /// Accepts package-date pairs in a dictionary format.
+    /// Accepts a dictionary format of `PACKAGE = "DATE"` pairs, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g., `24 hours`, `1 week`,
+    /// `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "dict",
