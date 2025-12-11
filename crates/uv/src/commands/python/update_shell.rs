@@ -28,8 +28,6 @@ pub(crate) async fn update_shell(
 
     #[cfg(windows)]
     {
-        use windows_registry::HSTRING;
-
         // Check if path is in PATH (read-only, doesn't mutate)
         let is_in_path = uv_shell::windows::contains_path(&executable_directory)?;
 
@@ -45,20 +43,7 @@ pub(crate) async fn update_shell(
 
         if is_in_path && args.force {
             // Already in PATH but forcing - remove it first, then prepend
-            let windows_path = uv_shell::windows::get_windows_path_var()?.unwrap_or_default();
-
-            // Remove the path if it exists
-            let new_path =
-                uv_shell::windows::remove_from_path(&windows_path, &executable_directory);
-
-            // Prepend the path
-            let final_path = uv_shell::windows::prepend_to_path(
-                &new_path,
-                HSTRING::from(executable_directory.as_path()),
-            )
-            .unwrap_or_else(|| HSTRING::from(executable_directory.as_path()));
-
-            uv_shell::windows::apply_windows_path_var(&final_path)?;
+            uv_shell::windows::force_prepend_path(&executable_directory)?;
 
             writeln!(
                 printer.stderr(),

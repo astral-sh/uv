@@ -85,6 +85,25 @@ pub fn prepend_to_path(existing_path: &HSTRING, path: HSTRING) -> Option<HSTRING
     }
 }
 
+/// Force prepend a path to the `PATH` variable, removing any existing entry first.
+///
+/// Used with `--force` to ensure the path is at the beginning of PATH.
+pub fn force_prepend_path(path: &Path) -> anyhow::Result<()> {
+    let windows_path = get_windows_path_var()?.unwrap_or_default();
+
+    // Remove the path if it exists
+    let new_path = remove_from_path(&windows_path, path);
+
+    // Prepend the path
+    let final_path =
+        prepend_to_path(&new_path, HSTRING::from(path)).unwrap_or_else(|| HSTRING::from(path));
+
+    // Set the `PATH` variable in the registry.
+    apply_windows_path_var(&final_path)?;
+
+    Ok(())
+}
+
 /// Check if a path is already in the Windows PATH variable (read-only).
 pub fn contains_path(path: &Path) -> anyhow::Result<bool> {
     let windows_path = get_windows_path_var()?.unwrap_or_default();
