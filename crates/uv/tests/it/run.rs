@@ -6405,3 +6405,40 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
 
     Ok(())
 }
+
+/// Using `--project` with a non-existent directory should warn.
+#[test]
+fn run_project_not_found() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in the future.
+    ");
+}
+
+/// Using `--project` with a file path should error.
+#[test]
+fn run_project_is_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a file instead of a directory.
+    let file_path = context.temp_dir.child("not-a-directory");
+    file_path.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--project").arg(file_path.path()).arg("python").arg("-c").arg("print('hello')"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project path `not-a-directory` is not a directory
+    ");
+
+    Ok(())
+}
