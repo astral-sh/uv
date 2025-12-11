@@ -918,7 +918,7 @@ pub enum InterpreterInfoError {
     },
     #[error("Only Pyodide is support for Emscripten Python")]
     EmscriptenNotPyodide,
-    #[error("Python is missing PYTHONHOME. If you are using a managed Python interpreter, this is a known bug (https://github.com/astral-sh/python-build-standalone/issues/380). You can recreate the virtual environment with `{}`.", "uv venv".green())]
+    #[error("Python is missing PYTHONHOME. If you are using a managed Python interpreter, this is a bug in older patch versions. Reinstalling the latest patch version and recreating the virtual environment solves this: `{}` and `{}`.", "uv python install --reinstall".green(), "uv venv".green())]
     PythonHomeNotFound,
 }
 
