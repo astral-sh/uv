@@ -223,8 +223,17 @@ impl LockedFile {
 
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
-        use std::os::unix::fs::PermissionsExt;
+        use rustix::io::Errno;
+        #[allow(clippy::disallowed_types)]
+        use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
+
+        #[allow(clippy::disallowed_types)]
+        fn try_set_permissions(file: &File) {
+            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(0o666)) {
+                warn!("Failed to set permissions on temporary file: {err}");
+            }
+        }
 
         // If path already exists, return it.
         if let Ok(file) = fs_err::OpenOptions::new()
@@ -242,12 +251,7 @@ impl LockedFile {
         } else {
             NamedTempFile::new()?
         };
-        if let Err(err) = file
-            .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o666))
-        {
-            warn!("Failed to set permissions on temporary file: {err}");
-        }
+        try_set_permissions(file.as_file());
 
         // Try to move the file to path, but if path exists now, just open path
         match file.persist_noclobber(path.as_ref()) {
@@ -258,6 +262,38 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
+                } else if matches!(
+                    Errno::from_io_error(&err.error),
+                    Some(Errno::NOTSUP | Errno::INVAL)
+                ) {
+                    // Fallback in case `persist_noclobber`, which uses `renameat2` or
+                    // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
+                    // with `EINVAL` and MacOS with `ENOTSUP`.
+
+                    // There is a race here where another process has just created the file, and we
+                    // try to open it and get permission errors because the other process hasn't set
+                    // the permission bits yet. This will lead to a transient failure, but unlike
+                    // alternative approaches it won't ever lead to a situation where two processes
+                    // are locking two different files. Also, since `persist_noclobber` is more
+                    // likely to not be supported on special filesystems which don't have permission
+                    // bits, it's less likely to ever matter.
+                    let file = fs_err::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(path.as_ref())?;
+
+                    // We don't want to `try_set_permissions` in cases where another user's process
+                    // has already created the lockfile and changed its permissions because we might
+                    // not have permission to change the permissions which would produce a confusing
+                    // warning.
+                    if file
+                        .metadata()
+                        .is_ok_and(|metadata| metadata.permissions().mode() != 0o666)
+                    {
+                        try_set_permissions(file.file());
+                    }
+                    Ok(file)
                 } else {
                     Err(err.error)
                 }
