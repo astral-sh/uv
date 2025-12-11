@@ -1,6 +1,5 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
-use std::fs;
 
 use uv_static::EnvVars;
 
@@ -27,7 +26,7 @@ fn python_update_shell_not_in_path() {
     "###);
 
     // Verify the file was created with the correct content
-    let contents = fs::read_to_string(shell_config.path()).unwrap();
+    let contents = fs_err::read_to_string(shell_config.path()).unwrap();
     assert!(contents.contains("export PATH="));
     assert!(contents.contains("# uv"));
 }
@@ -38,7 +37,7 @@ fn python_update_shell_already_in_path() {
 
     // Set a specific bin directory using UV_PYTHON_BIN_DIR
     let bin_dir = context.home_dir.child("bin");
-    fs::create_dir_all(bin_dir.path()).unwrap();
+    fs_err::create_dir_all(bin_dir.path()).unwrap();
 
     // Set PATH to include the bin directory so it's "already in PATH"
     let path_with_bin = std::env::join_paths(std::iter::once(bin_dir.path().to_path_buf()).chain(
@@ -77,7 +76,7 @@ fn python_update_shell_force() {
         .assert()
         .success();
 
-    let first_contents = fs::read_to_string(shell_config.path()).unwrap();
+    let first_contents = fs_err::read_to_string(shell_config.path()).unwrap();
     let first_count = first_contents.matches("export PATH=").count();
 
     // Second run with --force - should update
@@ -96,7 +95,7 @@ fn python_update_shell_force() {
     "###);
 
     // Verify only one PATH export exists (old one removed, new one added)
-    let second_contents = fs::read_to_string(shell_config.path()).unwrap();
+    let second_contents = fs_err::read_to_string(shell_config.path()).unwrap();
     let second_count = second_contents.matches("export PATH=").count();
     assert_eq!(
         first_count, second_count,
@@ -106,6 +105,6 @@ fn python_update_shell_force() {
     // Verify the command is at the end
     assert!(
         second_contents.trim_end().ends_with("export PATH=")
-            || second_contents.trim_end().ends_with("\"")
+            || second_contents.trim_end().ends_with('"')
     );
 }

@@ -110,8 +110,8 @@ pub fn remove_from_path(existing_path: &HSTRING, path_to_remove: &Path) -> HSTRI
     }
 
     let path_str = path_to_remove.to_string_lossy();
-    let paths: Vec<&str> = existing_path
-        .to_string_lossy()
+    let path_string = existing_path.to_string_lossy();
+    let paths: Vec<&str> = path_string
         .split(';')
         .filter(|p| p.trim() != path_str.as_ref())
         .collect();
