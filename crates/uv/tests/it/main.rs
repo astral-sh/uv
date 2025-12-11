@@ -102,6 +102,10 @@ mod python_pin;
 #[cfg(feature = "python-managed")]
 mod python_upgrade;
 
+#[cfg(feature = "python")]
+mod python_update_shell;
+
+
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod run;
 
