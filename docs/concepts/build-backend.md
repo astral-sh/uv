@@ -44,7 +44,7 @@ build-backend = "uv_build"
 To create a new project that uses the uv build backend, use `uv init`:
 
 ```console
-$ uv init
+$ uv init --package
 ```
 
 When the project is built, e.g., with [`uv build`](../guides/package.md), the uv build backend will
