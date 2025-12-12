@@ -79,4 +79,4 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
 
 [package.metadata.cargo-shear]
-ignored = ["flate2", "uv-extract", "uv-performance-memory-allocator"]
+ignored = ["uv-performance-memory-allocator"]

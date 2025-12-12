@@ -5429,7 +5429,6 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "h2",
  "http",
  "ignore",
  "indexmap",
