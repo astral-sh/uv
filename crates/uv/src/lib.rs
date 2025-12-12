@@ -1551,9 +1551,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::tool_uninstall(args.name, printer).await
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::UpdateShell,
+            command: ToolCommand::UpdateShell(args),
         }) => {
-            commands::tool_update_shell(printer).await?;
+            commands::tool_update_shell(args, printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -1745,9 +1745,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::UpdateShell,
+            command: PythonCommand::UpdateShell(args),
         }) => {
-            commands::python_update_shell(printer).await?;
+            commands::python_update_shell(args, printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {

@@ -5036,7 +5036,7 @@ pub enum ToolCommand {
     /// The tool executable directory is determined according to the XDG standard and can be
     /// retrieved with `uv tool dir --bin`.
     #[command(alias = "ensurepath")]
-    UpdateShell,
+    UpdateShell(PythonUpdateShellArgs),
     /// Show the path to the uv tools directory.
     ///
     /// The tools directory is used to store environments and metadata for installed tools.
@@ -5790,7 +5790,16 @@ pub enum PythonCommand {
     /// The Python executable directory is determined according to the XDG standard and can be
     /// retrieved with `uv python dir --bin`.
     #[command(alias = "ensurepath")]
-    UpdateShell,
+    UpdateShell(PythonUpdateShellArgs),
+}
+
+#[derive(Args)]
+pub struct PythonUpdateShellArgs {
+    /// Force prepending the executable directory to PATH even if it's already present.
+    ///
+    /// This is useful when the directory is in PATH but binaries are shadowed by earlier entries.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
