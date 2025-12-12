@@ -1116,16 +1116,18 @@ async fn compile_stdlib_bytecode(
     // Attempt to avoid accidentally bytecode compiling some other python
     // installation's bytecode if the installed interpreter reports a weird
     // stdlib path.
-    let stdlib_path = interpreter.stdlib().canonicalize()?;
     let interpreter_path = installation.path().canonicalize()?;
-    if !stdlib_path.starts_with(interpreter_path) {
-        warn_user_once!(
-            "The stdlib path for {} ({}) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.",
-            installation.key(),
-            stdlib_path.display()
-        );
-        return Ok(());
-    }
+    let stdlib_path = match interpreter.stdlib().canonicalize() {
+        Ok(path) if path.starts_with(interpreter_path) => path,
+        _ => {
+            warn_user_once!(
+                "The stdlib path for {} ({}) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.",
+                installation.key(),
+                interpreter.stdlib().display()
+            );
+            return Ok(());
+        }
+    };
 
     let files = uv_installer::compile_tree(
         &stdlib_path,
