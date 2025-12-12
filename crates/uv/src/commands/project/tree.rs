@@ -39,7 +39,6 @@ pub(crate) async fn tree(
     groups: DependencyGroups,
     lock_check: LockCheck,
     frozen: bool,
-    no_frozen: bool,
     universal: bool,
     depth: u8,
     prune: Vec<PackageName>,
@@ -83,7 +82,6 @@ pub(crate) async fn tree(
     let groups = groups.with_defaults(default_groups);
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
-    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     let interpreter = if frozen && universal {
         None
     } else {
@@ -126,7 +124,6 @@ pub(crate) async fn tree(
     };
 
     // Determine the lock mode.
-    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     let mode = if frozen {
         LockMode::Frozen
     } else if let LockCheck::Enabled(lock_check) = lock_check {

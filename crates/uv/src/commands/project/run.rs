@@ -85,7 +85,6 @@ pub(crate) async fn run(
     show_resolution: bool,
     lock_check: LockCheck,
     frozen: bool,
-    no_frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     isolated: bool,
@@ -263,7 +262,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .ok();
 
             // Determine the lock mode.
-            let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
             let mode = if frozen {
                 LockMode::Frozen
             } else if let LockCheck::Enabled(lock_check) = lock_check {
@@ -366,7 +364,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     "uv lock --script".green(),
                 );
             }
-            let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
             if frozen {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
@@ -604,7 +601,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
-            let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
@@ -752,7 +748,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .ok();
 
                 // Determine the lock mode.
-                let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
                 let mode = if frozen {
                     LockMode::Frozen
                 } else if let LockCheck::Enabled(lock_check) = lock_check {

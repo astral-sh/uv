@@ -44,7 +44,6 @@ pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: bool,
-    no_frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
@@ -76,7 +75,6 @@ pub(crate) async fn remove(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation",
             );
         }
-        let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
         if frozen {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
@@ -186,7 +184,6 @@ pub(crate) async fn remove(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     if frozen {
         return Ok(ExitStatus::Success);
     }

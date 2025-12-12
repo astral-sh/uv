@@ -1071,7 +1071,7 @@ pub enum ProjectCommand {
     ///
     /// The lockfile and project environment will be updated to reflect the added dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
-    /// `--no-sync`.
+    /// `--no-sync`. To override the global FROZEN environment variable temporarily, use `--no-frozen`. 
     ///
     /// If any of the requested dependencies cannot be found, uv will exit with an error, unless the
     /// `--frozen` flag is provided, in which case uv will add the dependencies verbatim without
@@ -1093,7 +1093,7 @@ pub enum ProjectCommand {
     ///
     /// The lockfile and project environment will be updated to reflect the removed dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
-    /// `--no-sync`.
+    /// `--no-sync`. To override the global FROZEN environment variable temporarily, use `--no-frozen`.
     ///
     /// If any of the requested dependencies are not present in the project, uv will exit with an
     /// error.
@@ -1124,7 +1124,7 @@ pub enum ProjectCommand {
     /// If the project virtual environment (`.venv`) does not exist, it will be created.
     ///
     /// The project is re-locked before syncing unless the `--locked` or `--frozen` flag is
-    /// provided.
+    /// provided. To override the global FROZEN environment variable temporarily, use `--no-frozen`.
     ///
     /// uv will search for a project in the current directory or any parent directory. If a project
     /// cannot be found, uv will exit with an error.
@@ -1153,7 +1153,7 @@ pub enum ProjectCommand {
     /// At present, both `requirements.txt` and `pylock.toml` (PEP 751) formats are supported.
     ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
-    /// provided.
+    /// provided. To override the global FROZEN environment variable temporarily, use `--no-frozen`.
     ///
     /// uv will search for a project in the current directory or any parent directory. If a project
     /// cannot be found, uv will exit with an error.

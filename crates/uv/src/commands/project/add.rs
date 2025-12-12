@@ -64,7 +64,6 @@ pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: bool,
-    no_frozen: bool,
     active: Option<bool>,
     no_sync: bool,
     no_install_project: bool,
@@ -187,7 +186,6 @@ pub(crate) async fn add(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
         if frozen {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
@@ -291,7 +289,7 @@ pub(crate) async fn add(
         // Enable the default groups of the project
         defaulted_groups =
             groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
-        let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
+
         if frozen || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
@@ -707,7 +705,6 @@ pub(crate) async fn add(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     if frozen {
         return Ok(ExitStatus::Success);
     }
