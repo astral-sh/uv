@@ -1,9 +1,7 @@
-use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
-use reqwest_retry::RetryPolicy;
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -14,7 +12,7 @@ use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
-use crate::base_client::is_transient_network_error;
+use crate::base_client::RetryState;
 use crate::error::ProblemDetails;
 use crate::{
     Error, ErrorKind,
@@ -692,9 +690,7 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let mut total_retries = 0;
-        let start_time = SystemTime::now();
-        let retry_policy = self.uncached().retry_policy();
+        let mut retry_state = RetryState::new(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
@@ -704,34 +700,10 @@ impl CachedClient {
             match result {
                 Ok(ok) => return Ok(ok),
                 Err(err) => {
-                    // Check if the middleware already performed retries
-                    total_retries += err.retries();
-                    if is_transient_network_error(err.error()) {
-                        // If middleware already retried, consider that in our retry budget
-                        let retry_decision = retry_policy.should_retry(start_time, total_retries);
-                        if let reqwest_retry::RetryDecision::Retry { execute_after } =
-                            retry_decision
-                        {
-                            let duration = execute_after
-                                .duration_since(SystemTime::now())
-                                .unwrap_or_else(|_| Duration::default());
-
-                            debug!(
-                                "Transient failure while handling response from {}; retrying after {:.1}s...",
-                                req.url(),
-                                duration.as_secs_f32(),
-                            );
-                            tokio::time::sleep(duration).await;
-                            total_retries += 1;
-                            continue;
-                        }
+                    if retry_state.should_retry(err.error(), err.retries()).await {
+                        continue;
                     }
-
-                    return if total_retries > 0 {
-                        Err(err.with_retries(total_retries))
-                    } else {
-                        Err(err)
-                    };
+                    return Err(err.with_retries(retry_state.total_retries()));
                 }
             }
         }
@@ -751,47 +723,22 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
-        let mut past_retries = 0;
-        let start_time = SystemTime::now();
-        let retry_policy = self.uncached().retry_policy();
+        let mut retry_state = RetryState::new(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
                 .skip_cache(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
 
-            // Check if the middleware already performed retries
-            let middleware_retries = match &result {
-                Err(err) => err.retries(),
-                _ => 0,
-            };
-
-            if result
-                .as_ref()
-                .is_err_and(|err| is_transient_network_error(err.error()))
-            {
-                let total_retries = past_retries + middleware_retries;
-                let retry_decision = retry_policy.should_retry(start_time, total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-                    debug!(
-                        "Transient failure while handling response from {}; retrying after {}s...",
-                        req.url(),
-                        duration.as_secs(),
-                    );
-                    tokio::time::sleep(duration).await;
-                    past_retries += 1;
-                    continue;
+            match result {
+                Ok(ok) => return Ok(ok),
+                Err(err) => {
+                    if retry_state.should_retry(err.error(), err.retries()).await {
+                        continue;
+                    }
+                    return Err(err.with_retries(retry_state.total_retries()));
                 }
             }
-
-            if past_retries > 0 {
-                return result.map_err(|err| err.with_retries(past_retries));
-            }
-
-            return result;
         }
     }
 }

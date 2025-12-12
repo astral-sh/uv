@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -20,7 +20,7 @@ use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipar
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
+    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
     default_on_request_success,
 };
 use thiserror::Error;
@@ -1143,8 +1143,66 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     None
 }
 
-pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
-    retryable_on_request_failure(err) == Some(Retryable::Transient)
+/// Decide whether a requests should be retried, tracking previous attempts and backoff.
+pub struct RetryState {
+    retry_policy: ExponentialBackoff,
+    start_time: SystemTime,
+    total_retries: u32,
+    url: DisplaySafeUrl,
+}
+
+impl RetryState {
+    pub fn new(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
+        Self {
+            retry_policy,
+            start_time: SystemTime::now(),
+            total_retries: 0,
+            url: url.into(),
+        }
+    }
+
+    /// The number of retries across all requests.
+    ///
+    /// After a failed retryable request, this equals the maximum number of retries.
+    pub fn total_retries(&self) -> u32 {
+        self.total_retries
+    }
+
+    /// Whether request should be retried. Waits with backoff if required.
+    ///
+    /// Takes the number of retries from nested layers associated with the specific `err` type as
+    /// `error_retries`.
+    pub async fn should_retry(&mut self, err: &(dyn Error + 'static), error_retries: u32) -> bool {
+        // Check if the middleware already performed retries
+        self.total_retries += error_retries;
+        match retryable_on_request_failure(err) {
+            Some(Retryable::Transient) => {
+                // If middleware already retried, consider that in our retry budget
+                let retry_decision = self
+                    .retry_policy
+                    .should_retry(self.start_time, self.total_retries);
+                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_else(|_| Duration::default());
+
+                    debug!(
+                        "Transient failure while handling response from {}; retrying after {:.1}s...",
+                        self.url,
+                        duration.as_secs_f32(),
+                    );
+                    // TODO(konsti): Should we show a spinner plus a message in the CLI while
+                    // waiting?
+                    tokio::time::sleep(duration).await;
+                    self.total_retries += 1;
+                    return true;
+                }
+
+                false
+            }
+            Some(Retryable::Fatal) | None => false,
+        }
+    }
 }
 
 /// Whether the error is a status code error that is retryable.
@@ -1414,7 +1472,7 @@ mod tests {
 
             let uv_retry = match response.error_for_status() {
                 Ok(_) => false,
-                Err(err) => is_transient_network_error(&err),
+                Err(err) => retryable_on_request_failure(&err) == Some(Retryable::Transient),
             };
 
             // Ensure we're retrying the same status code as the reqwest_retry crate. We may choose

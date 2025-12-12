@@ -6,21 +6,18 @@
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
-use reqwest_retry::RetryPolicy;
 use reqwest_retry::policies::ExponentialBackoff;
 use std::fmt;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{BaseClient, is_transient_network_error};
+use uv_client::{BaseClient, RetryState};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
 use uv_platform::Platform;
@@ -141,7 +138,7 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Attempt failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RetriedError {
         #[source]
         err: Box<Error>,
@@ -242,9 +239,7 @@ async fn download_and_unpack_with_retry(
     download_url: &Url,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
-    let mut total_attempts = 0;
-    let mut retried_here = false;
-    let start_time = SystemTime::now();
+    let mut retry_state = RetryState::new(*retry_policy, download_url.clone());
 
     loop {
         let result = download_and_unpack(
@@ -263,30 +258,14 @@ async fn download_and_unpack_with_retry(
         let result = match result {
             Ok(path) => Ok(path),
             Err(err) => {
-                total_attempts += err.attempts();
-                let past_retries = total_attempts - 1;
-
-                if is_transient_network_error(&err) {
-                    let retry_decision = retry_policy.should_retry(start_time, past_retries);
-                    if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                        debug!(
-                            "Transient failure while installing {} {}; retrying...",
-                            binary.name(),
-                            version
-                        );
-                        let duration = execute_after
-                            .duration_since(SystemTime::now())
-                            .unwrap_or_else(|_| Duration::default());
-                        tokio::time::sleep(duration).await;
-                        retried_here = true;
-                        continue;
-                    }
+                if retry_state.should_retry(&err, err.attempts()).await {
+                    continue;
                 }
 
-                if retried_here {
+                if retry_state.total_retries() > 0 {
                     Err(Error::RetriedError {
                         err: Box::new(err),
-                        retries: past_retries,
+                        retries: retry_state.total_retries(),
                     })
                 } else {
                     Err(err)

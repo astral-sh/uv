@@ -3,7 +3,6 @@ mod trusted_publishing;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
 use std::{fmt, io};
 
 use fs_err::tokio::File;
@@ -13,7 +12,7 @@ use itertools::Itertools;
 use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
-use reqwest_retry::RetryPolicy;
+use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
@@ -28,7 +27,7 @@ use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive, RegistryClientBuilder,
-    RequestBuilder, RetryParsingError, is_transient_network_error,
+    RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -474,11 +473,10 @@ pub async fn upload(
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    let mut n_past_retries = 0;
     let mut n_past_redirections = 0;
     let max_redirects = DEFAULT_MAX_REDIRECTS;
-    let start_time = SystemTime::now();
     let mut current_registry = registry.clone();
+    let mut retry_state = RetryState::new(retry_policy, registry.clone());
 
     loop {
         let (request, idx) = build_upload_request(
@@ -553,23 +551,16 @@ pub async fn upload(
                 response
             }
             Err(err) => {
-                if is_transient_network_error(&err) {
-                    let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-                    if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                        let duration = execute_after
-                            .duration_since(SystemTime::now())
-                            .unwrap_or_else(|_| Duration::default());
-                        warn_user!(
-                            "Transient failure while handling response for {}; retrying after {}s...",
-                            current_registry,
-                            duration.as_secs()
-                        );
-                        tokio::time::sleep(duration).await;
-                        n_past_retries += 1;
-                        continue;
-                    }
+                let middleware_retries = if let Some(RetryError::WithRetries { retries, .. }) =
+                    (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                {
+                    *retries
+                } else {
+                    0
+                };
+                if retry_state.should_retry(&err, middleware_retries).await {
+                    continue;
                 }
-
                 return Err(PublishError::PublishSend(
                     group.file.clone(),
                     current_registry.clone().into(),
