@@ -823,7 +823,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
@@ -843,7 +843,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await
@@ -2280,7 +2280,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback { err, .. } => err,
-                        CachedClientError::Client { err, .. } => Error::Client(err),
+                        CachedClientError::Client(err) => Error::Client(err),
                     })
             })
             .await

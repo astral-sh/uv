@@ -721,7 +721,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -745,7 +745,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?
@@ -926,7 +926,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -950,7 +950,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?

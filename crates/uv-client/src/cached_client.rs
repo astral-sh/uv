@@ -120,11 +120,10 @@ where
 }
 
 /// Dispatch type: Either a cached client error or a (user specified) error from the callback
+#[derive(Debug)]
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
-    Client {
-        retries: Option<u32>,
-        err: Error,
-    },
+    /// The client tracks retries internally
+    Client(Error),
     Callback {
         retries: Option<u32>,
         err: CallbackError,
@@ -132,23 +131,12 @@ pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
 }
 
 impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
-    /// Attach the number of retries to the error context.
-    ///
-    /// Adds to existing errors if any, in case different layers retried.
+    /// Attach the combined number of retries to the error context, discarding the previous count.
     fn with_retries(self, retries: u32) -> Self {
         match self {
-            Self::Client {
-                retries: existing_retries,
-                err,
-            } => Self::Client {
-                retries: Some(existing_retries.unwrap_or_default() + retries),
-                err,
-            },
-            Self::Callback {
-                retries: existing_retries,
-                err,
-            } => Self::Callback {
-                retries: Some(existing_retries.unwrap_or_default() + retries),
+            Self::Client(err) => Self::Client(err.with_retries(retries)),
+            Self::Callback { retries: _, err } => Self::Callback {
+                retries: Some(retries),
                 err,
             },
         }
@@ -156,14 +144,14 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
 
     fn retries(&self) -> Option<u32> {
         match self {
-            Self::Client { retries, .. } => *retries,
+            Self::Client(err) => Some(err.retries()),
             Self::Callback { retries, .. } => *retries,
         }
     }
 
     fn error(&self) -> &(dyn std::error::Error + 'static) {
         match self {
-            Self::Client { err, .. } => err,
+            Self::Client(err) => err,
             Self::Callback { err, .. } => err,
         }
     }
@@ -171,10 +159,7 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
 
 impl<CallbackError: std::error::Error + 'static> From<Error> for CachedClientError<CallbackError> {
     fn from(error: Error) -> Self {
-        Self::Client {
-            retries: None,
-            err: error,
-        }
+        Self::Client(error)
     }
 }
 
@@ -182,10 +167,7 @@ impl<CallbackError: std::error::Error + 'static> From<ErrorKind>
     for CachedClientError<CallbackError>
 {
     fn from(error: ErrorKind) -> Self {
-        Self::Client {
-            retries: None,
-            err: error.into(),
-        }
+        Self::Client(error.into())
     }
 }
 
@@ -193,11 +175,7 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
     /// Attach retry error context, if there were retries.
     fn from(error: CachedClientError<E>) -> Self {
         match error {
-            CachedClientError::Client {
-                retries: Some(retries),
-                err,
-            } => Self::new(err.into_kind(), retries),
-            CachedClientError::Client { retries: None, err } => err,
+            CachedClientError::Client(error) => error,
             CachedClientError::Callback {
                 retries: Some(retries),
                 err,
@@ -450,10 +428,15 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
+        // Capture retries from the retry middleware
+        let retries = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
         let data = response_callback(response)
             .boxed_local()
             .await
-            .map_err(|err| CachedClientError::Callback { retries: None, err })?;
+            .map_err(|err| CachedClientError::Callback { retries, err })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -662,16 +645,10 @@ impl CachedClient {
             } else {
                 None
             };
-            return Err(CachedClientError::<Error>::Client {
-                retries: retry_count,
-                err: ErrorKind::from_reqwest_with_problem_details(
-                    url,
-                    status_error,
-                    problem_details,
-                )
-                .into(),
-            }
-            .into());
+            return Err(Error::new(
+                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                retry_count.unwrap_or_default(),
+            ));
         }
 
         let cache_policy = cache_policy_builder.build(&response);
@@ -720,7 +697,7 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let mut past_retries = 0;
+        let mut total_retries = 0;
         let start_time = SystemTime::now();
         let retry_policy = self.uncached().retry_policy();
         loop {
@@ -729,40 +706,39 @@ impl CachedClient {
                 .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
 
-            // Check if the middleware already performed retries
-            let middleware_retries = match &result {
-                Err(err) => err.retries().unwrap_or_default(),
-                Ok(_) => 0,
-            };
+            match result {
+                Ok(ok) => return Ok(ok),
+                Err(err) => {
+                    // Check if the middleware already performed retries
+                    total_retries += err.retries().unwrap_or_default();
+                    if is_transient_network_error(err.error()) {
+                        // If middleware already retried, consider that in our retry budget
+                        let retry_decision = retry_policy.should_retry(start_time, total_retries);
+                        if let reqwest_retry::RetryDecision::Retry { execute_after } =
+                            retry_decision
+                        {
+                            let duration = execute_after
+                                .duration_since(SystemTime::now())
+                                .unwrap_or_else(|_| Duration::default());
 
-            if result
-                .as_ref()
-                .is_err_and(|err| is_transient_network_error(err.error()))
-            {
-                // If middleware already retried, consider that in our retry budget
-                let total_retries = past_retries + middleware_retries;
-                let retry_decision = retry_policy.should_retry(start_time, total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
+                            debug!(
+                                "Transient failure while handling response from {}; retrying after {:.1}s...",
+                                req.url(),
+                                duration.as_secs_f32(),
+                            );
+                            tokio::time::sleep(duration).await;
+                            total_retries += 1;
+                            continue;
+                        }
+                    }
 
-                    debug!(
-                        "Transient failure while handling response from {}; retrying after {:.1}s...",
-                        req.url(),
-                        duration.as_secs_f32(),
-                    );
-                    tokio::time::sleep(duration).await;
-                    past_retries += 1;
-                    continue;
+                    return if total_retries > 0 {
+                        Err(err.with_retries(total_retries))
+                    } else {
+                        Err(err)
+                    };
                 }
             }
-
-            if past_retries > 0 {
-                return result.map_err(|err| err.with_retries(past_retries));
-            }
-
-            return result;
         }
     }
 
@@ -797,8 +773,7 @@ impl CachedClient {
 
             if result
                 .as_ref()
-                .err()
-                .is_some_and(|err| is_transient_network_error(err.error()))
+                .is_err_and(|err| is_transient_network_error(err.error()))
             {
                 let total_retries = past_retries + middleware_retries;
                 let retry_decision = retry_policy.should_retry(start_time, total_retries);

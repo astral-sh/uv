@@ -123,6 +123,11 @@ impl Error {
         &self.kind
     }
 
+    pub(crate) fn with_retries(mut self, retries: u32) -> Self {
+        self.retries = retries;
+        self
+    }
+
     /// Create a new error from a JSON parsing error.
     pub(crate) fn from_json_err(err: serde_json::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
