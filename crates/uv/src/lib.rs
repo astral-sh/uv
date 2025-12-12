@@ -1601,6 +1601,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            let cache = cache.init().await?;
             commands::python_install(
                 &project_dir,
                 args.install_dir,
@@ -1614,6 +1615,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
                 client_builder.subcommand(vec!["python".to_owned(), "install".to_owned()]),
+                &cache,
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
@@ -1630,6 +1632,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
             let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
 
+            let cache = cache.init().await?;
             commands::python_install(
                 &project_dir,
                 args.install_dir,
@@ -1643,6 +1646,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.pypy_install_mirror,
                 args.python_downloads_json_url,
                 client_builder.subcommand(vec!["python".to_owned(), "upgrade".to_owned()]),
+                &cache,
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,

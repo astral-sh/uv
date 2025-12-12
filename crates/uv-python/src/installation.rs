@@ -261,6 +261,7 @@ impl PythonInstallation {
                 retry_policy,
                 installations_dir,
                 &scratch_dir,
+                cache,
                 false,
                 python_install_mirror,
                 pypy_install_mirror,

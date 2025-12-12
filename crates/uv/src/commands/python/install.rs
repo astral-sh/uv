@@ -14,6 +14,7 @@ use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
+use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
@@ -188,6 +189,7 @@ pub(crate) async fn install(
     pypy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
     client_builder: BaseClientBuilder<'_>,
+    cache: &Cache,
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
@@ -470,6 +472,7 @@ pub(crate) async fn install(
                         &retry_policy,
                         installations_dir,
                         &scratch_dir,
+                        cache,
                         reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
