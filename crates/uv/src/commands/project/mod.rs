@@ -220,6 +220,9 @@ pub(crate) enum ProjectError {
     DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
+    Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
     Python(#[from] uv_python::Error),
 
     #[error(transparent)]

@@ -10,20 +10,21 @@ use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
+use tokio::sync::Semaphore;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_configuration::Constraints;
 use uv_configuration::TargetTriple;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
-    IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -47,6 +48,7 @@ use uv_workspace::WorkspaceCache;
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::pip;
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -905,6 +907,62 @@ async fn get_or_create_environment(
         }
     };
 
+    // For `@latest`, fetch the latest version and create a constraint.
+    let latest = if let ToolRequest::Package {
+        target: Target::Latest(_, name, _),
+        ..
+    } = &request
+    {
+        // Build the registry client to fetch the latest version.
+        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+            .index_locations(settings.resolver.index_locations.clone())
+            .index_strategy(settings.resolver.index_strategy)
+            .markers(interpreter.markers())
+            .platform(interpreter.platform())
+            .build();
+
+        // Initialize the capabilities.
+        let capabilities = IndexCapabilities::default();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
+
+        // Initialize the client to fetch the latest version.
+        let latest_client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease: settings.resolver.prerelease,
+            exclude_newer: &settings.resolver.exclude_newer,
+            tags: None,
+            requires_python: None,
+        };
+
+        // Fetch the latest version.
+        if let Some(dist_filename) = latest_client
+            .find_latest(name, None, &download_concurrency)
+            .await?
+        {
+            let version = dist_filename.version().clone();
+            debug!("Resolved `{name}@latest` to `{name}=={version}`");
+
+            // The constraint pins the version during resolution to prevent backtracking.
+            Some(Requirement {
+                name: name.clone(),
+                extras: vec![].into_boxed_slice(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(
         with,
@@ -1016,7 +1074,7 @@ async fn get_or_create_environment(
                     if matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
-                            constraints.iter(),
+                            constraints.iter().chain(latest.iter()),
                             overrides.iter(),
                             InstallationStrategy::Permissive,
                             &markers,
@@ -1044,6 +1102,7 @@ async fn get_or_create_environment(
             .collect(),
         constraints: constraints
             .into_iter()
+            .chain(latest.into_iter())
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides

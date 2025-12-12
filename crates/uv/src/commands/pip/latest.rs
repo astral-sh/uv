@@ -12,7 +12,7 @@ use uv_warnings::warn_user_once;
 /// A client to fetch the latest version of a package from an index.
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
-/// requirement.
+/// requirement (if specified).
 #[derive(Debug, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
@@ -20,7 +20,7 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) exclude_newer: &'env ExcludeNewer,
     pub(crate) tags: Option<&'env Tags>,
-    pub(crate) requires_python: &'env RequiresPython,
+    pub(crate) requires_python: Option<&'env RequiresPython>,
 }
 
 impl LatestClient<'_> {
@@ -30,7 +30,7 @@ impl LatestClient<'_> {
         package: &PackageName,
         index: Option<&IndexUrl>,
         download_concurrency: &Semaphore,
-    ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
+    ) -> Result<Option<DistFilename>, uv_client::Error> {
         debug!("Fetching latest version of: `{package}`");
 
         let archives = match self
@@ -101,14 +101,16 @@ impl LatestClient<'_> {
                     }
 
                     // Skip distributions that are incompatible with the Python requirement.
-                    if file
-                        .requires_python
-                        .as_ref()
-                        .is_some_and(|requires_python| {
-                            !self.requires_python.is_contained_by(requires_python)
-                        })
-                    {
-                        continue;
+                    if let Some(requires_python) = self.requires_python {
+                        if file
+                            .requires_python
+                            .as_ref()
+                            .is_some_and(|file_requires_python| {
+                                !requires_python.is_contained_by(file_requires_python)
+                            })
+                        {
+                            continue;
+                        }
                     }
 
                     // Skip distributions that are incompatible with the current platform.

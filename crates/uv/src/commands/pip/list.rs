@@ -133,7 +133,7 @@ pub(crate) async fn pip_list(
             prerelease,
             exclude_newer: &exclude_newer,
             tags: Some(tags),
-            requires_python: &requires_python,
+            requires_python: Some(&requires_python),
         };
 
         let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);

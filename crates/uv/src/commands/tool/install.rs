@@ -3,16 +3,17 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
+use tokio::sync::Semaphore;
 use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -29,6 +30,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
@@ -224,6 +226,62 @@ pub(crate) async fn install(
         }
     };
 
+    // For `@latest`, fetch the latest version and create a constraint.
+    let latest = if let ToolRequest::Package {
+        target: Target::Latest(_, name, _),
+        ..
+    } = &request
+    {
+        // Build the registry client to fetch the latest version.
+        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+            .index_locations(settings.resolver.index_locations.clone())
+            .index_strategy(settings.resolver.index_strategy)
+            .markers(interpreter.markers())
+            .platform(interpreter.platform())
+            .build();
+
+        // Initialize the capabilities.
+        let capabilities = IndexCapabilities::default();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
+
+        // Initialize the client to fetch the latest version.
+        let latest_client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease: settings.resolver.prerelease,
+            exclude_newer: &settings.resolver.exclude_newer,
+            tags: None,
+            requires_python: None,
+        };
+
+        // Fetch the latest version.
+        if let Some(dist_filename) = latest_client
+            .find_latest(name, None, &download_concurrency)
+            .await?
+        {
+            let version = dist_filename.version().clone();
+            debug!("Resolved `{name}@latest` to `{name}=={version}`");
+
+            // The constraint pins the version during resolution to prevent backtracking.
+            Some(Requirement {
+                name: name.clone(),
+                extras: vec![].into_boxed_slice(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let package_name = &requirement.name;
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
@@ -284,11 +342,11 @@ pub(crate) async fn install(
     };
 
     // Resolve the constraints.
-    let constraints = spec
+    let constraints: Vec<_> = spec
         .constraints
         .into_iter()
         .map(|constraint| constraint.requirement)
-        .collect::<Vec<_>>();
+        .collect();
 
     // Resolve the overrides.
     let overrides = resolve_names(
@@ -412,7 +470,7 @@ pub(crate) async fn install(
                 if matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
-                        constraints.iter(),
+                        constraints.iter().chain(latest.iter()),
                         overrides.iter(),
                         InstallationStrategy::Permissive,
                         &markers,
@@ -454,6 +512,7 @@ pub(crate) async fn install(
         constraints: constraints
             .iter()
             .cloned()
+            .chain(latest.into_iter())
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides
