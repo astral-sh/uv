@@ -34,6 +34,33 @@ static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Error)]
+pub enum CreateLockedFileError {
+    #[error("Could not create temporary file")]
+    CreateTemporary(#[source] io::Error),
+    #[error("Could not persist temporary file `{}`", path.user_display())]
+    PersistTemporary {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("Could not open existing file")]
+    OpenExisting(#[source] io::Error),
+    #[error("Could not create or open the file")]
+    CreateOrOpen(#[source] io::Error),
+}
+
+impl CreateLockedFileError {
+    pub fn as_io_error(&self) -> &io::Error {
+        match self {
+            Self::CreateTemporary(err) => err,
+            Self::PersistTemporary { source, .. } => source,
+            Self::OpenExisting(err) => err,
+            Self::CreateOrOpen(err) => err,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum LockedFileError {
     #[error(
         "Timeout ({}s) when waiting for lock on `{}` at `{}`, is another uv process running? You can set `{}` to increase the timeout.",
@@ -58,8 +85,12 @@ pub enum LockedFileError {
         #[source]
         source: io::Error,
     },
-    #[error(transparent)]
-    Io(#[from] io::Error),
+    #[error("Could not open or create lock file at `{}`", path.user_display())]
+    Create {
+        path: PathBuf,
+        #[source]
+        source: CreateLockedFileError,
+    },
     #[error(transparent)]
     #[cfg(feature = "tokio")]
     JoinError(#[from] tokio::task::JoinError),
@@ -72,7 +103,7 @@ impl LockedFileError {
             #[cfg(feature = "tokio")]
             Self::JoinError(_) => None,
             Self::Lock { source, .. } => Some(source),
-            Self::Io(err) => Some(err),
+            Self::Create { source, .. } => Some(source.as_io_error()),
         }
     }
 }
@@ -201,7 +232,10 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
+        let file = Self::create(&path).map_err(|source| LockedFileError::Create {
+            path: path.as_ref().to_path_buf(),
+            source,
+        })?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -222,7 +256,7 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, CreateLockedFileError> {
         use rustix::io::Errno;
         #[allow(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
@@ -247,10 +281,11 @@ impl LockedFile {
         // Otherwise, create a temporary file with 666 permissions. We must set
         // permissions _after_ creating the file, to override the `umask`.
         let file = if let Some(parent) = path.as_ref().parent() {
-            NamedTempFile::new_in(parent)?
+            NamedTempFile::new_in(parent)
         } else {
-            NamedTempFile::new()?
-        };
+            NamedTempFile::new()
+        }
+        .map_err(CreateLockedFileError::CreateTemporary)?;
         try_set_permissions(file.as_file());
 
         // Try to move the file to path, but if path exists now, just open path
@@ -262,6 +297,7 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
+                        .map_err(CreateLockedFileError::OpenExisting)
                 } else if matches!(
                     Errno::from_io_error(&err.error),
                     Some(Errno::NOTSUP | Errno::INVAL)
@@ -281,7 +317,8 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .create(true)
-                        .open(path.as_ref())?;
+                        .open(path.as_ref())
+                        .map_err(CreateLockedFileError::CreateOrOpen)?;
 
                     // We don't want to `try_set_permissions` in cases where another user's process
                     // has already created the lockfile and changed its permissions because we might
@@ -295,19 +332,24 @@ impl LockedFile {
                     }
                     Ok(file)
                 } else {
-                    Err(err.error)
+                    let temp_path = err.file.into_temp_path();
+                    Err(CreateLockedFileError::PersistTemporary {
+                        path: <tempfile::TempPath as AsRef<Path>>::as_ref(&temp_path).to_path_buf(),
+                        source: err.error,
+                    })
                 }
             }
         }
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, CreateLockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path.as_ref())
+            .map_err(CreateLockedFileError::CreateOrOpen)
     }
 }
 

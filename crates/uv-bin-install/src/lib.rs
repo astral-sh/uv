@@ -19,10 +19,9 @@ use tracing::debug;
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 
-use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_cache::{Cache, CacheBucket, CacheEntry, LockCacheError};
 use uv_client::{BaseClient, is_transient_network_error};
 use uv_extract::{Error as ExtractError, stream};
-use uv_fs::LockedFileError;
 use uv_pep440::Version;
 use uv_platform::Platform;
 use uv_redacted::DisplaySafeUrl;
@@ -137,7 +136,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    LockedFile(#[from] LockedFileError),
+    LockCache(#[from] LockCacheError),
 
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),

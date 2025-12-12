@@ -5701,6 +5701,7 @@ dependencies = [
  "same-file",
  "serde",
  "tempfile",
+ "thiserror 2.0.17",
  "tracing",
  "uv-cache-info",
  "uv-cache-key",
