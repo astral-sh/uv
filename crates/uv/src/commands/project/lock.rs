@@ -470,6 +470,7 @@ async fn do_lock(
         upgrade,
         build_options,
         sources,
+        torch_backend: _,
     } = settings;
 
     if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)

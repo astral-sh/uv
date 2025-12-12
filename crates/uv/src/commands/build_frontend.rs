@@ -216,6 +216,7 @@ async fn build_impl(
         upgrade: _,
         build_options,
         sources,
+        torch_backend: _,
     } = settings;
 
     // Determine the source to build.

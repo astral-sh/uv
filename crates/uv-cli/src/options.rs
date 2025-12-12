@@ -366,6 +366,7 @@ pub fn resolver_options(
             exclude_newer_package.unwrap_or_default(),
         ),
         link_mode,
+        torch_backend: None,
         no_build: flag(no_build, build, "build"),
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary, "binary"),
