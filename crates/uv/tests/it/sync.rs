@@ -421,7 +421,7 @@ fn sync_json() -> Result<()> {
           }
         },
         "action": "check",
-        "packages": [
+        "changes": [
           {
             "name": "iniconfig",
             "version": "2.0.0",
@@ -472,7 +472,7 @@ fn sync_json() -> Result<()> {
           }
         },
         "action": "check",
-        "packages": []
+        "changes": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -512,7 +512,7 @@ fn sync_json() -> Result<()> {
           }
         },
         "action": "check",
-        "packages": []
+        "changes": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -579,7 +579,7 @@ fn sync_json() -> Result<()> {
           }
         },
         "action": "check",
-        "packages": []
+        "changes": []
       },
       "lock": {
         "path": "[TEMP_DIR]/uv.lock",
@@ -640,7 +640,7 @@ fn sync_dry_json() -> Result<()> {
           }
         },
         "action": "create",
-        "packages": [
+        "changes": [
           {
             "name": "iniconfig",
             "version": "2.0.0",
@@ -6874,7 +6874,7 @@ fn sync_active_script_environment_json() -> Result<()> {
           }
         },
         "action": "create",
-        "packages": [
+        "changes": [
           {
             "name": "anyio",
             "version": "4.3.0",
@@ -6937,7 +6937,7 @@ fn sync_active_script_environment_json() -> Result<()> {
           }
         },
         "action": "create",
-        "packages": [
+        "changes": [
           {
             "name": "anyio",
             "version": "4.3.0",
@@ -7013,7 +7013,7 @@ fn sync_active_script_environment_json() -> Result<()> {
           }
         },
         "action": "update",
-        "packages": [
+        "changes": [
           {
             "name": "anyio",
             "version": "4.3.0",

@@ -213,7 +213,7 @@ pub(crate) async fn sync(
         environment: EnvironmentReport::from(&environment),
         action: SyncAction::from(&environment),
         target: TargetName::from(&target),
-        packages: Vec::new(),
+        changes: Vec::new(),
     };
 
     // Show the intermediate results if relevant
@@ -302,7 +302,7 @@ pub(crate) async fn sync(
                         project: None,
                         script: Some(ScriptReport::from(script)),
                         sync: SyncReport {
-                            packages: PackageChangeReport::from_changelog(&changelog),
+                            changes: PackageChangeReport::from_changelog(&changelog),
                             ..sync_report
                         },
                         lock: None,
@@ -436,7 +436,7 @@ pub(crate) async fn sync(
         project: target.project().map(ProjectReport::from),
         script: target.script().map(ScriptReport::from),
         sync: SyncReport {
-            packages: PackageChangeReport::from_changelog(&changelog),
+            changes: PackageChangeReport::from_changelog(&changelog),
             ..sync_report
         },
         lock: Some(lock_report),
@@ -1264,7 +1264,7 @@ struct SyncReport {
     action: SyncAction,
     /// The packages that changed during the sync.
     #[serde(default)]
-    packages: Vec<PackageChangeReport>,
+    changes: Vec<PackageChangeReport>,
 
     // We store these fields so the report can format itself self-contained, but the outer
     // [`Report`] is intended to include these in user-facing output
@@ -1287,7 +1287,7 @@ impl SyncReport {
         let Self {
             environment,
             action,
-            packages: _,
+            changes: _,
             dry_run,
             target,
         } = self;
