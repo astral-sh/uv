@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
@@ -70,6 +72,57 @@ impl Display for PreviewFeatures {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PreviewFeatures {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeatures")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let choices: Vec<&str> = Self::all().iter().map(Self::flag_as_str).collect();
+        schemars::json_schema!({
+            "type": "string",
+            "enum": choices,
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PreviewFeatures {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PreviewFeatures;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                PreviewFeatures::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl serde::Serialize for PreviewFeatures {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let features: Vec<&str> = self.iter().map(Self::flag_as_str).collect();
+        features.serialize(serializer)
+    }
+}
+
 #[derive(Debug, Error, Clone)]
 pub enum PreviewFeaturesParseError {
     #[error("Empty string in preview features: {0}")]
@@ -121,6 +174,28 @@ impl FromStr for PreviewFeatures {
     }
 }
 
+pub enum PreviewFeaturesMode {
+    EnableAll,
+    DisableAll,
+    Selection(PreviewFeatures),
+}
+
+impl PreviewFeaturesMode {
+    pub fn from_bool(b: bool) -> Self {
+        if b { Self::EnableAll } else { Self::DisableAll }
+    }
+}
+
+impl<'a, I> From<I> for PreviewFeaturesMode
+where
+    I: Iterator<Item = &'a PreviewFeatures>,
+{
+    fn from(features: I) -> Self {
+        let flags = features.fold(PreviewFeatures::empty(), |f1, f2| f1 | *f2);
+        Self::Selection(flags)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
     flags: PreviewFeatures,
@@ -135,30 +210,18 @@ impl Preview {
         Self::new(PreviewFeatures::all())
     }
 
-    pub fn from_args(
-        preview: bool,
-        no_preview: bool,
-        preview_features: &[PreviewFeatures],
-    ) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        let mut flags = PreviewFeatures::empty();
-
-        for features in preview_features {
-            flags |= *features;
-        }
-
-        Self { flags }
-    }
-
     pub fn is_enabled(&self, flag: PreviewFeatures) -> bool {
         self.flags.contains(flag)
+    }
+}
+
+impl From<PreviewFeaturesMode> for Preview {
+    fn from(mode: PreviewFeaturesMode) -> Self {
+        match mode {
+            PreviewFeaturesMode::EnableAll => Self::all(),
+            PreviewFeaturesMode::DisableAll => Self::default(),
+            PreviewFeaturesMode::Selection(flags) => Self { flags },
+        }
     }
 }
 
@@ -239,19 +302,21 @@ mod tests {
     #[test]
     fn test_preview_from_args() {
         // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
+        let preview = Preview::from(PreviewFeaturesMode::DisableAll);
         assert_eq!(preview.to_string(), "disabled");
 
         // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
+        let preview = Preview::from(PreviewFeaturesMode::EnableAll);
         assert_eq!(preview.to_string(), "enabled");
 
         // Test specific features
-        let features = vec![
-            PreviewFeatures::PYTHON_UPGRADE,
-            PreviewFeatures::JSON_OUTPUT,
-        ];
-        let preview = Preview::from_args(false, false, &features);
+        let preview = Preview::from(PreviewFeaturesMode::from(
+            [
+                PreviewFeatures::PYTHON_UPGRADE,
+                PreviewFeatures::JSON_OUTPUT,
+            ]
+            .iter(),
+        ));
         assert!(preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE));
         assert!(preview.is_enabled(PreviewFeatures::JSON_OUTPUT));
         assert!(!preview.is_enabled(PreviewFeatures::PYLOCK));
