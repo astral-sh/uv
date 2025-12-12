@@ -36,12 +36,14 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-types = { workspace = true }
+uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+itertools = { workspace = true }
 nanoid = { workspace = true }
 owo-colors = { workspace = true }
 reqwest = { workspace = true }
