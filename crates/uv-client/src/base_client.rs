@@ -20,8 +20,8 @@ use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipar
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
-    default_on_request_error,
+    RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
+    default_on_request_success,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -1015,21 +1015,15 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
-/// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
+/// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
+/// adds additional retry cases.
 pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
-        // Use the default strategy and check for additional transient error cases.
-        let retryable = match DefaultRetryableStrategy.handle(res) {
-            None | Some(Retryable::Fatal)
-                if res
-                    .as_ref()
-                    .is_err_and(|err| is_transient_network_error(err)) =>
-            {
-                Some(Retryable::Transient)
-            }
-            default => default,
+        let retryable = match res {
+            Ok(success) => default_on_request_success(success),
+            Err(err) => retryable_on_request_failure(err),
         };
 
         // Log on transient errors
@@ -1055,11 +1049,13 @@ impl RetryableStrategy for UvRetryableStrategy {
 
 /// Whether the error looks like a network error that should be retried.
 ///
-/// There are two cases that the default retry strategy is missing:
+/// This is an extension over [`reqwest_middleware::default_on_request_failure`], which is missing
+/// a number of cases:
 /// * Inside the reqwest or reqwest-middleware error is an `io::Error` such as a broken pipe
 /// * When streaming a response, a reqwest error may be hidden several layers behind errors
-///   of different crates processing the stream, including `io::Error` layers.
-pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
+///   of different crates processing the stream, including `io::Error` layers
+/// * Any `h2` error
+fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
@@ -1074,29 +1070,32 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     // crates
     let mut current_source = Some(err);
     while let Some(source) = current_source {
-        if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
-            has_known_error = true;
-            if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
-                if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
-                    trace!("Retrying nested reqwest middleware error");
-                    return true;
-                }
-                if is_retryable_status_error(reqwest_err) {
-                    trace!("Retrying nested reqwest middleware status code error");
-                    return true;
-                }
-            }
+        // Handle different kinds of reqwest error nesting not accessible by downcast.
+        let reqwest_err = if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+            Some(reqwest_err)
+        } else if let Some(reqwest_err) = source
+            .downcast_ref::<WrappedReqwestError>()
+            .and_then(|err| err.inner())
+        {
+            Some(reqwest_err)
+        } else if let Some(reqwest_middleware::Error::Reqwest(reqwest_err)) =
+            source.downcast_ref::<reqwest_middleware::Error>()
+        {
+            Some(reqwest_err)
+        } else {
+            None
+        };
 
-            trace!("Cannot retry nested reqwest middleware error");
-        } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+        if let Some(reqwest_err) = reqwest_err {
             has_known_error = true;
+            // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Retrying nested reqwest error");
-                return true;
+                return Some(Retryable::Transient);
             }
             if is_retryable_status_error(reqwest_err) {
                 trace!("Retrying nested reqwest status code error");
-                return true;
+                return Some(Retryable::Transient);
             }
 
             trace!("Cannot retry nested reqwest error");
@@ -1104,7 +1103,7 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             // All h2 errors look like errors that should be retried
             // https://github.com/astral-sh/uv/issues/15916
             trace!("Retrying nested h2 error");
-            return true;
+            return Some(Retryable::Transient);
         } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
             let retryable_io_err_kinds = [
@@ -1121,7 +1120,7 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             ];
             if retryable_io_err_kinds.contains(&io_err.kind()) {
                 trace!("Retrying error: `{}`", io_err.kind());
-                return true;
+                return Some(Retryable::Transient);
             }
 
             trace!(
@@ -1136,7 +1135,12 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     if !has_known_error {
         trace!("Cannot retry error: Neither an IO error nor a reqwest error");
     }
-    false
+
+    None
+}
+
+pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
+    retryable_on_request_failure(err) == Some(Retryable::Transient)
 }
 
 /// Whether the error is a status code error that is retryable.
@@ -1397,7 +1401,7 @@ mod tests {
                 .await;
 
             let middleware_retry =
-                DefaultRetryableStrategy.handle(&response) == Some(Retryable::Transient);
+                UvRetryableStrategy.handle(&response) == Some(Retryable::Transient);
 
             let response = client
                 .get(format!("{}/{}", server.uri(), status))

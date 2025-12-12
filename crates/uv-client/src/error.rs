@@ -425,13 +425,33 @@ impl WrappedReqwestError {
         problem_details: Option<ProblemDetails>,
     ) -> Self {
         Self {
-            error,
+            error: Self::filter_retries_from_error(error),
             problem_details: problem_details.map(Box::new),
         }
     }
 
+    /// Drop `RetryError::WithRetries` to avoid reporting the number of retries twice.
+    ///
+    /// We attach the number of errors outside by adding the retry counts from the retry middleware
+    /// and from uv's outer retry loop for streaming bodies. Stripping the inner count from the
+    /// error context avoids showing two numbers.
+    fn filter_retries_from_error(error: reqwest_middleware::Error) -> reqwest_middleware::Error {
+        match error {
+            reqwest_middleware::Error::Middleware(error) => {
+                match error.downcast::<reqwest_retry::RetryError>() {
+                    Ok(
+                        reqwest_retry::RetryError::WithRetries { err, .. }
+                        | reqwest_retry::RetryError::Error(err),
+                    ) => err,
+                    Err(error) => reqwest_middleware::Error::Middleware(error),
+                }
+            }
+            error @ reqwest_middleware::Error::Reqwest(_) => error,
+        }
+    }
+
     /// Return the inner [`reqwest::Error`] from the error chain, if it exists.
-    fn inner(&self) -> Option<&reqwest::Error> {
+    pub fn inner(&self) -> Option<&reqwest::Error> {
         match &self.error {
             reqwest_middleware::Error::Reqwest(err) => Some(err),
             reqwest_middleware::Error::Middleware(err) => err.chain().find_map(|err| {
@@ -495,6 +515,7 @@ impl WrappedReqwestError {
 impl From<reqwest::Error> for WrappedReqwestError {
     fn from(error: reqwest::Error) -> Self {
         Self {
+            // No need to filter retries as this error does not have retries.
             error: error.into(),
             problem_details: None,
         }
@@ -504,7 +525,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
 impl From<reqwest_middleware::Error> for WrappedReqwestError {
     fn from(error: reqwest_middleware::Error) -> Self {
         Self {
-            error,
+            error: Self::filter_retries_from_error(error),
             problem_details: None,
         }
     }
