@@ -639,6 +639,12 @@ pub struct VersionArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Update the version and re-lock the project if necessary.
+    ///
+    /// The project environment will be synced unless `--no-sync` is also provided.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -3533,6 +3539,13 @@ pub struct RunArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Run with updating the `uv.lock` file if necessary.
+    ///
+    /// This is the default behavior. If the lockfile is missing or out-of-date, uv will update it
+    /// as needed.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
+
     /// Run the given path as a Python script.
     ///
     /// Using `--script` will attempt to parse the path as a PEP 723 script,
@@ -3847,6 +3860,12 @@ pub struct SyncArgs {
     /// lockfile yet, they will not be present in the environment.
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
+
+    /// Sync while allowing the `uv.lock` file to be updated, used when the ENV 'FROZEN' is set to true
+    ///
+    /// This option is necessary because '--frozen' conflicts with '--locked'.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
 
     /// Perform a dry run, without writing the lockfile or modifying the project environment.
     ///
@@ -4175,6 +4194,12 @@ pub struct AddArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Add dependencies while allowing the `uv.lock` file to be updated, used when the ENV 'FROZEN' is set to true
+    ///
+    /// This option is necessary because '--frozen' conflicts with '--locked'.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
+
     /// Prefer the active virtual environment over the project's virtual environment.
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
@@ -4414,6 +4439,12 @@ pub struct RemoveArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Remove dependencies while allowing the `uv.lock` file to be updated, used when the ENV 'FROZEN' is set to true
+    ///
+    /// This option is necessary because '--frozen' conflicts with '--locked'.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -4534,6 +4565,12 @@ pub struct TreeArgs {
     /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
+
+    /// Display the requirements while allowing the `uv.lock` file to be updated, used when the ENV 'FROZEN' is set to true
+    ///
+    /// This option is necessary because '--frozen' conflicts with '--locked'.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -4837,6 +4874,12 @@ pub struct ExportArgs {
     /// If a `uv.lock` does not exist, uv will exit with an error.
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
+
+    /// Export while allowing the `uv.lock` file to be updated, used when the ENV 'FROZEN' is set to true
+    ///
+    /// This option is necessary because '--frozen' conflicts with '--locked'.
+    #[arg(long, overrides_with="frozen", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,

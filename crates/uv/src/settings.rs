@@ -448,6 +448,7 @@ impl RunSettings {
             no_sync,
             locked,
             frozen,
+            no_frozen,
             installer,
             build,
             refresh,
@@ -473,7 +474,7 @@ impl RunSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -1396,6 +1397,7 @@ impl SyncSettings {
             only_install_package,
             locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             dry_run,
@@ -1432,6 +1434,7 @@ impl SyncSettings {
         } else {
             LockCheck::Disabled
         };
+        let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
 
         Self {
             output_format,
@@ -1617,6 +1620,7 @@ impl AddSettings {
             no_sync,
             locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -1721,7 +1725,7 @@ impl AddSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             active: flag(active, no_active, "active"),
             no_sync,
             packages,
@@ -1799,6 +1803,7 @@ impl RemoveSettings {
             no_sync,
             locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -1835,7 +1840,7 @@ impl RemoveSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             active: flag(active, no_active, "active"),
             no_sync,
             packages,
@@ -1892,6 +1897,7 @@ impl VersionSettings {
             no_sync,
             locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -1917,7 +1923,7 @@ impl VersionSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             active: flag(active, no_active, "active"),
             no_sync,
             package,
@@ -1977,6 +1983,7 @@ impl TreeSettings {
             all_groups,
             locked,
             frozen,
+            no_frozen,
             build,
             resolver,
             script,
@@ -2006,7 +2013,7 @@ impl TreeSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             universal,
             depth: tree.depth,
             prune: tree.prune,
@@ -2096,6 +2103,7 @@ impl ExportSettings {
             only_emit_package,
             locked,
             frozen,
+            no_frozen,
             resolver,
             build,
             refresh,
@@ -2149,7 +2157,7 @@ impl ExportSettings {
             } else {
                 LockCheck::Disabled
             },
-            frozen,
+            frozen: flag(frozen, no_frozen, "frozen").unwrap_or_default(),
             include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
             include_header: flag(header, no_header, "header").unwrap_or(true),
             script,

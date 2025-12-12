@@ -83,6 +83,7 @@ pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: bool,
+    no_frozen: bool,
     dry_run: DryRun,
     refresh: Refresh,
     python: Option<String>,
@@ -136,6 +137,7 @@ pub(crate) async fn lock(
 
     // Determine the lock mode.
     let interpreter;
+    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     let mode = if frozen {
         LockMode::Frozen
     } else {

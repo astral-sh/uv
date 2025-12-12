@@ -69,6 +69,7 @@ pub(crate) async fn export(
     editable: Option<EditableMode>,
     lock_check: LockCheck,
     frozen: bool,
+    no_frozen: bool,
     include_annotations: bool,
     include_header: bool,
     script: Option<Pep723Script>,
@@ -90,6 +91,7 @@ pub(crate) async fn export(
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
+        let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
         let project = if frozen {
             VirtualProject::discover(
                 project_dir,
@@ -142,6 +144,7 @@ pub(crate) async fn export(
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
+    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     let interpreter = if frozen {
         None
     } else {
@@ -184,6 +187,7 @@ pub(crate) async fn export(
     };
 
     // Determine the lock mode.
+    let frozen = flag(frozen, no_frozen, "frozen").unwrap_or_default();
     let mode = if frozen {
         LockMode::Frozen
     } else if let LockCheck::Enabled(lock_check) = lock_check {
