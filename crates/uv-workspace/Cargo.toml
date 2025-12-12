@@ -55,6 +55,3 @@ tempfile = { workspace = true }
 
 [features]
 schemars = ["dep:schemars", "uv-pypi-types/schemars", "uv-redacted/schemars"]
-
-[package.metadata.cargo-shear]
-ignored = ["uv-options-metadata"]
