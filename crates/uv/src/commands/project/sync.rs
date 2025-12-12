@@ -676,6 +676,7 @@ pub(super) async fn do_sync(
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
                 sources,
+                torch_backend: None,
                 upgrade: Upgrade::default(),
             };
             script_extra_build_requires(

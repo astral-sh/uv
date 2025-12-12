@@ -28,7 +28,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
@@ -76,6 +76,12 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if settings.resolver.torch_backend.is_some() {
+        warn_user_once!(
+            "The `--torch-backend` option is experimental and may change without warning."
+        );
+    }
+
     let reporter = PythonDownloadReporter::single(printer);
 
     let python_request = python.as_deref().map(PythonRequest::parse);
