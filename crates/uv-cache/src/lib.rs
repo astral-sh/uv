@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
+use thiserror::Error;
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
@@ -34,6 +35,24 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
+
+/// Error locking a cache entry or shard
+#[derive(Debug, Error)]
+pub enum LockCacheError {
+    #[error("Could not create path")]
+    CreateRoot(#[from] io::Error),
+    #[error("Could not acquire lock")]
+    Acquire(#[from] LockedFileError),
+}
+
+/// Error initialising the cache
+#[derive(Debug, Error)]
+pub enum InitCacheError {
+    #[error("Could not acquire lock")]
+    Acquire(#[from] LockedFileError),
+    #[error("Could not make the path absolute")]
+    Absolute(#[from] io::Error),
+}
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -80,14 +99,14 @@ impl CacheEntry {
     }
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
+    pub async fn lock(&self) -> Result<LockedFile, LockCacheError> {
         fs_err::create_dir_all(self.dir())?;
-        LockedFile::acquire(
+        Ok(LockedFile::acquire(
             self.path(),
             LockedFileMode::Exclusive,
             self.path().display(),
         )
-        .await
+        .await?)
     }
 }
 
@@ -114,14 +133,14 @@ impl CacheShard {
     }
 
     /// Acquire the cache entry as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
+    pub async fn lock(&self) -> Result<LockedFile, LockCacheError> {
         fs_err::create_dir_all(self.as_ref())?;
-        LockedFile::acquire(
+        Ok(LockedFile::acquire(
             self.join(".lock"),
             LockedFileMode::Exclusive,
             self.display(),
         )
-        .await
+        .await?)
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
@@ -441,7 +460,7 @@ impl Cache {
     }
 
     /// Initialize the [`Cache`].
-    pub async fn init(self) -> Result<Self, LockedFileError> {
+    pub async fn init(self) -> Result<Self, InitCacheError> {
         let root = &self.root;
 
         Self::create_base_files(root)?;
@@ -466,7 +485,7 @@ impl Cache {
                 );
                 None
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         };
 
         Ok(Self {
