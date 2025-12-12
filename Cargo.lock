@@ -5715,7 +5715,6 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "fs-err",
- "nanoid",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -5730,6 +5729,7 @@ dependencies = [
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-small-str",
  "uv-static",
  "walkdir",
 ]
@@ -6104,7 +6104,6 @@ dependencies = [
  "fs-err",
  "futures",
  "md-5",
- "rayon",
  "regex",
  "reqwest",
  "rustc-hash",
@@ -6114,12 +6113,10 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
  "uv-static",
  "xz2",
- "zip",
  "zstd",
 ]
 
