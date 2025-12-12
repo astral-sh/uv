@@ -1071,7 +1071,7 @@ pub enum ProjectCommand {
     ///
     /// The lockfile and project environment will be updated to reflect the added dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
-    /// `--no-sync`. To override the global FROZEN environment variable temporarily, use `--no-frozen`. 
+    /// `--no-sync`. To override the global FROZEN environment variable temporarily, use `--no-frozen`.
     ///
     /// If any of the requested dependencies cannot be found, uv will exit with an error, unless the
     /// `--frozen` flag is provided, in which case uv will add the dependencies verbatim without
