@@ -13,8 +13,8 @@ use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
+use reqwest_retry::RetryPolicy;
 use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use thiserror::Error;
@@ -28,7 +28,7 @@ use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
-    RetryParsingError, UvRetryableStrategy,
+    RetryParsingError, is_transient_network_error,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -484,31 +484,36 @@ pub async fn upload(
         .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         let result = request.send().await;
-        if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
-            let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-            if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+        let response = match result {
+            Ok(response) => {
                 reporter.on_upload_complete(idx);
-                let duration = execute_after
-                    .duration_since(SystemTime::now())
-                    .unwrap_or_else(|_| Duration::default());
-                warn_user!(
-                    "Transient failure while handling response for {}; retrying after {}s...",
-                    registry,
-                    duration.as_secs()
-                );
-                tokio::time::sleep(duration).await;
-                n_past_retries += 1;
-                continue;
+                response
             }
-        }
+            Err(err) => {
+                if is_transient_network_error(&err) {
+                    let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                    if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                        let duration = execute_after
+                            .duration_since(SystemTime::now())
+                            .unwrap_or_else(|_| Duration::default());
+                        warn_user!(
+                            "Transient failure while handling response for {}; retrying after {}s...",
+                            registry,
+                            duration.as_secs()
+                        );
+                        tokio::time::sleep(duration).await;
+                        n_past_retries += 1;
+                        continue;
+                    }
+                }
 
-        let response = result.map_err(|err| {
-            PublishError::PublishSend(
-                group.file.clone(),
-                registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
-            )
-        })?;
+                return Err(PublishError::PublishSend(
+                    group.file.clone(),
+                    registry.clone().into(),
+                    PublishSendError::ReqwestMiddleware(err).into(),
+                ));
+            }
+        };
 
         return match handle_response(registry, response).await {
             Ok(()) => {

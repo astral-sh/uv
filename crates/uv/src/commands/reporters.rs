@@ -322,7 +322,9 @@ impl ProgressReporter {
                         Direction::Download => "Downloaded",
                         Direction::Upload => "Uploaded",
                         Direction::Extract => "Extracted",
-                    },
+                    }
+                    .bold()
+                    .cyan(),
                     progress.message()
                 );
             }
