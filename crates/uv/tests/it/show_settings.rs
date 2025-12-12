@@ -152,7 +152,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -355,7 +355,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -559,7 +559,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -795,7 +795,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -966,7 +966,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -1181,7 +1181,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -1444,7 +1444,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -1717,7 +1717,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -1911,7 +1911,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [
+                flat_indexes: [
                     Index {
                         name: None,
                         url: Url(
@@ -2138,7 +2138,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -2391,7 +2391,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -2627,7 +2627,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -2819,7 +2819,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -2995,7 +2995,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -3171,7 +3171,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -3349,7 +3349,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -3598,7 +3598,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -3735,7 +3735,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -3979,7 +3979,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -4228,7 +4228,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -4556,7 +4556,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -4825,7 +4825,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -5004,7 +5004,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -5202,7 +5202,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -5461,7 +5461,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -5699,7 +5699,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -5943,7 +5943,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -6182,7 +6182,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -6428,7 +6428,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -6667,7 +6667,7 @@ fn index_priority() -> anyhow::Result<()> {
                         cache_control: None,
                     },
                 ],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -6850,7 +6850,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7019,7 +7019,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7186,7 +7186,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7355,7 +7355,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7522,7 +7522,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7690,7 +7690,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -7895,7 +7895,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8009,7 +8009,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8123,7 +8123,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8237,7 +8237,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8351,7 +8351,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8467,7 +8467,7 @@ fn preview_features() {
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
-                    flat_index: [],
+                    flat_indexes: [],
                     no_index: false,
                 },
                 index_strategy: FirstIndex,
@@ -8580,7 +8580,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -8757,7 +8757,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -8957,7 +8957,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -9132,7 +9132,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -9301,7 +9301,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -9471,7 +9471,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -9721,7 +9721,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -9840,7 +9840,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -9982,7 +9982,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -10099,7 +10099,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -10206,7 +10206,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -10314,7 +10314,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             fork_strategy: RequiresPython,
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             index_strategy: FirstIndex,
@@ -10471,7 +10471,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
@@ -10643,7 +10643,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
-                flat_index: [],
+                flat_indexes: [],
                 no_index: false,
             },
             python: None,
